@@ -99,6 +99,9 @@ const FIXTURE_SPECS = [
   '**/inspector/symbol-view.spec.ts',
   '**/keyboard/shortcuts.spec.ts',
   '**/project/scan.spec.ts',
+  // Scans the sample app over REST; beside it, the repository's re-exports
+  // spec found its inspector empty (#208's second run).
+  '**/live-agent/file-watcher-pipeline.spec.ts',
 ];
 
 /** Specs that need the backend to themselves — see the `serial` project. */
@@ -137,6 +140,8 @@ const SERIAL_SPECS = [
   '**/plan/brief-mode.spec.ts',
   // They read the graph of whichever project was scanned last.
   '**/parsers/**',
+  // Opens a temporary git worktree as the project.
+  '**/git/worktree-checkout.spec.ts',
 ];
 
 export default defineConfig({

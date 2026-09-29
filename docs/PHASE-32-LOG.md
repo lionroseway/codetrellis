@@ -299,6 +299,12 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   Sixteen of them made that constant (43 "scan already in progress" lines).
   The 16 now run in the serial project (`FIXTURE_SPECS` in
   `playwright.config.ts`), after the parallel specs and one at a time.
+- **CI's second run** failed the re-exports spec again, beside
+  file-watcher-pipeline, which scans the sample app over REST and was already
+  parallel before HD2 (moving the 16 reshuffled which specs share a shard).
+  It joins `FIXTURE_SPECS`. The one other parallel spec opening a project of
+  its own, git/worktree-checkout (a temporary worktree), joins the serial list
+  too. No parallel spec now scans anything but this repository.
 
 ### 2026-09-29: HD1 — a project's diff is its own
 - **Found.** The follow-up's guess was right. `/api/diff?project=A` diffs the
