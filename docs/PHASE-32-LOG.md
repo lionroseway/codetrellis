@@ -12,10 +12,10 @@
 | | |
 |---|---|
 | **Stage / step** | Wave 2 — A4.3: workstreams on the phone |
-| **Status** | A4.1 merged (#215). A4.2 in review (#216). A4.3 built: `workstreams.list` and `workstreams.detail` (files, turns in the Timeline's words); turn grouping and phrasing moved to `src/shared/lib` |
-| **Next action** | Merge #216, then A4.3; then A4.4, push for a high signal |
+| **Status** | A4.1 and A4.2 merged (#215, #216). A4.3 in review: `workstreams.list` and `workstreams.detail` (files, turns in the Timeline's words); turn grouping and phrasing moved to `src/shared/lib` |
+| **Next action** | Merge A4.3; then A4.4 (built, stacked), then A4.5 |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a4-3-phone-workstreams` (stacked on A4.2) |
+| **Branch** | `feat/phase-32-a4-3-phone-workstreams` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -90,7 +90,7 @@
   - [x] A8.4 Proof of use from MCP calls (`get_skill`), labelled by source (#202)
 - [ ] A4 Mobile, refined in EXECUTION §4:
   - [x] A4.1 Reply to the agents about a signal (shared by desktop and phone) ([#215](https://github.com/lionroseway/codetrellis/pull/215), which also carried the refinement, #214)
-  - [ ] A4.2 The phone's signal RPC and live count — in review
+  - [x] A4.2 The phone's signal RPC and live count ([#216](https://github.com/lionroseway/codetrellis/pull/216))
   - [ ] A4.3 Workstreams on the phone — in review
   - [ ] A4.4 Push for a high signal
   - [ ] A4.5 The phone's screens, and a way to render them
