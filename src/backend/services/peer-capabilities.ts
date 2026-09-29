@@ -127,6 +127,9 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   // Phase 32 A4.2 — what overlaps, in the desktop's words (mobile-awareness.ts).
   'awareness.needsYou': 'read',
   'awareness.signal': 'read',
+  // Phase 32 A4.3 — the lines of work and their turns (mobile-workstreams.ts).
+  'workstreams.list': 'read',
+  'workstreams.detail': 'read',
 
   // ── write ───────────────────────────────────────────────────────────
   'channel.post': 'write',

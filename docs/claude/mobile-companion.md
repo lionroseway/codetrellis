@@ -121,6 +121,23 @@ in the snapshot.
   device, carry the phone as the channel (`phoneActor()`), and tell the
   desktop.
 
+### The lines of work (Phase 32 A4.3)
+
+`src/backend/services/mobile-workstreams.ts`, read-only:
+
+- `workstreams.list` returns each line of work as the strip names it
+  (`chipLabel`), idle ones left out: its agents, the unfinished tasks they
+  have claimed, how many files it has changed, the live signals naming it and
+  how many of those need the person.
+- `workstreams.detail` takes an id from that list, never a folder the phone
+  makes up. It returns the changed files (with line counts where git gave
+  them), how far it is from main, and its ten most recent turns, newest first,
+  grouped and summarised by the Timeline's own code
+  (`src/shared/lib/agent-turns.ts` and `tool-phrasing.ts`, moved from the
+  frontend for this). A turn is named by its session's agent as it stands now,
+  not by the `mcp-client` guess a session carries until its client names
+  itself.
+
 ## State sync
 
 Desktop pushes a full snapshot of relevant workspace state on connect over the `ui` channel, then streams `fast-json-patch` diffs. Mobile applies them into `useWorkspaceStore`. This is the same pattern used for plan state, terminal scrollback metadata, presence, and channel events.
