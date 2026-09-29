@@ -198,6 +198,42 @@ jobs:
         run: npm run typecheck
 
   # ---------------------------------------------------------------------------
+  # The phone's screens, rendered and photographed (Phase 32 A4.5a).
+  #
+  # The companion's real screens from mobile/, through react-native-web, with
+  # native modules stubbed and RPC answered from fixtures
+  # (tools/phone-preview, tests/phone). Until this, phone screens were
+  # typechecked and linted and never looked at. The screenshots are uploaded
+  # on every run, so a PR that changes a screen can be seen.
+  # ---------------------------------------------------------------------------
+  phone:
+    name: Phone screens (rendered)
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Install mobile dependencies
+        run: npm ci --prefix mobile
+      - name: Install Playwright runner
+        run: npx playwright install --with-deps chromium
+      - name: Phone screens
+        run: npm run test:phone
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phone-screens-${{ github.run_id }}
+          path: |
+            test-results/phone/
+            playwright-report/phone/
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
   # The sandboxed HTML view (Phase 31 §7.3), in real Electron.
   #
   # A report that tries every way out — remote loads, fetch, sockets,
@@ -366,7 +402,7 @@ jobs:
     name: CI passed
     if: always()
     # `harness` (four shards) and `browser` (three) block (Phase 32).
-    needs: [no-private-docs, desktop, mobile, html-view, harness, browser]
+    needs: [no-private-docs, desktop, mobile, phone, html-view, harness, browser]
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - name: Check results

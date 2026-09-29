@@ -704,15 +704,15 @@ records that — but "✗ none" is proof of a gap.
 |---|---|---|---|---|---|---|---|
 | j | `_layout.tsx` |  | n/a | n/a |  |  |  |
 | j | `(tabs)/_layout.tsx` |  | n/a | n/a |  |  |  |
-| j | `(tabs)/activity.tsx` |  | n/a | n/a |  |  |  |
+| j | `(tabs)/activity.tsx` |  | n/a | 1 |  |  |  |
 | j | `(tabs)/graph.tsx` |  | n/a | n/a |  |  |  |
-| j | `(tabs)/index.tsx` |  | n/a | n/a |  |  |  |
-| j | `(tabs)/plans.tsx` |  | n/a | n/a |  |  |  |
+| j | `(tabs)/index.tsx` |  | n/a | 1 |  |  |  |
+| j | `(tabs)/plans.tsx` |  | n/a | 1 |  |  |  |
 | j | `(tabs)/terminals.tsx` |  | n/a | n/a |  |  |  |
 | j | `approval.tsx` |  | n/a | n/a |  |  |  |
-| j | `approvals.tsx` |  | n/a | n/a |  |  |  |
+| j | `approvals.tsx` |  | n/a | 1 |  |  |  |
 | j | `body-editor.tsx` |  | n/a | n/a |  |  |  |
-| j | `breakpoints.tsx` |  | n/a | n/a |  |  |  |
+| j | `breakpoints.tsx` |  | n/a | 1 |  |  |  |
 | j | `changes.tsx` |  | n/a | n/a |  |  |  |
 | j | `connection-switcher.tsx` |  | n/a | n/a |  |  |  |
 | j | `doc-viewer.tsx` |  | n/a | n/a |  |  |  |
