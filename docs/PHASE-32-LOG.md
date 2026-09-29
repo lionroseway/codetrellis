@@ -12,7 +12,7 @@
 | | |
 |---|---|
 | **Stage / step** | Wave 2 — HD2: graph specs on the sample app |
-| **Status** | HD1 merged (#207): a project's diff is its own. HD2 in review: the 16 browser specs that click or lay out graph nodes open `tests/fixtures/sample-app`, not this repository; their files, plans and workstream roots are the sample app's; three silent skips are failures; the sample app's leftover spec plans are cleared before a run. The 16 pass locally (77 tests) |
+| **Status** | HD1 merged (#207): a project's diff is its own. HD2 in review: the 16 browser specs that click or lay out graph nodes open `tests/fixtures/sample-app`, not this repository; their files, plans and workstream roots are the sample app's; three silent skips are failures; the sample app's leftover spec plans are cleared before a run. They run in the serial project, because the backend holds one project at a time (#208's first CI run) |
 | **Next action** | Merge HD2's PR when green; then B5 (replay), refined into sub-steps first |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-hd2-graph-specs-fixture` |
@@ -290,6 +290,15 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   sample app's spec-made plan folders too, as it did this repository's:
   `.codetrellis/` is gitignored, so resetting the fixture left nine behind.
 - **Tests.** The 16 specs, 77 tests, pass locally.
+- **CI on #208, then the fix.** Two browser shards failed, neither in a moved
+  spec's own logic. In one, a plan seeded in the sample app was gone from the
+  onboarding spec's list. In the other, a repository spec (inspector
+  re-exports) read the sample app's dependencies. The cause is the rule the
+  config already states for add-to-plan: the backend holds one project at a
+  time, and a spec opening the sample app swaps it under every parallel spec.
+  Sixteen of them made that constant (43 "scan already in progress" lines).
+  The 16 now run in the serial project (`FIXTURE_SPECS` in
+  `playwright.config.ts`), after the parallel specs and one at a time.
 
 ### 2026-09-29: HD1 — a project's diff is its own
 - **Found.** The follow-up's guess was right. `/api/diff?project=A` diffs the
