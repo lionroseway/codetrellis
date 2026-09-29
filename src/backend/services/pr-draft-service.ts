@@ -177,6 +177,10 @@ export function buildPrDraft(params: {
     if (review.review.summary.itemsPartial > 0) {
       warnings.push(`${review.review.summary.itemsPartial} item(s) only partially landed.`);
     }
+    const openHigh = review.review.otherWork?.openHigh ?? 0;
+    if (openHigh > 0) {
+      warnings.push(`${openHigh} high overlap(s) with other work are still open; see "Other work in flight".`);
+    }
   } else {
     // Say so rather than shipping a PR body that quietly omits the half
     // a reviewer most needs.
