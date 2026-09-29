@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A8.2: a pre-edit check any client can run |
-| **Status** | A8.1 merged (#200). A8.2 in review: `--check-edit <path> [--old-text-file f]` in the connector exits 2 with the reason when the edit is held, 0 otherwise and on any failure, so any client's hook or a wrapper script gets the pause. A8.4, A8.3 (Gemini CLI's hook) and A2.7 are stacked after it, rebased on #200 |
-| **Next action** | Merge A8.2's PR when green; then A8.4, A8.3, A2.7 in turn (each rebased on the last merged). Then B4.4 |
+| **Stage / step** | Track A — A8.4: proof of skill use for any client |
+| **Status** | A8.2 merged (#201). A8.4 in review: a `get_skill` read counts as proof a skill was used, for any client, and each proof says where it came from, so "unknown" is left only where nothing was seen. A8.3 (Gemini CLI's hook) and A2.7 are stacked after it, rebased on #201 |
+| **Next action** | Merge A8.4's PR when green; then A8.3 and A2.7 in turn (each rebased on the last merged). Then B4.4 |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a8-2-check-edit` |
+| **Branch** | `feat/phase-32-a8-4-proof-any-client` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -85,9 +85,9 @@
 - [ ] A2.7 Signatures for Go, Rust, Java, C#, Kotlin, Swift, Ruby, PHP (owner's ask, 2026-09-28)
 - [ ] A8 Any agent (owner's ask, 2026-09-28), refined in EXECUTION §4:
   - [x] A8.1 Parity table; `check_breakpoint` in the guide for every agent; journeys run by a client with no hook (#200)
-  - [x] A8.2 Client-neutral pre-edit check in the connector
+  - [x] A8.2 Client-neutral pre-edit check in the connector (#201)
   - [ ] A8.3 Hook adapters for other clients, each checked against its docs
-  - [ ] A8.4 Proof of use and session signals from MCP calls
+  - [x] A8.4 Proof of use from MCP calls (`get_skill`), labelled by source
 - [ ] A4 Mobile
 - [ ] A5 Review
 - [ ] A6 The Brief
@@ -256,6 +256,28 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A8.4 — proof of skill use for any client
+- **Journey.** Codex, with no session watcher, claims a task recommending
+  `pr-review` and `migrations`; its claim says "Load each with
+  get_skill(name): pr-review, migrations." Before, both read "use unknown"
+  (nothing seen). It loads `pr-review`: the instructions come back, and the
+  task reads "✓ used" (hover: "read this skill through CodeTrellis
+  (get_skill)"); `migrations` still reads unknown, never "not used". The
+  sign-off pack says "✓ used (read through CodeTrellis)"; a Claude Code use
+  says "(Claude Code session log)".
+- **Built.** MCP `get_skill(name)` (capability `read`): the skill found in
+  the caller's own worktree through the project skills index (confined-fs;
+  a linked skill folder is never read), its use stored against that
+  session's working tasks with `source = 'mcp'` (`recordSkillRead`); the
+  watcher's rows are `session_log`. `skillUseSources` / `sourceOf`;
+  `proofSource` on `/api/items/:uid/skills` and in the sign-off pack;
+  `skills_load` in the skills block. Session signals beyond skills are
+  already derived from every MCP call (the Timeline's tool events), so this
+  step keeps to proof of use.
+- **Tests.** Unit `skill-use-service.test.ts`; harness
+  `tests/e2e/skill-proof-any-client.test.ts`; C1.3's harness and browser
+  specs updated for the labelled wording.
 
 ### 2026-09-29: A8.2 — a pre-edit check any client can run
 - **Journey.** Sam asks to be asked before `validateCreateUser` changes.

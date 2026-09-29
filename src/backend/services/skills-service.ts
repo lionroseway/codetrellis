@@ -88,6 +88,22 @@ function presentIn(root: string, rel: string): boolean {
   }
 }
 
+/**
+ * One of the project's skills and its text (Phase 32 A8.4, `get_skill`), by
+ * the name the index gives it, read inside `root` through confined-fs.
+ * Null when there is no such skill there.
+ */
+export function readProjectSkill(root: string, name: string): { skill: ProjectSkill; text: string } | null {
+  const skill = listProjectSkills(root).find((s) => s.name === name);
+  if (!skill) return null;
+  try {
+    const buf = readFileWithin(root, skill.path, 'skill');
+    return buf.length > MAX_SKILL_FILE ? null : { skill, text: buf.toString('utf-8') };
+  } catch {
+    return null;
+  }
+}
+
 export interface SkillContext {
   /** The opened project's root, from the plan's record. */
   projectRoot: string | null;

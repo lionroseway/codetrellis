@@ -166,7 +166,7 @@ run as a plain `codex` client with no hook and no watcher in
 | Task and spec breakpoints | enforced at the MCP interception: the call returns "paused" with a ref; `await_decision` | — |
 | Code and function breakpoints | `check_breakpoint(path, old_text)` before an edit (the guide tells every agent to); an edit made without checking is a breach on its next call. A client whose hooks run a command, or a wrapper script: the connector's `--check-edit <path>` exits 2 when held (A8.2) | Claude Code's `PreToolUse` hook makes the check itself and holds the edit before it is made, sending the replaced text |
 | Signal breakpoints | claims, finishes and spec edits pause while the signal is open | hooked edits pause too |
-| Skills | the task's skills, where to find them, in `get_brief`, `claim_item` and `get_next_item` (C1.1) | Claude Code's session log proves a skill was used (C1.3); A8.4 derives the same from MCP calls |
+| Skills | the task's skills, where to find them, in `get_brief`, `claim_item` and `get_next_item` (C1.1); `get_skill(name)` loads one and is the proof of use, labelled "read through CodeTrellis" (A8.4) | Claude Code's session log also proves a skill it loaded itself (C1.3), labelled "session log" |
 | Setup | the MCP connector config (Settings → MCP Server: a JSON entry for Claude Desktop, Cursor and most clients) | Claude Code's skill and hook installer (A3.4); A8.3 adds other clients' hooks |
 
 ## Rules to keep

@@ -248,7 +248,13 @@ export function skillsBlock(item: PlanItem, projectRoot: string | null, workstre
   };
   const inEffect = resolveSkillsWithSource(item).filter((r) => !waiting(r.fromUid).has(r.skill.name)).map((r) => r.skill);
   const skills = agentSkills(inEffect, { projectRoot, workstreamRoot });
-  return { skills, skills_note: skillsNote(skills) };
+  // A8.4: any client loads a repo skill through CodeTrellis, which is how its use is seen.
+  const repo = skills.filter((s) => s.where?.kind === 'repo').map((s) => s.name);
+  return {
+    skills,
+    skills_note: skillsNote(skills),
+    ...(repo.length ? { skills_load: `Load ${repo.length === 1 ? 'it' : 'each'} with get_skill(name): ${repo.join(', ')}. Reading it there shows the person you used it.` } : {}),
+  };
 }
 
 /** Every recorded file on the plan, item by item in tree order. */

@@ -16,6 +16,8 @@ import { resultWithMeta, authorFromExtra } from '../helpers';
 import { ABOUT_MATERIALS } from '../../services/brief-service';
 import { quoteMaterial } from '../../services/material-reader/quote';
 import { listWorkstreams } from '../../services/workstream-service';
+import { readProjectSkill, listProjectSkills } from '../../services/skills-service';
+import { recordSkillRead } from '../../services/skill-use-service';
 import { resolveSection, branchOfRoot, claimRefusal, offeredTo, elsewhereLine, cleanBranch, workstreamOfBranch, whereWorked } from '../../services/section-workstreams';
 
 /**
@@ -71,6 +73,48 @@ const itemCommentKindEnum = z.enum(['note', 'blocker', 'progress', 'question']);
 const attachmentKindEnum = z.enum(['url', 'image', 'video', 'file_ref', 'code_block', 'transcript']);
 
 export function register(server: McpServer, deps: ToolDeps): void {
+  // Phase 32 A8.4 — any client loads a task's skill here, and reading it is
+  // the proof of use that Claude Code's session log gives for its own.
+  server.registerTool(
+    'get_skill',
+    {
+      description:
+        'Load one of the project\'s skills (a `.claude/skills/<name>/SKILL.md`) by name: its instructions, to follow for the ' +
+        'task. get_brief, claim_item and get_next_item name the skills a task wants; load each with this. Reading it here ' +
+        'records that you used it on the tasks you are working, so the person sees "✓ used" whatever your client. ' +
+        'It is read from your own worktree, so a skill added on your branch is found.',
+      inputSchema: {
+        name: z.string().min(1).max(80).describe('The skill\'s name, as the task names it.'),
+      },
+    },
+    async ({ name }) => {
+      const session = deps.sessionService.getActiveSessions().find((s) => s.sessionId === deps.sessionId);
+      const root = session?.workstreamRoot ?? deps.getActiveProjectPath();
+      if (!root) return { isError: true, content: [{ type: 'text' as const, text: 'No project is open.' }] };
+      const found = readProjectSkill(root, name);
+      if (!found) {
+        const known = listProjectSkills(root).map((s) => s.name);
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: `No skill named ${name} in ${root}.${known.length ? ` The project's skills: ${known.join(', ')}.` : ' The project has no skills in .claude/skills.'}` }],
+        };
+      }
+      const tasks = recordSkillRead({ skill: found.skill.name, sessionId: deps.sessionId, workstreamRoot: session?.workstreamRoot ?? null });
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            name: found.skill.name,
+            path: found.skill.path,
+            description: found.skill.description,
+            recorded_on: tasks,
+            instructions: found.text,
+          }, null, 2),
+        }],
+      };
+    },
+  );
+
   // --- add_item ---
 
   server.registerTool(

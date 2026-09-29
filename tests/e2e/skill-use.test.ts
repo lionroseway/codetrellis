@@ -123,7 +123,7 @@ test.describe.serial('Proof of skill use', () => {
     ]);
     const html = await (await h.client.raw('GET', `/api/plans/${planUid}/signoff-pack.html`)).text();
     expect(html).toContain('<h2>Skills</h2>');
-    expect(html).toContain('<td>Currency support</td><td>pr-review</td><td>recommended</td><td>✓ used</td>');
-    expect(html).toContain('<td>Refunds</td><td>pr-review</td><td>recommended</td><td>unknown (the agent does not report it)</td>');
+    expect(html).toContain('<td>Currency support</td><td>pr-review</td><td>recommended</td><td>✓ used (Claude Code session log)</td>');
+    expect(html).toContain('<td>Refunds</td><td>pr-review</td><td>recommended</td><td>unknown (nothing seen: the agent may have read the file itself)</td>');
   });
 });

@@ -338,6 +338,8 @@ export interface Skill {
  * "not used" on a guess.
  */
 export type SkillProof = 'used' | 'not_used' | 'unknown';
+/** Phase 32 A8.4 — how a use was seen: Claude Code's session log, or a read through get_skill (any client). */
+export type SkillProofSource = 'session_log' | 'mcp';
 
 /** Phase 32 C1 — a skill found in the opened project's `.claude/skills`. */
 export interface ProjectSkill {

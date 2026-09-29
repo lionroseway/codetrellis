@@ -28,8 +28,8 @@ import { resolveTrustedProjectRoot } from './trusted-roots';
 import { sha256FileWithin } from '../lib/sha256-file';
 import { signoffRows } from './signoff-rows';
 import { listAllItems, resolveSkills } from './plan-item-service';
-import { skillProof } from './skill-use-service';
-import type { SkillProof } from '../../shared/types';
+import { skillProof, skillUseSources, sourceOf } from './skill-use-service';
+import type { SkillProof, SkillProofSource } from '../../shared/types';
 import { decisionWords, stateWords, type SignoffRow } from '../../shared/lib/signoff';
 
 export const PACK_FORMAT = 'codetrellis-signoff-pack';
@@ -54,6 +54,8 @@ export interface PackSkill {
   name: string;
   use: 'required' | 'recommended';
   proof: SkillProof | null;
+  /** A8.4 — how a use was seen: Claude Code's session log, or a read through get_skill. */
+  proofSource?: SkillProofSource | null;
 }
 
 export interface SignoffPack {
@@ -74,8 +76,13 @@ export function packSkills(planUid: string): PackSkill[] {
     const wanted = resolveSkills(item).filter((s) => s.required || s.use === 'recommended');
     if (wanted.length === 0) continue;
     const proof = skillProof(item, wanted);
+    const sources = skillUseSources(item.uid);
     for (const s of wanted) {
-      out.push({ itemUid: item.uid, itemTitle: item.title, name: s.name, use: s.required ? 'required' : 'recommended', proof: proof?.get(s.name) ?? null });
+      const p = proof?.get(s.name) ?? null;
+      out.push({
+        itemUid: item.uid, itemTitle: item.title, name: s.name, use: s.required ? 'required' : 'recommended', proof: p,
+        proofSource: p === 'used' ? sourceOf(sources, s.name) : null,
+      });
     }
   }
   return out;
@@ -300,11 +307,13 @@ ${skillsSection(pack.skills ?? [])}
 
 function skillsSection(skills: PackSkill[]): string {
   if (skills.length === 0) return '';
-  const words = (p: SkillProof | null) => p === 'used' ? '✓ used' : p === 'not_used' ? '○ not used' : p === 'unknown' ? 'unknown (the agent does not report it)' : 'not started';
-  const rows = skills.map((s) => `<tr><td>${esc(s.itemTitle)}</td><td>${esc(s.name)}</td><td>${s.use}</td><td>${esc(words(s.proof))}</td></tr>`).join('');
+  const words = (p: SkillProof | null, src?: SkillProofSource | null) => p === 'used'
+    ? `✓ used${src === 'mcp' ? ' (read through CodeTrellis)' : src === 'session_log' ? ' (Claude Code session log)' : ''}`
+    : p === 'not_used' ? '○ not used' : p === 'unknown' ? 'unknown (nothing seen: the agent may have read the file itself)' : 'not started';
+  const rows = skills.map((s) => `<tr><td>${esc(s.itemTitle)}</td><td>${esc(s.name)}</td><td>${s.use}</td><td>${esc(words(s.proof, s.proofSource))}</td></tr>`).join('');
   return `
 <h2>Skills</h2>
-<p class="muted">The skills each task asked the agent to use, and whether the agent loaded them. Claude Code reports each skill it loads; other agents do not, so theirs read unknown.</p>
+<p class="muted">The skills each task asked the agent to use, and whether the agent loaded them: from Claude Code's session log, or from the agent reading it through CodeTrellis (any client). Unknown means nothing was seen.</p>
 <table><thead><tr><th>Task</th><th>Skill</th><th>Asked as</th><th>Used</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 

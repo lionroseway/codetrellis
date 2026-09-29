@@ -42,7 +42,7 @@ import { commitsByWorkstream } from './services/workstream-commits';
 import { lineChangesFor, cleanRelPath, readWorkstreamCopy } from './services/line-changes';
 import { normaliseSkills } from './services/skill-model';
 import { listProjectSkills } from './services/skills-service';
-import { skillProof } from './services/skill-use-service';
+import { skillProof, skillUseSources, sourceOf } from './services/skill-use-service';
 import { pendingArrivals, planArrivals, acceptArrival, type SkillArrival } from './services/skill-arrival-service';
 import { releaseSettled } from './services/signal-breakpoints';
 import { listBreakpoints, getBreakpoint, setBreakpoint, clearBreakpoint, listHits, getHit, answerHit, cleanNote, BreakpointError, DECISIONS } from './services/breakpoint-service';
@@ -2296,10 +2296,15 @@ app.get('/api/items/:uid/skills', (req, res) => {
   const rows = planItemService.resolveSkillsWithSource(item);
   // C1.3: whether each was used, once an agent has worked the task.
   const proof = skillProof(item, rows.map((r) => r.skill));
+  // A8.4: how each use was seen.
+  const sources = skillUseSources(item.uid);
   // C1.4: a skill that arrived in a plan file and waits for a person, with who added it.
   const waiting = new Map<string, Map<string, SkillArrival>>();
   const pendingOf = (uid: string) => { if (!waiting.has(uid)) waiting.set(uid, pendingArrivals(uid)); return waiting.get(uid)!; };
-  res.json({ skills: rows.map((r) => ({ ...r, proof: proof?.get(r.skill.name) ?? null, pending: pendingOf(r.fromUid).get(r.skill.name) ?? null })) });
+  res.json({ skills: rows.map((r) => {
+    const p = proof?.get(r.skill.name) ?? null;
+    return { ...r, proof: p, proofSource: p === 'used' ? sourceOf(sources, r.skill.name) : null, pending: pendingOf(r.fromUid).get(r.skill.name) ?? null };
+  }) });
 });
 
 /**

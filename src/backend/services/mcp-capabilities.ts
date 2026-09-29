@@ -155,6 +155,8 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   move_item: 'write',
   delete_item: 'write',
   claim_item: 'write',
+  // A project skill's text; records the read as proof of use on the caller's own tasks (A8.4).
+  get_skill: 'read',
   // Phase 32 C5.1 — which worktree a section is worked in: a plan edit.
   assign_workstream: 'write',
   get_next_item: 'read',
