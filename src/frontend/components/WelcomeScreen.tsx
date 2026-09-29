@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FolderOpen, GitBranch, Cpu, Eye, ArrowRight, Pin, PinOff, X, Clock } from 'lucide-react';
 import { getAPI } from '../bridge';
 import { useProjectStore } from '../stores/project-store';
@@ -55,14 +55,24 @@ export function WelcomeScreen() {
   // ActiveAgentProjects; /api/auto-detect has always known this.
   const activeSessions = useActiveAgentProjects();
 
+  // Paths removed here: a list that arrives late never puts one back.
+  const removedRef = useRef(new Set<string>());
+
   useEffect(() => {
+    // Cancelled on unmount, and filtered by what was removed meanwhile: the
+    // effect runs twice in development (StrictMode), and a slower first load
+    // landing after "Remove from recents" put the row straight back.
+    let cancelled = false;
     fetch('/api/recent-projects')
       .then((r) => r.json())
       .then((data) => {
-        setRecents(Array.isArray(data?.projects) ? data.projects : []);
+        if (cancelled) return;
+        const projects: RecentProject[] = Array.isArray(data?.projects) ? data.projects : [];
+        setRecents(projects.filter((p) => !removedRef.current.has(p.path)));
       })
-      .catch(() => setRecents([]))
-      .finally(() => setLoadingRecents(false));
+      .catch(() => { if (!cancelled) setRecents([]); })
+      .finally(() => { if (!cancelled) setLoadingRecents(false); });
+    return () => { cancelled = true; };
   }, []);
 
   const openAtPath = useCallback(async (projectPath: string) => {
@@ -104,6 +114,7 @@ export function WelcomeScreen() {
 
   const handleRemove = async (projectPath: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    removedRef.current.add(projectPath);
     setRecents((prev) => prev.filter((p) => p.path !== projectPath));
     await fetch('/api/recent-projects', {
       method: 'DELETE',
