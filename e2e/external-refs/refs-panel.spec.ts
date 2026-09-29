@@ -75,8 +75,11 @@ test.describe('External references', () => {
   });
 
   test('external ref visible in item canvas UI', async ({ page, request }) => {
+    // Its own title: the other tests here seed plans under PLAN_TITLE too,
+    // and openPlan by that title could open one of theirs, which has no ref.
+    const title = `${PLAN_TITLE} visible ${Date.now()}`;
     const plan = await seedPlan(request, {
-      title: PLAN_TITLE,
+      title,
       actions: [{ title: 'Visible Ref Action', body: 'Body' }],
     });
 
@@ -85,18 +88,15 @@ test.describe('External references', () => {
     });
 
     await gotoWithProject(page);
-    await openPlan(page, PLAN_TITLE);
+    await openPlan(page, title);
 
     await page.getByText('Visible Ref Action').first().click();
-    await page.waitForTimeout(1000);
 
-    // The ref label or URL should be visible somewhere in the canvas
-    const hasRef = await page.getByText('GitHub Repo Link').first()
-      .isVisible({ timeout: 5000 }).catch(() => false);
-    const hasUrl = await page.getByText('github.com').first()
-      .isVisible({ timeout: 3000 }).catch(() => false);
-
-    expect(hasRef || hasUrl).toBe(true);
+    // The ref label or URL should be visible somewhere in the canvas. Waited
+    // for, not sampled: `isVisible` checks once and ignores its timeout, so a
+    // canvas that took over a second to load the item's refs read as absent.
+    await expect(page.getByText('GitHub Repo Link').or(page.getByText('github.com/example/repo')).first())
+      .toBeVisible({ timeout: 10_000 });
   });
 
   test('plan-level refs endpoint works', async ({ request }) => {
