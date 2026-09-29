@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B3.2: line changes in the code view |
-| **Status** | B3.1 merged (#191). B3.2 done on its branch, stacked on it: a workstream gutter in the code view (this copy's own changes, and other workstreams' lines placed through the base, in words on hover), a strip naming who else changes the file, and "Compare with…" another copy, both sides named. Unit, harness and browser pass |
-| **Next action** | Open B3.2's PR and merge when green. Then B3.3 (overlay list in `graph-builder`; line counts on file nodes; a signal chip focuses the graph) |
+| **Stage / step** | Track B — B3.3a: overlays on the graph |
+| **Status** | B3.1 (#191) and B3.2 (#193) merged. B3.3a done on its branch: the overlay list (plan intent, workstreams, collision zones, breakpoints) turned on and off, each other workstream's line counts and collision zones on file nodes. B3.3b, A8.1, A8.2 and A8.4 are built on branches stacked after it. Unit, harness and browser pass |
+| **Next action** | Open B3.3a's PR and merge when green; then B3.3b, A8.1, A8.2, A8.4 in turn (each rebased on the last merged). Then A8.3 (other clients' hooks, each checked against its docs), A2.7, B4.4 |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b3-2-code-gutter` |
+| **Branch** | `feat/phase-32-b3-3a-overlays` |
 | **Last updated** | 2026-09-28 |
 
 ---
@@ -114,8 +114,10 @@
   - [x] B2.2 ◆ commits and merges, ✓ / ✗ checks ([#172](https://github.com/lionroseway/codetrellis/pull/172))
 - [ ] B3 Line changes and overlays, refined in EXECUTION §5:
   - [x] B3.1 Line changes per workstream from git: REST and `get_line_changes` ([#191](https://github.com/lionroseway/codetrellis/pull/191))
-  - [x] B3.2 The code view: gutter marks, who changed what, Compare with… (PR open)
-  - [ ] B3.3 Overlay list; line counts on file nodes; a signal chip focuses the graph
+  - [x] B3.2 The code view: gutter marks, who changed what, Compare with… ([#193](https://github.com/lionroseway/codetrellis/pull/193))
+  - [ ] B3.3 Overlay list; line counts on file nodes; a signal chip focuses the graph (split in two, EXECUTION §5)
+    - [x] B3.3a Overlays turned on and off; each other workstream's line counts and collision zones on file nodes
+    - [ ] B3.3b A signal chip focuses the graph; "Show changes" on a file node
 - [ ] B4 Breakpoints, refined in EXECUTION §5:
   - [x] B4.1 Task and spec breakpoints at the interception; `await_decision`; answers over REST; Timeline events ([#179](https://github.com/lionroseway/codetrellis/pull/179))
   - [x] B4.2 Code breakpoints; the hook pauses; breach for other clients ([#180](https://github.com/lionroseway/codetrellis/pull/180))
@@ -251,6 +253,29 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-28: B3.3a — overlays on the graph, turned on and off
+- **Journey.** Two other workstreams change `database.ts` and the overlap is
+  open. Its node reads "2 workstreams: ＋12 −3, ＋4" (hover: "billing-v2: 12
+  lines added, 3 removed / exports: 4 lines added") and has a dashed ring
+  with ⚠ whose hover is the overlap's summary. "Overlays 4/4" in the toolbar
+  lists Plan intent, Workstreams, Collision zones and Breakpoints; turning
+  Workstreams off takes the counts away, Collision zones the ring, and both
+  come back when turned on. Remembered per machine.
+- **Built.** The watcher runs `git diff --numstat -z` beside `--name-status`
+  (worktrees and branches), so each changed file carries `added`/`removed`
+  (`parseNumstatZ`, `withLineCounts`). `lib/graph-overlays.ts`: the list, the
+  project's prefix inside its repository (graph paths are the project's,
+  workstream paths the repository's), each other workstream's counts per file
+  (the open copy left out: its changes are the graph's live state), and the
+  files in open or acknowledged collisions. The canvas applies the ones that
+  are on; plan intent on the live graph and the ⏸ badges now follow their
+  overlay. `OverlaysMenu` in the toolbar; `WorkOverlayMarks` on file nodes,
+  drawn inside the node, which clips what overflows it. The canvas loads the
+  awareness store itself for a project it has not seen.
+- **Tests.** Unit `graph-overlays.test.ts`, numstat in
+  `workstream-watch-service.test.ts`. Browser `graph/graph-overlays.spec.ts`
+  (screenshots `graph-overlays-node.png`, `graph-overlays-menu.png`).
 
 ### 2026-09-28: B3.2 — line changes in the code view; compare with another copy
 - **Journey.** Sam opens `validators.ts`. The strip above the code reads

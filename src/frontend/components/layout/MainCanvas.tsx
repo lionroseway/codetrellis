@@ -40,6 +40,9 @@ import { SelectionActionBar } from '../graph/SelectionActionBar';
 import { WelcomeScreen } from '../WelcomeScreen';
 import { useTerminalStore } from '../../stores/terminal-store';
 import type { GraphNode, GraphEdge } from '@shared/types';
+import { useAwarenessStore } from '../../stores/awareness-store';
+import { OverlaysMenu } from '../graph/OverlaysMenu';
+import { workCountsByFile, workCountLabel, collisionFiles, projectPrefix } from '../../lib/graph-overlays';
 
 const nodeTypes = {
   packageNode: PackageNode,
@@ -78,6 +81,9 @@ export function MainCanvas() {
   const setSelectedNode = useUiStore((s) => s.setSelectedNode);
   const selectedNodeId = useUiStore((s) => s.selectedNodeId);
   const graphStyle = useUiStore((s) => s.graphStyle);
+  // Phase 32 B3.3 — the overlays a person has on.
+  const graphOverlays = useUiStore((s) => s.graphOverlays);
+  const planOverlay = graphOverlays.includes('plan');
   const setGraphStyle = useUiStore((s) => s.setGraphStyle);
   const recentlyChanged = useAgentStore((s) => s.recentlyChangedFiles);
   const layoutMode = useGraphStore((s) => s.layoutMode);
@@ -791,8 +797,9 @@ export function MainCanvas() {
 
     // Live mode (default)
     if (depEdges.length === 0) return { nodes: [], edges: [] };
-    return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, recentlyChanged, trellisMode === 'planned' || projectionEnabled ? projectionData : null, layoutMode, trellisMode, scopePath);
-  }, [depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, liveWorkingTreeDiff, recentlyChanged, projectionData, projectionEnabled, layoutMode, trellisMode, currentSnapshot, scopePath]);
+    // Plan intent on the live graph is an overlay (B3.3); the Planned view asks for it outright.
+    return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, recentlyChanged, trellisMode === 'planned' || (projectionEnabled && planOverlay) ? projectionData : null, layoutMode, trellisMode, scopePath);
+  }, [depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, liveWorkingTreeDiff, recentlyChanged, projectionData, projectionEnabled, planOverlay, layoutMode, trellisMode, currentSnapshot, scopePath]);
 
   // One element per id, whichever builder ran. Duplicate ids leak DOM on
   // every render; see `uniqueGraph` for how much.
@@ -816,9 +823,27 @@ export function MainCanvas() {
 
   const breakpoints = useBreakpointsStore((s) => s.breakpoints);
 
+  // Phase 32 B3.3 — the workstream and collision overlays read the awareness
+  // store; the Awareness tab keeps it fed, and this loads it once for a
+  // project it has not seen, so the graph does not wait for the tab.
+  const awarenessRoot = useAwarenessStore((s) => s.root);
+  const workstreams = useAwarenessStore((s) => s.workstreams);
+  const signals = useAwarenessStore((s) => s.signals);
+  useEffect(() => {
+    if (root && awarenessRoot !== root) void useAwarenessStore.getState().refresh(root);
+  }, [root, awarenessRoot]);
+  const workCounts = useMemo(
+    () => (graphOverlays.includes('workstreams') ? workCountsByFile(workstreams, root) : new Map()),
+    [graphOverlays, workstreams, root],
+  );
+  const collisions = useMemo(
+    () => (graphOverlays.includes('collisions') ? collisionFiles(signals, projectPrefix(root, workstreams)) : new Map<string, string[]>()),
+    [graphOverlays, signals, workstreams, root],
+  );
+
   const displayGraphData = useMemo(() => {
-    const hasPlanHighlights = planHighlightPaths.size > 0;
-    const codeBreakpoints = breakpoints.filter((b) => b.kind === 'code');
+    const hasPlanHighlights = planOverlay && planHighlightPaths.size > 0;
+    const codeBreakpoints = graphOverlays.includes('breakpoints') ? breakpoints.filter((b) => b.kind === 'code') : [];
     // Deduplicate nodes by id — the graph builder should produce
     // unique ids, but projection / ghost / cross-system passes can
     // occasionally produce a duplicate that crashes ReactFlow.
@@ -830,7 +855,10 @@ export function MainCanvas() {
     }
     const safeEdges = graphData?.edges ?? [];
 
-    if (!selectedNodeId && !hasPlanHighlights && codeBreakpoints.length === 0) return { nodes: safeNodes, edges: safeEdges };
+    if (!selectedNodeId && !hasPlanHighlights && codeBreakpoints.length === 0 && workCounts.size === 0 && collisions.size === 0) {
+      return { nodes: safeNodes, edges: safeEdges };
+    }
+    const isFile = (data: Record<string, unknown>) => data.nodeType === 'file' || data.nodeType === undefined;
 
     // ⏸ on a node a breakpoint holds (B4.3b): a file, a symbol, or a cluster
     // with any file under one.
@@ -862,6 +890,9 @@ export function MainCanvas() {
               : false,
             planHighlighted: hasPlanHighlights && planHighlightPaths.has(nodePath),
             breakpointTitle: breakpointTitle(node, data, nodePath),
+            // B3.3 — each other workstream's lines in this file, and whether it is in an open overlap.
+            workCount: isFile(data) && workCounts.has(nodePath) ? workCountLabel(workCounts.get(nodePath)!) : undefined,
+            collisionTitle: isFile(data) && collisions.has(nodePath) ? collisions.get(nodePath)!.join('\n') : undefined,
           },
         };
       }),
@@ -874,7 +905,7 @@ export function MainCanvas() {
         },
       })),
     };
-  }, [graphData, selectedNodeId, planHighlightPaths, breakpoints]);
+  }, [graphData, selectedNodeId, planHighlightPaths, planOverlay, breakpoints, graphOverlays, workCounts, collisions]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(displayGraphData?.nodes ?? []);
   const [edges, setEdges, onEdgesChange] = useEdgesState(displayGraphData?.edges ?? []);
@@ -1372,6 +1403,9 @@ export function MainCanvas() {
                   <option value={10000}>10s</option>
                   <option value={30000}>30s</option>
                 </select>
+              </div>
+              <div className="shrink-0">
+                <OverlaysMenu />
               </div>
               <div className="shrink-0">
                 <ExportButton />

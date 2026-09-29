@@ -21,7 +21,7 @@
 import { execFileSync } from 'node:child_process';
 import type { ChangedFile, WorkstreamChanges } from '../../shared/types';
 import { isSafeGitRef } from './git-safety';
-import { parseNameStatusZ, combineChanges } from './workstream-watch-service';
+import { parseNameStatusZ, parseNumstatZ, withLineCounts, combineChanges } from './workstream-watch-service';
 
 export interface BranchRef {
   /** Full ref name, e.g. `refs/heads/billing-v2` or `refs/remotes/origin/billing-v2`. */
@@ -168,6 +168,7 @@ export function branchChanges(repo: string, mainRef: string | null, head: string
   let files: ChangedFile[] = [];
   try {
     files = parseNameStatusZ(git(repo, ['diff', '--name-status', '-z', '-M', base!, head, '--']));
+    files = withLineCounts(files, parseNumstatZ(git(repo, ['diff', '--numstat', '-z', '-M', base!, head, '--'])));
   } catch { /* none */ }
   return { base, ...combineChanges(files, []) };
 }

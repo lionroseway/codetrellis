@@ -156,6 +156,13 @@ export interface ChangedFile {
    * is not the same as an empty list, "changed no symbols".
    */
   symbols?: SymbolChange[];
+  /**
+   * Phase 32 B3.3 — lines added and removed against the merge base, as
+   * `git diff --numstat` counts them. Absent for a binary file and for one
+   * git does not track yet.
+   */
+  added?: number;
+  removed?: number;
 }
 
 export interface SymbolChange {
