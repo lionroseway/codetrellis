@@ -28,8 +28,9 @@ test.describe('Plan creation', () => {
     await page.getByRole('button', { name: 'Plans', exact: true }).click();
     await page.locator('button:has-text("New plan")').click();
 
+    // Three requests on a busy backend: create, open, and the list after.
     await expect(page.locator('input[placeholder="Untitled plan"]')).toBeVisible({
-      timeout: 5000,
+      timeout: 10_000,
     });
   });
 

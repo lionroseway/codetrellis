@@ -212,8 +212,11 @@ export function PlanList() {
       });
       if (!res.ok) throw new Error(await res.text());
       const plan = await res.json();
-      await fetchPlans();
+      // Open it first, then refresh the list: waiting for the whole list
+      // before showing the new plan left the person looking at nothing for
+      // seconds on a project with many plans.
       await setActivePlan(plan.uid);
+      void fetchPlans();
     } catch (err) {
       addToast({ type: 'error', title: 'Could not create plan', message: String(err) });
     }
