@@ -280,11 +280,26 @@ export type SignalState = 'open' | 'acknowledged' | 'intended' | 'dismissed' | '
 export const SETTABLE_SIGNAL_STATES = ['open', 'acknowledged', 'intended', 'dismissed'] as const;
 export type SettableSignalState = typeof SETTABLE_SIGNAL_STATES[number];
 
-/** Who set a signal's state, as the call arrived (see `actorFrom` in server.ts). */
+/**
+ * Who set a signal's state or replied about it, as the call arrived (see
+ * `actorFrom` in server.ts; `phone` is a paired phone, from A4.2).
+ */
 export interface SignalStateBy {
   actor: string;
   actorType: 'human' | 'unverified';
-  channel: 'desktop' | 'local-api';
+  channel: 'desktop' | 'local-api' | 'phone';
+}
+
+/**
+ * A person's message to the agents about a signal (A4.1), and the agent
+ * sessions that have read it: each reads it once, on its next tool call.
+ */
+export interface SignalReply {
+  id: number;
+  message: string;
+  by: SignalStateBy;
+  at: number;
+  readBy: Array<{ sessionId: string; agentType: string; readAt: number }>;
 }
 
 /** An agent session that was told about a signal, and what it said (A2.6). */
@@ -343,4 +358,6 @@ export interface AwarenessSignal {
   /** Who last set the state, and when; absent while nobody has (A1.8). */
   stateBy?: SignalStateBy;
   stateAt?: number;
+  /** The person's messages to the agents about it (A4.1), oldest first. */
+  replies?: SignalReply[];
 }

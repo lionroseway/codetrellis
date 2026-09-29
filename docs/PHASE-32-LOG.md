@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — A4: the phone (M4), refined |
-| **Status** | B5 done (#209, #210, #211, #213). A4 refined into six sub-steps (EXECUTION §4, entry below): a reply to the agents about a signal first, since the desktop has no "message the agent" either; then the phone's signal and workstream RPCs, push for high, the screens with a way to render them, and M4's done-when |
-| **Next action** | A4.1: `POST /api/awareness/:id/reply`, delivered once to each session in the signal's workstreams on its next tool call, and a steer on the plan channel where an agent there holds a task; the Awareness tab's "Message the agents" |
+| **Stage / step** | Wave 2 — A4.1: message the agents about a signal |
+| **Status** | A4 refined (#214). A4.1 built: "Message the agents" on each signal; each agent in its workstreams reads it once on its next call; a steer on the plan of a task held there. Unit, harness (5) and browser (2) green locally |
+| **Next action** | Merge #214, then A4.1 when green; then A4.2, the phone's signal RPC (`awareness.needsYou`, `.signal`, `.answer`, `.reply`) and the `openSignals` count |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a4-refine` |
+| **Branch** | `feat/phase-32-a4-1-reply` (stacked on `feat/phase-32-a4-refine`) |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -89,7 +89,7 @@
   - [x] A8.3 Hook adapters for other clients, each checked against its docs (Gemini CLI, from its own source; others wait on the same check) (#203)
   - [x] A8.4 Proof of use from MCP calls (`get_skill`), labelled by source (#202)
 - [ ] A4 Mobile, refined in EXECUTION §4:
-  - [ ] A4.1 Reply to the agents about a signal (shared by desktop and phone)
+  - [ ] A4.1 Reply to the agents about a signal (shared by desktop and phone) — in review
   - [ ] A4.2 The phone's signal RPC and live count
   - [ ] A4.3 Workstreams on the phone
   - [ ] A4.4 Push for a high signal
@@ -278,6 +278,40 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A4.1 — message the agents about a signal
+Journey **C2**'s reply, built first for the desktop because the spec's "message
+the agent" (§7.2) was never built there either.
+
+- **What the person sees.** Each signal in the Awareness tab has "Message the
+  agents" beside Acknowledge, Intended and Dismiss. It opens a box that says
+  "Each agent in billing-v2 and checkout-fix reads it on its next step";
+  Send (or ⌘/Ctrl-Enter) keeps the words under the signal: "Not read yet:
+  each agent in this work reads it on its next step", then "Read by codex and
+  claude-code · just now". A message sent over plain HTTP carries the
+  "not verified" tag, as answers do.
+- **What the agent gets.** `awareness-replies.ts`: the message is kept in
+  `awareness_signal_replies`. At the one MCP interception, each session placed
+  in one of the signal's workstreams gets it once, appended to its next tool
+  result as "── CodeTrellis: a message about other work ──". The block quotes
+  the person's words under the signal they are about and says who sent them
+  as the call arrived. Reads are kept per session, so the tab can say who
+  read it. A reply sent while the signal was live still reaches an agent
+  whose next call comes after it resolved.
+- **The steer.** `replyToSignalAsPerson` (server.ts, shared with the phone in
+  A4.2) also posts a `steer` on the plan of each unfinished task an agent in
+  those workstreams has claimed ("About "<summary>": <words>"), through
+  `postChannelEventAsPerson`, so it is exported, broadcast and routed like any
+  plan message.
+- **Tests.** Unit: `awareness-replies.test.ts` (6: the words, once per
+  session, only those workstreams, after resolve, the steer's targets) and
+  `awareness-view.test.ts` (+3). Harness: `awareness-replies` (5, three real
+  worktrees and three MCP clients; the one in a third worktree never reads
+  it). Browser: `awareness-reply.spec.ts` (2), with screenshots
+  `awareness-message-agents.png` and `awareness-message-sent.png`.
+- **Found by the screenshot.** In the panel's default height the box opened
+  with Send below the fold. It now scrolls itself into view, and the spec
+  checks that Send is in the viewport.
 
 ### 2026-09-29: A4 refined — the phone (M4)
 Journey **C2** ("a serious warning fires while Sam is out"): a push, both sides

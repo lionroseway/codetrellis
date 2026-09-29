@@ -9,7 +9,7 @@
  * the answer can be taken back (awareness spec §4.4, §7.2).
  */
 
-import type { AwarenessSignal, SettableSignalState, Workstream } from '@shared/types';
+import type { AwarenessSignal, SettableSignalState, SignalReply, Workstream } from '@shared/types';
 import { chipLabel, stripWorkstreams } from './workstream-strip';
 
 const RANK = { high: 0, medium: 1, low: 2 } as const;
@@ -150,6 +150,22 @@ export function reopenedWords(s: Pick<AwarenessSignal, 'reopened' | 'state'>, no
   if (!s.reopened || s.state !== 'open') return null;
   const was = s.reopened.from === 'intended' ? 'marked it intended' : 'acknowledged it';
   return `Back: it changed since you ${was} · ${ago(s.reopened.at, now)}`;
+}
+
+/**
+ * Where a message to the agents stands (A4.1): who has read it, or that no
+ * agent has yet. Each agent in the work reads it on its next step.
+ */
+export function replyReadWords(r: Pick<SignalReply, 'readBy'>, now: number): string {
+  if (r.readBy.length === 0) return 'Not read yet: each agent in this work reads it on its next step';
+  const names = [...new Set(r.readBy.map((x) => x.agentType))];
+  const who = names.length <= 2 ? names.join(' and ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;
+  return `Read by ${who} · ${ago(Math.max(...r.readBy.map((x) => x.readAt)), now)}`;
+}
+
+/** Who sent a message, as it arrived. */
+export function replyFromWords(r: Pick<SignalReply, 'by'>): string {
+  return r.by.channel === 'phone' ? 'You, from your phone' : 'You';
 }
 
 export interface SignalAction { state: SettableSignalState; label: string; hint: string }

@@ -6,7 +6,7 @@
  */
 
 import { create } from 'zustand';
-import type { AwarenessSignal, SettableSignalState, Workstream, WorkstreamCommit } from '@shared/types';
+import type { AwarenessSignal, SettableSignalState, SignalReply, Workstream, WorkstreamCommit } from '@shared/types';
 
 /** How far back the Timeline lanes ask for commits (B2.2): the lanes' widest window. */
 const COMMITS_WINDOW_MS = 2 * 60 * 60 * 1000;
@@ -23,6 +23,8 @@ interface AwarenessState {
   refresh: (root: string | null) => Promise<void>;
   /** A person's answer to a signal. Resolves to an error message, or null. */
   answer: (id: string, state: SettableSignalState) => Promise<string | null>;
+  /** A person's message to the agents about a signal (A4.1). Resolves to an error message, or null. */
+  reply: (id: string, message: string) => Promise<string | null>;
 }
 
 export const useAwarenessStore = create<AwarenessState>((set, get) => ({
@@ -72,6 +74,25 @@ export const useAwarenessStore = create<AwarenessState>((set, get) => ({
       if (!res.ok) return (body as { error?: string }).error ?? `Server returned ${res.status}`;
       const updated = body as AwarenessSignal;
       set((s) => ({ signals: s.signals.map((x) => (x.id === id ? updated : x)) }));
+      return null;
+    } catch {
+      return 'Could not reach CodeTrellis.';
+    }
+  },
+
+  reply: async (id, message) => {
+    const root = get().root;
+    if (!root) return 'No project is open.';
+    try {
+      const res = await fetch(`/api/awareness/${encodeURIComponent(id)}/reply?project=${encodeURIComponent(root)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return (body as { error?: string }).error ?? `Server returned ${res.status}`;
+      const { signalId: _s, steers: _t, ...reply } = body as SignalReply & { signalId: string; steers: string[] };
+      set((s) => ({ signals: s.signals.map((x) => (x.id === id ? { ...x, replies: [...(x.replies ?? []), reply] } : x)) }));
       return null;
     } catch {
       return 'Could not reach CodeTrellis.';

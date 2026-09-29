@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Radar, ArrowLeftRight, ArrowRight, History } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, ChevronRight, Radar, ArrowLeftRight, ArrowRight, History, MessageSquare } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
 import { useReplayState, useReplayStore } from '../../stores/replay-store';
 import { hhmm, signalsAsOf } from '../../lib/replay';
@@ -14,6 +14,7 @@ import { useUiStore } from '../../stores/ui-store';
 import { useToastStore } from '../../stores/toast-store';
 import {
   groupSignals, needsYouCount, digestLine, kindWords, sidesOf, sideRootsOf, sideLabel, stateWords, actionsFor, ago, toldWords, reopenedWords,
+  replyReadWords, replyFromWords,
 } from '../../lib/awareness-view';
 import { buildDigest } from '@shared/lib/awareness-digest';
 import type { AwarenessSignal, SettableSignalState, Workstream } from '@shared/types';
@@ -270,6 +271,95 @@ function DriftDetail({ subject }: { subject: AwarenessSignal['subject'] }) {
 }
 
 /**
+ * The person's messages to the agents about a signal (A4.1), and who has
+ * read each. The agents' answers are under "told", in their own words.
+ */
+function SignalReplies({ signal: s, now }: { signal: AwarenessSignal; now: number }) {
+  if (!s.replies?.length) return null;
+  return (
+    <div data-testid="awareness-replies" className="mt-1.5 space-y-1">
+      {s.replies.map((r) => (
+        <div key={r.id} data-testid="awareness-reply" className="pl-2 border-l border-sky-400/40 text-[10px]">
+          <div className="text-foreground whitespace-pre-wrap break-words">“{r.message}”</div>
+          <div className="text-foreground-subtle">
+            {replyFromWords(r)}<UnverifiedIf type={r.by.actorType} /> · {ago(r.at, now)} · <span data-testid="awareness-reply-read">{replyReadWords(r, now)}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * "Message the agents" (A4.1, awareness spec §7.2): the person's words reach
+ * each agent working on either side, once, on its next step.
+ */
+function MessageAgents({ signal: s, sides }: { signal: AwarenessSignal; sides: string[] }) {
+  const reply = useAwarenessStore((st) => st.reply);
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  // Opened near the bottom of a short panel: bring Send into view too, not only the textbox.
+  useEffect(() => { if (open) boxRef.current?.scrollIntoView({ block: 'nearest' }); }, [open]);
+  const send = async () => {
+    const message = text.trim();
+    if (!message) return;
+    setBusy(true);
+    const err = await reply(s.id, message);
+    setBusy(false);
+    if (err) { useToastStore.getState().addToast({ type: 'error', title: 'Could not send the message', message: err }); return; }
+    setText('');
+    setOpen(false);
+  };
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        data-testid="awareness-message-agents"
+        title="Your words reach each agent working on either side, on its next step"
+        className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border border-border-subtle text-foreground-muted hover:text-foreground hover:bg-surface-hover transition-colors"
+      >
+        <MessageSquare size={10} /> Message the agents
+      </button>
+    );
+  }
+  return (
+    <div ref={boxRef} data-testid="awareness-message-box" className="order-last basis-full mt-1 space-y-1">
+      <textarea
+        autoFocus
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void send(); }
+          if (e.key === 'Escape') setOpen(false);
+        }}
+        maxLength={1000}
+        rows={2}
+        aria-label="Message to the agents"
+        placeholder="e.g. Keep the old signature until checkout-fix has moved its callers"
+        className="w-full rounded border border-border-subtle bg-surface px-2 py-1 text-[11px] text-foreground placeholder:text-foreground-subtle focus:outline-none focus:border-accent/50"
+      />
+      <div className="flex items-center gap-1.5 text-[10px]">
+        <button
+          type="button"
+          onClick={() => { void send(); }}
+          disabled={busy || !text.trim()}
+          className="px-2 py-0.5 rounded bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-50 transition-colors"
+        >
+          Send
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="px-2 py-0.5 rounded text-foreground-muted hover:text-foreground">
+          Cancel
+        </button>
+        <span className="text-foreground-subtle">Each agent in {sides.join(' and ')} reads it on its next step.</span>
+      </div>
+    </div>
+  );
+}
+
+/**
  * The agents told about a signal, and what each said with acknowledge_signal
  * (A2.6). Their words, quoted and attributed: they sit beside the person's
  * answer and never set it.
@@ -407,10 +497,11 @@ function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; 
       )}
 
       <AgentsTold signal={s} now={now} />
+      <SignalReplies signal={s} now={now} />
 
       {answered && <div data-testid="awareness-answered" className="mt-1 text-[9px] text-foreground-subtle italic">{answered}<UnverifiedIf type={s.stateBy?.actorType} /></div>}
 
-      <div className="mt-1.5 flex items-center gap-1">
+      <div className="mt-1.5 flex flex-wrap items-center gap-1">
         <span data-testid="awareness-actions" className="flex items-center gap-1">
           {!replayed && actionsFor(s.state, s.kind).map((a) => (
             <button
@@ -424,6 +515,7 @@ function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; 
             </button>
           ))}
         </span>
+        {!replayed && <MessageAgents signal={s} sides={sides} />}
         {/* Where it is, beside what to do about it (B3.3b). */}
         <SignalFileChips signal={s} workstreams={workstreams} />
       </div>
