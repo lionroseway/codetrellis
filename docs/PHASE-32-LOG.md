@@ -112,12 +112,12 @@
 - [x] B2 Timeline lanes, refined in EXECUTION §5:
   - [x] B2.1 Lanes per workstream: ● turns, ✎ edits, ⚠ signals, hover and click ([#171](https://github.com/lionroseway/codetrellis/pull/171))
   - [x] B2.2 ◆ commits and merges, ✓ / ✗ checks ([#172](https://github.com/lionroseway/codetrellis/pull/172))
-- [ ] B3 Line changes and overlays, refined in EXECUTION §5:
+- [x] B3 Line changes and overlays, refined in EXECUTION §5:
   - [x] B3.1 Line changes per workstream from git: REST and `get_line_changes` ([#191](https://github.com/lionroseway/codetrellis/pull/191))
   - [x] B3.2 The code view: gutter marks, who changed what, Compare with… ([#193](https://github.com/lionroseway/codetrellis/pull/193))
-  - [ ] B3.3 Overlay list; line counts on file nodes; a signal chip focuses the graph (split in two, EXECUTION §5)
+  - [x] B3.3 Overlay list; line counts on file nodes; a signal chip focuses the graph (split in two, EXECUTION §5)
     - [x] B3.3a Overlays turned on and off; each other workstream's line counts and collision zones on file nodes
-    - [ ] B3.3b A signal chip focuses the graph; "Show changes" on a file node
+    - [x] B3.3b A signal chip focuses the graph; "Show changes" on a file node
 - [ ] B4 Breakpoints, refined in EXECUTION §5:
   - [x] B4.1 Task and spec breakpoints at the interception; `await_decision`; answers over REST; Timeline events ([#179](https://github.com/lionroseway/codetrellis/pull/179))
   - [x] B4.2 Code breakpoints; the hook pauses; breach for other clients ([#180](https://github.com/lionroseway/codetrellis/pull/180))
@@ -253,6 +253,22 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: B3.3b — from an overlap to its lines
+- **Journey.** billing-v2 and exports both change `database.ts`. On the
+  overlap's card, "Show on graph" switches to the graph and zooms onto the
+  file's node (or the cluster holding it). Right-click it: "Show line
+  changes" opens the file in the code view with each workstream's lines
+  marked (B3.2). Back on the card, "Show lines" goes straight there. With it
+  B3 is done: line changes from git, in the code view, on the graph, for
+  any agent.
+- **Built.** `SignalFileChips` on each signal card (the signal's repository
+  path turned into the project's; nothing shown for a file outside the open
+  project), using the existing `focusNode` and `openFileAt`; "Show line
+  changes" on a file node's menu.
+- **Tests.** Browser `graph/signal-to-lines.spec.ts` (the journey; the
+  focused node covers the middle of the canvas; screenshots
+  `signal-to-lines-card.png`, `signal-to-lines-graph.png`).
 
 ### 2026-09-28: B3.3a — overlays on the graph, turned on and off
 - **Journey.** Two other workstreams change `database.ts` and the overlap is
