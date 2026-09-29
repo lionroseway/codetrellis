@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — A4.5b: the phone's new screens |
-| **Status** | A4.1–A4.3 (#215–#217), A4.5a (#218) and A4.4 (#219) merged. A4.5b in review: Needs you on Activity, signal detail, workstreams, the push tap, each photographed |
-| **Next action** | Merge A4.5b when green; then A4.6 (M4 done-when end to end, and docs) |
+| **Stage / step** | Wave 2 — A4.6: the M4 "done when" |
+| **Status** | A4.1–A4.5b merged (#215–#220). A4.6 in review: `awareness-m4`, from the push to an asleep phone to the agent reading the reply and finding the steer; the phone's part in `awareness.md` and `mobile-companion.md` |
+| **Next action** | Merge A4.6 when green, which closes A4 (M4); update the status page (v12); then A5, the review |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a4-5b-phone-screens` |
+| **Branch** | `feat/phase-32-a4-6-m4-done-when` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -94,8 +94,8 @@
   - [x] A4.3 Workstreams on the phone ([#217](https://github.com/lionroseway/codetrellis/pull/217))
   - [x] A4.4 Push for a high signal (#219)
   - [x] A4.5a A way to see the phone's screens (#218)
-  - [ ] A4.5b The phone's new screens (Needs you, signal detail, workstreams, the push tap) — in review
-  - [ ] A4.6 M4 done-when, end to end, and docs
+  - [x] A4.5b The phone's new screens (Needs you, signal detail, workstreams, the push tap) (#220)
+  - [ ] A4.6 M4 done-when, end to end, and docs — in review
 - [ ] A5 Review
 - [ ] A6 The Brief
 - [ ] A7 Rules
@@ -280,6 +280,37 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A4.6 — M4, away from the desk
+The M4 "done when" (awareness spec §10) as one test,
+`tests/e2e/awareness-m4.test.ts`, on the running backend with real
+worktrees:
+
+1. Sam's phone is paired, given its push token, and put to sleep.
+2. billing-v2's agent changes `validateCreateUser`, which checkout-fix's work
+   imports, with no window open. The phone is pushed once, with the id and
+   words that name nothing.
+3. Sam opens the phone. It opens the signal by the pushed id and reads both
+   sides.
+4. Sam replies from the phone. The reply is the person's, from their phone,
+   and it is posted as a `steer` on the task checkout-fix's agent holds.
+5. That agent reads the reply once, on its next call, and finds the steer on
+   its task through `list_channel_events`. billing-v2's agent reads it too,
+   and the desktop lists both as having read it.
+
+Passed 3 times of 3 locally.
+
+- **Found.** "Asleep" takes time. A phone that stops answering is let go
+  after three missed heartbeats, 10 s apart, and until then it counts as
+  connected and is not pushed. The first run pushed nothing for that reason.
+  The test now waits for the desktop to let go (about 40 s), as a real phone
+  going into a pocket would. The timing is in `mobile-companion.md`.
+- **Harness limit.** The harness phone cannot reconnect with its pairing
+  secret yet, so "Sam opens the phone" is a second pairing. What the test
+  proves is unchanged: the push carries only the id, and the phone loads
+  everything else over the mesh.
+- **Docs.** `awareness.md` gains the phone's screens, the M4 test and the
+  phone specs. `mobile-companion.md` gains when a phone counts as away.
 
 ### 2026-09-29: A4.5b — the phone's new screens
 Journey C2 on the phone. Sam is away from the desk. Activity opens with

@@ -134,6 +134,14 @@ The data is `{ type: 'signal', id }`. One push per kind per minute per
 device, never to a phone watching live, whose `openSignals` count moves
 instead. The watchers run this with no window open, which is the point.
 
+A phone counts as away once the desktop has let go of its link. A phone
+that closes cleanly drops at once. One that just stops answering is let go
+after three missed heartbeats, 10 s apart (`webrtc-service.ts`), so up to
+about 40 s. Until then its count moves and it is not pushed.
+
+The whole journey, from the push to the agent reading the reply, is tested
+in `tests/e2e/awareness-m4.test.ts` (the M4 "done when", A4.6).
+
 `CODETRELLIS_PUSH_URL` can point pushes at a receiver on this machine
 (`127.0.0.1` or `localhost` only; anything else is ignored), which is how the
 harness sees them. Tapping the push opens `/signal-detail?id=` (A4.5b,
