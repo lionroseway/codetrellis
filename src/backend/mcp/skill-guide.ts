@@ -227,9 +227,12 @@ waiting — an answer can take hours, and the wait survives restarts.
 - **stop**: do not make the call; tell the person what you will do instead.
 
 A breakpoint can also be on code: a file, a folder, or one function.
-Claude Code's hook asks \`check_breakpoint\` before each edit and holds it;
-any agent can ask it too before editing. Pass \`old_text\` (what the edit
-replaces) and a breakpoint on one function holds only edits that touch it. If you change such a file with your own editor, your
+Before you edit a file, call \`check_breakpoint(path, old_text)\`, whatever
+your client: \`pass\` means go ahead; \`paused\` means wait on its ref with
+\`await_decision\`. Pass \`old_text\` (what the edit replaces) and a
+breakpoint on one function holds only edits that touch it. Claude Code's
+hook makes this check for you; no other client needs a hook to be held.
+If you change such a file without checking, your
 next tool call says so: that is a **breach**. Stop changing it and wait with
 \`await_decision\` the same way.
 
@@ -1294,7 +1297,9 @@ work alongside them.
    that imports them (through barrels too). Changing a signature that
    another workstream's work imports raises a \`contract\` signal.
    \`get_line_changes(path)\` then shows which of their lines, so an edit
-   of the same file can stay out of them.
+   of the same file can stay out of them. Before you edit a file, call
+   \`check_breakpoint(path, old_text)\`: a person may have asked to be
+   asked first (the Claude Code hook does this for you; any client can).
 4. **When a signal touches you:** fix it if the fix is yours to make.
    If it needs a choice (whose change wins, which signature to keep),
    post it with \`post_channel_event\` (\`event_type: 'need-decision'\`, with the options) and wait.

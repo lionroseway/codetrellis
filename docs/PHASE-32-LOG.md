@@ -84,7 +84,7 @@
   - [x] A3.5 `docs/claude/awareness.md`; M3 "done when" (#168)
 - [ ] A2.7 Signatures for Go, Rust, Java, C#, Kotlin, Swift, Ruby, PHP (owner's ask, 2026-09-28)
 - [ ] A8 Any agent (owner's ask, 2026-09-28), refined in EXECUTION §4:
-  - [ ] A8.1 Parity table; `check_breakpoint` in the guide for every agent; journeys run by a client with no hook
+  - [x] A8.1 Parity table; `check_breakpoint` in the guide for every agent; journeys run by a client with no hook
   - [ ] A8.2 Client-neutral pre-edit check in the connector
   - [ ] A8.3 Hook adapters for other clients, each checked against its docs
   - [ ] A8.4 Proof of use and session signals from MCP calls
@@ -256,6 +256,22 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A8.1 — any agent: the parity table and the journeys with no hook
+- **Journey.** Two Codex sessions, no hook and no watcher, one in billing-v2
+  and one in exports. Codex sees its own worktree and the other, and the
+  collision on `validateCreateOrder`; is told "exports changed line 19, in
+  validateCreateOrder, not committed"; has a claim paused by a task
+  breakpoint and let through on continue; asks `check_breakpoint` with the
+  text it replaces and is held only for `validateCreateUser`, then gets the
+  person's steer; the other Codex, editing past the breakpoint with its own
+  editor, is told of the breach on its next call.
+- **Built.** The parity table in `docs/claude/awareness.md` (what every MCP
+  client gets, what a client's hook or log adds). The guide now tells every
+  agent "Before you edit a file, call `check_breakpoint(path, old_text)`",
+  in the summary and in the parallel flavour, where it only said Claude
+  Code's hook did.
+- **Tests.** Harness `tests/e2e/any-agent-parity.test.ts`, one test per row.
 
 ### 2026-09-29: B3.3b — from an overlap to its lines
 - **Journey.** billing-v2 and exports both change `database.ts`. On the

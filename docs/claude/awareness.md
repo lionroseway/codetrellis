@@ -149,6 +149,26 @@ event, for the active project.
     and denies an edit only where a person set a breakpoint on the file,
     as "paused: waiting for a decision" (see `services/code-breakpoints.ts`).
 
+## Any agent: what every client gets (A8)
+
+CodeTrellis is agent-agnostic. The rule: a feature ships with the path
+every MCP client has (tool calls, folder watching, git); a client's own
+hook or log may make it earlier or richer, never the only way. Each row is
+run as a plain `codex` client with no hook and no watcher in
+`tests/e2e/any-agent-parity.test.ts`.
+
+| Feature | Any MCP client | What a client's own hook or log adds |
+|---|---|---|
+| Workstreams, who is where | `list_workstreams`; the session is placed by its MCP roots or the connector's working folder (A1.1) | Claude Code's session watcher places a session before its first MCP call |
+| Signals | `get_awareness`, and unseen ones appended to its next tool result (A2.6) | — |
+| Footprints and line changes | `check_footprint`, `get_line_changes` (B3.1), from git | — |
+| Declared intent | `declare_intent` | — |
+| Task and spec breakpoints | enforced at the MCP interception: the call returns "paused" with a ref; `await_decision` | — |
+| Code and function breakpoints | `check_breakpoint(path, old_text)` before an edit (the guide tells every agent to); an edit made without checking is a breach on its next call | Claude Code's `PreToolUse` hook makes the check itself and holds the edit before it is made, sending the replaced text |
+| Signal breakpoints | claims, finishes and spec edits pause while the signal is open | hooked edits pause too |
+| Skills | the task's skills, where to find them, in `get_brief`, `claim_item` and `get_next_item` (C1.1) | Claude Code's session log proves a skill was used (C1.3); A8.4 derives the same from MCP calls |
+| Setup | the MCP connector config (Settings → MCP Server: a JSON entry for Claude Desktop, Cursor and most clients) | Claude Code's skill and hook installer (A3.4); A8.3 adds other clients' hooks |
+
 ## Rules to keep
 
 - **An agent is never handed another agent's text** (principle 5).

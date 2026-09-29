@@ -160,7 +160,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | 1 | ✓ 0.4c-2: old state back as a new version; unknown 404 (item-surface) |  |  |
 | c | `POST /api/items/:uid/skill-arrivals/accept` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/worktree` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans` |  | 1 | 59 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans` |  | 1 | 60 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 2 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:planUid/items` |  | ✗ none | 32 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
@@ -221,8 +221,8 @@ records that — but "✗ none" is proof of a gap.
 | g | `GET /api/workstreams/commits` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/workstreams/folder-requests` |  | ✗ none | 1 |  |  |  |
 | g | `POST /api/awareness/:id/state` |  | ✗ none | 4 |  |  |  |
-| g | `POST /api/breakpoint-hits/:ref/answer` |  | ✗ none | 3 |  |  |  |
-| g | `POST /api/breakpoints` |  | ✗ none | 4 |  |  |  |
+| g | `POST /api/breakpoint-hits/:ref/answer` |  | ✗ none | 4 |  |  |  |
+| g | `POST /api/breakpoints` |  | ✗ none | 5 |  |  |  |
 | g | `POST /api/plans/:uid/budget/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4g: unflags an agent's change and records who saw it; unknown change or wrong plan 404 (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `POST /api/sessions/:sessionId/assign-plan` |  | ✗ none | 3 | ✓ 0.4g: unknown plan or session 404, missing plan 400, nothing changed (agent-ui-tools); bug 27 |  |  |
 | g | `POST /api/workstreams/folder-requests/:id/dismiss` |  | ✗ none | 1 |  |  |  |
@@ -330,7 +330,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `add_plan_scope` | plan · write | ✗ none | 3 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-cross-repo, cdev-stitched-view (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `assign_workstream` | plan-item · write | ✗ none | 1 |  |  |  |
 | c | `bulk_add_items` | plan-item · write | ✗ none | 1 | ✓ 0.7: a tree in one call, parents by temporary id, authored by the calling agent; unknown plan refused (item-batch-search-import) |  |  |
-| c | `claim_item` | plan-item · write | ✗ none | 13 | ✓ 0.4c: exercised by agent-loop, multi-agent, plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `claim_item` | plan-item · write | ✗ none | 14 | ✓ 0.4c: exercised by agent-loop, multi-agent, plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `copy_plan_as_prompt` | plan · read | ✗ none | 1 | ✓ 0.4c-1: whole plan or one item; unknown plan is an error (plan-tools) |  |  |
 | c | `create_plan` | plan · write | ✗ none | 20 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-channels, cdev-cross-repo, cdev-phase11, +15 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `create_plan_from_template` | plan · write | ✗ none | 1 | ✓ 0.4c-1: items copied, statuses reset; unknown template errors (plan-tools) |  |  |
@@ -353,7 +353,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `list_items` | plan-item · read | ✗ none | 3 | ✓ 0.4c: exercised by cdev-phase5, intake, plan-items (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `list_plan_pointers` | plan · read | ✗ none | 1 | ✓ 0.4c: exercised by cdev-cross-repo (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `list_plan_templates` | plan · read | ✗ none | 1 | ✓ 0.4c-1: built-ins; project templates with project_root (plan-tools) |  |  |
-| c | `list_plans` | plan · read | ✗ none | 8 | ✓ 0.4c: exercised by plan-tools, transport-auth (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `list_plans` | plan · read | ✗ none | 9 | ✓ 0.4c: exercised by plan-tools, transport-auth (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `list_plans_by_repo` | plan · read | ✗ none | 1 | ✓ 0.4c: exercised by cdev-cross-repo (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `move_item` | plan-item · write | ✗ none | 3 | ✓ 0.4c-2: refuses cycles and foreign/missing parents (item-surface; bug 23) |  |  |
 | c | `prepare_contributor_branch` | contribution · write | ✗ none | 1 | ✓ 0.4c: exercised by cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -386,13 +386,13 @@ records that — but "✗ none" is proof of a gap.
 | e | `read_material` | plan-item · files | ✗ none | 1 | ✓ 0.4e: CSV by {range} (bug 24), text by {lines}, image as itself; read logged on the item (brief-surface, read unit) |  |  |
 | e | `record_artefact` | plan-item · write | ✗ none | 4 | ✓ 0.4e: agent records an output (brief-surface, criteria-loops) |  |  |
 | f | `await_ack` | presence · write | ✗ none | 1 | ✓ 0.4f: released by ack; instant when already acked; unknown card an error at once; dismissed → via dismissed (presence-channels; bug 25) |  |  |
-| f | `await_decision` | presence · read | ✗ none | 3 |  |  |  |
+| f | `await_decision` | presence · read | ✗ none | 4 |  |  |  |
 | f | `await_user_input` | presence · write | ✗ none | 1 | ✓ 0.4f: gets the reply; a newer question supersedes an older wait at once (presence-channels; bug 25) |  |  |
-| f | `check_breakpoint` | presence · read | ✗ none | 1 |  |  |  |
+| f | `check_breakpoint` | presence · read | ✗ none | 2 |  |  |  |
 | f | `dismiss_channel_event` | channel · write | ✗ none | 1 | ✓ 0.4f: dismissed, broadcast, gone from the open list; unknown an error (presence-channels) |  |  |
 | f | `dismiss_presence` | presence · write | ✗ none | 1 | ✓ 0.4f: clears every card and releases waiters (presence-channels; bug 25) |  |  |
 | f | `get_channel_thread` | channel · read | ✗ none | 2 | ✓ 0.4f: same order as REST (presence-channels, cdev-channels) |  |  |
-| f | `get_line_changes` | presence · read | ✗ none | 1 |  |  |  |
+| f | `get_line_changes` | presence · read | ✗ none | 2 |  |  |  |
 | f | `list_channel_events` | channel · read | ✗ none | 4 | ✓ 0.4f: status filter excludes dismissed; pulled events appear (presence-channels; bug 26) |  |  |
 | f | `post_channel_event` | channel · write | ✗ none | 7 | ✓ 0.4f: threads with responds_to, exported to the plan folder (presence-channels, cdev-channels) |  |  |
 | f | `present` | presence · write | ✗ none | 2 | ✓ 0.4f: card posted, broadcast, attributed to the agent (presence-channels) |  |  |
@@ -403,13 +403,13 @@ records that — but "✗ none" is proof of a gap.
 | g | `clipboard_read` | ui · capture | ✗ none | 1 | ✓ 0.4g: refused without capture; the window's answer returned (agent-ui-tools) |  |  |
 | g | `clipboard_write` | ui · write | ✗ none | 1 | ✓ 0.4g: sends the text to the window (agent-ui-tools) |  |  |
 | g | `declare_intent` | awareness · write | ✗ none | 2 |  |  |  |
-| g | `get_app_guide` | ui · read | ✗ none | 2 | ✓ 0.4g: every flavour distinct; summary names this project's plans; unknown flavour refused (agent-ui-tools) |  |  |
-| g | `get_awareness` | awareness · read | ✗ none | 6 |  |  |  |
+| g | `get_app_guide` | ui · read | ✗ none | 3 | ✓ 0.4g: every flavour distinct; summary names this project's plans; unknown flavour refused (agent-ui-tools) |  |  |
+| g | `get_awareness` | awareness · read | ✗ none | 7 |  |  |  |
 | g | `get_budget` | budget · read | ✗ none | 1 | ✓ 0.4g: ceiling, spent, forecast, notes; unknown plan refused (agent-ui-tools) |  |  |
 | g | `get_log_path` | ui · read | ✗ none | 1 | ✓ 0.4g: today's file in the data dir; naming it creates nothing (agent-ui-tools), logger-path unit; bug 28 |  |  |
 | g | `get_logs` | ui · read | ✗ none | 1 | ✓ 0.4g: says when there is no log file; tail and filter of the desktop log (agent-ui-tools); bug 28 |  |  |
 | g | `get_settings` | ui · read | ✗ none | 1 | ✓ 0.4g: reads back what update_settings wrote; no secrets in settings (cdev-phase5) |  |  |
-| g | `list_workstreams` | awareness · read | ✗ none | 2 |  |  |  |
+| g | `list_workstreams` | awareness · read | ✗ none | 3 |  |  |  |
 | g | `navigate_item_back` | session · write | ✗ none | 1 | ✓ 0.4g: selection steps back (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `navigate_item_forward` | session · write | ✗ none | 1 | ✓ 0.4g: and forward (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `navigate_to` | session · write | ✗ none | 1 | ✓ 0.4g: every target's payload; unknown plan/item/file refused (agent-ui-tools); bug 27 |  |  |
@@ -418,7 +418,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `open_plan` | session · write | ✗ none | 1 | ✓ 0.4g: plan opens; unknown plan refused with no toast (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `open_settings` | session · write | ✗ none | 1 | ✓ 0.4g: settings dialog opens (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `refresh_ui` | session · write | ✗ none | 1 | ✓ 0.4g: sends ui-refresh (agent-ui-tools) |  |  |
-| g | `register_session` | session · read | ✗ none | 30 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
+| g | `register_session` | session · read | ✗ none | 31 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
 | g | `screenshot` | ui · capture | ✗ none | 1 | ✓ 0.4g: refused without capture; image from the window's answer; empty answer an error (agent-ui-tools) |  |  |
 | g | `select_item` | ui · write | ✗ none | 1 | ✓ 0.4g: item selected; unknown item or wrong plan refused (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `set_active_plan` | session · write | ✗ none | 1 | ✓ 0.4g: shown and recorded as the agent's plan; unknown refused, unchanged (agent-ui-tools); bug 27 |  |  |
