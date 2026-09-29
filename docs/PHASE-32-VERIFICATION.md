@@ -20,7 +20,7 @@ records that — but "✗ none" is proof of a gap.
 | REST routes | 238 | 236 | 0 | 0 | 217 | 0 |
 | MCP tools | 195 | 195 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 76 | 71 | 0 | 0 | 76 | 0 |
-| Frontend components | 109 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 110 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 12 | n/a | n/a | n/a | 10 | 12 |
 
@@ -38,7 +38,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4h Drift, governance, review | 10 | 24 | 8 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 31 | 0 |
-| 0.4k Settings, updates, privacy | 11 | 0 | 3 | 5 | 0 | 12 |
+| 0.4k Settings, updates, privacy | 11 | 0 | 3 | 6 | 0 | 12 |
 | 0.4l System docs and intake | 7 | 11 | 6 | 1 | 0 | 0 |
 
 ## MCP tools: registry vs capability matrix
@@ -221,8 +221,8 @@ records that — but "✗ none" is proof of a gap.
 | g | `GET /api/workstreams/commits` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/workstreams/folder-requests` |  | ✗ none | 1 |  |  |  |
 | g | `POST /api/awareness/:id/state` |  | ✗ none | 4 |  |  |  |
-| g | `POST /api/breakpoint-hits/:ref/answer` |  | ✗ none | 5 |  |  |  |
-| g | `POST /api/breakpoints` |  | ✗ none | 6 |  |  |  |
+| g | `POST /api/breakpoint-hits/:ref/answer` |  | ✗ none | 6 |  |  |  |
+| g | `POST /api/breakpoints` |  | ✗ none | 7 |  |  |  |
 | g | `POST /api/plans/:uid/budget/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4g: unflags an agent's change and records who saw it; unknown change or wrong plan 404 (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `POST /api/sessions/:sessionId/assign-plan` |  | ✗ none | 3 | ✓ 0.4g: unknown plan or session 404, missing plan 400, nothing changed (agent-ui-tools); bug 27 |  |  |
 | g | `POST /api/workstreams/folder-requests/:id/dismiss` |  | ✗ none | 1 |  |  |  |
@@ -572,7 +572,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (109)
+## Frontend components (110)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -681,6 +681,7 @@ records that — but "✗ none" is proof of a gap.
 | j | `pairing/RemotePeersPanel.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/AddToClaudeCode.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/AddToClaudeDesktop.tsx` |  | n/a | n/a |  |  |  |
+| k | `settings/AddToGeminiCli.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/SettingsModal.tsx` |  | n/a | n/a |  | ✓ 0.5 — one height for every section (0.5b) |  |
 | k | `settings/VerifiedUpdateDownload.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/WebcamQrScanner.tsx` |  | n/a | n/a |  |  |  |

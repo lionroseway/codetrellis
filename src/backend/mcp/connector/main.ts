@@ -17,7 +17,7 @@ import { ConnectorCore, type JsonRpcMessage } from './core';
 import { connectSseUpstream } from './sse-upstream';
 import { defaultDataDir, readConnectTarget } from './files';
 import fs from 'node:fs';
-import { HOOK_FLAG, HOOK_PRE_TOOL_USE, runPreToolUseHook, CHECK_EDIT_FLAG, OLD_TEXT_FILE_FLAG, runCheckEdit } from './hook';
+import { HOOK_FLAG, HOOK_PRE_TOOL_USE, HOOK_GEMINI_BEFORE_TOOL, runPreToolUseHook, runGeminiBeforeToolHook, CHECK_EDIT_FLAG, OLD_TEXT_FILE_FLAG, runCheckEdit } from './hook';
 
 declare const __CONNECTOR_VERSION__: string | undefined;
 const VERSION = typeof __CONNECTOR_VERSION__ === 'string' ? __CONNECTOR_VERSION__ : 'dev';
@@ -43,12 +43,14 @@ const connectFrom = (cwd: string) => {
 
 // As a Claude Code PreToolUse hook (A3.4): read the call, answer once, exit.
 // Always exit 0: a hook that fails must never stand in the way of an edit.
-if (argValue(HOOK_FLAG) === HOOK_PRE_TOOL_USE) {
+// As Gemini CLI's BeforeTool hook (A8.3), the same way: its own input and output.
+if (argValue(HOOK_FLAG) === HOOK_PRE_TOOL_USE || argValue(HOOK_FLAG) === HOOK_GEMINI_BEFORE_TOOL) {
+  const run = argValue(HOOK_FLAG) === HOOK_GEMINI_BEFORE_TOOL ? runGeminiBeforeToolHook : runPreToolUseHook;
   let input = '';
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', (chunk: string) => { input += chunk; });
   process.stdin.on('end', () => {
-    void runPreToolUseHook({ stdin: input, connect: async (cwd) => connectFrom(cwd), version: VERSION })
+    void run({ stdin: input, connect: async (cwd) => connectFrom(cwd), version: VERSION })
       .catch(() => null)
       // Exit once it is written: on macOS a pipe write is asynchronous.
       .then((out) => { if (out) process.stdout.write(`${out}\n`, () => process.exit(0)); else process.exit(0); });

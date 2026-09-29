@@ -23,6 +23,7 @@ import {
 import { setElectronScreenshotCapture, getMcpSetup } from '../backend/mcp/server';
 import { applyClaudeDesktop, previewClaudeDesktop, thisMachine } from '../backend/services/claude-desktop-config';
 import { applyClaudeCode, previewClaudeCode, thisMachine as claudeCodeMachine } from '../backend/services/claude-code-parallel';
+import { applyGeminiHook, previewGeminiHook, thisMachine as geminiMachine } from '../backend/services/gemini-cli-hook';
 import { dispatchAuthorised, type IpcRequest } from '../backend/services/ipc-dispatcher';
 import * as terminalService from '../backend/services/terminal-service';
 import { installFileLogger, getCurrentLogPath } from '../backend/services/logger';
@@ -682,6 +683,22 @@ ipcMain.handle('claude-code:apply', (e, choice: unknown) => {
   const hook = typeof c.hook === 'string' && HASH.test(c.hook) ? c.hook : undefined;
   if (!skill && !hook) return { ok: false, reason: 'Preview the change first.' };
   return applyClaudeCode(claudeCodeMachine(), getMcpSetup().connector ?? null, { skill, hook });
+});
+
+/**
+ * Phase 32 A8.3 — the breakpoint hook for Gemini CLI. The same rules: this
+ * window only, the entry decided here from the connector this app resolved,
+ * and written only if the settings file is still the one shown. See
+ * gemini-cli-hook.ts.
+ */
+ipcMain.handle('gemini-cli:preview', (e) => {
+  if (!mainWindow || e.sender !== mainWindow.webContents) return { ok: false, reason: 'Not available here.' };
+  return previewGeminiHook(geminiMachine(), getMcpSetup().connector ?? null);
+});
+ipcMain.handle('gemini-cli:apply', (e, shownHash: unknown) => {
+  if (!mainWindow || e.sender !== mainWindow.webContents) return { ok: false, reason: 'Not available here.' };
+  if (typeof shownHash !== 'string' || !HASH.test(shownHash)) return { ok: false, reason: 'Preview the change first.' };
+  return applyGeminiHook(geminiMachine(), getMcpSetup().connector ?? null, shownHash);
 });
 
 ipcMain.handle('artefacts:reveal', async (_e, uid: unknown) => {

@@ -86,7 +86,7 @@
 - [ ] A8 Any agent (owner's ask, 2026-09-28), refined in EXECUTION §4:
   - [x] A8.1 Parity table; `check_breakpoint` in the guide for every agent; journeys run by a client with no hook (#200)
   - [x] A8.2 Client-neutral pre-edit check in the connector (#201)
-  - [ ] A8.3 Hook adapters for other clients, each checked against its docs
+  - [x] A8.3 Hook adapters for other clients, each checked against its docs (Gemini CLI, from its own source; others wait on the same check)
   - [x] A8.4 Proof of use from MCP calls (`get_skill`), labelled by source
 - [ ] A4 Mobile
 - [ ] A5 Review
@@ -256,6 +256,46 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A8.3 — a breakpoint hook for Gemini CLI, checked against its source
+- **Journey.** Sam uses Gemini CLI. In Settings → MCP Server they click
+  "Add breakpoints to Gemini CLI…", see `~/.gemini/settings.json` and the
+  one `BeforeTool` entry as a diff, unticked, tick "Hold edits at your
+  breakpoints" and add it. With a breakpoint on `validateCreateUser`,
+  Gemini's `replace` of it is denied with "paused: waiting for a decision …
+  Their note: User rules are frozen", which the model reads; a `replace` of
+  another function and a `write_file` elsewhere go ahead. After Sam says
+  continue, the replace goes ahead. With the app not running, nothing
+  happens. A settings file changed after it was shown is shown again, not
+  written.
+- **Checked, not remembered.** geminicli.com is blocked by this
+  container's proxy, so the format was read from `@google/gemini-cli-core`
+  0.61.0 on npm: `BeforeTool` with `session_id`, `transcript_path`, `cwd`,
+  `hook_event_name`, `timestamp`, `tool_name`, `tool_input`; the edit tools
+  `write_file(file_path, content)` and `replace(file_path, old_string,
+  new_string)`; a block is `{decision:"deny", reason}`; the matcher is a
+  regular expression; the timeout is in milliseconds; user settings at
+  `${GEMINI_CLI_HOME||home}/.gemini/settings.json`; the command runs through
+  `bash -c`, or PowerShell on Windows, with the entry's own `env` set, so it
+  is quoted per shell and the connector's environment goes in `env` rather
+  than a POSIX prefix PowerShell would not run. `BeforeTool` has no field
+  the model reads on an allowed call (`systemMessage` goes to the person),
+  so a steer reaches Gemini only through `check_breakpoint` over MCP.
+  Cursor and other clients wait until their formats can be checked the same
+  way; `--check-edit` (A8.2) covers any whose hooks run a command.
+- **Built.** Connector mode `--hook gemini-before-tool`
+  (`runGeminiBeforeToolHook`, `parseGeminiHookInput`, `geminiDeny`);
+  `services/gemini-cli-hook.ts` (plan, preview, apply with the shown hash,
+  a timestamped copy, confined-fs, links refused, an older entry of ours
+  replaced); IPC `gemini-cli:preview` / `gemini-cli:apply`, window only;
+  `AddToGeminiCli` in Settings under Claude Code's.
+- **Tests.** Unit `gemini-cli-hook.test.ts` (14: the real input and output,
+  the merge, refusals, hash, links); harness `tests/e2e/gemini-hook.test.ts`
+  (the real connector: denied, other function and file go ahead, released,
+  app not running); browser `e2e/settings/mcp-server.spec.ts` (not offered
+  outside the app, unticked, re-shown when changed, already there). The
+  installer is IPC only, so "writes only what was ticked" is proved by the
+  unit and browser tests rather than the harness.
 
 ### 2026-09-29: A8.4 — proof of skill use for any client
 - **Journey.** Codex, with no session watcher, claims a task recommending

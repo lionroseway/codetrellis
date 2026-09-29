@@ -60,6 +60,13 @@ and proxies to the SSE server.
   reason on stderr), 0 and silent on any failure. Any client whose hooks can
   run a command, or a wrapper script, gets the pause with no format of its
   own to know.
+- A fourth, `--hook gemini-before-tool` (Phase 32 A8.3,
+  `runGeminiBeforeToolHook`): Gemini CLI's `BeforeTool` hook for
+  `write_file` and `replace`. It asks `check_breakpoint` and prints
+  `{"decision":"deny","reason":…}` only when a breakpoint holds the edit;
+  otherwise nothing. It fails open and silent, always exits 0, and asks as
+  `gemini-cli-hook`. Settings installs it on a click
+  (`services/gemini-cli-hook.ts`).
 - Built by `npm run build:connector` (its own Vite config, one
   self-contained file). Every `package:*` script and `predev` run it.
 
