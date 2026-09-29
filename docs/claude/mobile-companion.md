@@ -44,6 +44,8 @@ Routes are file-based under `mobile/app/`, with `_layout.tsx` driving a Stack at
 - `event-detail`, `changes`, `graph-file-detail` — event/diff viewers
 - `input-request` *(modal)* — user input requested by an agent
 - `approvals`, `approval` — work waiting on the person, and approving or sending back one criterion (Phase 31 §12; see below)
+- `signal-detail` — one overlap between lines of work, and the person's answer to it (Phase 32 A4.5b; see below)
+- `workstreams`, `workstream-detail` — the lines of work, and one line's files and recent turns (Phase 32 A4.5b)
 - `body-editor` *(modal)* — content editor
 - `connection-switcher` *(modal)* — switch between paired desktops
 - `doc-viewer` — document rendering
@@ -134,8 +136,8 @@ instead. The watchers run this with no window open, which is the point.
 
 `CODETRELLIS_PUSH_URL` can point pushes at a receiver on this machine
 (`127.0.0.1` or `localhost` only; anything else is ignored), which is how the
-harness sees them. The tap's route to the signal's screen comes with the
-screens in A4.5.
+harness sees them. Tapping the push opens `/signal-detail?id=` (A4.5b,
+`routeForNotification` in `mobile/lib/push.ts`).
 
 ### The lines of work (Phase 32 A4.3)
 
@@ -153,6 +155,31 @@ screens in A4.5.
   frontend for this). A turn is named by its session's agent as it stands now,
   not by the `mcp-client` guess a session carries until its client names
   itself.
+
+### The screens (Phase 32 A4.5b)
+
+- **Needs you** (`components/NeedsYou.tsx`, the top of Activity). Agents held
+  at a breakpoint, then the digest's lines with the question each asks, then
+  each high and medium overlap in its own card, which opens its detail. The
+  heading's count is the snapshot's `waitingBreakpoints + openSignals`, the
+  same count the Home badge adds in. The words are pulled when `openSignals`
+  moves or the tab is focused. When nothing is waiting, a line says so.
+  "Lines of work ›" opens the list.
+- **`signal-detail`**, which is also where the push lands. It shows the
+  summary, each side in the desktop's words, the files, and what each told
+  agent said. Below that are the person's own replies, each with whether an
+  agent has read it yet. Three buttons answer: Acknowledge, Intended (not
+  shown for stale-base, where there is nothing to intend) and Reply to agent,
+  whose words each agent in either line of work reads on its next step. A
+  signal that has gone shows the desktop's refusal and says it may have
+  resolved.
+- **`workstreams`** lists each line of work with its shape, what it changed,
+  its overlaps, its agents (one name per agent, however many sources saw
+  it) and its tasks. **`workstream-detail`** adds the changed files with line
+  counts, the distance from main and the recent turns in the Timeline's words.
+
+The types and calls are in `mobile/lib/awareness.ts`. Each screen is
+photographed by `tests/phone/awareness.spec.ts`.
 
 ## Seeing the screens (Phase 32 A4.5a)
 
@@ -172,10 +199,16 @@ expect(await calls(page)).toContainEqual(...);        // what a tap sent
 expect(await navigations(page)).toContainEqual(...);  // where it asked to go
 ```
 
+Fixtures have to cross into the page as plain data. An answer that depends
+on the params is written `{ __byParam: 'id', answers: { k1: … } }`, and a
+refusal is written `{ __error: 'No such open signal in this project' }`, which
+the call throws the way the desktop's refusal reaches the phone.
+
 A new screen joins the preview's table in `tools/phone-preview/main.tsx` (name,
 title, import). CI runs the specs and uploads the screenshots. It is a way to
 see screens, not a web build: WebRTC, the camera, push and the terminal never
 run there.
+
 ## State sync
 
 Desktop pushes a full snapshot of relevant workspace state on connect over the `ui` channel, then streams `fast-json-patch` diffs. Mobile applies them into `useWorkspaceStore`. This is the same pattern used for plan state, terminal scrollback metadata, presence, and channel events.

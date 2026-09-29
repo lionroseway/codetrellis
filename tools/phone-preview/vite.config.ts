@@ -31,7 +31,7 @@ const STUBS: Record<string, string> = {
   'expo-haptics': stub('empty.ts'),
   'expo-clipboard': stub('expo-clipboard.ts'),
   'expo-secure-store': stub('expo-secure-store.ts'),
-  'expo-notifications': stub('empty.ts'),
+  'expo-notifications': stub('expo-notifications.ts'),
   'expo-constants': stub('expo-constants.ts'),
   'expo-status-bar': stub('expo-status-bar.tsx'),
   'expo-camera': stub('empty.ts'),
@@ -44,7 +44,7 @@ const STUBS: Record<string, string> = {
 /** The phone's own modules that talk to the desktop: answered from fixtures instead. */
 const LOCAL_STUBS: Record<string, string> = {
   [path.join(mobile, 'lib/rpc.ts')]: stub('rpc.ts'),
-  [path.join(mobile, 'lib/webrtc.ts')]: stub('empty.ts'),
+  [path.join(mobile, 'lib/webrtc.ts')]: stub('webrtc.ts'),
 };
 
 function phoneStubs(): Plugin {

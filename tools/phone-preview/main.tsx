@@ -23,6 +23,9 @@ const SCREENS: Record<string, { title: string; load: () => Promise<{ default: Co
   plans: { title: 'Plans', load: () => import('../../mobile/app/(tabs)/plans') },
   breakpoints: { title: 'Waiting on you', load: () => import('../../mobile/app/breakpoints') },
   approvals: { title: 'Waiting for you', load: () => import('../../mobile/app/approvals') },
+  'signal-detail': { title: 'Overlap', load: () => import('../../mobile/app/signal-detail') },
+  workstreams: { title: 'Lines of work', load: () => import('../../mobile/app/workstreams') },
+  'workstream-detail': { title: 'Line of work', load: () => import('../../mobile/app/workstream-detail') },
 };
 
 const phone = (window as unknown as { __PHONE__?: { state?: Partial<WorkspaceSnapshot> } }).__PHONE__ ?? {};

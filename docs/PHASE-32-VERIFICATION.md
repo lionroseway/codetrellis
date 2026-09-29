@@ -21,7 +21,7 @@ records that — but "✗ none" is proof of a gap.
 | MCP tools | 196 | 196 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 84 | 76 | 0 | 0 | 78 | 0 |
 | Frontend components | 111 | n/a | n/a | n/a | 0 | 23 |
-| Mobile screens | 32 | n/a | n/a | n/a | 0 | 0 |
+| Mobile screens | 35 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 12 | n/a | n/a | n/a | 10 | 12 |
 
 ## By domain
@@ -37,7 +37,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4g Agents and MCP | 25 | 32 | 10 | 26 | 0 | 0 |
 | 0.4h Drift, governance, review | 10 | 24 | 8 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
-| 0.4j Mobile surface | 25 | 14 | 0 | 2 | 32 | 0 |
+| 0.4j Mobile surface | 25 | 14 | 0 | 2 | 35 | 0 |
 | 0.4k Settings, updates, privacy | 11 | 0 | 3 | 6 | 0 | 12 |
 | 0.4l System docs and intake | 7 | 11 | 6 | 1 | 0 | 0 |
 
@@ -700,15 +700,15 @@ records that — but "✗ none" is proof of a gap.
 | k | `settings/WebcamQrScanner.tsx` |  | n/a | n/a |  |  |  |
 | l | `system-docs/SystemDocsPanel.tsx` |  | n/a | n/a |  | ✓ 0.5a — empty state is content |  |
 
-## Mobile screens (32)
+## Mobile screens (35)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
 | j | `_layout.tsx` |  | n/a | n/a |  |  |  |
 | j | `(tabs)/_layout.tsx` |  | n/a | n/a |  |  |  |
-| j | `(tabs)/activity.tsx` |  | n/a | 1 |  |  |  |
+| j | `(tabs)/activity.tsx` |  | n/a | 2 |  |  |  |
 | j | `(tabs)/graph.tsx` |  | n/a | n/a |  |  |  |
-| j | `(tabs)/index.tsx` |  | n/a | 1 |  |  |  |
+| j | `(tabs)/index.tsx` |  | n/a | 2 |  |  |  |
 | j | `(tabs)/plans.tsx` |  | n/a | 1 |  |  |  |
 | j | `(tabs)/terminals.tsx` |  | n/a | n/a |  |  |  |
 | j | `approval.tsx` |  | n/a | n/a |  |  |  |
@@ -732,10 +732,13 @@ records that — but "✗ none" is proof of a gap.
 | j | `project-browser.tsx` |  | n/a | n/a |  |  |  |
 | j | `projects.tsx` |  | n/a | n/a |  |  |  |
 | j | `settings.tsx` |  | n/a | n/a |  |  |  |
+| j | `signal-detail.tsx` |  | n/a | 1 |  |  |  |
 | j | `system-doc-detail.tsx` |  | n/a | n/a |  |  |  |
 | j | `system-docs.tsx` |  | n/a | n/a |  |  |  |
 | j | `terminal-detail.tsx` |  | n/a | n/a |  |  |  |
 | j | `workspace.tsx` |  | n/a | n/a |  |  |  |
+| j | `workstream-detail.tsx` |  | n/a | 1 |  |  |  |
+| j | `workstreams.tsx` |  | n/a | 1 |  |  |  |
 
 ## Settings sections (12)
 
