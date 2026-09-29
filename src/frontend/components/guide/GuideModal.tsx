@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Copy, Check, Sparkles, Plug } from 'lucide-react';
 import { GUIDE_SECTIONS, GUIDE_GROUPS } from './guide-content';
@@ -53,7 +53,9 @@ export function GuideModal() {
     fetchMcpSetup().then(setMcpSetup);
   }, [open]);
 
-  useEffect(() => {
+  // Before paint, not after: an effect runs once the dialog is already on
+  // screen, so an Escape pressed the moment it appears was missed.
+  useLayoutEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
     document.addEventListener('keydown', onKey);
