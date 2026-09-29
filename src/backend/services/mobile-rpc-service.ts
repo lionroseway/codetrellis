@@ -90,6 +90,7 @@ import {
 } from '../server';
 import { handleBreakpointMethod } from './mobile-breakpoints';
 import { handleAwarenessMethod } from './mobile-awareness';
+import { handleWorkstreamMethod } from './mobile-workstreams';
 import { isTaskStatus, TASK_STATUSES } from '../../shared/lib/plan-vocab';
 import { grantChange, grantRefusal } from './grant-guard';
 import { buildPlanPrompt } from '../mcp/prompt-builders';
@@ -463,6 +464,15 @@ async function routeMethod(
         send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
         broadcast,
       }, { who: phoneActor(), projectRoot: getActiveProjectPath(), reply: replyToSignalAsPerson });
+
+    // --- The lines of work, as the strip shows them (A4.3) ------------------
+    case 'workstreams.list':
+    case 'workstreams.detail':
+      return handleWorkstreamMethod(method, params, {
+        fingerprint,
+        send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
+        broadcast,
+      }, { projectRoot: getActiveProjectPath() });
 
     // --- Plans ---------------------------------------------------------------
     case 'plan.list': {

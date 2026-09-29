@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | Wave 2 — A4.5a: the phone's screens, seen |
-| **Status** | A4.1 and A4.2 merged (#215, #216); A4.3 in review (#217); A4.4 built, stacked on it. A4.5a built: the real phone screens rendered through react-native-web and photographed (`npm run test:phone`), a CI job for them |
-| **Next action** | Merge A4.3, A4.4 and A4.5a as each goes green; then A4.5b, the new screens |
+| **Status** | A4.1–A4.3 merged (#215, #216, #217). A4.4 in review (#219). A4.5a in review (#218): the real phone screens rendered through react-native-web and photographed (`npm run test:phone`), a CI job for them |
+| **Next action** | Merge #218 and #219 as each goes green; then A4.5b, the new screens |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-a4-5a-phone-render` |
 | **Last updated** | 2026-09-29 |
@@ -90,9 +90,9 @@
   - [x] A8.4 Proof of use from MCP calls (`get_skill`), labelled by source (#202)
 - [ ] A4 Mobile, refined in EXECUTION §4:
   - [x] A4.1 Reply to the agents about a signal (shared by desktop and phone) ([#215](https://github.com/lionroseway/codetrellis/pull/215), which also carried the refinement, #214)
-  - [ ] A4.2 The phone's signal RPC and live count — in review
-  - [ ] A4.3 Workstreams on the phone
-  - [ ] A4.4 Push for a high signal
+  - [x] A4.2 The phone's signal RPC and live count ([#216](https://github.com/lionroseway/codetrellis/pull/216))
+  - [x] A4.3 Workstreams on the phone ([#217](https://github.com/lionroseway/codetrellis/pull/217))
+  - [ ] A4.4 Push for a high signal — in review (#219)
   - [ ] A4.5a A way to see the phone's screens — in review
   - [ ] A4.5b The phone's new screens (Needs you, signal detail, workstreams, the push tap)
   - [ ] A4.6 M4 done-when, end to end, and docs
@@ -309,6 +309,30 @@ new ones and photographs them the same way.
   that open it; a screen the preview cannot show stays n/a.
 - **What it is not.** A web build of the app: the WebRTC mesh, the camera,
   push and the terminal never run here. A web view shows a placeholder.
+### 2026-09-29: A4.3 — workstreams on the phone
+The strip, pulled over RPC, for "who is doing what" away from the desk.
+
+- **`workstreams.list`**: each line of work as the strip names it, idle ones
+  left out: its agents, the unfinished tasks they claimed, how many files it
+  changed, the live signals naming it and how many need the person.
+- **`workstreams.detail`**: by an id from the list, never a folder from the
+  request. It returns the changed files with line counts and ahead/behind,
+  and the ten most recent turns, newest first.
+- **The Timeline's words on the phone.** The turn grouping and phrasing
+  (`agent-turns.ts`, `tool-phrasing.ts`) depended only on shared types, so
+  they moved to `src/shared/lib`, and the frontend paths re-export them. The
+  phone's turns are the Timeline's turns, summary included.
+- **Found: a turn named by a guess.** A session is registered as
+  `mcp-client` at connect, from the user-agent, and renamed when the client
+  says what it is. The events before that keep the guess, so a turn that
+  began with them read "mcp-client". Turns are now named by their session's
+  agent as it stands.
+- **Also: #216's unit test did not typecheck.** Its reply stub took the
+  phone's narrower actor type. Typed to the context's, and pushed to #216.
+- **Tests.** Harness: `phone-workstreams` (4) with two worktrees, a claimed
+  task, real edits and a collision: the list, the detail's files and turns,
+  a made-up folder refused, and a read-only phone can still see the list.
+  The turn and phrasing unit tests (31) still pass from their new home.
 
 ### 2026-09-29: A4.2 — the phone's signal RPC and live count
 The desktop half of journey **C2** on the phone. The approvals flow is the
