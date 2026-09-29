@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | Wave 2 — B5.1: replay frames |
-| **Status** | HD1 (#207) and HD2 (#208) merged: a project's diff is its own, and the browser graph specs run on the sample app in the serial project. B5 refined into four sub-steps (entry below); B5.1 under way |
-| **Next action** | B5.1: frames carry project, SHA, session, workstream, reason and a digest; taken at turn end, status change and commit, only for the held project |
+| **Status** | HD1 (#207) and HD2 (#208) merged. B5 refined into four sub-steps. B5.1 in review: frames at turn end, status change and commit, for the held project only, deduplicated by digest; unit and harness green locally |
+| **Next action** | Merge B5.1's PR when green; then B5.2, the state at a moment (with signal spans as app events) |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-b5-1-frames` |
 | **Last updated** | 2026-09-29 |
@@ -270,6 +270,35 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-29: B5.1 — replay frames
+- **Built.** `services/replay-frames.ts`. A frame is a `trellis_snapshots` row
+  of type `frame` with its project, reasons, ref, session, agent, workstream,
+  commit, branch and a digest of its files and edges. Three moments ask for
+  one: a session quiet for `TURN_GAP_MS` (now one constant in
+  `src/shared/lib/turn-gap.ts`, shared by the Timeline, the budget and
+  replay), an action's status changing (a listener at the one place every
+  status write goes, `updateItemImpl`, called inside an MCP tool's context so
+  the frame is that agent's), and a checkout's HEAD moving (the refs watcher,
+  against each checkout's HEAD noted when the project was scanned).
+- **Rules.** Refused, not scanned for, unless the server holds that project;
+  held back during a scan and taken after it. At most one per project every
+  10 s, trailing, so moments inside the window become one frame naming all of
+  them. A frame whose digest matches the last points at the frame with the
+  copy (`same_as`, never at another pointer) and stores none. 14 days kept; a
+  frame a kept one points at stays. `GET /api/replay/frames?project&from&to`
+  (confined like `/api/awareness`); the checkpoint list leaves frames out,
+  and `/api/trellis/:id` reads a pointing frame's graph through its pointer.
+- **Also.** `readLiveGraph()` counts symbols in one query; it was one per
+  file, which `captureCurrentTrellis` now shares.
+- **Not yet.** Signal raise and resolve as app events move to B5.2, where the
+  state at a moment first reads them; B5.1 has no reader for them.
+- **Tests.** Unit (12): digest order and change, merging, refusals, pointer
+  chains, the checkpoint list, from/to, retention. Harness (7, repeated 3×):
+  a turn end with its session and commit, a status change from the window and
+  from an agent, a commit, no frame while another project is held and frames
+  again once it is scanned back, the route's 400 and 403.
+- **The person's side** comes in B5.3; this step has no screen.
+
 ### 2026-09-29: B5 refined — replay
 Journey **G1** ("what happened while I was in that meeting?"), the part left
 after B1–B4: the graph, the stack and the inbox as they were at a moment, one
@@ -297,8 +326,8 @@ snapshots exist (`trellis_snapshots`), but only on Checkpoint or plan approval.
 
 | Sub-step | Delivers | Tests |
 |---|---|---|
-| B5.1 | Frames: `trellis_snapshots` gains project, commit SHA, session, workstream, reason and a digest. A frame is taken when a session's turn ends (30 s quiet, the window's rule, moved to `src/shared`), an item's status changes, or a commit lands on a workstream; only when the server holds that project; one per project at most every 10 s; a frame whose graph matches the last one points at it instead of copying. Symbol counts in one query. 14 days kept, as `agent_events`. A signal's raising and resolving are kept as app events beside `breakpoint_hit`, so a reopened signal keeps its earlier spans. `GET /api/replay/frames?project&from&to` | unit (digest, debounce, the held-project refusal); harness: a turn end, a status change and a commit each make a frame with its SHA and session; another project held makes none |
-| B5.2 | The state at a moment: `GET /api/replay/state?project&at` answers the graph of the frame at or before `at` (with what differs from now), each item's status, the breakpoint hits waiting and the signals open at `at`, and the lanes up to it. Everything from the records above; nothing new is kept | harness: states at three moments of one scripted run, each matching what the window showed live |
+| B5.1 | Frames: `trellis_snapshots` gains project, commit SHA, session, workstream, reason and a digest. A frame is taken when a session's turn ends (30 s quiet, the window's rule, moved to `src/shared`), an item's status changes, or a commit lands on a workstream; only when the server holds that project; one per project at most every 10 s; a frame whose graph matches the last one points at it instead of copying. Symbol counts in one query. 14 days kept, as `agent_events`. `GET /api/replay/frames?project&from&to` | unit (digest, debounce, the held-project refusal); harness: a turn end, a status change and a commit each make a frame with its SHA and session; another project held makes none |
+| B5.2 | The state at a moment: `GET /api/replay/state?project&at` answers the graph of the frame at or before `at` (with what differs from now), each item's status, the breakpoint hits waiting and the signals open at `at` (a signal's raising and resolving kept from here as app events beside `breakpoint_hit`, so a reopened signal keeps its earlier spans), and the lanes up to it | harness: states at three moments of one scripted run, each matching what the window showed live |
 | B5.3 | One clock in the window: a replay store holds the cursor; the transport bar drives the Timeline cursor, the graph (frames step, never animate), the plan list's statuses and the inbox. The chrome says "Replaying 10:02 → 12:04" with a way back to live; live events keep arriving underneath | browser, with screenshots: step, play, back to live |
 | B5.4 | Catch-up: the window remembers when the person last looked; the digest (C1) offers "Watch at 4×" from there to now. Any MCP client gets the same moment with `get_state_at` | browser: G1 end to end; harness: the MCP tool |
 

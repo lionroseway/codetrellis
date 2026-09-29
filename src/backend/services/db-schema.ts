@@ -358,7 +358,20 @@ export const SCHEMA_PLANS_CORE = `
     git_branch TEXT,
     files_json TEXT NOT NULL,
     edges_json TEXT NOT NULL,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    -- Phase 32 B5.1: a replay frame (snapshot_type 'frame') says whose graph
+    -- it is, what caused it and at which commit. A frame whose graph matches
+    -- the one before points at it (same_as) and stores no copy. Indexed by
+    -- replay-frames.ts once these columns exist on an older database.
+    project_path TEXT,
+    reason TEXT,
+    ref TEXT,
+    session_id TEXT,
+    agent_type TEXT,
+    workstream_root TEXT,
+    commit_sha TEXT,
+    digest TEXT,
+    same_as INTEGER
   );
 
   CREATE INDEX IF NOT EXISTS idx_trellis_plan ON trellis_snapshots(plan_uid);

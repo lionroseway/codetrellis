@@ -67,6 +67,8 @@ CodeTrellis treats long-running agent sessions as first-class — desktops don't
 - **`power-signals`** is the event stream + heartbeat that other services subscribe to.
 - **`state-sync-service`** rehydrates terminal scrollback, plan state, and agent-session metadata when a peer reconnects.
 - **`session-service`** tracks agent sessions and attributes tool calls to the originating client.
+- **`agent-event-log`** keeps every broadcast agent event (Phase 32 B1), 14 days, so the Timeline survives a reload.
+- **`replay-frames`** keeps a graph snapshot at the moments replay steps between (Phase 32 B5.1): a session's turn ends (30 s quiet, `src/shared/lib/turn-gap.ts`, the Timeline's rule), an item's status changes, or a checkout's HEAD moves. Only for the project the server holds and never mid-scan; at most one per project every 10 s (moments inside merge into one); a frame whose graph digest matches the last points at it (`same_as`) instead of copying. Frames are `trellis_snapshots` rows of type `frame`, listed by `GET /api/replay/frames?project=`, left out of the checkpoint list.
 
 ## Cross-system extraction
 
