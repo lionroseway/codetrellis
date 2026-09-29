@@ -14,19 +14,27 @@ export function FolderPickerModal() {
   const [currentDir, setCurrentDir] = useState('');
   const [parentDir, setParentDir] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  // Which browse is the latest, and whether the path was typed since it was
+  // sent. The opening browse can answer after the person has typed a path and
+  // pressed Go, and it used to put the starting folder back over theirs.
+  const browseSeq = useRef(0);
+  const typedSince = useRef(false);
 
   const browse = useCallback(async (dirPath?: string) => {
+    const seq = ++browseSeq.current;
+    typedSince.current = false;
     try {
       const url = dirPath
         ? `/api/fs/browse?path=${encodeURIComponent(dirPath)}`
         : '/api/fs/browse';
       const res = await fetch(url);
-      if (!res.ok) return;
+      if (!res.ok || seq !== browseSeq.current) return;
       const data = await res.json();
+      if (seq !== browseSeq.current) return;
       setDirs(data.dirs);
       setCurrentDir(data.current);
       setParentDir(data.parent);
-      setPathValue(data.current);
+      if (!typedSince.current) setPathValue(data.current);
     } catch { /* ignore */ }
   }, []);
 
@@ -86,7 +94,7 @@ export function FolderPickerModal() {
             ref={inputRef}
             type="text"
             value={pathValue}
-            onChange={(e) => setPathValue(e.target.value)}
+            onChange={(e) => { typedSince.current = true; setPathValue(e.target.value); }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') handlePathSubmit();
               if (e.key === 'Escape') done(null);
