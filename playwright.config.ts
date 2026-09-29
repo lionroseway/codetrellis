@@ -97,6 +97,8 @@ const SERIAL_SPECS = [
   '**/mcp-tools/graph-tools.spec.ts',
   // Opens the sample app, which swaps the one project every parallel spec reads.
   '**/inspector/add-to-plan.spec.ts',
+  // Scans the sample app on purpose, to see the canvas keep its own project's graph.
+  '**/graph/graph-own-project.spec.ts',
   // navigate_to 'code' on the sample app, which moves every open page's code view.
   '**/inspector/workstream-gutter.spec.ts',
   // request_plan_deletion opens its confirmation on every open page.
