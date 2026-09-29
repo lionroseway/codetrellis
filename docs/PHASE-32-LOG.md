@@ -271,6 +271,25 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-29: two browser-suite failures, at their cause (#212)
+- **Idle connections reset** (#211: `websocket-events.spec.ts:72`, `read
+  ECONNRESET` on a PUT). Node closes a kept-alive socket after 5 s; a request
+  sent on it as it closes is reset before the server sees it
+  (`e2e/helpers/setup.ts` already retried `cleanupPlans` for this).
+  `keepAliveTimeout` is now 65 s, `headersTimeout` just above; a harness test
+  reads the `Keep-Alive` header and reuses a connection idle for 6 s.
+- **onboarding-to-plan gave the task detail one second** (#208's first run,
+  #212's). It clicked a task, waited a fixed second and read the page once; on
+  a loaded runner the canvas took longer. It now polls for up to 10 s.
+- **A wrong diagnosis, corrected.** On #208 this spec's failure was put down
+  to two workers switching the server's project, and the spec moved to the
+  serial project for it. It then failed there too. The failed page's snapshot
+  is taken after `afterEach` has deleted the plan, which is why it looked as if
+  the plan had vanished mid-test (a "Plan deleted" toast, and a stale "Found 1
+  plan on disk" banner, read once when the project opened); it had not. The
+  move to the serial project stays: the one-project-at-a-time reason holds for
+  the other sample-app specs.
+
 ### 2026-09-29: B5.4 — catch-up, and the same moment for any agent
 - **The journey (G1, finished).** Sam comes back after an hour. The inbox's
   digest offers "Watch what happened since 14:50 at 4×" (when the last visit
