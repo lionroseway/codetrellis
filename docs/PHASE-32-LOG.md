@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B3.3b: from an overlap to its lines |
-| **Status** | B3.3a merged (#194), after base fixes #195–#198 (see the follow-ups below). B3.3b in review: signal file chips ("Show on graph", "Show lines") beside the answers, and "Show line changes" on a file node. A8.1, A8.2, A8.4, A8.3 (Gemini CLI's hook) and A2.7 (signatures for eight more languages) are built on branches stacked after it. Unit, harness and browser pass |
-| **Next action** | Merge B3.3b's PR when green; then A8.1, A8.2, A8.4, A8.3, A2.7 in turn (each rebased on the last merged). Then B4.4 |
+| **Stage / step** | Track A — A8.1: any agent, the parity table |
+| **Status** | B3 done: B3.3b merged (#199). A8.1 in review: the parity table, `check_breakpoint` in the guide for every agent, and the journeys run by a client with no hook. A8.2, A8.4, A8.3 (Gemini CLI's hook) and A2.7 are built on branches stacked after it, rebased on #199 |
+| **Next action** | Merge A8.1's PR when green; then A8.2, A8.4, A8.3, A2.7 in turn (each rebased on the last merged). Then B4.4 |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b3-3b-focus-show-changes` |
+| **Branch** | `feat/phase-32-a8-1-parity` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -84,7 +84,7 @@
   - [x] A3.5 `docs/claude/awareness.md`; M3 "done when" (#168)
 - [ ] A2.7 Signatures for Go, Rust, Java, C#, Kotlin, Swift, Ruby, PHP (owner's ask, 2026-09-28)
 - [ ] A8 Any agent (owner's ask, 2026-09-28), refined in EXECUTION §4:
-  - [ ] A8.1 Parity table; `check_breakpoint` in the guide for every agent; journeys run by a client with no hook
+  - [x] A8.1 Parity table; `check_breakpoint` in the guide for every agent; journeys run by a client with no hook
   - [ ] A8.2 Client-neutral pre-edit check in the connector
   - [ ] A8.3 Hook adapters for other clients, each checked against its docs
   - [ ] A8.4 Proof of use and session signals from MCP calls
@@ -120,7 +120,7 @@
   - [x] B3.2 The code view: gutter marks, who changed what, Compare with… ([#193](https://github.com/lionroseway/codetrellis/pull/193))
   - [x] B3.3 Overlay list; line counts on file nodes; a signal chip focuses the graph (split in two, EXECUTION §5)
     - [x] B3.3a Overlays turned on and off; each other workstream's line counts and collision zones on file nodes
-    - [x] B3.3b A signal chip focuses the graph; "Show changes" on a file node
+    - [x] B3.3b A signal chip focuses the graph; "Show changes" on a file node (#199)
 - [ ] B4 Breakpoints, refined in EXECUTION §5:
   - [x] B4.1 Task and spec breakpoints at the interception; `await_decision`; answers over REST; Timeline events ([#179](https://github.com/lionroseway/codetrellis/pull/179))
   - [x] B4.2 Code breakpoints; the hook pauses; breach for other clients ([#180](https://github.com/lionroseway/codetrellis/pull/180))
@@ -256,6 +256,22 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A8.1 — any agent: the parity table and the journeys with no hook
+- **Journey.** Two Codex sessions, no hook and no watcher, one in billing-v2
+  and one in exports. Codex sees its own worktree and the other, and the
+  collision on `validateCreateOrder`; is told "exports changed line 19, in
+  validateCreateOrder, not committed"; has a claim paused by a task
+  breakpoint and let through on continue; asks `check_breakpoint` with the
+  text it replaces and is held only for `validateCreateUser`, then gets the
+  person's steer; the other Codex, editing past the breakpoint with its own
+  editor, is told of the breach on its next call.
+- **Built.** The parity table in `docs/claude/awareness.md` (what every MCP
+  client gets, what a client's hook or log adds). The guide now tells every
+  agent "Before you edit a file, call `check_breakpoint(path, old_text)`",
+  in the summary and in the parallel flavour, where it only said Claude
+  Code's hook did.
+- **Tests.** Harness `tests/e2e/any-agent-parity.test.ts`, one test per row.
 
 ### 2026-09-29: B3.3b — from an overlap to its lines
 - **Journey.** billing-v2 and exports both change `database.ts`. On the
