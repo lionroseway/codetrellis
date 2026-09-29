@@ -12,10 +12,10 @@
 | | |
 |---|---|
 | **Stage / step** | Wave 2 — A4.5b: the phone's new screens |
-| **Status** | A4.1–A4.3 merged. A4.4 (#219) and A4.5a (#218) in review. A4.5b built and photographed, stacked on both: Needs you on Activity, signal detail, workstreams, the push tap |
-| **Next action** | Merge #218 and #219 as each goes green, merge the base into A4.5b, open its PR; then A4.6 (M4 done-when end to end) |
+| **Status** | A4.1–A4.3 (#215–#217), A4.5a (#218) and A4.4 (#219) merged. A4.5b in review: Needs you on Activity, signal detail, workstreams, the push tap, each photographed |
+| **Next action** | Merge A4.5b when green; then A4.6 (M4 done-when end to end, and docs) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a4-5b-phone-screens` (stacked on A4.5a and A4.4) |
+| **Branch** | `feat/phase-32-a4-5b-phone-screens` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -92,9 +92,9 @@
   - [x] A4.1 Reply to the agents about a signal (shared by desktop and phone) ([#215](https://github.com/lionroseway/codetrellis/pull/215), which also carried the refinement, #214)
   - [x] A4.2 The phone's signal RPC and live count ([#216](https://github.com/lionroseway/codetrellis/pull/216))
   - [x] A4.3 Workstreams on the phone ([#217](https://github.com/lionroseway/codetrellis/pull/217))
-  - [ ] A4.4 Push for a high signal — in review (#219)
-  - [ ] A4.5a A way to see the phone's screens — in review
-  - [ ] A4.5b The phone's new screens (Needs you, signal detail, workstreams, the push tap) — built, PR after #218 and #219
+  - [x] A4.4 Push for a high signal (#219)
+  - [x] A4.5a A way to see the phone's screens (#218)
+  - [ ] A4.5b The phone's new screens (Needs you, signal detail, workstreams, the push tap) — in review
   - [ ] A4.6 M4 done-when, end to end, and docs
 - [ ] A5 Review
 - [ ] A6 The Brief
