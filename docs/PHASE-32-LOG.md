@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — A5.1: branch reviews get their dependencies back |
-| **Status** | A4 done: M4 met (#215–#221). A5 (the Review feature, M5) refined into seven steps in EXECUTION §4. A5.1 in review: `commit:` sides carry their dependency edges, and the picker offers each line of work's branch |
-| **Next action** | Merge A5.1 when green; update the status page (v12); then A5.2, "Other work in flight" in `review_plan` and `get_pr_draft` |
+| **Stage / step** | Wave 2 — A5.2: other work in flight |
+| **Status** | A4 done (M4). A5.1 merged (#222): commit and branch reviews find dependencies nobody planned again. A5.2 in review: "Other work in flight" in `review_plan` and `get_pr_draft` |
+| **Next action** | Merge A5.2 when green; then A5.3, the opt-in "no open high signals" check in the `code` criterion |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a5-1-commit-edges` |
+| **Branch** | `feat/phase-32-a5-2-other-work` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -97,8 +97,8 @@
   - [x] A4.5b The phone's new screens (Needs you, signal detail, workstreams, the push tap) (#220)
   - [x] A4.6 M4 done-when, end to end, and docs (#221)
 - [ ] A5 Review (the feature, M5), refined in EXECUTION §4:
-  - [ ] A5.1 `commit:` sides get their dependency edges; the picker offers each line of work's branch — in review
-  - [ ] A5.2 "Other work in flight" in `review_plan` and `get_pr_draft` — built, PR after A5.1
+  - [x] A5.1 `commit:` sides get their dependency edges; the picker offers each line of work's branch (#222)
+  - [ ] A5.2 "Other work in flight" in `review_plan` and `get_pr_draft` — in review
   - [ ] A5.3 The opt-in "no open high signals" check
   - [ ] A5.4 The review queue and `get_review_queue`
   - [ ] A5.5 The Review tab
