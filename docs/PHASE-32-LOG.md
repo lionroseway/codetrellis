@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — A5.2: other work in flight |
-| **Status** | A4 done (M4). A5.1 merged (#222): commit and branch reviews find dependencies nobody planned again. A5.2 in review: "Other work in flight" in `review_plan` and `get_pr_draft` |
-| **Next action** | Merge A5.2 when green; then A5.3, the opt-in "no open high signals" check in the `code` criterion |
+| **Stage / step** | Wave 2 — A5.3: sign-off can wait for an open high overlap |
+| **Status** | A5.1 (#222) and A5.2 (#223) merged: branch reviews find dependencies nobody planned, and reviews and PR bodies carry "Other work in flight". A5.3 in review: the opt-in hold inside the `code` criterion |
+| **Next action** | Merge A5.3 when green; then A5.4, the review queue with a suggested merge order |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a5-2-other-work` |
+| **Branch** | `feat/phase-32-a5-3-high-signal-check` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -98,8 +98,8 @@
   - [x] A4.6 M4 done-when, end to end, and docs (#221)
 - [ ] A5 Review (the feature, M5), refined in EXECUTION §4:
   - [x] A5.1 `commit:` sides get their dependency edges; the picker offers each line of work's branch (#222)
-  - [ ] A5.2 "Other work in flight" in `review_plan` and `get_pr_draft` — in review
-  - [ ] A5.3 The opt-in "no open high signals" check — built, PR after A5.2
+  - [x] A5.2 "Other work in flight" in `review_plan` and `get_pr_draft` (#223)
+  - [ ] A5.3 The opt-in "no open high signals" check — in review
   - [ ] A5.4 The review queue and `get_review_queue`
   - [ ] A5.5 The Review tab
   - [ ] A5.6 The queue on the phone
