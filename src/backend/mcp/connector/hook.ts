@@ -166,6 +166,57 @@ export interface RunHookOptions {
 }
 
 /**
+ * One short MCP session with the app, bound to `cwd`: `fn` gets a way to call
+ * a tool and read its first text block. Null on any failure, and never longer
+ * than `timeoutMs`, connection included.
+ */
+async function withToolSession<T>(
+  opts: { connect: (cwd: string) => Promise<Upstream>; cwd: string; version: string; clientName: string; timeoutMs?: number },
+  fn: (callTool: (name: string, args: Record<string, unknown>) => Promise<string | null>) => Promise<T | null>,
+): Promise<T | null> {
+  let upstream: Upstream | null = null;
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), opts.timeoutMs ?? 5000); });
+  const work = (async (): Promise<T | null> => {
+    upstream = await opts.connect(opts.cwd);
+    const pending = new Map<number, (m: JsonRpcMessage) => void>();
+    upstream.onmessage = (m) => {
+      if (typeof m.id === 'number' && pending.has(m.id)) { pending.get(m.id)!(m); pending.delete(m.id); }
+    };
+    const closed = new Promise<never>((_, reject) => { upstream!.onclose = () => reject(new Error('closed')); });
+    closed.catch(() => { /* raced below */ });
+    let nextId = 1;
+    const request = (method: string, params: unknown) => {
+      const id = nextId++;
+      return Promise.race([
+        new Promise<JsonRpcMessage>((resolve) => { pending.set(id, resolve); void upstream!.send({ jsonrpc: '2.0', id, method, params }); }),
+        closed,
+      ]);
+    };
+
+    const init = await request('initialize', {
+      protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: opts.clientName, version: opts.version },
+    });
+    if (init.error) return null;
+    await upstream.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+    // The first block is each answer; a notice (A2.6) may follow it.
+    const callTool = async (name: string, args: Record<string, unknown>) => {
+      const res = await request('tools/call', { name, arguments: args });
+      const result = res.result as { isError?: boolean; content?: Array<{ type: string; text?: string }> } | undefined;
+      return !result || result.isError ? null : result.content?.[0]?.text ?? null;
+    };
+    return fn(callTool);
+  })().catch(() => null);
+
+  try {
+    return await Promise.race([work, timeout]);
+  } finally {
+    clearTimeout(timer);
+    try { (upstream as Upstream | null)?.close(); } catch { /* */ }
+  }
+}
+
+/**
  * Run the hook: what to print on stdout, or null to print nothing. Never
  * throws and never waits longer than `timeoutMs`: every failure is silence.
  */
@@ -175,46 +226,60 @@ export async function runPreToolUseHook(opts: RunHookOptions): Promise<string | 
   const repo = repoOf(call.filePath, opts.exists);
   if (!repo) return null;
 
-  let upstream: Upstream | null = null;
-  let timer: NodeJS.Timeout | undefined;
-  const timeout = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), opts.timeoutMs ?? 5000); });
-  const work = (async (): Promise<string | null> => {
-    upstream = await opts.connect(call.cwd);
-    const pending = new Map<number, (m: JsonRpcMessage) => void>();
-    upstream.onmessage = (m) => {
-      if (typeof m.id === 'number' && pending.has(m.id)) { pending.get(m.id)!(m); pending.delete(m.id); }
-    };
-    const closed = new Promise<never>((_, reject) => { upstream!.onclose = () => reject(new Error('closed')); });
-    closed.catch(() => { /* raced below */ });
-    const request = (id: number, method: string, params: unknown) => Promise.race([
-      new Promise<JsonRpcMessage>((resolve) => { pending.set(id, resolve); void upstream!.send({ jsonrpc: '2.0', id, method, params }); }),
-      closed,
-    ]);
-
-    const init = await request(1, 'initialize', {
-      protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude-code-hook', version: opts.version },
-    });
-    if (init.error) return null;
-    await upstream.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
-    // The first block is each answer; a notice (A2.6) may follow it.
-    const first = (res: JsonRpcMessage) => {
-      const result = res.result as { isError?: boolean; content?: Array<{ type: string; text?: string }> } | undefined;
-      return !result || result.isError ? null : result.content?.[0]?.text ?? null;
-    };
+  return withToolSession({ connect: opts.connect, cwd: call.cwd, version: opts.version, clientName: 'claude-code-hook', timeoutMs: opts.timeoutMs }, async (callTool) => {
     // A breakpoint first (B4.2): a held edit goes no further.
     const bpArgs = call.oldTexts ? { path: repo.rel, old_text: call.oldTexts } : { path: repo.rel };
-    const held = breakpointAnswer(first(await request(2, 'tools/call', { name: 'check_breakpoint', arguments: bpArgs })));
+    const held = breakpointAnswer(await callTool('check_breakpoint', bpArgs));
     if (held?.hold) return hookDeny(held.hold);
-    const text = first(await request(3, 'tools/call', { name: 'check_footprint', arguments: { paths: [repo.rel] } }));
+    const text = await callTool('check_footprint', { paths: [repo.rel] });
     const notice = text ? hookNotice(text, repo) : null;
     const context = [held?.steer, notice].filter((x): x is string => !!x).join('\n\n');
     return context ? hookOutput(context) : null;
-  })().catch(() => null);
+  });
+}
 
-  try {
-    return await Promise.race([work, timeout]);
-  } finally {
-    clearTimeout(timer);
-    try { (upstream as Upstream | null)?.close(); } catch { /* */ }
-  }
+// ── A client-neutral pre-edit check (Phase 32 A8.2) ─────────────────────
+
+/**
+ *   <connector command> --check-edit <path> [--old-text-file <file>]
+ *
+ * For any client whose hooks can run a command, and any wrapper script: asks
+ * `check_breakpoint` about one file, in the worktree it is in, and answers
+ * with an exit code no client format has to be known for. 0 go ahead; 2
+ * held, the reason on stderr; 0 and nothing printed on any failure (no app,
+ * a file outside every repository, a slow answer), like the Claude Code hook.
+ * A person's steer on "continue" goes to stdout.
+ */
+export const CHECK_EDIT_FLAG = '--check-edit';
+export const OLD_TEXT_FILE_FLAG = '--old-text-file';
+/** The exit code for an edit a breakpoint holds. */
+export const CHECK_EDIT_HELD = 2;
+
+export interface CheckEditResult {
+  code: 0 | typeof CHECK_EDIT_HELD;
+  stdout: string | null;
+  stderr: string | null;
+}
+
+export async function runCheckEdit(opts: {
+  file: string;
+  /** Where the command was run; a relative `file` is read from here. */
+  cwd: string;
+  /** What the edit replaces, when known: a function breakpoint then holds only an edit that touches it. */
+  oldText?: string | null;
+  connect: (cwd: string) => Promise<Upstream>;
+  version: string;
+  timeoutMs?: number;
+  exists?: (p: string) => boolean;
+}): Promise<CheckEditResult> {
+  const go: CheckEditResult = { code: 0, stdout: null, stderr: null };
+  const repo = repoOf(path.resolve(opts.cwd, opts.file), opts.exists);
+  if (!repo) return go;
+  const answer = await withToolSession({ connect: opts.connect, cwd: repo.root, version: opts.version, clientName: 'codetrellis-check-edit', timeoutMs: opts.timeoutMs }, async (callTool) => {
+    const args = opts.oldText ? { path: repo.rel, old_text: [opts.oldText] } : { path: repo.rel };
+    return breakpointAnswer(await callTool('check_breakpoint', args));
+  });
+  if (answer?.hold) return { code: CHECK_EDIT_HELD, stdout: null, stderr: answer.hold };
+  if (answer?.steer) return { code: 0, stdout: answer.steer, stderr: null };
+  return go;
 }
