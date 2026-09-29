@@ -147,6 +147,15 @@ event, for the active project.
   `sensors.awareness.inlineNotices: false` turns it off.
   `acknowledge_signal(id, note?)` records the agent's note, which never
   sets the person's answer.
+- **The person's own words** (`awareness-replies.ts`, A4.1): "Message the
+  agents" on a signal (`POST /api/awareness/:id/reply`) keeps the message
+  beside the signal. Each session placed in one of its workstreams reads it
+  once, on its next tool call, as a "── CodeTrellis: a message about other
+  work ──" block under the signal it is about, saying who sent it as the
+  call arrived (plain HTTP says it was not verified as the person). Where an
+  agent there holds a task, `replyToSignalAsPerson` in `server.ts` also
+  posts it as a `steer` on that task's plan. The tab lists each message and
+  which agents have read it. The phone uses the same path (A4.2).
 - **The guide**: `get_app_guide(flavor='parallel')` /
   `codetrellis://skill/parallel` (A3.3) is the contract an agent follows:
   awareness, then intent, then footprint, then fix or ask.
@@ -205,6 +214,9 @@ run as a plain `codex` client with no hook and no watcher in
   among trusted roots, and a clone needs the person's consent.
 - **Only the person answers a signal.** An agent's note sits beside the
   answer.
+- **A person's message reaches only the agents in the signal's
+  workstreams**, quoted as theirs, and is never shown to an agent as
+  another agent's words.
 - **Nothing is installed silently.** The skill and the hook follow Add to
   Claude Desktop: a diff first, then only what was ticked, from the app
   window only.
@@ -214,7 +226,7 @@ run as a plain `codex` client with no hook and no watcher in
 - Unit:
   - `awareness-signals.test.ts` (the rules);
   - `awareness-digest.test.ts`;
-  - `awareness-notices.test.ts`;
+  - `awareness-notices.test.ts`, `awareness-replies.test.ts`;
   - `workstream-*.test.ts`;
   - `claude-code-parallel.test.ts`, `gemini-cli-hook.test.ts`;
   - `connector/hook.test.ts`.
@@ -224,9 +236,11 @@ run as a plain `codex` client with no hook and no watcher in
     `awareness-drift`, `declare-intent`;
   - `awareness-notices`, the M2 "done when";
   - `awareness-cooldown`;
+  - `awareness-replies`: a message read once by each agent in either
+    workstream and never by a third, and the steer on the plan;
   - `parallel-hook`, `check-edit`, `gemini-hook`;
   - `awareness-m3`, the M3 "done when": five workstreams, seven overlaps,
     a five-line digest well under a minute to read, and intended staying
     quiet until a side changes shape.
-- Browser: `e2e/agent/awareness-tab.spec.ts`, `e2e/agent/workstream-strip.spec.ts`,
+- Browser: `e2e/agent/awareness-tab.spec.ts`, `e2e/agent/awareness-reply.spec.ts`, `e2e/agent/workstream-strip.spec.ts`,
   `e2e/settings/mcp-server.spec.ts`.

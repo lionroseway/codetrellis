@@ -58,6 +58,7 @@ import { suggestSectionBranch } from '../shared/lib/branch-name';
 import { setWorkstreamChangesListener, setRefsChangedListener } from './services/workstream-watch-service';
 import { refreshSignals, listSignals, setAwarenessListener, setSignalState } from './services/awareness-service';
 import { withTold, setNoticeListener } from './services/awareness-notices';
+import { recordReply, withReplies, cleanReply, setReplyReadListener, MAX_REPLY } from './services/awareness-replies';
 import { listFolderRequests, takeFolderRequest, dismissFolderRequest, rememberDismissal, setFolderRequestsListener } from './services/folder-requests';
 import { captureSnapshot, setBaseline, computeDiff, getBaseline, baselineLabel, restoreBaseline, setBaselineStore } from './services/diff-engine';
 import { sqliteBaselineStore } from './services/baseline-store';
@@ -146,7 +147,7 @@ import {
   cancelUpdateDownload,
 } from './services/update-download-service';
 import { BUILD_INFO } from '../shared/build-info';
-import { SETTABLE_SIGNAL_STATES, type SettableSignalState } from '../shared/types';
+import { SETTABLE_SIGNAL_STATES, type SettableSignalState, type SignalStateBy } from '../shared/types';
 import * as peerService from './services/peer-connection-service';
 import { setDeviceCapabilities } from './services/paired-device-service';
 import { listPeerAudit } from './services/peer-audit-service';
@@ -688,6 +689,7 @@ setRefsChangedListener((repo) => {
 // workstream's files move, and announced only when they change.
 setAwarenessListener((projectRoot) => broadcast('awareness-changed', { projectRoot }));
 setNoticeListener((projectRoot) => broadcast('awareness-changed', { projectRoot, told: true }));
+setReplyReadListener((projectRoot) => broadcast('awareness-changed', { projectRoot, told: true }));
 let signalTimer: ReturnType<typeof setTimeout> | null = null;
 function scheduleSignalRefresh(): void {
   if (signalTimer) clearTimeout(signalTimer);
@@ -810,7 +812,7 @@ app.get('/api/awareness', (req, res) => {
   if (!projectRoot) return;
   refreshSignals(projectRoot);
   // With the agents told about each and what they said (A2.6).
-  res.json({ signals: withTold(listSignals(projectRoot)) });
+  res.json({ signals: withReplies(withTold(listSignals(projectRoot))) });
 });
 
 // A person's answer to a signal (A1.8): acknowledged, intended, dismissed,
@@ -830,6 +832,20 @@ app.post('/api/awareness/:id/state', (req, res) => {
   if (!signal) { res.status(404).json({ error: 'No such open signal in this project.' }); return; }
   res.json(signal);
 });
+// A person's message to the agents about a signal (A4.1). Kept beside the
+// signal and read by each agent in its workstreams on its next tool call;
+// also a steer on the plan of each task an agent there holds. Who sent it
+// comes from how the call arrived, as for an answer.
+app.post('/api/awareness/:id/reply', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const message = cleanReply((req.body ?? {}).message);
+  if (!message) { res.status(400).json({ error: `message must be 1–${MAX_REPLY} characters.` }); return; }
+  const reply = replyToSignalAsPerson(projectRoot, req.params.id, message, actorFrom(req));
+  if (!reply) { res.status(404).json({ error: 'No such open signal in this project.' }); return; }
+  res.status(201).json(reply);
+});
+
 app.get('/api/workstreams', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
@@ -2670,6 +2686,34 @@ export function postChannelEventAsPerson(input: {
   // Phase 2.3 — fire any matching routing rules.
   dispatchChannelEvent(created).catch((err) => console.warn('[Channels] dispatch failed:', err));
   return created;
+}
+
+/**
+ * A person's message about a signal (A4.1), from the app window, plain HTTP
+ * or the phone. Returns the reply and the steers posted, or null when the
+ * signal is not open in this project. The steer carries the signal's words
+ * so the plan's channel reads on its own.
+ */
+export function replyToSignalAsPerson(projectRoot: string, signalId: string, message: string, by: SignalStateBy) {
+  const kept = recordReply(projectRoot, signalId, message, by);
+  if (!kept) return null;
+  const steers: string[] = [];
+  for (const t of kept.tasks) {
+    try {
+      const event = postChannelEventAsPerson({
+        planUid: t.planUid,
+        itemUid: t.itemUid,
+        eventType: 'steer',
+        message: `About "${kept.signal.summary}": ${message}`,
+        by: by.actorType,
+      });
+      steers.push(event.uid);
+    } catch (err) {
+      console.warn('[Awareness] steer for a reply failed:', err instanceof Error ? err.message : err);
+    }
+  }
+  broadcast('awareness-changed', { projectRoot });
+  return { ...kept.reply, signalId, steers };
 }
 
 /** A person resolves, dismisses or reopens a channel event — app or phone, as above. */

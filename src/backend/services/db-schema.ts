@@ -338,6 +338,27 @@ export const SCHEMA_PLANS_CORE = `
   );
   CREATE INDEX IF NOT EXISTS idx_signal_spans_project ON awareness_signal_spans(project_root, opened_at);
 
+  -- Phase 32 A4.1: a person's message to the agents about a signal, and
+  -- which agent sessions have read it (once each, on their next tool call).
+  CREATE TABLE IF NOT EXISTS awareness_signal_replies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    signal_id TEXT NOT NULL,
+    project_root TEXT NOT NULL,
+    message TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    actor_type TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_signal_replies_signal ON awareness_signal_replies(signal_id, created_at);
+  CREATE TABLE IF NOT EXISTS awareness_signal_reply_reads (
+    reply_id INTEGER NOT NULL,
+    session_id TEXT NOT NULL,
+    agent_type TEXT NOT NULL,
+    read_at INTEGER NOT NULL,
+    PRIMARY KEY (reply_id, session_id)
+  );
+
   -- Phase 32 A1.7c: folders an agent reported that the person said "not now"
   -- to. Asked once per folder, not once per connection.
   CREATE TABLE IF NOT EXISTS folder_request_dismissals (

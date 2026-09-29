@@ -33,6 +33,7 @@ import * as sessionService from '../services/session-service';
 import { readBindingHeaders } from './binding-headers';
 import { recordFolderRequest } from '../services/folder-requests';
 import { noticeFor } from '../services/awareness-notices';
+import { replyNoticeFor } from '../services/awareness-replies';
 import { candidateWorkstreamRoots, firstWorkstreamRoot, matchWorkstreamRoot } from '../services/workstream-binding';
 import { fileURLToPath } from 'node:url';
 import * as budgetService from '../services/budget-service';
@@ -555,6 +556,9 @@ function setupMcpServerInstance(sessionId: string): McpServer {
       if (result && !result.isError && Array.isArray(result.content)) {
         const notice = noticeFor(sessionId, name, getActiveProjectPath());
         if (notice) result.content.push({ type: 'text', text: notice });
+        // The person's own message about a signal on this work (A4.1), once.
+        const reply = replyNoticeFor(sessionId, getActiveProjectPath());
+        if (reply) result.content.push({ type: 'text', text: reply });
         // A breakpoint breach (B4.2): a file with a breakpoint that this
         // workstream changed with its own editor, which nothing could pause.
         const breach = breachNoticeFor(sessionId, getActiveProjectPath());

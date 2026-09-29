@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B5.4: catch-up and `get_state_at` |
-| **Status** | B5.1–B5.3 merged or in review (#209, #210, #211). B5.4 in review: the inbox offers "Watch what happened since 14:50 at 4×", which plays the moments since the last visit; `get_state_at` gives any MCP client the same moment. B5 is done when it merges |
-| **Next action** | Merge B5.3 (#211) and B5.4 when green; tick B5; status page; then A4 (the phone) per EXECUTION §2 |
+| **Stage / step** | Wave 2 — A4.1: message the agents about a signal |
+| **Status** | A4 refined (#214). A4.1 built: "Message the agents" on each signal; each agent in its workstreams reads it once on its next call; a steer on the plan of a task held there. Unit, harness (5) and browser (2) green locally |
+| **Next action** | Merge #214, then A4.1 when green; then A4.2, the phone's signal RPC (`awareness.needsYou`, `.signal`, `.answer`, `.reply`) and the `openSignals` count |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b5-4-catch-up` |
+| **Branch** | `feat/phase-32-a4-1-reply` (stacked on `feat/phase-32-a4-refine`) |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -88,7 +88,13 @@
   - [x] A8.2 Client-neutral pre-edit check in the connector (#201)
   - [x] A8.3 Hook adapters for other clients, each checked against its docs (Gemini CLI, from its own source; others wait on the same check) (#203)
   - [x] A8.4 Proof of use from MCP calls (`get_skill`), labelled by source (#202)
-- [ ] A4 Mobile
+- [ ] A4 Mobile, refined in EXECUTION §4:
+  - [ ] A4.1 Reply to the agents about a signal (shared by desktop and phone) — in review
+  - [ ] A4.2 The phone's signal RPC and live count
+  - [ ] A4.3 Workstreams on the phone
+  - [ ] A4.4 Push for a high signal
+  - [ ] A4.5 The phone's screens, and a way to render them
+  - [ ] A4.6 M4 done-when, end to end, and docs
 - [ ] A5 Review
 - [ ] A6 The Brief
 - [ ] A7 Rules
@@ -102,12 +108,14 @@
 - [ ] Follow-up: listing workstreams in a clone with many recent remote branches is slow: 133 remote refs made the first `/api/workstreams` take 11.6 s and each later one about 1.2 s, all synchronous in the Express process, while the window polls it. Found locally during B3.2 (it stalled "Add to plan"); CI's single-branch checkout never sees it. Cache branch workstreams by ref SHA and move the git work off the request path.
 - [ ] Follow-up: `graph/context-menu.spec.ts:49` failed on #188 with the canvas still on "Building dependency graph…" after 15 s (the scan had finished; laying out the whole repository beside a second worker was slow). `gotoWithProject` now waits 30 s for the canvas (#188). That covers the slow-layout case only; the blank-graph-on-rescan case below still needs its fix at the source.
 - [x] Follow-up: with another project scanned, about 20 extra nodes appear on a canvas showing its own graph (seen writing graph-own-project.spec, #196). Probably another endpoint answering for whichever project was scanned last (`/api/diff`'s working-tree ghosts): the same one-project-at-a-time class as #195, on a different route. **Fixed by HD1:** it was `/api/diff`: after another project's scan it diffed that project's files against this one and sent them, 45 added and 45 removed on the sample app.
-- [ ] Follow-up: `agent/workstream-strip.spec.ts:89` failed once on #205 (653c3e1): the chip read `[expanded]`, but `workstream-popover` never appeared and the test ran out of its 30 s (36.1 s; its siblings took about 9 s). Nothing in #205 touches the strip; it passed on the previous commit, locally 18 of 18 twice, and on the one re-run. Its cause is not found: the failure snapshot CI prints is cut at 20 KB, before the end of `<body>` where the popover is portalled. Next time it fails, keep the whole error context (raise the `head -c` limit in CI for that file).
+- [ ] Follow-up: `agent/workstream-strip.spec.ts:89` failed once on #205 (653c3e1): the chip read `[expanded]`, but `workstream-popover` never appeared and the test ran out of its 30 s (36.1 s; its siblings took about 9 s). Nothing in #205 touches the strip; it passed on the previous commit, locally 18 of 18 twice, and on the one re-run. Its cause is not found: the failure snapshot CI prints is cut at 20 KB, before the end of `<body>` where the popover is portalled. Next time it fails, keep the whole error context (raise the `head -c` limit in CI for that file). **Failed again on #212** (browser 1/3) beside `graph/edge-visuals.spec.ts:32`, both at 30 s. `edge-visuals` counts edges after a fixed `waitForTimeout(2000)` three times over; that class (a fixed wait, then a count) is what `onboarding-to-plan` had until #213 polled it. Poll both specs on what they wait for.
 - [ ] Follow-up: on this container, several browser specs fail on the base too and pass in CI: `awareness-tab.spec` (the served signals never render), `context-menu.spec:12` and `plan/create.spec:16` (the first test of a spec on a cold start), and `graph-breakpoints`' clear toast. Worth one look at why this machine differs, so local runs can be trusted again.
 - [x] Browser robustness, 2026-09-29 (#195, #197, #198, all on base): guide Escape attached before paint; plan-to-graph right-clicks on reachable nodes; graph-breakpoints right-click on the node itself; awareness-tab told times early in their minute; plan create waits for the workspace and the save; recents never re-add a removed project after a late load; New plan opens before the list refreshes.
 - [x] Follow-up: `graph/context-menu.spec.ts:38` failed on #186 with no graph at all (`.react-flow` never rendered in 15 s), the same empty-graph class as `layout-controls.spec.ts:38` on #184: a rescan on the other worker blanks every open graph. Worth fixing at the source (keep the last graph on screen while a rescan runs) rather than lengthening waits. **Fixed at the source by #195 and #196:** a scan answers "scanning" and every graph answer names its project; a canvas keeps its graph through another project's scan, and an empty one rescans its own.
 - [ ] Follow-up: the browser `serial` project runs in every CI shard;
   run it in one, to reclaim ~3 min per PR.
+- [ ] Follow-up: `e2e/golden-chain/onboarding-to-plan.spec.ts` imports `API` and never uses it, a lint error that predates #213. `npm run lint` covers `src/` only, so nothing reports it; either lint `e2e/` too or drop the import the next time the spec is touched.
+- [ ] Follow-up: browser shards now take about 16–25 minutes each (up from 15–19 at the Wave 1 review). The serial project, which runs the sample-app specs since HD2, is most of the rise; see the serial-project follow-up above.
 
 ### Track B: observability
 - [x] B1 Agent event log, refined in EXECUTION §5: done (#169, #170)
@@ -132,11 +140,11 @@
   - [x] B4.4 The phone and push ([#205](https://github.com/lionroseway/codetrellis/pull/205))
 - [x] HD1 The extra graph nodes after another project's scan (Wave 2 hardening) ([#207](https://github.com/lionroseway/codetrellis/pull/207))
 - [x] HD2 Browser graph specs on the sample app (Wave 2 hardening) ([#208](https://github.com/lionroseway/codetrellis/pull/208))
-- [ ] B5 Replay
+- [x] B5 Replay
   - [x] B5.1 Frames: project, SHA, session; turn end, status change, commit ([#209](https://github.com/lionroseway/codetrellis/pull/209))
   - [x] B5.2 The state at a moment ([#210](https://github.com/lionroseway/codetrellis/pull/210))
   - [x] B5.3 One clock in the window ([#211](https://github.com/lionroseway/codetrellis/pull/211))
-  - [ ] B5.4 Catch-up, and `get_state_at`
+  - [x] B5.4 Catch-up, and `get_state_at` ([#213](https://github.com/lionroseway/codetrellis/pull/213))
 - [ ] B6 Stack view
 - [ ] B7 Conferring
 - [ ] B8 Grounding
@@ -270,6 +278,87 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A4.1 — message the agents about a signal
+Journey **C2**'s reply, built first for the desktop because the spec's "message
+the agent" (§7.2) was never built there either.
+
+- **What the person sees.** Each signal in the Awareness tab has "Message the
+  agents" beside Acknowledge, Intended and Dismiss. It opens a box that says
+  "Each agent in billing-v2 and checkout-fix reads it on its next step";
+  Send (or ⌘/Ctrl-Enter) keeps the words under the signal: "Not read yet:
+  each agent in this work reads it on its next step", then "Read by codex and
+  claude-code · just now". A message sent over plain HTTP carries the
+  "not verified" tag, as answers do.
+- **What the agent gets.** `awareness-replies.ts`: the message is kept in
+  `awareness_signal_replies`. At the one MCP interception, each session placed
+  in one of the signal's workstreams gets it once, appended to its next tool
+  result as "── CodeTrellis: a message about other work ──". The block quotes
+  the person's words under the signal they are about and says who sent them
+  as the call arrived. Reads are kept per session, so the tab can say who
+  read it. A reply sent while the signal was live still reaches an agent
+  whose next call comes after it resolved.
+- **The steer.** `replyToSignalAsPerson` (server.ts, shared with the phone in
+  A4.2) also posts a `steer` on the plan of each unfinished task an agent in
+  those workstreams has claimed ("About "<summary>": <words>"), through
+  `postChannelEventAsPerson`, so it is exported, broadcast and routed like any
+  plan message.
+- **Tests.** Unit: `awareness-replies.test.ts` (6: the words, once per
+  session, only those workstreams, after resolve, the steer's targets) and
+  `awareness-view.test.ts` (+3). Harness: `awareness-replies` (5, three real
+  worktrees and three MCP clients; the one in a third worktree never reads
+  it). Browser: `awareness-reply.spec.ts` (2), with screenshots
+  `awareness-message-agents.png` and `awareness-message-sent.png`.
+- **Found by the screenshot.** In the panel's default height the box opened
+  with Send below the fold. It now scrolls itself into view, and the spec
+  checks that Send is in the viewport.
+
+### 2026-09-29: A4 refined — the phone (M4)
+Journey **C2** ("a serious warning fires while Sam is out"): a push, both sides
+in plain words, and Acknowledge, Intended and Reply to agent, the reply read by
+the agent on its next step. M4 is done when a contract signal on the desktop
+reaches the phone as a push and a reply from the phone reaches the agent as a
+`steer`.
+
+*What exists.* B4.4 gave the phone the template: `mobile-breakpoints.ts` pulls
+the list over RPC, answers need a pairing confirmed on the desktop and are
+audited, the author is `phonePerson()`, a count (`waitingBreakpoints`) rides in
+the snapshot, and `pushForBreakpoint` sends ids only, one per kind per minute,
+never to a phone watching live. On the desktop a signal can be acknowledged,
+marked intended or dismissed (`POST /api/awareness/:id/state`), and an agent is
+told of it once, appended to its next tool result (`noticeFor`, A2.6).
+
+*What is missing.*
+- **Nobody can reply to an agent about a signal, on either side.** Awareness
+  spec §7 lists "message the agent (posts `steer` to the channel)" among the
+  desktop tab's actions; it was never built. A `steer` channel event needs a
+  plan, and a signal names workstreams, not plans; an agent reads channel
+  events only when it asks. So the reply is kept beside the signal and rides
+  on each concerned session's next tool call (the path A2.6 proved), and is
+  also a `steer` on the plan of any task an agent there holds.
+- The phone has nothing on awareness: no RPC, no count, no screen.
+- Push has no signal kind, and the harness cannot see a push.
+- The phone's screens are never rendered (the Wave 1 review's point 4). The
+  owner's answer put the render path with A4.
+
+EXECUTION §4 has the sub-steps:
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| A4.1 | Reply to the agents about a signal, one path for desktop and phone: `POST /api/awareness/:id/reply {message}` keeps the person's words beside the signal (author from `actorFrom`), and each session placed in one of the signal's workstreams reads it once, on its next tool call, as a clearly marked message from the person (the notice interception, A2.6). Where an agent there holds a task, the reply is also a `steer` on that plan's channel, so it shows where plan messages do. The Awareness tab gains "Message the agents" on each signal, and shows the replies and who has read them | unit (the delivery text, once per session); harness: a reply reaches the scripted agent on its next call, once, and not an agent in another workstream; the steer is on the plan; browser, with a screenshot |
+| A4.2 | The phone's signal RPC, as approvals do it (list and detail pulled, a count in the snapshot): `awareness.needsYou` (the digest's lines and the high and medium signals, in the desktop's words, both sides named with `sideLabel`), `awareness.signal` (one signal: both sides, the files, who was told and what they said, the replies), `awareness.answer` (acknowledge or intended) and `awareness.reply` (A4.1's path), both needing a pairing confirmed on the desktop, audited, the author `phonePerson()`. The snapshot's `openSignals` counts live high and medium signals not set aside. A `peer-capabilities` row for each method | unit (the words); harness: list, detail, answer, reply from a paired phone; a read-only phone sees but cannot answer; the count moves |
+| A4.3 | Workstreams on the phone: `workstreams.list` (branch, agents, task, signal count) and `workstreams.detail` (its changed files and its recent turns from `agent_events`), the folder never from the request | harness |
+| A4.4 | Push for a high signal: when a high signal opens or reopens, a phone that is not watching live is told, with ids only (the words load over the mesh), at most one push per kind per minute, through the existing service; the tap opens that signal. The harness can point pushes at a local receiver | unit (rate, ids only); harness: a contract signal pushes once; an open phone is not pushed |
+| A4.5 | The phone's screens: a "Needs you" section at the top of Activity (the digest line, then breakpoints and signals, one count as the Home badge implies), `signal-detail.tsx` (both sides in plain words, the files, Acknowledge, Intended, Reply to agent), `workstreams.tsx` with its detail, and the push tap routed. A way to render phone screens for screenshots (Expo web, the bridge answered from fixtures), so they are seen, not only typechecked | mobile typecheck and lint; screenshots of each screen through the render path, or the reason it could not be built logged |
+| A4.6 | M4 done-when as a test: a contract signal on the desktop reaches the phone as a push; the phone reads it and replies; the reply reaches the agent as a steer on its next step. `docs/claude/awareness.md` and `docs/claude/mobile-companion.md` gain the phone's part | harness end to end |
+
+*Decided.* The reply path comes first and is shared, so the desktop gets the
+action the spec promised and the phone reuses it rather than adding a second
+way to reach an agent. The reply reaches the agent the way a notice does
+(once per session, on a call it was making anyway), because an agent that is
+not polling its plan's channel would otherwise never read it. The render path
+is attempted in A4.5 and not assumed: if Expo web cannot host the screens
+without the native modules, that is logged with what would be needed.
 
 ### 2026-09-29: two browser-suite failures, at their cause (#212)
 - **Idle connections reset** (#211: `websocket-events.spec.ts:72`, `read

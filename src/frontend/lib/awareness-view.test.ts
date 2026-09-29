@@ -4,7 +4,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { groupSignals, needsYouCount, digestLine, kindWords, sideLabel, sidesOf, stateWords, actionsFor, ago, toldWords, reopenedWords } from './awareness-view';
+import { groupSignals, needsYouCount, digestLine, kindWords, sideLabel, sidesOf, stateWords, actionsFor, ago, toldWords, reopenedWords, replyReadWords, replyFromWords } from './awareness-view';
 import type { AwarenessSignal, Workstream, WorkstreamAgent } from '../../shared/types';
 
 const NOW = 1_800_000_000_000;
@@ -157,5 +157,23 @@ describe('actionsFor', () => {
   test('a stale base has no second side, so it cannot be "intended"', () => {
     assert.deepEqual(actionsFor('open', 'stale-base').map((a) => a.state), ['acknowledged', 'dismissed']);
     assert.deepEqual(actionsFor('acknowledged', 'stale-base').map((a) => a.state), ['dismissed', 'open']);
+  });
+});
+
+describe('a message to the agents (A4.1)', () => {
+  const by = { actor: 'sam', actorType: 'human' as const, channel: 'desktop' as const };
+  test('says nobody has read it yet, and when they will', () => {
+    assert.equal(replyReadWords({ readBy: [] }, NOW), 'Not read yet: each agent in this work reads it on its next step');
+  });
+  test('names who read it, once each, and when the last did', () => {
+    assert.equal(replyReadWords({ readBy: [
+      { sessionId: 'a', agentType: 'codex', readAt: NOW - 5 * 60_000 },
+      { sessionId: 'b', agentType: 'codex', readAt: NOW - 2 * 60_000 },
+      { sessionId: 'c', agentType: 'claude-code', readAt: NOW - 3 * 60_000 },
+    ] }, NOW), `Read by codex and claude-code · ${ago(NOW - 2 * 60_000, NOW)}`);
+  });
+  test('says when it came from the phone', () => {
+    assert.equal(replyFromWords({ by }), 'You');
+    assert.equal(replyFromWords({ by: { ...by, channel: 'phone' } }), 'You, from your phone');
   });
 });
