@@ -1070,6 +1070,12 @@
   "rpc:freeze.acknowledge": {
     "behaviour": "✓ 0.4k: unflags in the person's name, audited, desktop told; bad id refused (freeze-flags)"
   },
+  "rpc:breakpoint.waiting": {
+    "behaviour": "✓ B4.4: held calls oldest first in the desktop's words, pauses and breaches, with the three answers worded for each (phone-breakpoints)"
+  },
+  "rpc:breakpoint.answer": {
+    "behaviour": "✓ B4.4: continue, steer (needs a note) or stop in the person's name; confirmed pairing only, audited, desktop told; the first answer stands (phone-breakpoints)"
+  },
   "rest:GET /api/settings": {
     "behaviour": "✓ 0.4k: every section; what was saved comes back after a restart (settings-surface)"
   },

@@ -87,6 +87,7 @@ import {
   postChannelEventAsPerson,
   setChannelEventStatusAsPerson,
 } from '../server';
+import { handleBreakpointMethod } from './mobile-breakpoints';
 import { isTaskStatus, TASK_STATUSES } from '../../shared/lib/plan-vocab';
 import { grantChange, grantRefusal } from './grant-guard';
 import { buildPlanPrompt } from '../mcp/prompt-builders';
@@ -440,6 +441,15 @@ async function routeMethod(
         send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
         broadcast,
       });
+
+    // --- What is held for the person, answered from the phone (B4.4) --------
+    case 'breakpoint.waiting':
+    case 'breakpoint.answer':
+      return handleBreakpointMethod(method, params, {
+        fingerprint,
+        send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
+        broadcast,
+      }, { who: phonePerson(), projectRoot: getActiveProjectPath() });
 
     // --- Plans ---------------------------------------------------------------
     case 'plan.list': {

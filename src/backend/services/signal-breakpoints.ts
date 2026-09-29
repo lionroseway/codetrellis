@@ -32,6 +32,7 @@ import {
   type Breakpoint, type BreakpointHit, type BreakpointAction,
 } from './breakpoint-service';
 import type { AwarenessSignal } from '../../shared/types';
+import { pushForBreakpoint } from './push-notification-service';
 
 export type SignalEnforcement =
   | { kind: 'pass' }
@@ -112,6 +113,7 @@ export function enforceSignals(
           recordBreakpointEvent('breakpoint_hit', {
             ...hitPayload(hit), breakpointId: rule.id, signalKind: signal.kind, signalSummary: signal.summary.slice(0, 300),
           }, caller.agent);
+          void pushForBreakpoint(hit).catch(() => {}); // a person away from the desk is told (B4.4)
           return { kind: 'paused', hit, signal, fresh: true };
         }
         if (latest.answeredAt === null) return { kind: 'paused', hit: latest, signal, fresh: false };

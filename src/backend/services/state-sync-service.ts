@@ -47,6 +47,7 @@ import * as terminalService from './terminal-service';
 import { getHistorySize } from './terminal-history-service';
 import * as deviationService from './deviation-service';
 import * as remoteInteractionService from './remote-interaction-service';
+import { countWaitingHits } from './breakpoint-service';
 import { getAllAddresses } from './pairing-server';
 import { getCurrentPowerStatus } from './power-service';
 import { getActiveProjectPath } from '../server';
@@ -86,6 +87,12 @@ export interface SyncStateSnapshot {
   walkthroughActive: boolean;
   /** Deviation counts for attention badges. */
   deviationCounts: DeviationCountsSummary;
+  /**
+   * Phase 32 B4.4 — agent calls held at a breakpoint, waiting for a person.
+   * A count only: the phone reads the calls, in words, over `breakpoint.waiting`
+   * when it moves. Live, so a phone already open sees a new one without a push.
+   */
+  waitingBreakpoints: number;
   /**
    * All IPv4 addresses this desktop is reachable on (LAN + Tailscale/VPN),
    * ordered LAN-first. The companion persists these so a pairing made on the
@@ -456,6 +463,10 @@ export function collectSnapshot(): SyncStateSnapshot {
     deviationCounts = { pending: totalPending, byPlan };
   } catch { /* deviation service may not be ready */ }
 
+  // --- B4.4: held calls waiting for a person (an indexed count) ---
+  let waitingBreakpoints = 0;
+  try { waitingBreakpoints = countWaitingHits(); } catch { /* database not ready */ }
+
   // --- 11.1: power status (replaces mobile 4s poll) ---
   const powerStatus = getCurrentPowerStatus();
 
@@ -473,6 +484,7 @@ export function collectSnapshot(): SyncStateSnapshot {
     pendingInputRequests,
     walkthroughActive,
     deviationCounts,
+    waitingBreakpoints,
     deviceAddresses: safeAddresses(),
     powerStatus,
   };

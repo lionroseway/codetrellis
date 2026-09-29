@@ -189,7 +189,7 @@ run as a plain `codex` client with no hook and no watcher in
 | Signals | `get_awareness`, and unseen ones appended to its next tool result (A2.6) | — |
 | Footprints and line changes | `check_footprint`, `get_line_changes` (B3.1), from git | — |
 | Declared intent | `declare_intent` | — |
-| Task and spec breakpoints | enforced at the MCP interception: the call returns "paused" with a ref; `await_decision` | — |
+| Task and spec breakpoints | enforced at the MCP interception: the call returns "paused" with a ref; `await_decision`. The person answers from the window's inbox or the phone (B4.4), with a push when the phone is away | — |
 | Code and function breakpoints | `check_breakpoint(path, old_text)` before an edit (the guide tells every agent to); an edit made without checking is a breach on its next call. A client whose hooks run a command, or a wrapper script: the connector's `--check-edit <path>` exits 2 when held (A8.2) | Claude Code's `PreToolUse` hook and Gemini CLI's `BeforeTool` hook (A8.3) make the check themselves and hold the edit before it is made, sending the replaced text |
 | Signal breakpoints | claims, finishes and spec edits pause while the signal is open | hooked edits pause too |
 | Skills | the task's skills, where to find them, in `get_brief`, `claim_item` and `get_next_item` (C1.1); `get_skill(name)` loads one and is the proof of use, labelled "read through CodeTrellis" (A8.4) | Claude Code's session log also proves a skill it loaded itself (C1.3), labelled "session log" |

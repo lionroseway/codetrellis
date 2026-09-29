@@ -67,6 +67,7 @@ const EMPTY_SNAPSHOT: WorkspaceSnapshot = {
   pendingInputRequests: [],
   walkthroughActive: false,
   deviationCounts: { pending: 0, byPlan: [] },
+  waitingBreakpoints: 0,
 };
 
 // --- Dedupe helper -----------------------------------------------------------
@@ -298,13 +299,18 @@ export function useDeviationCounts(): DeviationCountsSummary {
   return useWorkspaceStore((s) => s.snapshot?.deviationCounts ?? EMPTY_DEVIATIONS);
 }
 
+/** Agent calls held at a breakpoint, waiting for the person (B4.4). */
+export function useWaitingBreakpointCount(): number {
+  return useWorkspaceStore((s) => s.snapshot?.waitingBreakpoints ?? 0);
+}
+
 export function useAudio(): { capturing: boolean; bufferedSeconds: number } {
   return useWorkspaceStore((s) => s.snapshot?.audio ?? EMPTY_AUDIO);
 }
 
 // --- Attention badge helpers -------------------------------------------------
 
-/** Total attention items: pending deviations + pending input requests + active stuck events. */
+/** Total attention items: held calls, pending deviations, input requests, stuck and need-decision events. */
 export function useAttentionCount(): number {
   return useWorkspaceStore((s) => {
     const snap = s.snapshot;
@@ -319,6 +325,8 @@ export function useAttentionCount(): number {
       (e) => e.eventType === 'need-decision' && e.status === 'open',
     ).length ?? 0;
 
-    return deviations + inputRequests + stuckEvents + needDecision;
+    const held = snap.waitingBreakpoints ?? 0;
+
+    return held + deviations + inputRequests + stuckEvents + needDecision;
   });
 }

@@ -42,6 +42,7 @@ import {
   ACTIVE_SELECT, HIT_SELECT, rowsOf, toBreakpointRow, toHitRow, getHit, hitPayload, codeCovers,
   type Breakpoint, type BreakpointHit,
 } from './breakpoint-service';
+import { pushForBreakpoint } from './push-notification-service';
 
 export const HOOK_AGENT = 'claude-code-hook';
 
@@ -155,6 +156,7 @@ function newHit(input: {
   );
   const hit = getHit(ref)!;
   recordBreakpointEvent('breakpoint_hit', { ...hitPayload(hit), breakpointId: input.bp.id, on: input.bp.target }, input.caller.agent);
+  void pushForBreakpoint(hit).catch(() => {}); // a person away from the desk is told (B4.4)
   return hit;
 }
 

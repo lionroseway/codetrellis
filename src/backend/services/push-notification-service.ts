@@ -16,7 +16,8 @@
  * Rate limit: max 1 push per event type per minute per device.
  */
 
-import type { ChannelEvent } from '../../shared/types';
+import type { BreakpointHit, ChannelEvent } from '../../shared/types';
+import { agentName } from '../../shared/lib/breakpoint-words';
 import { getPeerConnection } from './webrtc-service';
 
 /**
@@ -242,6 +243,38 @@ export async function pushForBudgetChange(planUid: string, planTitle: string, ag
       title: 'Budget changed by an agent',
       body: `${agent} changed the budget on ${planTitle.length > 80 ? planTitle.slice(0, 77) + '...' : planTitle}`,
       data: { type: 'budget-change', planUid },
+      sound: 'default',
+      channelId: 'codetrellis-events',
+    });
+  }
+  if (payloads.length > 0) await sendExpoPush(payloads);
+}
+
+/**
+ * An agent is held at a person's breakpoint, or edited past one (Phase 32
+ * B4.4). A person away from the desk is told, and the tap opens the
+ * waiting list. The words name the agent only: which file, task or note is
+ * on the phone once it wakes and loads over WebRTC, never in a payload a
+ * push service sees. The data carries the hit's ref and plan id.
+ */
+export async function pushForBreakpoint(hit: Pick<BreakpointHit, 'ref' | 'breach' | 'agent' | 'planUid'>): Promise<void> {
+  if (!started) return;
+  const tokens = Array.from(pushTokens.values());
+  if (tokens.length === 0) return;
+
+  const who = agentName(hit.agent);
+  const payloads: PushPayload[] = [];
+  for (const { token, fingerprint } of tokens) {
+    if (isDeviceActive(fingerprint)) continue; // already watching live — don't push
+    if (isRateLimited(fingerprint, 'breakpoint')) continue;
+    markSent(fingerprint, 'breakpoint');
+    payloads.push({
+      to: token,
+      title: hit.breach ? 'Edited past a breakpoint' : 'Waiting on you',
+      body: hit.breach
+        ? `${who} changed code past one of your breakpoints and was told to stop.`
+        : `${who} is held at one of your breakpoints until you answer.`,
+      data: { type: 'breakpoint', ref: hit.ref, ...(hit.planUid ? { planUid: hit.planUid } : {}) },
       sound: 'default',
       channelId: 'codetrellis-events',
     });

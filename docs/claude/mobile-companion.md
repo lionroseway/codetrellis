@@ -76,6 +76,25 @@ The person can approve an agent's work, or send it back, from the phone. How it 
   - lines of a file;
   - or an image, which Electron scales down for the phone.
 
+## Breakpoints on the phone (Phase 32 B4.4)
+
+An agent held at a breakpoint the person set is answered from the phone as it is on the desktop. How it fits together:
+
+- **Where it starts.**
+  - On Home, "An agent is waiting on you" is the first card under NEEDS ATTENTION, above approvals: an agent is stopped until the person answers. It opens `/breakpoints`.
+  - The snapshot carries `waitingBreakpoints`, a live count of held calls. An open app re-reads the list when it moves, so a new one shows without a push, and the tab badge counts it.
+  - A phone that is not connected gets a push: "Waiting on you" for a pause, "Edited past a breakpoint" for a breach. The words name the agent only; which file, task or note is held loads over WebRTC once the app wakes. The data is `{ type: 'breakpoint', ref, planUid? }`, and `routeForNotification` opens `/breakpoints`.
+- **What it shows.** Each card is the desktop's own wording, from `src/shared/lib/breakpoint-words.ts` and `workstream-words.ts`:
+  - who wants to do what, in which workstream;
+  - why it is waiting on the person;
+  - the note the person left on the breakpoint.
+  A breach is never worded as a pause: it happened, and the agent was told to stop and wait.
+- **What it calls.** `mobile/lib/breakpoints.ts` wraps two RPCs:
+  - `breakpoint.waiting` (read) returns the held calls, oldest first;
+  - `breakpoint.answer` (write) sends continue, steer (with a note the agent reads) or stop. It also needs a pairing confirmed on the desktop, because the answer is recorded as the person's. It is audited against the device, and the desktop is told.
+  The first answer stands wherever it was given. A late answer from the phone gets back the answer that stood, marked `alreadyAnswered`.
+  The desktop half is `src/backend/services/mobile-breakpoints.ts`.
+
 ## State sync
 
 Desktop pushes a full snapshot of relevant workspace state on connect over the `ui` channel, then streams `fast-json-patch` diffs. Mobile applies them into `useWorkspaceStore`. This is the same pattern used for plan state, terminal scrollback metadata, presence, and channel events.
