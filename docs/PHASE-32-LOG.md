@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | Wave 2 — A4.4: push for a high signal |
-| **Status** | A4.2 in review (#216); A4.3 and A4.4 built on stacked branches. A4.4: `pushForSignal` when a high signal opens (`newlySerious`), ids only, one per kind per minute, never to a connected phone; a loopback-only push URL for the harness |
-| **Next action** | Merge #216, then A4.3 and A4.4 in order; then A4.5, the phone's screens and a way to render them |
+| **Status** | A4.1 and A4.2 merged (#215, #216); A4.3 in review (#217). A4.4 built, stacked on it: `pushForSignal` when a high signal opens (`newlySerious`), ids only, one per kind per minute, never to a connected phone; a loopback-only push URL for the harness |
+| **Next action** | Merge #217, then A4.4; then A4.5, the phone's screens and a way to render them |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-a4-4-signal-push` (stacked on A4.3) |
 | **Last updated** | 2026-09-29 |
@@ -90,7 +90,7 @@
   - [x] A8.4 Proof of use from MCP calls (`get_skill`), labelled by source (#202)
 - [ ] A4 Mobile, refined in EXECUTION §4:
   - [x] A4.1 Reply to the agents about a signal (shared by desktop and phone) ([#215](https://github.com/lionroseway/codetrellis/pull/215), which also carried the refinement, #214)
-  - [ ] A4.2 The phone's signal RPC and live count — in review
+  - [x] A4.2 The phone's signal RPC and live count ([#216](https://github.com/lionroseway/codetrellis/pull/216))
   - [ ] A4.3 Workstreams on the phone — in review
   - [ ] A4.4 Push for a high signal — in review
   - [ ] A4.5 The phone's screens, and a way to render them
