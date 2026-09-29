@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Radar, ArrowLeftRight, ArrowRight } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
+import { useReplayState } from '../../stores/replay-store';
+import { signalsAsOf } from '../../lib/replay';
 import { useAwarenessStore } from '../../stores/awareness-store';
 import { usePlanItemsStore } from '../../stores/plan-items-store';
 import { usePlanStore } from '../../stores/plan-store';
@@ -72,8 +74,12 @@ function writeLastViewed(at: number): void {
 
 export function AwarenessTab() {
   const root = useProjectStore((s) => s.root);
-  const { workstreams, signals, loaded, error } = useAwarenessStore();
-  const [now, setNow] = useState(() => Date.now());
+  const { workstreams, signals: liveSignals, loaded, error } = useAwarenessStore();
+  const [liveNow, setNow] = useState(() => Date.now());
+  // B5.3: while replaying, the signals open at the cursor's moment.
+  const replay = useReplayState();
+  const signals = useMemo(() => (replay ? signalsAsOf(replay) : liveSignals), [replay, liveSignals]);
+  const now = replay ? replay.at : liveNow;
   // What was new is measured from the visit before this one; leaving marks this one.
   const [lastViewed] = useState(readLastViewed);
   useEffect(() => {
@@ -106,7 +112,7 @@ export function AwarenessTab() {
         <Radar size={14} className={`shrink-0 mt-0.5 ${groups.needsYou.length > 0 ? 'text-warning' : 'text-foreground-subtle'}`} />
         <div className="min-w-0">
           <div className="text-[12px] font-medium text-foreground">{digest.headline}</div>
-          {distilled.newSince != null && distilled.newSince > 0 && lastViewed && (
+          {!replay && distilled.newSince != null && distilled.newSince > 0 && lastViewed && (
             <div data-testid="awareness-new-since" className="mt-0.5 text-[10px] text-warning">
               {distilled.newSince} new since you last looked ({new Date(lastViewed).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })})
             </div>
@@ -312,6 +318,8 @@ function SignalFileChips({ signal: s, workstreams }: { signal: AwarenessSignal; 
 
 function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; workstreams: Workstream[]; now: number }) {
   const answer = useAwarenessStore((st) => st.answer);
+  // Answering is for now: a replayed signal is shown as it was, without actions.
+  const replayed = useReplayState() !== null;
   const [busy, setBusy] = useState(false);
   const answered = stateWords(s, now);
   const quiet = s.state !== 'open';
@@ -389,7 +397,7 @@ function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; 
 
       <div className="mt-1.5 flex items-center gap-1">
         <span data-testid="awareness-actions" className="flex items-center gap-1">
-          {actionsFor(s.state, s.kind).map((a) => (
+          {!replayed && actionsFor(s.state, s.kind).map((a) => (
             <button
               key={a.state}
               onClick={() => act(a.state)}

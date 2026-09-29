@@ -8,6 +8,7 @@ import { usePlanItemsStore, buildItemTree } from '../../../stores/plan-items-sto
 import { useToastStore } from '../../../stores/toast-store';
 import { progressByWorktree, worktreeReadiness } from '../../../lib/section-worktrees';
 import { useAwarenessStore } from '../../../stores/awareness-store';
+import { useReplayStore } from '../../../stores/replay-store';
 import type { PlanItem, PlanItemKind, TaskStatus } from '@shared/types';
 
 const STATUS_ICON: Record<TaskStatus, { Icon: typeof Circle; tint: string }> = {
@@ -281,8 +282,14 @@ function ItemRow({
   const isLocal = item.visibility === 'local';
 
   const KindIcon = item.kind === 'action' ? Zap : FileText;
-  const statusMeta = item.kind === 'action' && item.status
-    ? STATUS_ICON[item.status]
+  // B5.3: while replaying, the task's status at the cursor's moment; a task
+  // made after it is shown faded, since it did not exist yet.
+  const replaying = useReplayStore((st) => st.active && st.state !== null);
+  const replayStatus = useReplayStore((st) => (st.active && st.state ? st.statuses[item.uid] : undefined));
+  const notYet = replaying && item.kind === 'action' && replayStatus === undefined;
+  const shownStatus = replaying && item.kind === 'action' ? replayStatus ?? null : item.status;
+  const statusMeta = item.kind === 'action' && shownStatus
+    ? STATUS_ICON[shownStatus as keyof typeof STATUS_ICON] ?? null
     : null;
 
   const handleDragStart = (e: React.DragEvent) => {
@@ -337,8 +344,11 @@ function ItemRow({
     <div
       ref={rowRef}
       aria-current={isSelected ? 'true' : undefined}
+      data-replay-status={replaying && item.kind === 'action' ? (notYet ? 'not-yet' : shownStatus ?? 'none') : undefined}
+      title={notYet ? 'Made after the moment being replayed' : undefined}
       className={[
         'group relative flex items-center gap-1.5 px-1.5 py-1.5 cursor-pointer rounded-md mx-1.5',
+        notYet ? 'opacity-40' : '',
         isSelected ? 'bg-accent/10 ring-1 ring-accent/30' : 'hover:bg-white/[0.03]',
         dropIndicator && drag.position === 'inside' ? 'ring-1 ring-accent/50 bg-accent/5' : '',
       ].join(' ')}

@@ -22,6 +22,7 @@ import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, 
 import '@xyflow/react/dist/style.css';
 
 import { useProjectStore } from '../../stores/project-store';
+import { useReplayStore } from '../../stores/replay-store';
 import { useGraphStore } from '../../stores/graph-store';
 import { useAgentStore } from '../../stores/agent-store';
 import { usePlanStore } from '../../stores/plan-store';
@@ -91,6 +92,9 @@ export function MainCanvas() {
   const setGraphData = useGraphStore((s) => s.setGraphData);
   const setLayoutMode = useGraphStore((s) => s.setLayoutMode);
   const trellisMode = useGraphStore((s) => s.trellisMode);
+  // B5.3: while replaying, the graph as it was at the cursor's frame, frozen.
+  const replayGraph = useReplayStore((s) => (s.active ? s.graph : null));
+  const replayAt = useReplayStore((s) => (s.active && s.state ? s.state.at : null));
   const setTrellisMode = useGraphStore((s) => s.setTrellisMode);
   const scopePath = useGraphStore((s) => s.scopePath);
   const setScopePath = useGraphStore((s) => s.setScopePath);
@@ -771,6 +775,8 @@ export function MainCanvas() {
   const liveWorkingTreeDiff = useMemo(() => mergeLiveDiff(snapshotDiff, diffData), [snapshotDiff, diffData]);
 
   const rawGraphData = useMemo(() => {
+    // Replay (B5.3): the frame's graph, as it was, whatever the mode.
+    if (replayGraph) return buildFromSnapshot(replayGraph.edges, viewDepth, layoutMode, null, true, null, scopePath);
     // Current/Planned mode: render from frozen snapshot
     if ((trellisMode === 'current' || trellisMode === 'planned') && currentSnapshot) {
       return buildFromSnapshot(
@@ -800,7 +806,7 @@ export function MainCanvas() {
     if (depEdges.length === 0) return { nodes: [], edges: [] };
     // Plan intent on the live graph is an overlay (B3.3); the Planned view asks for it outright.
     return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, recentlyChanged, trellisMode === 'planned' || (projectionEnabled && planOverlay) ? projectionData : null, layoutMode, trellisMode, scopePath);
-  }, [depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, liveWorkingTreeDiff, recentlyChanged, projectionData, projectionEnabled, planOverlay, layoutMode, trellisMode, currentSnapshot, scopePath]);
+  }, [replayGraph, depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, liveWorkingTreeDiff, recentlyChanged, projectionData, projectionEnabled, planOverlay, layoutMode, trellisMode, currentSnapshot, scopePath]);
 
   // One element per id, whichever builder ran. Duplicate ids leak DOM on
   // every render; see `uniqueGraph` for how much.
@@ -1111,6 +1117,12 @@ export function MainCanvas() {
 
   return (
     <div className="w-full h-full relative overflow-hidden bg-gradient-to-br from-[#0a0b10] via-[#0d1020] to-[#0a0b10]">
+      {replayAt !== null && (
+        <div data-testid="replay-canvas" className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-10 rounded-full border border-accent/40 bg-background/80 px-3 py-1 text-[11px] text-accent shadow">
+          As it was at {new Date(replayAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {replayGraph ? ` · ${replayGraph.files.length} files` : ''} · replaying
+        </div>
+      )}
       <div className="pointer-events-none absolute inset-0 opacity-45 [background-image:radial-gradient(circle_at_center,rgba(59,130,246,0.08)_0,transparent_46%),linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:100%_100%,28px_28px,28px_28px]" />
       <ReactFlow
         nodes={nodes}
