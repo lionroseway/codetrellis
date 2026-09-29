@@ -11,12 +11,12 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B3.3a: overlays on the graph |
-| **Status** | B3.1 (#191) and B3.2 (#193) merged. B3.3a done on its branch: the overlay list (plan intent, workstreams, collision zones, breakpoints) turned on and off, each other workstream's line counts and collision zones on file nodes. B3.3b, A8.1, A8.2 and A8.4 are built on branches stacked after it. Unit, harness and browser pass |
-| **Next action** | Open B3.3a's PR and merge when green; then B3.3b, A8.1, A8.2, A8.4 in turn (each rebased on the last merged). Then A8.3 (other clients' hooks, each checked against its docs), A2.7, B4.4 |
+| **Stage / step** | Track B — B3.3b: from an overlap to its lines |
+| **Status** | B3.3a merged (#194), after base fixes #195–#198 (see the follow-ups below). B3.3b in review: signal file chips ("Show on graph", "Show lines") beside the answers, and "Show line changes" on a file node. A8.1, A8.2, A8.4, A8.3 (Gemini CLI's hook) and A2.7 (signatures for eight more languages) are built on branches stacked after it. Unit, harness and browser pass |
+| **Next action** | Merge B3.3b's PR when green; then A8.1, A8.2, A8.4, A8.3, A2.7 in turn (each rebased on the last merged). Then B4.4 |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b3-3a-overlays` |
-| **Last updated** | 2026-09-28 |
+| **Branch** | `feat/phase-32-b3-3b-focus-show-changes` |
+| **Last updated** | 2026-09-29 |
 
 ---
 
@@ -98,10 +98,13 @@
   (5/5 on base and on the branch). Find which broadcast leaves the
   workspace, so a person's open plan survives someone else's plan changes.
 - [ ] Follow-up: two browser tests failed once on #167 and passed on re-run: `realtime/plan-events.spec.ts:18` (a reset connection mid-POST; also 2/3 locally on the base branch) and `external-refs/refs-panel.spec.ts:77` (a fixed 3 s `isVisible`). Both are queued as separate fixes; neither touches A3.4's code.
-- [ ] Follow-up: two browser tests failed once on the docs-only #184 and passed on re-run: `graph/layout-controls.spec.ts:38` (0 nodes after Tree → Map; the spec already names a rescan on the other worker as the cause of an empty graph, and polls 20 s) and `review-regressions/pr55-ui.spec.ts:431` (the linked-ticket chip never appeared, on the sample-app fixture). Neither touches a Phase 32 file; each needs its root cause found, not a longer wait.
+- [x] Follow-up: two browser tests failed once on the docs-only #184 and passed on re-run: `graph/layout-controls.spec.ts:38` (0 nodes after Tree → Map; the spec already names a rescan on the other worker as the cause of an empty graph, and polls 20 s) and `review-regressions/pr55-ui.spec.ts:431` (the linked-ticket chip never appeared, on the sample-app fixture). Neither touches a Phase 32 file; each needs its root cause found, not a longer wait. **Fixed at the source by #195 and #196:** a scan answers "scanning" and every graph answer names its project; a canvas keeps its graph through another project's scan, and an empty one rescans its own.
 - [ ] Follow-up: listing workstreams in a clone with many recent remote branches is slow: 133 remote refs made the first `/api/workstreams` take 11.6 s and each later one about 1.2 s, all synchronous in the Express process, while the window polls it. Found locally during B3.2 (it stalled "Add to plan"); CI's single-branch checkout never sees it. Cache branch workstreams by ref SHA and move the git work off the request path.
 - [ ] Follow-up: `graph/context-menu.spec.ts:49` failed on #188 with the canvas still on "Building dependency graph…" after 15 s (the scan had finished; laying out the whole repository beside a second worker was slow). `gotoWithProject` now waits 30 s for the canvas (#188). That covers the slow-layout case only; the blank-graph-on-rescan case below still needs its fix at the source.
-- [ ] Follow-up: `graph/context-menu.spec.ts:38` failed on #186 with no graph at all (`.react-flow` never rendered in 15 s), the same empty-graph class as `layout-controls.spec.ts:38` on #184: a rescan on the other worker blanks every open graph. Worth fixing at the source (keep the last graph on screen while a rescan runs) rather than lengthening waits.
+- [ ] Follow-up: with another project scanned, about 20 extra nodes appear on a canvas showing its own graph (seen writing graph-own-project.spec, #196). Probably another endpoint answering for whichever project was scanned last (`/api/diff`'s working-tree ghosts): the same one-project-at-a-time class as #195, on a different route.
+- [ ] Follow-up: on this container, several browser specs fail on the base too and pass in CI: `awareness-tab.spec` (the served signals never render), `context-menu.spec:12` and `plan/create.spec:16` (the first test of a spec on a cold start), and `graph-breakpoints`' clear toast. Worth one look at why this machine differs, so local runs can be trusted again.
+- [x] Browser robustness, 2026-09-29 (#195, #197, #198, all on base): guide Escape attached before paint; plan-to-graph right-clicks on reachable nodes; graph-breakpoints right-click on the node itself; awareness-tab told times early in their minute; plan create waits for the workspace and the save; recents never re-add a removed project after a late load; New plan opens before the list refreshes.
+- [x] Follow-up: `graph/context-menu.spec.ts:38` failed on #186 with no graph at all (`.react-flow` never rendered in 15 s), the same empty-graph class as `layout-controls.spec.ts:38` on #184: a rescan on the other worker blanks every open graph. Worth fixing at the source (keep the last graph on screen while a rescan runs) rather than lengthening waits. **Fixed at the source by #195 and #196:** a scan answers "scanning" and every graph answer names its project; a canvas keeps its graph through another project's scan, and an empty one rescans its own.
 - [ ] Follow-up: the browser `serial` project runs in every CI shard;
   run it in one, to reclaim ~3 min per PR.
 
