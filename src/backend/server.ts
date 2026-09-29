@@ -1844,6 +1844,25 @@ app.get('/api/diff', async (req, res) => {
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
 
+  // The baseline and the files table hold one project at a time. While a
+  // scan runs, or once another project was scanned, a diff of the tables
+  // against this project is another project's files, and a canvas drew
+  // them as ghost nodes (Phase 32 HD1). Say whose data this is instead,
+  // as /api/dependencies does, and the canvas keeps the diff it has.
+  const trimRoot = (p: string) => p.replace(/[\\/]+$/, '');
+  if (scanInFlight) {
+    res.json({ error: 'A scan is running; its changes come when it lands', scanning: true, project: scanInFlight.path });
+    return;
+  }
+  const held = getActiveProjectPath();
+  if (held) res.set('X-CodeTrellis-Project', encodeURIComponent(held));
+  const heldElsewhere = !held || trimRoot(held) !== trimRoot(projectPath)
+    || (baseline.projectPath != null && trimRoot(baseline.projectPath) !== trimRoot(projectPath));
+  if (heldElsewhere) {
+    res.json({ error: 'The server holds another project\'s files; scan this project to see its changes', otherProject: true, project: held ?? baseline.projectPath });
+    return;
+  }
+
   // Read current state from the DB instead of re-running a full
   // scan + parse + resolveImports on every poll. The file watcher
   // already keeps individual files up-to-date as they change. The

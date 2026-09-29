@@ -4,7 +4,8 @@
  * have opened another (lib/graph-answer.ts).
  *
  * A canvas showing its graph keeps it when another project is scanned: no
- * node of its graph goes, and no error is shown. (A canvas with nothing on
+ * node of its graph goes, none of the other project's files joins it as a
+ * ghost (its working-tree diff is its own, HD1), and no error is shown. (A canvas with nothing on
  * screen scans its own project again; a reload here would lose the test's
  * project, so that path is covered by graph-answer's rules and CI's shared
  * backend, where it happens by itself.)
@@ -33,10 +34,16 @@ test.describe('The graph belongs to this window\'s project', () => {
     const held = await request.get(`${API}/dependencies?include=cross_system`);
     expect(decodeURIComponent(held.headers()['x-codetrellis-project'] ?? '')).toBe(OTHER);
 
-    // The graph on screen is this project's, and stays: none of its nodes go.
-    await page.waitForTimeout(1500);
+    // Its working-tree diff is asked for now, not at the next 10 s poll: before
+    // HD1 it came back as the other project's files, about twenty ghost nodes.
+    await page.getByTitle('Check for changes now').click();
+
+    // The graph on screen is this project's, and stays: none of its nodes go,
+    // and nothing of the other project's arrives.
+    await page.waitForTimeout(2500);
     const after = new Set(await ids());
     expect(before.filter((id) => !after.has(id))).toEqual([]);
+    expect([...after].filter((id) => !before.includes(id))).toEqual([]);
     await expect(page.getByText('The dependency graph did not load')).toHaveCount(0);
   });
 });
