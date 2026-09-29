@@ -100,7 +100,7 @@
   - [x] A5.1 `commit:` sides get their dependency edges; the picker offers each line of work's branch (#222)
   - [x] A5.2 "Other work in flight" in `review_plan` and `get_pr_draft` (#223)
   - [ ] A5.3 The opt-in "no open high signals" check — in review
-  - [ ] A5.4 The review queue and `get_review_queue`
+  - [ ] A5.4 The review queue and `get_review_queue` — built, PR after A5.3
   - [ ] A5.5 The Review tab
   - [ ] A5.6 The queue on the phone
   - [ ] A5.7 M5 done-when, end to end, and docs
@@ -287,6 +287,41 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A5.4 — the review queue, with a suggested merge order
+"What should merge next, and why", answered in one place:
+`GET /api/review-queue` and a read-only `get_review_queue` MCP tool (with its
+`TOOL_CAPABILITIES` row).
+
+- **Lines.** Each line of work that has plan items, keyed by (plan, branch),
+  for plans not completed or archived. Each is reviewed against the main
+  checkout's branch with the existing review, so it carries A5.1's
+  dependency edges and A5.2's "Other work in flight". A line shows:
+  - where its items' criteria stand;
+  - files changed, blast radius and dependencies nobody planned;
+  - open overlaps and the high ones;
+  - a status in words: ready (every criterion met, none sent back, no open
+    high overlap), held by an open high overlap, waiting for sign-off, or in
+    progress.
+- **Order.** From the live contract overlaps (`src/shared/lib/merge-order.ts`,
+  pure). A line that changes something another imports goes first: "Before
+  checkout-fix: it imports validateCreateUser, which this changes, and will
+  need updating after", and on the other side "After billing-v2…". An
+  answered overlap still orders the queue, because the importer still has
+  to update; only a fixed one stops. Among free lines, ready ones come
+  first, then by name. A cycle is broken at the best-ranked line, and said
+  to be one. The order is a suggestion, never enforced.
+- **Guards caught two gaps.** The agent guide did not mention the new tool
+  (`skill-guide.test.ts`), and the inventory had no domain for the route. It
+  is in the guide's review table now, with how to pass on a reason. Two
+  stale "a commit has files only" lines went too, in the agent guide and the
+  in-app guide.
+- **Tests.**
+  - Unit: `merge-order.test.ts` (5).
+  - Harness: `review-queue` (4). Two branches in one plan, billing-v2 first
+    with its reason and checkout-fix after. Both are held while the overlap
+    is open, both ready once it is marked intended, with the order kept. An
+    agent gets the same queue.
 
 ### 2026-09-29: A5.3 — sign-off can wait for an open high overlap
 The one place awareness can hold anything up, and only when a project asks.

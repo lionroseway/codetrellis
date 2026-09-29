@@ -199,7 +199,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       + 'pick — a checkpoint, a commit, the baseline, or the working tree.',
     points: [
       'Checkpoints are named moments you capture yourself, useful before a risky change.',
-      'A commit contributes its file list only; comparing against a checkpoint also compares edges.',
+      'A commit or a branch compares its dependencies too, so a new import shows as a new edge.',
     ],
     asks: [
       {

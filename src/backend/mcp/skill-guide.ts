@@ -677,7 +677,7 @@ those transitions silently.
 
 | Tool | What it does |
 |------|-------------|
-| \`list_comparands(project_path)\` | Every point you can compare from: live, baseline, checkpoints, recent commits |
+| \`list_comparands(project_path)\` | Every point you can compare from: live, baseline, checkpoints, each line of work's branch, recent commits |
 | \`compare_snapshots(project_path, before, after)\` | Diff any two of them — files added / removed / modified, and edges where both sides know them |
 | \`get_plan_history(project_path, plan_slug)\` | How a plan changed across commits |
 | \`get_plan_at_commit(project_path, plan_slug, commit_hash)\` | A plan as it stood at one commit |
@@ -685,9 +685,10 @@ those transitions silently.
 | \`search_plan_history(project_path, query)\` | Find a plan change by text |
 | \`get_team_activity(project_path)\` | Who changed which plans, from the manifest's git history |
 
-A commit contributes its file list only; reconstructing its edges would
-mean checking the tree out and re-parsing it. Compare against a checkpoint
-when you need edges.
+A commit or branch carries its dependency edges (built from the graph and
+the files that differ at it), so a branch review finds dependencies nobody
+planned. Past 400 differing files the edges are left out, and the note
+says so.
 
 ### Review and PR draft (Phase 29)
 
@@ -695,9 +696,15 @@ when you need edges.
 |------|-------------|
 | \`review_plan(plan_uid, project_path, before?, after?)\` | Per item: what landed, what is missing, and which changed files no item claimed |
 | \`get_pr_draft(plan_uid, project_path, before?, after?)\` | A PR title and body with the tickets and the review folded in |
+| \`get_review_queue(project_path)\` | Every line of work with plan items: criteria, blast radius, unplanned dependencies, open overlaps, whether it is ready, and a suggested merge order with the reason for each place |
 
-Read-only. Neither touches the repository — you do the git and open the
-PR with your own credentials.
+Both reviews carry "Other work in flight": the overlaps with other lines of
+work and what happened to each. When asked what to merge next, read the
+queue and pass on its reason ("merge after billing-v2: it changes
+validateCreateUser, which this imports"); the order is a suggestion.
+
+Read-only. None of these touches the repository — you do the git and open
+the PR with your own credentials.
 
 ### Conflicts and governance
 

@@ -246,6 +246,7 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   compare_snapshots: 'read',
   review_plan: 'read',
   get_pr_draft: 'read',
+  get_review_queue: 'read',
 
   // ── session-tools ───────────────────────────────────────────────────
   // `register_session` is the handshake and is deliberately the cheapest

@@ -71,6 +71,7 @@ import * as planService from './services/plan-service';
 import * as budgetService from './services/budget-service';
 import { compareSnapshots, listComparands, readFileAt } from './services/snapshot-compare-service';
 import { reviewPlan, renderReviewMarkdown } from './services/plan-review-service';
+import { reviewQueue } from './services/review-queue-service';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
@@ -3721,6 +3722,14 @@ app.get('/api/plans/:uid/pr-draft', (req, res) => {
   });
   if (!result.ok) { res.status(404).json(result); return; }
   res.json(result.draft);
+});
+
+// The review queue (Phase 32 A5.4): each line of work with plan items, with
+// where it stands and a suggested merge order, reasons shown, never enforced.
+app.get('/api/review-queue', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(reviewQueue(projectRoot));
 });
 
 app.get('/api/plans/:uid/review', (req, res) => {
