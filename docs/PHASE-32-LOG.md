@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — A4.2: the phone's signal RPC |
-| **Status** | A4 refined and A4.1 merged together (#215; #214 closed, its commit carried). A4.2 built: `openSignals` in the snapshot; `awareness.needsYou` / `.signal` / `.answer` / `.reply`; the coverage guard now credits typed `rpc<T>()` calls |
-| **Next action** | Merge A4.2 when green; then A4.3, workstreams on the phone (`workstreams.list`, `workstreams.detail`) |
+| **Stage / step** | Wave 2 — A4.3: workstreams on the phone |
+| **Status** | A4.1 merged (#215). A4.2 in review (#216). A4.3 built: `workstreams.list` and `workstreams.detail` (files, turns in the Timeline's words); turn grouping and phrasing moved to `src/shared/lib` |
+| **Next action** | Merge #216, then A4.3; then A4.4, push for a high signal |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a4-2-phone-signals` |
+| **Branch** | `feat/phase-32-a4-3-phone-workstreams` (stacked on A4.2) |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -91,7 +91,7 @@
 - [ ] A4 Mobile, refined in EXECUTION §4:
   - [x] A4.1 Reply to the agents about a signal (shared by desktop and phone) ([#215](https://github.com/lionroseway/codetrellis/pull/215), which also carried the refinement, #214)
   - [ ] A4.2 The phone's signal RPC and live count — in review
-  - [ ] A4.3 Workstreams on the phone
+  - [ ] A4.3 Workstreams on the phone — in review
   - [ ] A4.4 Push for a high signal
   - [ ] A4.5 The phone's screens, and a way to render them
   - [ ] A4.6 M4 done-when, end to end, and docs
@@ -278,6 +278,31 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A4.3 — workstreams on the phone
+The strip, pulled over RPC, for "who is doing what" away from the desk.
+
+- **`workstreams.list`**: each line of work as the strip names it, idle ones
+  left out: its agents, the unfinished tasks they claimed, how many files it
+  changed, the live signals naming it and how many need the person.
+- **`workstreams.detail`**: by an id from the list, never a folder from the
+  request. It returns the changed files with line counts and ahead/behind,
+  and the ten most recent turns, newest first.
+- **The Timeline's words on the phone.** The turn grouping and phrasing
+  (`agent-turns.ts`, `tool-phrasing.ts`) depended only on shared types, so
+  they moved to `src/shared/lib`, and the frontend paths re-export them. The
+  phone's turns are the Timeline's turns, summary included.
+- **Found: a turn named by a guess.** A session is registered as
+  `mcp-client` at connect, from the user-agent, and renamed when the client
+  says what it is. The events before that keep the guess, so a turn that
+  began with them read "mcp-client". Turns are now named by their session's
+  agent as it stands.
+- **Also: #216's unit test did not typecheck.** Its reply stub took the
+  phone's narrower actor type. Typed to the context's, and pushed to #216.
+- **Tests.** Harness: `phone-workstreams` (4) with two worktrees, a claimed
+  task, real edits and a collision: the list, the detail's files and turns,
+  a made-up folder refused, and a read-only phone can still see the list.
+  The turn and phrasing unit tests (31) still pass from their new home.
 
 ### 2026-09-29: A4.2 — the phone's signal RPC and live count
 The desktop half of journey **C2** on the phone. The approvals flow is the
