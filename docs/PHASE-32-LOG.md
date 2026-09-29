@@ -12,10 +12,10 @@
 | | |
 |---|---|
 | **Stage / step** | Wave 2 — A4.2: the phone's signal RPC |
-| **Status** | A4 refined (#214, re-running a browser shard that failed on two known tests). A4.1 in review (#215). A4.2 built: `openSignals` in the snapshot; `awareness.needsYou` / `.signal` / `.answer` / `.reply`; the coverage guard now credits typed `rpc<T>()` calls |
-| **Next action** | Merge #214, #215, then A4.2; then A4.3, workstreams on the phone (`workstreams.list`, `workstreams.detail`) |
+| **Status** | A4 refined and A4.1 merged together (#215; #214 closed, its commit carried). A4.2 built: `openSignals` in the snapshot; `awareness.needsYou` / `.signal` / `.answer` / `.reply`; the coverage guard now credits typed `rpc<T>()` calls |
+| **Next action** | Merge A4.2 when green; then A4.3, workstreams on the phone (`workstreams.list`, `workstreams.detail`) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a4-2-phone-signals` (stacked on A4.1) |
+| **Branch** | `feat/phase-32-a4-2-phone-signals` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -89,7 +89,7 @@
   - [x] A8.3 Hook adapters for other clients, each checked against its docs (Gemini CLI, from its own source; others wait on the same check) (#203)
   - [x] A8.4 Proof of use from MCP calls (`get_skill`), labelled by source (#202)
 - [ ] A4 Mobile, refined in EXECUTION §4:
-  - [ ] A4.1 Reply to the agents about a signal (shared by desktop and phone) — in review
+  - [x] A4.1 Reply to the agents about a signal (shared by desktop and phone) ([#215](https://github.com/lionroseway/codetrellis/pull/215), which also carried the refinement, #214)
   - [ ] A4.2 The phone's signal RPC and live count — in review
   - [ ] A4.3 Workstreams on the phone
   - [ ] A4.4 Push for a high signal
