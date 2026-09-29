@@ -79,16 +79,8 @@ export function kindWords(s: Pick<AwarenessSignal, 'kind' | 'subject'>): string 
   return (s.subject.symbol ? 'Same function' : 'Same file') + declared;
 }
 
-/**
- * The name of one side of a signal. Signals name workstreams by root: a
- * folder, or `branch:<name>` for a branch with no checkout.
- */
-export function sideLabel(root: string, workstreams: readonly Workstream[]): string {
-  const ws = workstreams.find((w) => w.root === root);
-  if (ws) return chipLabel(ws);
-  if (root.startsWith('branch:')) return root.slice('branch:'.length);
-  return root.split(/[\\/]/).filter(Boolean).pop() ?? root;
-}
+import { sideLabel } from '../../shared/lib/workstream-words';
+export { sideLabel };
 
 /**
  * The sides a signal shows. A stale base is one workstream against main. A

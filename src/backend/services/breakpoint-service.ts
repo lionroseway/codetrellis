@@ -41,6 +41,7 @@ import { getDb } from './database';
 import { recordBreakpointEvent } from './agent-event-log';
 import type { Breakpoint, BreakpointHit, BreakpointKind, BreakpointAction, BreakpointDecision as Decision } from '../../shared/types';
 import { BREAKPOINT_KINDS, SIGNAL_BREAK_KINDS, BREAKPOINT_DECISIONS as DECISIONS } from '../../shared/types';
+import { pushForBreakpoint } from './push-notification-service';
 export { BREAKPOINT_KINDS, SIGNAL_BREAK_KINDS, DECISIONS };
 export type { Breakpoint, BreakpointHit, BreakpointKind, BreakpointAction, Decision };
 
@@ -320,6 +321,11 @@ export function getHit(ref: string): BreakpointHit | null {
   return r ? toHit(r) : null;
 }
 
+/** How many held calls are waiting for a person: the phone's live count (B4.4). */
+export function countWaitingHits(): number {
+  return Number(rowsOf<{ n: number }>('SELECT COUNT(*) AS n FROM breakpoint_hits WHERE answered_at IS NULL')[0]?.n ?? 0);
+}
+
 /** Hits, oldest first: those still waiting for a person, or every one (newest 200). */
 export function listHits(q: { state?: 'waiting' | 'all'; planUid?: string } = {}): BreakpointHit[] {
   const where: string[] = [];
@@ -425,6 +431,7 @@ export function enforce(tool: string, args: unknown, caller: Caller, now = Date.
     );
     const hit = getHit(ref)!;
     recordBreakpointEvent('breakpoint_hit', { ...hitPayload(hit), breakpointId: bp.id, on: bp.target, onTitle: bp.targetTitle }, caller.agent);
+    void pushForBreakpoint(hit).catch(() => {}); // a person away from the desk is told (B4.4)
     return { kind: 'paused', hit, fresh: true };
   }
   // Every breakpoint that held it has answered continue: the last answer's steer rides along.

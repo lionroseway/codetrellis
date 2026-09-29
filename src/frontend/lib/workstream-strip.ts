@@ -34,11 +34,8 @@ export function stripWorkstreams(all: readonly Workstream[], signals: readonly A
   return active;
 }
 
-/** The chip's name: the branch, or the commit when detached. */
-export function chipLabel(w: Pick<Workstream, 'branch' | 'head'>): string {
-  if (w.branch) return w.branch;
-  return w.head ? `detached ${w.head.slice(0, 7)}` : 'detached';
-}
+import { chipLabel } from '../../shared/lib/workstream-words';
+export { chipLabel };
 
 /** One line saying what kind of workstream it is. */
 export function shapeWords(w: Pick<Workstream, 'main' | 'shape' | 'agents'>): string {

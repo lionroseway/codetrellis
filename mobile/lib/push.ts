@@ -171,6 +171,8 @@ export interface NotificationData {
   /** Phase 31 §12 — a notice about a criterion opens its approval. */
   criterionUid?: string;
   itemUid?: string;
+  /** Phase 32 B4.4 — an agent held at a breakpoint: the hit's ref. */
+  ref?: string;
 }
 
 function extract(data: Record<string, unknown> | undefined): NotificationData {
@@ -182,6 +184,7 @@ function extract(data: Record<string, unknown> | undefined): NotificationData {
     eventType: data?.eventType as string | undefined,
     criterionUid: data?.criterionUid as string | undefined,
     itemUid: data?.itemUid as string | undefined,
+    ref: data?.ref as string | undefined,
   };
 }
 
@@ -191,6 +194,10 @@ export function routeForNotification(d: NotificationData): string | null {
   // tap opens that, not the event about it.
   if (d.criterionUid && d.itemUid) {
     return `/approval?criterionUid=${encodeURIComponent(d.criterionUid)}&itemUid=${encodeURIComponent(d.itemUid)}`;
+  }
+  // An agent is held until the person answers: the tap opens the answers.
+  if (d.type === 'breakpoint') {
+    return '/breakpoints';
   }
   if (d.type === 'input-request' && d.requestId) {
     return `/input-request?requestId=${encodeURIComponent(d.requestId)}`;

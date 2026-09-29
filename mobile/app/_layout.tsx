@@ -126,6 +126,13 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="breakpoints"
+          options={{
+            title: 'Waiting on you',
+            headerStyle: { backgroundColor: '#0a0c18' },
+          }}
+        />
+        <Stack.Screen
           name="approvals"
           options={{
             title: 'Waiting for you',

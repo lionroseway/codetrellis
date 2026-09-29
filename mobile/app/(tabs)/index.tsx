@@ -25,9 +25,11 @@ import {
   useChannelEvents,
   useConnectionState,
   useSnapshot,
+  useWaitingBreakpointCount,
 } from '../../lib/store';
 import { rpc } from '../../lib/rpc';
 import { listAwaiting, type AwaitingEntry } from '../../lib/approvals';
+import { listWaitingBreakpoints, type PhoneHit } from '../../lib/breakpoints';
 
 export default function HomeTab() {
   const router = useRouter();
@@ -60,6 +62,18 @@ export default function HomeTab() {
   useFocusEffect(refreshAwaiting);
   useEffect(refreshAwaiting, [refreshAwaiting, needDecision.length]);
 
+  // Phase 32 B4.4 — agents held at a breakpoint, first in the list: an agent
+  // is stopped until the person answers. Re-read when the desktop's live
+  // count moves, so a new one shows without a push while the app is open.
+  const heldCount = useWaitingBreakpointCount();
+  const [held, setHeld] = useState<PhoneHit[]>([]);
+  const refreshHeld = useCallback(() => {
+    if (connState !== 'connected') return;
+    listWaitingBreakpoints().then(setHeld).catch(() => undefined);
+  }, [connState]);
+  useFocusEffect(refreshHeld);
+  useEffect(refreshHeld, [refreshHeld, heldCount]);
+
   const openProject = useCallback(async (projectPath: string) => {
     setOpeningProject(projectPath);
     try {
@@ -74,6 +88,7 @@ export default function HomeTab() {
   }, []);
 
   const hasAttention =
+    held.length > 0 ||
     deviationCounts.pending > 0 ||
     stuckEvents.length > 0 ||
     needDecision.length > 0 ||
@@ -145,6 +160,24 @@ export default function HomeTab() {
       {hasAttention && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>NEEDS ATTENTION</Text>
+
+          {held.length > 0 && (
+            <TouchableOpacity
+              style={[styles.attentionCard, held.some((h) => h.breach) ? styles.attentionError : styles.attentionHeld]}
+              onPress={() => router.push('/breakpoints')}
+              accessibilityLabel={`${held.length} waiting on you at a breakpoint`}
+            >
+              <Text style={styles.attentionIcon}>⏸</Text>
+              <View style={styles.attentionBody}>
+                <Text style={styles.attentionTitle}>
+                  {held.length === 1 ? 'An agent is waiting on you' : `${held.length} agents are waiting on you`}
+                </Text>
+                <Text style={styles.attentionSub} numberOfLines={2}>
+                  {held[0]?.headline}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
 
           {awaiting.length > 0 && (
             <TouchableOpacity
@@ -468,6 +501,9 @@ const styles = StyleSheet.create({
   },
   attentionApproval: {
     borderColor: '#22c55e50',
+  },
+  attentionHeld: {
+    borderColor: '#f59e0b80',
   },
   attentionInput: {
     borderColor: '#3b82f640',

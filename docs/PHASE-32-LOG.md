@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | Track B — B4.4: breakpoints on the phone |
-| **Status** | Wave 1 done: A2.7 merged (#204), after A8 (#200–#203) and B3.3b (#199). B4.4 started: mapping the phone's list, its RPC methods and the push path before building |
-| **Next action** | Build B4.4: waiting breakpoints first in the phone's list, answered from the phone (author the phone), a push when an agent is held. Then the direction review |
+| **Status** | Wave 1 done (A2.7 merged, #204). B4.4 built: the phone lists what is held first, in the desktop's words, and answers it as the person (confirmed pairing only, audited); a live count in the snapshot; a push naming the agent only when the phone is away. Unit, harness pass |
+| **Next action** | Open B4.4's PR; merge when green. Then the Wave 1 direction review |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-b4-4-phone` |
 | **Last updated** | 2026-09-29 |
@@ -128,7 +128,7 @@
   - [x] B4.2c Function-level breakpoints and breaches ([#183](https://github.com/lionroseway/codetrellis/pull/183))
   - [x] B4.3a The waiting list, answering, Ask me first on a task, what is set ([#182](https://github.com/lionroseway/codetrellis/pull/182))
   - [x] B4.3b Graph node action, ⏸ on nodes, lane spans ([#185](https://github.com/lionroseway/codetrellis/pull/185))
-  - [ ] B4.4 The phone and push
+  - [x] B4.4 The phone and push
 - [ ] B5 Replay
 - [ ] B6 Stack view
 - [ ] B7 Conferring
@@ -253,9 +253,45 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-28 | Line changes are asked for as `GET /api/workstreams/changes?path=&workstream=`, not `/api/workstreams/:id/changes` (B3.1) | A workstream's id is its folder, which has slashes in it; the sibling route `/api/workstreams/commits` already takes query parameters. `workstream` names one by id or branch among those `listWorkstreams` found, never a folder to read |
 | 2026-09-28 | A hunk is "committed" only when none of its lines differ between HEAD and the working copy; a committed change edited again reads "not committed" (B3.1) | The question the person asks is "is this safe in a commit yet". Part of it not being so is the answer that matters, and splitting one run of lines in two would make the gutter harder to read than the difference is worth |
 | 2026-09-28 | Another workstream's lines are placed on this copy's lines through the base: their base lines, moved by this copy's own hunks above them (B3.2) | Their hunks are numbered in their copy, which is not the file on screen. Through the base is exact when both branched from the same commit of main and close otherwise; the words on hover keep their own line numbers, which are always exact. Diffing their copy against this one instead would mix in this copy's own changes |
+| 2026-09-29 | On the phone, an answer to a held call needs a pairing the person confirmed on the desktop, as approving a criterion does, and is audited against the device; a late answer gets back the answer that stood (`alreadyAnswered`) rather than an error (B4.4) | The answer is recorded as the person's; an unconfirmed pairing is a device nobody vouched for. Someone answering first on the window is ordinary, not a failure, and the phone should show what stood |
+| 2026-09-29 | A breakpoint push names the agent only ("Claude Code is held at one of your breakpoints until you answer."); the file, task and note load over WebRTC when the app wakes. Pauses and breaches both push, rate-limited per device like every push (B4.4) | A push passes through Expo and the platform's push service; which file an agent was stopped at is the project's, not theirs. Nothing else in a push needs to say more to get the person to open the app |
+| 2026-09-29 | The snapshot carries `waitingBreakpoints`, a count; the calls come from `breakpoint.waiting` when it moves. The breakpoint and workstream words move to `src/shared/lib` so the phone is sent the desktop's wording (B4.4) | An open phone gets no push, so it needs a live signal; a count is one indexed query per tick where the full list would repeat the words every 100 ms. One wording, like `freeze-words.ts`, so a held call reads the same in both places |
 ---
 
 ## Entries
+
+### 2026-09-29: B4.4 — breakpoints on the phone
+- **Journey (K1, away from the desk).** Sam asked to be asked before an agent
+  touches payments. Codex claims "Partial refunds" and is held. Sam's phone,
+  in a pocket, buzzes: "Waiting on you — codex is held at one of your
+  breakpoints until you answer." The tap opens Waiting on you: "codex in main
+  wants to claim “Partial refunds”", why it is waiting ("You asked to be asked
+  before an agent claims or finishes this task"), and Sam's own note. Sam taps
+  Continue with steer, types "Go ahead, but don't change the refund path", and
+  sends. Codex's `await_decision` returns the note and its claim goes through.
+  With the app open there is no push: Home's first card under NEEDS ATTENTION
+  says "An agent is waiting on you" as soon as the call is held.
+- **Built.**
+  - `breakpoint.waiting` (read) and `breakpoint.answer` (write) in
+    `services/mobile-breakpoints.ts`, routed from `mobile-rpc-service.ts` with
+    `phonePerson()` as the author. An answer needs a confirmed pairing, is
+    audited, and broadcasts `breakpoint-answered` so the window refreshes.
+  - `pushForBreakpoint`, called where a hit is made (task and spec, code, signal).
+  - `waitingBreakpoints` in the `ui` snapshot (`countWaitingHits`).
+  - `src/shared/lib/breakpoint-words.ts` and `workstream-words.ts`, moved out of
+    the frontend's `breakpoint-view.ts`, `workstream-strip.ts` and
+    `awareness-view.ts`, which re-export them.
+  - Phone: `mobile/lib/breakpoints.ts`, `app/breakpoints.tsx`, Home's first
+    card, the badge count, and push routing for `type: 'breakpoint'`.
+- **Tests.** Unit: `mobile-breakpoints.test.ts` (the words, a breach worded as
+  one, refusals including an unconfirmed pairing, the answer is the person's
+  and never a name from the request, audited, the window told, the first answer
+  stands); `push-breakpoint.test.ts` (off, the payload names the agent only, the
+  rate limit, a breach). Harness: `phone-breakpoints.test.ts` (a real MCP agent
+  held, a paired phone lists and answers it, the agent carries on, stored as
+  `human` not `unverified`, audited, the live count moves, a read-only phone
+  cannot answer). The mobile app has no test runner; its code is typechecked
+  and linted.
 
 ### 2026-09-29: A2.7 — signatures for the other eight languages
 - **Journey.** `billing-v2` gives `ReconcileJob.runCount` a parameter

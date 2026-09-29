@@ -19,9 +19,9 @@ records that — but "✗ none" is proof of a gap.
 |---|---|---|---|---|---|---|
 | REST routes | 238 | 236 | 0 | 0 | 217 | 0 |
 | MCP tools | 195 | 195 | 0 | 0 | 185 | 0 |
-| Mobile RPC methods | 76 | 71 | 0 | 0 | 76 | 0 |
+| Mobile RPC methods | 78 | 71 | 1 | 0 | 78 | 0 |
 | Frontend components | 110 | n/a | n/a | n/a | 0 | 23 |
-| Mobile screens | 31 | n/a | n/a | n/a | 0 | 0 |
+| Mobile screens | 32 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 12 | n/a | n/a | n/a | 10 | 12 |
 
 ## By domain
@@ -34,10 +34,10 @@ records that — but "✗ none" is proof of a gap.
 | 0.4d Criteria and sign-off | 9 | 7 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 12 | 7 | 1 | 0 | 0 |
-| 0.4g Agents and MCP | 24 | 31 | 2 | 25 | 0 | 0 |
+| 0.4g Agents and MCP | 24 | 31 | 4 | 25 | 0 | 0 |
 | 0.4h Drift, governance, review | 10 | 24 | 8 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
-| 0.4j Mobile surface | 25 | 14 | 0 | 2 | 31 | 0 |
+| 0.4j Mobile surface | 25 | 14 | 0 | 2 | 32 | 0 |
 | 0.4k Settings, updates, privacy | 11 | 0 | 3 | 6 | 0 | 12 |
 | 0.4l System docs and intake | 7 | 11 | 6 | 1 | 0 | 0 |
 
@@ -69,7 +69,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 131 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 132 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -160,7 +160,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | 1 | ✓ 0.4c-2: old state back as a new version; unknown 404 (item-surface) |  |  |
 | c | `POST /api/items/:uid/skill-arrivals/accept` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/worktree` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans` |  | 1 | 61 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans` |  | 1 | 62 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 2 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:planUid/items` |  | ✗ none | 33 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
@@ -222,7 +222,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `GET /api/workstreams/folder-requests` |  | ✗ none | 1 |  |  |  |
 | g | `POST /api/awareness/:id/state` |  | ✗ none | 4 |  |  |  |
 | g | `POST /api/breakpoint-hits/:ref/answer` |  | ✗ none | 6 |  |  |  |
-| g | `POST /api/breakpoints` |  | ✗ none | 7 |  |  |  |
+| g | `POST /api/breakpoints` |  | ✗ none | 8 |  |  |  |
 | g | `POST /api/plans/:uid/budget/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4g: unflags an agent's change and records who saw it; unknown change or wrong plan 404 (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `POST /api/sessions/:sessionId/assign-plan` |  | ✗ none | 3 | ✓ 0.4g: unknown plan or session 404, missing plan 400, nothing changed (agent-ui-tools); bug 27 |  |  |
 | g | `POST /api/workstreams/folder-requests/:id/dismiss` |  | ✗ none | 1 |  |  |  |
@@ -263,7 +263,7 @@ records that — but "✗ none" is proof of a gap.
 | j | `GET /api/peers/status` |  | ✗ none | 3 | ✓ 0.4j: running, mobile API port actually bound, counts (gate4-reconnect-identity, pairing-enables-lan, cdev-phase11) |  |  |
 | j | `GET /api/sync/peek` |  | ✗ none | 2 | ✓ 0.4j: what an import would bring, before it does (cdev-phase5, surfaced-rest) |  |  |
 | j | `GET /api/sync/status` |  | ✗ none | 1 | ✓ 0.4j: personal sync state (cdev-phase5) |  |  |
-| j | `PATCH /api/peers/devices/:fingerprint` |  | ✗ none | 8 | ✓ 0.4j: grant and revoke recorded; unknown capability dropped; unknown device 404 (peer-device-access, harness peer) |  |  |
+| j | `PATCH /api/peers/devices/:fingerprint` |  | ✗ none | 9 | ✓ 0.4j: grant and revoke recorded; unknown capability dropped; unknown device 404 (peer-device-access, harness peer) |  |  |
 | j | `POST /api/pairing/cancel` |  | ✗ none | 2 | ✓ 0.4j: window closed (pairing-transport, peer-reconnect-auth) |  |  |
 | j | `POST /api/pairing/confirm` |  | ✗ none | 3 | ✓ 0.4j: the code the phone derived is the code expected; no secret in the reply; turns the LAN listener on (gate4-reconnect-identity, pairing-enables-lan, harness peer) |  |  |
 | j | `POST /api/pairing/initiate` |  | ✗ none | 4 | ✓ 0.4j: v5 QR payload, scannable size; code only in the body (gate4-reconnect-identity, pairing-transport, harness peer) |  |  |
@@ -330,7 +330,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `add_plan_scope` | plan · write | ✗ none | 3 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-cross-repo, cdev-stitched-view (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `assign_workstream` | plan-item · write | ✗ none | 1 |  |  |  |
 | c | `bulk_add_items` | plan-item · write | ✗ none | 1 | ✓ 0.7: a tree in one call, parents by temporary id, authored by the calling agent; unknown plan refused (item-batch-search-import) |  |  |
-| c | `claim_item` | plan-item · write | ✗ none | 15 | ✓ 0.4c: exercised by agent-loop, multi-agent, plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `claim_item` | plan-item · write | ✗ none | 16 | ✓ 0.4c: exercised by agent-loop, multi-agent, plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `copy_plan_as_prompt` | plan · read | ✗ none | 1 | ✓ 0.4c-1: whole plan or one item; unknown plan is an error (plan-tools) |  |  |
 | c | `create_plan` | plan · write | ✗ none | 20 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-channels, cdev-cross-repo, cdev-phase11, +15 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `create_plan_from_template` | plan · write | ✗ none | 1 | ✓ 0.4c-1: items copied, statuses reset; unknown template errors (plan-tools) |  |  |
@@ -372,7 +372,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `set_plan_home_repo` | plan · write | ✗ none | 1 | ✓ 0.4c-1: normalised; empty clears (plan-tools) |  |  |
 | c | `suggest_specs` | plan-item · read | ✗ none | 1 | ✓ 0.4c-2: file specs under a scope (item-surface) |  |  |
 | c | `unlink_plan_from_files` | plan · write | ✗ none | 1 | ✓ 0.4c-1: removes the directory, even after a rename; plan survives (plan-tools; bug 22) |  |  |
-| c | `update_item` | plan-item · write | ✗ none | 12 | ✓ 0.4c: exercised by agent-loop, cdev-phase3-demo, cdev-phase5, criteria-signoff, +6 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `update_item` | plan-item · write | ✗ none | 13 | ✓ 0.4c: exercised by agent-loop, cdev-phase3-demo, cdev-phase5, criteria-signoff, +6 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `update_item_progress` | plan-item · write | ✗ none | 2 | ✓ 0.4c: exercised by plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `update_plan` | plan · write | ✗ none | 2 | ✓ 0.4c-1: title/status/description, version recorded; write-through continues after a rename (plan-tools; bug 22) |  |  |
 | d | `add_criterion` | plan-item · write | ✗ none | 1 | ✓ 0.4d: kept at propose, tagged with the agent's name in the app (criteria-signoff, criteria.spec) |  |  |
@@ -387,7 +387,7 @@ records that — but "✗ none" is proof of a gap.
 | e | `read_material` | plan-item · files | ✗ none | 1 | ✓ 0.4e: CSV by {range} (bug 24), text by {lines}, image as itself; read logged on the item (brief-surface, read unit) |  |  |
 | e | `record_artefact` | plan-item · write | ✗ none | 4 | ✓ 0.4e: agent records an output (brief-surface, criteria-loops) |  |  |
 | f | `await_ack` | presence · write | ✗ none | 1 | ✓ 0.4f: released by ack; instant when already acked; unknown card an error at once; dismissed → via dismissed (presence-channels; bug 25) |  |  |
-| f | `await_decision` | presence · read | ✗ none | 4 |  |  |  |
+| f | `await_decision` | presence · read | ✗ none | 5 |  |  |  |
 | f | `await_user_input` | presence · write | ✗ none | 1 | ✓ 0.4f: gets the reply; a newer question supersedes an older wait at once (presence-channels; bug 25) |  |  |
 | f | `check_breakpoint` | presence · read | ✗ none | 2 |  |  |  |
 | f | `dismiss_channel_event` | channel · write | ✗ none | 1 | ✓ 0.4f: dismissed, broadcast, gone from the open list; unknown an error (presence-channels) |  |  |
@@ -419,7 +419,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `open_plan` | session · write | ✗ none | 1 | ✓ 0.4g: plan opens; unknown plan refused with no toast (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `open_settings` | session · write | ✗ none | 1 | ✓ 0.4g: settings dialog opens (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `refresh_ui` | session · write | ✗ none | 1 | ✓ 0.4g: sends ui-refresh (agent-ui-tools) |  |  |
-| g | `register_session` | session · read | ✗ none | 32 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
+| g | `register_session` | session · read | ✗ none | 33 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
 | g | `screenshot` | ui · capture | ✗ none | 1 | ✓ 0.4g: refused without capture; image from the window's answer; empty answer an error (agent-ui-tools) |  |  |
 | g | `select_item` | ui · write | ✗ none | 1 | ✓ 0.4g: item selected; unknown item or wrong plan refused (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `set_active_plan` | session · write | ✗ none | 1 | ✓ 0.4g: shown and recorded as the agent's plan; unknown refused, unchanged (agent-ui-tools); bug 27 |  |  |
@@ -491,7 +491,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `verify_system_doc` | system-docs · write | ✗ none | 3 | ✓ 0.4l: stamps HEAD (sysdocs-intake) |  |  |
 | l | `write_system_doc` | system-docs · write | ✗ none | 3 | ✓ 0.4l: creates in the agent's name (was recorded as a person's); update renames the file with the title; unknown uid refused (sysdocs-intake); bug 47 |  |  |
 
-## Mobile RPC methods (76)
+## Mobile RPC methods (78)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -544,6 +544,8 @@ records that — but "✗ none" is proof of a gap.
 | f | `channel.resolve` | write | ✗ none | 1 | ✓ 0.4j: status changes, desktop told; bad status and unknown refused (phone-channels-projects) |  |  |
 | f | `channel.thread` | read | ✗ none | 1 | ✓ 0.4j: root then reply (phone-channels-projects) |  |  |
 | f | `input.respond` | write | ✗ none | 1 | ✓ 0.4j: answer reaches the asking peer once; not pending refused (phone-channels-projects) |  |  |
+| g | `breakpoint.answer` | write | 1 | 1 | ✓ B4.4: continue, steer (needs a note) or stop in the person's name; confirmed pairing only, audited, desktop told; the first answer stands (phone-breakpoints) |  |  |
+| g | `breakpoint.waiting` | read | 1 | ✗ none | ✓ B4.4: held calls oldest first in the desktop's words, pauses and breaches, with the three answers worded for each (phone-breakpoints) |  |  |
 | g | `budget.acknowledge` | write | 1 | 1 | ✓ 0.4j: unflagged, desktop told (phone-sync-and-tools), mobile-budget unit |  |  |
 | g | `budget.get` | read | 1 | 1 | ✓ 0.4j: agent's change flagged (phone-sync-and-tools), mobile-budget unit |  |  |
 | h | `deviation.list` | read | ✗ none | 1 | ✓ 0.4j: same as REST; unknown plan refused (phone-plans) |  |  |
@@ -687,7 +689,7 @@ records that — but "✗ none" is proof of a gap.
 | k | `settings/WebcamQrScanner.tsx` |  | n/a | n/a |  |  |  |
 | l | `system-docs/SystemDocsPanel.tsx` |  | n/a | n/a |  | ✓ 0.5a — empty state is content |  |
 
-## Mobile screens (31)
+## Mobile screens (32)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -701,6 +703,7 @@ records that — but "✗ none" is proof of a gap.
 | j | `approval.tsx` |  | n/a | n/a |  |  |  |
 | j | `approvals.tsx` |  | n/a | n/a |  |  |  |
 | j | `body-editor.tsx` |  | n/a | n/a |  |  |  |
+| j | `breakpoints.tsx` |  | n/a | n/a |  |  |  |
 | j | `changes.tsx` |  | n/a | n/a |  |  |  |
 | j | `connection-switcher.tsx` |  | n/a | n/a |  |  |  |
 | j | `doc-viewer.tsx` |  | n/a | n/a |  |  |  |

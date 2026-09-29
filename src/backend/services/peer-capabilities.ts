@@ -122,6 +122,8 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   // A plan's budget and the agent changes still flagged (mobile-budget.ts).
   'budget.get': 'read',
   'freeze.get': 'read',
+  // Phase 32 B4.4 — what is held for the person (mobile-breakpoints.ts).
+  'breakpoint.waiting': 'read',
 
   // ── write ───────────────────────────────────────────────────────────
   'channel.post': 'write',
@@ -132,6 +134,8 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   // Marking an agent's budget change seen: also needs a CONFIRMED pairing.
   'budget.acknowledge': 'write',
   'freeze.acknowledge': 'write',
+  // Answering a held call: also needs a CONFIRMED pairing, and is audited.
+  'breakpoint.answer': 'write',
   'channel.resolve': 'write',
   'comment.add': 'write',
   'deviation.resolve': 'write',
