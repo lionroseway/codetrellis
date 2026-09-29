@@ -130,7 +130,7 @@ so each step is usable by itself, and so the clearest value lands early.
 ```
 0.1 → 0.2 → 0.3 → 0.4 (domains) → 0.5 → 0.6 → 0.7 review → 0.8 release
   → A0 → A1 → A2 → A3 → B1 → B2 → C1 → B4 → C5 → B3 → A8 → A2.7 → review
-  → B5 → A4 → A5 → B6 → B7 → A6 → C2 → C3 → B8 → B9 → C4 → A7 → B10 → review
+  → HD1 → HD2 → B5 → A4 → A5 → B6 → B7 → A6 → C2 → C3 → B8 → B9 → C4 → A7 → B10 → review
   → phase-end: main merged in, full suite, packaged build, merge to main
 ```
 
@@ -139,6 +139,13 @@ changes and A8 come from the owner's asks of 2026-09-28: one plan worked
 in several worktrees, line-level changes per workstream, and CodeTrellis
 staying agent-agnostic rather than tuned to Claude Code.
 Within B4, B4.3b comes first and B4.4 (the phone) moves after A8.
+Wave 2 opens with two hardening steps (the Wave 1 direction review and
+the owner's answer, 2026-09-29): **HD1** ends the extra graph nodes left by
+another project's scan (the server answering for whichever project was
+scanned last), and **HD2** moves the browser specs that click graph nodes
+onto the committed sample app (`tests/fixtures/sample-app`), so a PR that
+adds files to this repository no longer moves the graph they click. The
+phone (A4, and a way to render its screens) stays after B5.
 
 Steps near the front are specified in detail. Later steps are specified
 at the level of the design docs, and refined into sub-steps when they

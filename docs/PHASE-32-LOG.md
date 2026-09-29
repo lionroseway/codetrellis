@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | Wave 1 direction review |
-| **Status** | Wave 1 done: B4.4 merged (#205), so B4 is done, after C5, B3, A8 and A2.7. The direction review is written below; its proposal for Wave 2's order (a hardening step, then A4 before B5) is with the owner |
-| **Next action** | The owner's answer on Wave 2's order; then EXECUTION §2 updated in the same PR as this review, and the first Wave 2 step started |
+| **Status** | Wave 1 done (B4 closed by #205). The direction review is below, with the owner's answer: HD1 (the extra graph nodes) and HD2 (graph specs on the sample app) open Wave 2, then B5; the phone stays after B5 |
+| **Next action** | Merge this review PR when green; then HD1: find which route answers for another project after its scan, and scope it to the opened project |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-review-wave-1` |
 | **Last updated** | 2026-09-29 |
@@ -130,6 +130,8 @@
   - [x] B4.3a The waiting list, answering, Ask me first on a task, what is set ([#182](https://github.com/lionroseway/codetrellis/pull/182))
   - [x] B4.3b Graph node action, ⏸ on nodes, lane spans ([#185](https://github.com/lionroseway/codetrellis/pull/185))
   - [x] B4.4 The phone and push ([#205](https://github.com/lionroseway/codetrellis/pull/205))
+- [ ] HD1 The extra graph nodes after another project's scan (Wave 2 hardening)
+- [ ] HD2 Browser graph specs on the sample app (Wave 2 hardening)
 - [ ] B5 Replay
 - [ ] B6 Stack view
 - [ ] B7 Conferring
@@ -257,6 +259,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-29 | On the phone, an answer to a held call needs a pairing the person confirmed on the desktop, as approving a criterion does, and is audited against the device; a late answer gets back the answer that stood (`alreadyAnswered`) rather than an error (B4.4) | The answer is recorded as the person's; an unconfirmed pairing is a device nobody vouched for. Someone answering first on the window is ordinary, not a failure, and the phone should show what stood |
 | 2026-09-29 | A breakpoint push names the agent only ("Claude Code is held at one of your breakpoints until you answer."); the file, task and note load over WebRTC when the app wakes. Pauses and breaches both push, rate-limited per device like every push (B4.4) | A push passes through Expo and the platform's push service; which file an agent was stopped at is the project's, not theirs. Nothing else in a push needs to say more to get the person to open the app |
 | 2026-09-29 | The snapshot carries `waitingBreakpoints`, a count; the calls come from `breakpoint.waiting` when it moves. The breakpoint and workstream words move to `src/shared/lib` so the phone is sent the desktop's wording (B4.4) | An open phone gets no push, so it needs a live signal; a count is one indexed query per tick where the full list would repeat the words every 100 ms. One wording, like `freeze-words.ts`, so a held call reads the same in both places |
+| 2026-09-29 | Wave 2 opens with HD1 (the extra graph nodes after another project's scan) and HD2 (the browser specs that click graph nodes move to the committed sample app); B5 follows, and the phone (A4) stays after it. The Rust, Java and PHP call sites are not scheduled | The owner's answer to the Wave 1 direction review. The extra nodes are the one-project-at-a-time class #195 and #196 fixed on other routes; most CI noise since #194 came from specs clicking a graph of this repository, which every PR changes |
 ---
 
 ## Entries
@@ -328,6 +331,13 @@ same PR):
 - A4 (the phone) before B5: it builds straight on B4.4's list, answer and
   push, which are fresh.
 - Rust, Java and PHP call sites as a small step after A4, if wanted.
+
+**Decided** (owner, 2026-09-29): the phone waits, and A4 stays after B5
+("phone we can do after"); fix the stray nodes; put the browser tests on
+a sample project, using the one we have. So Wave 2 opens HD1 (the extra
+nodes), HD2 (graph specs on `tests/fixtures/sample-app`), then B5. The
+phone render path goes with A4; the Rust, Java and PHP call sites are not
+scheduled. EXECUTION §2 changed in this PR.
 
 ### 2026-09-29: B4.4 — breakpoints on the phone
 - **Journey (K1, away from the desk).** Sam asked to be asked before an agent
