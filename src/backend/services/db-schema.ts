@@ -321,6 +321,23 @@ export const SCHEMA_PLANS_CORE = `
     PRIMARY KEY (signal_id, session_id)
   );
 
+  -- Phase 32 B5.2: each time a signal was open, for replay. A signal keeps
+  -- one row in awareness_signals and is reopened in place, so its earlier
+  -- openings would be lost; here each opening is a row, closed when it
+  -- resolves. Kept 14 days after it closes, like the agent event log.
+  CREATE TABLE IF NOT EXISTS awareness_signal_spans (
+    signal_id TEXT NOT NULL,
+    project_root TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    workstreams TEXT NOT NULL,
+    opened_at INTEGER NOT NULL,
+    closed_at INTEGER,
+    PRIMARY KEY (signal_id, opened_at)
+  );
+  CREATE INDEX IF NOT EXISTS idx_signal_spans_project ON awareness_signal_spans(project_root, opened_at);
+
   -- Phase 32 A1.7c: folders an agent reported that the person said "not now"
   -- to. Asked once per folder, not once per connection.
   CREATE TABLE IF NOT EXISTS folder_request_dismissals (

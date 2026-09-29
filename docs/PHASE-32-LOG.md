@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B5.1: replay frames |
-| **Status** | HD1 (#207) and HD2 (#208) merged. B5 refined into four sub-steps. B5.1 in review: frames at turn end, status change and commit, for the held project only, deduplicated by digest; unit and harness green locally |
-| **Next action** | Merge B5.1's PR when green; then B5.2, the state at a moment (with signal spans as app events) |
+| **Stage / step** | Wave 2 — B5.2: the state at a moment |
+| **Status** | B5.1 merged (#209): replay frames. B5.2 in review: `GET /api/replay/state` answers the frame, task statuses, what was waiting and the signals open at a moment; signal openings kept as spans |
+| **Next action** | Merge B5.2's PR when green; then B5.3, one clock in the window (the transport bar drives the Timeline, graph, plan list and inbox) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b5-1-frames` |
+| **Branch** | `feat/phase-32-b5-2-state` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -133,7 +133,7 @@
 - [x] HD1 The extra graph nodes after another project's scan (Wave 2 hardening) ([#207](https://github.com/lionroseway/codetrellis/pull/207))
 - [x] HD2 Browser graph specs on the sample app (Wave 2 hardening) ([#208](https://github.com/lionroseway/codetrellis/pull/208))
 - [ ] B5 Replay
-  - [ ] B5.1 Frames: project, SHA, session; turn end, status change, commit
+  - [x] B5.1 Frames: project, SHA, session; turn end, status change, commit ([#209](https://github.com/lionroseway/codetrellis/pull/209))
   - [ ] B5.2 The state at a moment
   - [ ] B5.3 One clock in the window
   - [ ] B5.4 Catch-up, and `get_state_at`
@@ -265,10 +265,43 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-29 | The snapshot carries `waitingBreakpoints`, a count; the calls come from `breakpoint.waiting` when it moves. The breakpoint and workstream words move to `src/shared/lib` so the phone is sent the desktop's wording (B4.4) | An open phone gets no push, so it needs a live signal; a count is one indexed query per tick where the full list would repeat the words every 100 ms. One wording, like `freeze-words.ts`, so a held call reads the same in both places |
 | 2026-09-29 | Wave 2 opens with HD1 (the extra graph nodes after another project's scan) and HD2 (the browser specs that click graph nodes move to the committed sample app); B5 follows, and the phone (A4) stays after it. The Rust, Java and PHP call sites are not scheduled | The owner's answer to the Wave 1 direction review. The extra nodes are the one-project-at-a-time class #195 and #196 fixed on other routes; most CI noise since #194 came from specs clicking a graph of this repository, which every PR changes |
 | 2026-09-29 | Replay frames are taken only when a turn ends, an item's status changes or a commit lands, only for the project the server holds, and a frame whose graph is unchanged points at the last one | Replay steps between recorded moments (observability §6.2); a timer would copy graphs nothing changed, and a capture must never switch the held project under the window |
+| 2026-09-29 | A signal's openings are kept as rows of `awareness_signal_spans`, not as app events in `agent_events` (B5.2) | App events would show in the Timeline as rows beside the ⚠ marks the lanes already draw from signals, and a span is two times on one row where events would be two rows to pair up. The refinement had said app events; this is the same record, kept where it reads |
 
 ---
 
 ## Entries
+
+### 2026-09-29: B5.2 — the state at a moment
+- **Built.** `services/replay-state.ts` and `GET /api/replay/state?project&at`
+  (confined like `/api/awareness`; `at` defaults to now, anything but a
+  number of milliseconds is a 400). For one project at one moment:
+  - **the frame** at or before it, and `sinceFrame`, how the graph now
+    differs from it, given only when the server holds that project;
+  - **each action's status** then, from `plan_events`: the last change by
+    then, or the status before the first change after it, or its status now
+    if it never changed; `statusNow` when that differs. A task made after the
+    moment is left out;
+  - **what was waiting on the person**: hits made by then and not answered by
+    then, with when they were answered if they were;
+  - **the signals open then**, from `awareness_signal_spans`.
+- **Signal spans, a table rather than app events.** `refreshSignals` opens a
+  span when a signal is new or comes back after resolving, keeps its wording
+  current while open, and closes it when it resolves; a signal open since
+  before spans existed opens its span at its first sighting, and one with no
+  span at all is read from its row. Spans are pruned with frames, 14 days
+  after closing.
+- **Not here.** The lanes up to a moment are already
+  `/api/agent-events?before=`. A task deleted since is not shown: deleting
+  removes the row, and its last state lives only in the `item_deleted`
+  event; the record (B10) is where that belongs.
+- **Tests.** Unit (6): statuses before, between and after changes, another
+  project's tasks, waiting then and answered later, spans open, closed and
+  open again, a pre-span signal, the frame and `sinceFrame` only when held.
+  Harness (3, repeated twice with awareness and replay-frames): one scripted
+  run, a task started, a collision opened, a claim held and answered, the
+  collision closed and reopened, then each moment asked about afterwards
+  answers as it was, including a second opening rather than one stretched
+  over the gap; the route's 400s and 403.
 
 ### 2026-09-29: B5.1 — replay frames
 - **Built.** `services/replay-frames.ts`. A frame is a `trellis_snapshots` row
@@ -335,7 +368,7 @@ snapshots exist (`trellis_snapshots`), but only on Checkpoint or plan approval.
 | Sub-step | Delivers | Tests |
 |---|---|---|
 | B5.1 | Frames: `trellis_snapshots` gains project, commit SHA, session, workstream, reason and a digest. A frame is taken when a session's turn ends (30 s quiet, the window's rule, moved to `src/shared`), an item's status changes, or a commit lands on a workstream; only when the server holds that project; one per project at most every 10 s; a frame whose graph matches the last one points at it instead of copying. Symbol counts in one query. 14 days kept, as `agent_events`. `GET /api/replay/frames?project&from&to` | unit (digest, debounce, the held-project refusal); harness: a turn end, a status change and a commit each make a frame with its SHA and session; another project held makes none |
-| B5.2 | The state at a moment: `GET /api/replay/state?project&at` answers the graph of the frame at or before `at` (with what differs from now), each item's status, the breakpoint hits waiting and the signals open at `at` (a signal's raising and resolving kept from here as app events beside `breakpoint_hit`, so a reopened signal keeps its earlier spans), and the lanes up to it | harness: states at three moments of one scripted run, each matching what the window showed live |
+| B5.2 | The state at a moment: `GET /api/replay/state?project&at` answers the graph of the frame at or before `at` (with what differs from now), each item's status, the breakpoint hits waiting and the signals open at `at` (each opening of a signal kept from here as a span, so a reopened signal keeps its earlier ones); the lanes up to it are `/api/agent-events?before=` | harness: states at three moments of one scripted run, each matching what the window showed live |
 | B5.3 | One clock in the window: a replay store holds the cursor; the transport bar drives the Timeline cursor, the graph (frames step, never animate), the plan list's statuses and the inbox. The chrome says "Replaying 10:02 → 12:04" with a way back to live; live events keep arriving underneath | browser, with screenshots: step, play, back to live |
 | B5.4 | Catch-up: the window remembers when the person last looked; the digest (C1) offers "Watch at 4×" from there to now. Any MCP client gets the same moment with `get_state_at` | browser: G1 end to end; harness: the MCP tool |
 
