@@ -283,3 +283,56 @@ export async function runCheckEdit(opts: {
   if (answer?.steer) return { code: 0, stdout: answer.steer, stderr: null };
   return go;
 }
+
+// ── Gemini CLI's BeforeTool hook (Phase 32 A8.3) ─────────────────────────
+//
+// Checked against Gemini CLI's own published source, @google/gemini-cli-core
+// 0.61.0 (hooks/types.d.ts, hooks/hookRunner.js, hooks/hookPlanner.js,
+// tools/definitions/base-declarations.js), not written from memory:
+//  - the event is `BeforeTool`; stdin is `{ session_id, transcript_path,
+//    cwd, hook_event_name, timestamp, tool_name, tool_input }`;
+//  - the edit tools are `write_file` (`file_path`, `content`) and `replace`
+//    (`file_path`, `old_string`, `new_string`, …);
+//  - stdout JSON `{ "decision": "deny", "reason": … }` blocks the call with
+//    that reason; exit 0 with nothing printed lets it run;
+//  - a matcher is a regular expression tested against the tool name.
+// It only holds: a person's breakpoint is the one case it says no, and it
+// never says yes, like the Claude Code hook.
+
+export const HOOK_GEMINI_BEFORE_TOOL = 'gemini-before-tool';
+/** The matcher Settings writes: exactly Gemini CLI's two edit tools. */
+export const GEMINI_HOOK_MATCHER = '^(write_file|replace)$';
+
+/** The edit a Gemini CLI BeforeTool hook was handed, or null when it is not one this hook is for. */
+export function parseGeminiHookInput(raw: string): HookCall | null {
+  let v: { hook_event_name?: unknown; tool_name?: unknown; cwd?: unknown; tool_input?: Record<string, unknown> };
+  try { v = JSON.parse(raw); } catch { return null; }
+  if (v.hook_event_name !== 'BeforeTool') return null;
+  if (v.tool_name !== 'write_file' && v.tool_name !== 'replace') return null;
+  const cwd = typeof v.cwd === 'string' ? v.cwd : null;
+  const file = v.tool_input?.file_path;
+  if (!cwd || typeof file !== 'string' || !file) return null;
+  const old = v.tool_input?.old_string;
+  // `replace` says what it replaces, so a function breakpoint holds only an edit of that function;
+  // `write_file` replaces the whole file, so any breakpoint on it holds.
+  const oldTexts = v.tool_name === 'replace' && typeof old === 'string' && old && old.length <= 20_000 ? [old] : undefined;
+  return { cwd, filePath: path.resolve(cwd, file), ...(oldTexts ? { oldTexts } : {}) };
+}
+
+/** Gemini CLI's output for a held edit: denied, with the reason the model reads. */
+export function geminiDeny(reason: string): string {
+  return JSON.stringify({ decision: 'deny', reason });
+}
+
+/** Run as Gemini CLI's BeforeTool hook: what to print, or null to print nothing. Every failure is silence. */
+export async function runGeminiBeforeToolHook(opts: RunHookOptions): Promise<string | null> {
+  const call = parseGeminiHookInput(opts.stdin);
+  if (!call) return null;
+  const repo = repoOf(call.filePath, opts.exists);
+  if (!repo) return null;
+  return withToolSession({ connect: opts.connect, cwd: call.cwd, version: opts.version, clientName: 'gemini-cli-hook', timeoutMs: opts.timeoutMs }, async (callTool) => {
+    const args = call.oldTexts ? { path: repo.rel, old_text: call.oldTexts } : { path: repo.rel };
+    const held = breakpointAnswer(await callTool('check_breakpoint', args));
+    return held?.hold ? geminiDeny(held.hold) : null;
+  });
+}

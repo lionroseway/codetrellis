@@ -222,3 +222,80 @@ test.describe('Add parallel work to Claude Code', () => {
     expect(await page.evaluate(() => (window as unknown as { __ccCalls: string[] }).__ccCalls)).toEqual(['preview', 'apply:skill=s', 'preview', 'apply:hook=h']);
   });
 });
+
+/**
+ * Phase 32 A8.3 — the breakpoint hook for Gemini CLI. Main-process file work
+ * is unit-tested (gemini-cli-hook.test.ts); here the page runs against a
+ * stand-in for that IPC, to prove the person sees the change, nothing is
+ * ticked for them, only the hash of the file shown is sent, and a file that
+ * changed underneath is shown again rather than written.
+ */
+test.describe('Add breakpoints to Gemini CLI', () => {
+  const openMcp = async (page: import('@playwright/test').Page) => {
+    await gotoWithProject(page);
+    await page.locator('button[title*="Settings"]').click();
+    await page.getByRole('button', { name: 'MCP Server' }).click();
+  };
+
+  test('is not offered outside the desktop app', async ({ page }) => {
+    await openMcp(page);
+    await expect(page.getByTestId('mcp-config-snippet')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('button', { name: /breakpoints to Gemini CLI/ })).toHaveCount(0);
+  });
+
+  test('shows the change, is opt-in, re-shows a file that changed, and says when it is there', async ({ page }) => {
+    await page.addInitScript(() => {
+      const calls: string[] = [];
+      let round = 0;
+      (window as unknown as { __gmCalls: string[] }).__gmCalls = calls;
+      (window as unknown as { electronAPI: unknown }).electronAPI = {
+        geminiCli: {
+          preview: async () => {
+            calls.push('preview');
+            if (round >= 2) return { ok: true, dir: '/Users/me/.gemini', path: '/Users/me/.gemini/settings.json', status: 'unchanged', diff: [], beforeHash: 'c'.repeat(64), exists: true };
+            return {
+              ok: true, dir: '/Users/me/.gemini', path: '/Users/me/.gemini/settings.json', status: 'update', exists: true,
+              beforeHash: (round === 0 ? 'a' : 'b').repeat(64),
+              diff: [{ op: ' ', text: '  "theme": "Dracula",' }, { op: '+', text: '  "hooks": { "BeforeTool": [ { "matcher": "^(write_file|replace)$", … "--hook gemini-before-tool" } ] }' }],
+            };
+          },
+          apply: async (hash: string) => {
+            calls.push(`apply:${hash[0]}`);
+            round += 1;
+            if (round === 1) return { ok: false, changed: true, reason: "Gemini CLI's settings.json changed after you looked at it. Here is the change again, against the file as it is now." };
+            return { ok: true, path: '/Users/me/.gemini/settings.json', backupPath: '/Users/me/.gemini/settings.before-codetrellis-2026.json', status: 'update' };
+          },
+        },
+      };
+    });
+    await openMcp(page);
+    const panel = page.getByTestId('add-to-gemini-cli');
+    await panel.getByRole('button', { name: 'Add breakpoints to Gemini CLI…' }).click();
+
+    const hook = panel.getByTestId('gemini-cli-hook');
+    await expect(hook.getByText('/Users/me/.gemini/settings.json')).toBeVisible();
+    await expect(panel.getByTestId('gemini-cli-hook-diff')).toContainText('--hook gemini-before-tool');
+    await expect(hook.getByText(/holds the edit until you answer\. It never approves an edit/)).toBeVisible();
+    // It runs before every edit, so nothing is ticked for the person.
+    await expect(hook.getByRole('checkbox')).not.toBeChecked();
+    await expect(panel.getByRole('button', { name: 'Add to Gemini CLI' })).toBeDisabled();
+    fs.mkdirSync(OUT, { recursive: true });
+    await panel.screenshot({ path: path.join(OUT, 'gemini-cli-hook.png') });
+
+    // The file changed after it was shown: nothing written, the change shown again, unticked.
+    await hook.getByRole('checkbox').check();
+    await panel.getByRole('button', { name: 'Add to Gemini CLI' }).click();
+    await expect(panel.getByText(/changed after you looked at it/)).toBeVisible();
+    await expect(hook.getByRole('checkbox')).not.toBeChecked();
+
+    await hook.getByRole('checkbox').check();
+    await panel.getByRole('button', { name: 'Add to Gemini CLI' }).click();
+    await expect(panel.getByText(/Added the hook\. Gemini CLI picks it up in its next session\. The previous file is kept as/)).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as { __gmCalls: string[] }).__gmCalls)).toEqual(['preview', 'apply:a', 'preview', 'apply:b']);
+
+    // Shown again: already there.
+    await panel.getByRole('button', { name: 'Add breakpoints to Gemini CLI…' }).click();
+    await expect(hook.getByText('Already added, and up to date.')).toBeVisible();
+    await expect(hook.getByRole('checkbox')).toBeDisabled();
+  });
+});

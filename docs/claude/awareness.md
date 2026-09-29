@@ -148,6 +148,21 @@ event, for the active project.
     and fails open and silent. Since B4.2 it asks `check_breakpoint` first
     and denies an edit only where a person set a breakpoint on the file,
     as "paused: waiting for a decision" (see `services/code-breakpoints.ts`).
+- **Gemini CLI's hook**, offered the same way (A8.3,
+  `services/gemini-cli-hook.ts`, IPC only, unticked): one `BeforeTool` entry
+  in `~/.gemini/settings.json` (or under `$GEMINI_CLI_HOME`), matching
+  `write_file` and `replace`, running the connector's
+  `--hook gemini-before-tool` mode. It asks `check_breakpoint` only and
+  answers `{"decision":"deny","reason":…}` where a breakpoint holds the
+  edit, nothing otherwise. Its format was read from
+  `@google/gemini-cli-core` 0.61.0's own source, since its docs site was
+  not reachable; the fixture in `gemini-cli-hook.test.ts` is that format.
+  A person's steer does not reach Gemini through the hook, because
+  `BeforeTool` has no field the model reads when an edit goes ahead; it
+  gets the steer from `check_breakpoint` over MCP.
+- **Other clients' hooks** are added only once their format is checked
+  against the client's own docs or source (A8.3's rule). Until then, a client
+  whose hooks run a command uses `--check-edit` (A8.2).
 
 ## Any agent: what every client gets (A8)
 
@@ -164,10 +179,10 @@ run as a plain `codex` client with no hook and no watcher in
 | Footprints and line changes | `check_footprint`, `get_line_changes` (B3.1), from git | — |
 | Declared intent | `declare_intent` | — |
 | Task and spec breakpoints | enforced at the MCP interception: the call returns "paused" with a ref; `await_decision` | — |
-| Code and function breakpoints | `check_breakpoint(path, old_text)` before an edit (the guide tells every agent to); an edit made without checking is a breach on its next call. A client whose hooks run a command, or a wrapper script: the connector's `--check-edit <path>` exits 2 when held (A8.2) | Claude Code's `PreToolUse` hook makes the check itself and holds the edit before it is made, sending the replaced text |
+| Code and function breakpoints | `check_breakpoint(path, old_text)` before an edit (the guide tells every agent to); an edit made without checking is a breach on its next call. A client whose hooks run a command, or a wrapper script: the connector's `--check-edit <path>` exits 2 when held (A8.2) | Claude Code's `PreToolUse` hook and Gemini CLI's `BeforeTool` hook (A8.3) make the check themselves and hold the edit before it is made, sending the replaced text |
 | Signal breakpoints | claims, finishes and spec edits pause while the signal is open | hooked edits pause too |
 | Skills | the task's skills, where to find them, in `get_brief`, `claim_item` and `get_next_item` (C1.1); `get_skill(name)` loads one and is the proof of use, labelled "read through CodeTrellis" (A8.4) | Claude Code's session log also proves a skill it loaded itself (C1.3), labelled "session log" |
-| Setup | the MCP connector config (Settings → MCP Server: a JSON entry for Claude Desktop, Cursor and most clients) | Claude Code's skill and hook installer (A3.4); A8.3 adds other clients' hooks |
+| Setup | the MCP connector config (Settings → MCP Server: a JSON entry for Claude Desktop, Cursor and most clients) | Claude Code's skill and hook installer (A3.4); Gemini CLI's hook installer (A8.3) |
 
 ## Rules to keep
 
@@ -190,14 +205,14 @@ run as a plain `codex` client with no hook and no watcher in
   - `awareness-digest.test.ts`;
   - `awareness-notices.test.ts`;
   - `workstream-*.test.ts`;
-  - `claude-code-parallel.test.ts`;
+  - `claude-code-parallel.test.ts`, `gemini-cli-hook.test.ts`;
   - `connector/hook.test.ts`.
 - Harness, all on real worktrees:
   - `awareness` (M1: collisions and stale base), `awareness-answers`;
   - `awareness-contract`, `awareness-drift`, `declare-intent`;
   - `awareness-notices`, the M2 "done when";
   - `awareness-cooldown`;
-  - `parallel-hook`;
+  - `parallel-hook`, `check-edit`, `gemini-hook`;
   - `awareness-m3`, the M3 "done when": five workstreams, seven overlaps,
     a five-line digest well under a minute to read, and intended staying
     quiet until a side changes shape.

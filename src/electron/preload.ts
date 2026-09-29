@@ -152,6 +152,14 @@ const electronAPI = {
     preview: (): Promise<unknown> => ipcRenderer.invoke('claude-code:preview'),
     apply: (choice: { skill?: string; hook?: string }): Promise<unknown> => ipcRenderer.invoke('claude-code:apply', choice),
   },
+  /**
+   * Phase 32 A8.3 — the breakpoint hook for Gemini CLI. `apply` takes the
+   * hash of the settings file shown, and writes only if it is still that one.
+   */
+  geminiCli: {
+    preview: (): Promise<unknown> => ipcRenderer.invoke('gemini-cli:preview'),
+    apply: (shownHash: string): Promise<unknown> => ipcRenderer.invoke('gemini-cli:apply', shownHash),
+  },
   htmlReport: {
     show: (uid: string, bounds: { x: number; y: number; width: number; height: number }, scripts: boolean): Promise<{ ok: boolean; reason?: string }> =>
       ipcRenderer.invoke('artefacts:html:show', uid, bounds, scripts),
