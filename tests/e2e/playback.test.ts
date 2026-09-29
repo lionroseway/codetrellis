@@ -129,22 +129,24 @@ test.describe('Fast-forward (Phase 26)', () => {
     }
   });
 
-  test('edge counts are omitted for commit frames rather than reported as zero', async () => {
+  // Phase 32 A5.1: commit frames carry edge counts. They used to be null
+  // throughout, because a commit contributed its file list only.
+  test('commit frames count their edges: a commit adding an import adds one', async () => {
     const h = await setupHarness('playback-edges');
     try {
-      commitChange(h.fixture.projectPath, 'packages/shared/src/types.ts', '\nexport type A = 1;\n', 'second');
+      commitChange(h.fixture.projectPath, 'packages/web/src/Extra.ts', "import { listUsers } from './api';\nexport const extra = listUsers;\n", 'add an import');
       await h.client.scanProject(h.fixture.projectPath);
 
       const seq = await playback(h);
       const commitFrames = seq.frames.filter((f) => f.kind === 'commit' && f.delta);
-
+      expect(commitFrames.length).toBeGreaterThan(0);
       for (const frame of commitFrames) {
-        // Reporting "0 edges changed" for a comparison that never looked
-        // at edges would read as a finding rather than an absence.
-        expect(frame.delta!.edgesAdded).toBeNull();
-        expect(frame.delta!.edgesRemoved).toBeNull();
+        expect(typeof frame.delta!.edgesAdded).toBe('number');
+        expect(typeof frame.delta!.edgesRemoved).toBe('number');
       }
-      expect(seq.notes.join(' ')).toMatch(/file list only/);
+      const adding = commitFrames.find((f) => f.changedFiles.includes('packages/web/src/Extra.ts'));
+      expect(adding?.delta).toMatchObject({ added: 1, edgesAdded: 1, edgesRemoved: 0 });
+      expect(seq.notes.join(' ')).not.toMatch(/Edge counts are omitted/);
     } finally {
       await h.teardown();
     }

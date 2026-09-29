@@ -1,11 +1,15 @@
 import { execFileSync } from 'node:child_process';
 import { assertSafeGitRef } from './git-safety';
-import { getDb, getDependencyEdges, getAllFileHashes } from './database';
+import { getDb, getDependencyEdges, getAllFileHashes, getImportResolutionContext } from './database';
 import { getBaseline, diffSnapshots, captureSnapshot, type GraphSnapshot, type ArchDiff } from './diff-engine';
 import { getSnapshot, listSnapshots } from './trellis-service';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { getParseableExtensions } from './ast-parser';
+import { getParseableExtensions, parseVirtualFile } from './ast-parser';
+import { getResolverForLanguage } from './resolvers';
+import { commitEdges, type CommitEdgeDeps } from './commit-edges';
+import { workstreamBranches } from './workstream-service';
+import { isSafeGitRef } from './git-safety';
 import { projectRelative } from './trusted-roots';
 import { readTextWithin, resolveWithin, ConfinementError } from './confined-fs';
 import fs from 'node:fs';
@@ -41,14 +45,16 @@ export interface ResolvedComparand {
   /**
    * False when the comparand's edges could not be reconstructed.
    *
-   * A git commit is the case that matters: reading its file list is
-   * cheap (`git ls-tree`), but knowing its *edges* would mean checking
-   * the tree out and re-parsing every file in it. Rather than pretend,
-   * a commit comparand reports files only, and the diff says edges were
-   * not comparable instead of quietly reporting "no edges changed" —
-   * which would read as a finding rather than an absence.
+   * A git commit used to be this case always. Since Phase 32 A5.1 its edges
+   * are built from the opened graph and the files that differ at the commit
+   * (`commit-edges.ts`), and it is unknown only when too many files differ
+   * to parse; `edgesNote` says so. Rather than pretend, the diff then says
+   * edges were not comparable instead of quietly reporting "no edges
+   * changed", which would read as a finding rather than an absence.
    */
   edgesKnown: boolean;
+  /** Why the edges are not known, when they are not. */
+  edgesNote?: string;
 }
 
 export interface ComparisonResult {
@@ -146,7 +152,7 @@ function md5Blobs(projectPath: string, oids: string[]): void {
 }
 
 /**
- * A git commit, files only.
+ * A git commit's files, with their blob ids.
  *
  * Two things here exist because the obvious implementation is wrong in a way
  * that looks right, and did ship that way:
@@ -169,9 +175,9 @@ function md5Blobs(projectPath: string, oids: string[]): void {
  * working-tree bytes, so a file can report modified on line endings alone.
  * That is real history, not a bug here, but it will look like one.
  *
- * Edges are not available; see `edgesKnown`.
+ * Its edges are built afterwards, from these blob ids (`commit-edges.ts`).
  */
-function commitSnapshot(projectPath: string, ref: string): GraphSnapshot | null {
+function commitSnapshot(projectPath: string, ref: string): { snapshot: GraphSnapshot; oids: Map<string, string> } | null {
   assertSafeGitRef(ref, 'snapshot comparand');
   let out: string;
   try {
@@ -200,15 +206,62 @@ function commitSnapshot(projectPath: string, ref: string): GraphSnapshot | null 
   md5Blobs(projectPath, entries.map((e) => e.oid));
 
   const files = new Map<string, { hash: string; symbolCount: number }>();
+  const oids = new Map<string, string>();
   for (const { filePath, oid } of entries) {
     const hash = blobMd5.get(oid);
     // An unreadable blob is left out rather than given its OID as a hash:
     // a wrong-space hash is what caused the bug above.
-    if (hash) files.set(filePath, { hash, symbolCount: 0 });
+    if (hash) {
+      files.set(filePath, { hash, symbolCount: 0 });
+      oids.set(filePath, oid);
+    }
   }
   if (files.size === 0) return null;
 
-  return { timestamp: Date.now(), files, edges: new Set<string>() };
+  return { snapshot: { timestamp: Date.now(), files, edges: new Set<string>() }, oids };
+}
+
+/** The text of each blob, via one `git cat-file --batch` process. */
+function readBlobs(projectPath: string, oids: string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  if (oids.length === 0) return out;
+  let buf: Buffer;
+  try {
+    buf = execFileSync('git', ['cat-file', '--batch'], { cwd: projectPath, input: oids.join('\n') + '\n', maxBuffer: 256 * 1024 * 1024 });
+  } catch {
+    return out;
+  }
+  let i = 0;
+  while (i < buf.length) {
+    const nl = buf.indexOf(0x0a, i);
+    if (nl === -1) break;
+    const parts = buf.subarray(i, nl).toString('utf-8').split(' ');
+    i = nl + 1;
+    const size = parts.length >= 3 ? Number(parts[2]) : NaN;
+    if (!Number.isFinite(size)) continue;
+    out.set(parts[0], buf.subarray(i, i + size).toString('utf-8'));
+    i += size + 1;
+  }
+  return out;
+}
+
+/** How a commit's files are parsed and resolved: the scanner's own parser and resolvers. */
+function edgeDeps(projectPath: string): CommitEdgeDeps {
+  const { aliasMap, systems } = getImportResolutionContext(projectPath);
+  return {
+    readBlobs: (oids) => readBlobs(projectPath, oids),
+    parseImports: (abs, content) => {
+      try {
+        const parsed = parseVirtualFile(abs, content);
+        return parsed ? { language: parsed.language, imports: parsed.imports } : null;
+      } catch {
+        return null;
+      }
+    },
+    resolve: (language, importSource, importerPath, knownFiles, isRelative) =>
+      getResolverForLanguage(language)?.resolve({ importSource, importerPath, projectRoot: projectPath, knownFiles, aliasMap, systems, isRelative }) ?? null,
+    relative: (abs) => projectRelative(projectPath, abs),
+  };
 }
 
 /**
@@ -245,14 +298,18 @@ export function resolveComparand(spec: string, projectPath: string): ResolvedCom
     // a ref like `--upload-pack=…` produced a 500 "Internal server error" where
     // the neighbouring `commit:deadbeef` produced a clean 404 with a reason.
     // Refusing input is not an internal error, and saying so is more useful.
-    let snapshot: GraphSnapshot | null;
+    let commit: ReturnType<typeof commitSnapshot>;
     try {
-      snapshot = commitSnapshot(projectPath, ref);
+      commit = commitSnapshot(projectPath, ref);
     } catch {
       return null;
     }
-    if (!snapshot) return null;
-    return { spec, label: `Commit ${ref}`, snapshot, edgesKnown: false };
+    if (!commit) return null;
+    const { snapshot, oids } = commit;
+    const edges = commitEdges({ projectPath, files: snapshot.files, oids, live: liveSnapshot(projectPath) }, edgeDeps(projectPath));
+    if (!edges.ok) return { spec, label: `Commit ${ref}`, snapshot, edgesKnown: false, edgesNote: edges.reason };
+    snapshot.edges = edges.edges;
+    return { spec, label: `Commit ${ref}`, snapshot, edgesKnown: true };
   }
 
   return null;
@@ -289,6 +346,17 @@ export function listComparands(
       kind: 'checkpoint',
       timestamp: snap.createdAt,
     });
+  }
+
+  // The lines of work, each at its branch's latest commit (Phase 32 A5.1), so
+  // a branch review is one pick rather than a sha to look up.
+  try {
+    for (const branch of workstreamBranches(projectPath)) {
+      if (!isSafeGitRef(branch)) continue;
+      out.push({ spec: `commit:${branch}`, label: `${branch} (line of work)`, kind: 'branch' });
+    }
+  } catch {
+    /* not a git repository, or nothing to list */
   }
 
   // Recent commits, so the common case needs no typing.
@@ -373,11 +441,8 @@ export function compareSnapshots(
     // Say it plainly. Reporting zero edge changes for a comparison that
     // never looked at edges would read as a finding rather than an
     // absence, which is worse than saying nothing.
-    notes.push(
-      'Edges were not compared: a git commit contributes its file list only. ' +
-        'Reconstructing its edges would mean checking the tree out and re-parsing it. ' +
-        'Compare against a checkpoint to include edges.',
-    );
+    const why = [before.edgesNote, after.edgesNote].filter(Boolean).join(' ');
+    notes.push(`Edges were not compared: ${why || 'one side\'s edges are not known.'} Compare against a checkpoint to include edges.`);
   }
   if (beforeSpec === afterSpec) {
     notes.push('Both sides are the same point, so the diff is empty by construction.');
