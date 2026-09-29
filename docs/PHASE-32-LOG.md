@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A8.4: proof of skill use for any client |
-| **Status** | A8.2 merged (#201). A8.4 in review: a `get_skill` read counts as proof a skill was used, for any client, and each proof says where it came from, so "unknown" is left only where nothing was seen. A8.3 (Gemini CLI's hook) and A2.7 are stacked after it, rebased on #201 |
-| **Next action** | Merge A8.4's PR when green; then A8.3 and A2.7 in turn (each rebased on the last merged). Then B4.4 |
+| **Stage / step** | Track A — A8.3: a breakpoint hook for Gemini CLI |
+| **Status** | A8.4 merged (#202). A8.3 in review: Settings offers Gemini CLI's BeforeTool hook, diff first and unticked, written only from the app window; its format checked against `@google/gemini-cli-core` 0.61.0. A2.7 is stacked after it, rebased on #202 |
+| **Next action** | Merge A8.3's PR when green; then A2.7 (rebased on it). Then B4.4 |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a8-4-proof-any-client` |
+| **Branch** | `feat/phase-32-a8-3-gemini-hook` |
 | **Last updated** | 2026-09-29 |
 
 ---
@@ -87,7 +87,7 @@
   - [x] A8.1 Parity table; `check_breakpoint` in the guide for every agent; journeys run by a client with no hook (#200)
   - [x] A8.2 Client-neutral pre-edit check in the connector (#201)
   - [x] A8.3 Hook adapters for other clients, each checked against its docs (Gemini CLI, from its own source; others wait on the same check)
-  - [x] A8.4 Proof of use from MCP calls (`get_skill`), labelled by source
+  - [x] A8.4 Proof of use from MCP calls (`get_skill`), labelled by source (#202)
 - [ ] A4 Mobile
 - [ ] A5 Review
 - [ ] A6 The Brief
