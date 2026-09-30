@@ -19,9 +19,9 @@ records that — but "✗ none" is proof of a gap.
 |---|---|---|---|---|---|---|
 | REST routes | 244 | 242 | 0 | 0 | 217 | 0 |
 | MCP tools | 198 | 198 | 0 | 0 | 185 | 0 |
-| Mobile RPC methods | 85 | 77 | 0 | 0 | 78 | 0 |
+| Mobile RPC methods | 86 | 78 | 0 | 0 | 78 | 0 |
 | Frontend components | 113 | n/a | n/a | n/a | 0 | 23 |
-| Mobile screens | 36 | n/a | n/a | n/a | 0 | 0 |
+| Mobile screens | 37 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 12 | n/a | n/a | n/a | 10 | 12 |
 
 ## By domain
@@ -30,14 +30,14 @@ records that — but "✗ none" is proof of a gap.
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 19 | 12 | 10 | 0 | 0 | 0 |
 | 0.4b Graph | 19 | 15 | 8 | 13 | 0 | 0 |
-| 0.4c Plans and items | 97 | 54 | 20 | 56 | 0 | 0 |
+| 0.4c Plans and items | 97 | 54 | 21 | 56 | 0 | 0 |
 | 0.4d Criteria and sign-off | 9 | 7 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 12 | 7 | 1 | 0 | 0 |
 | 0.4g Agents and MCP | 25 | 32 | 10 | 28 | 0 | 0 |
 | 0.4h Drift, governance, review | 11 | 25 | 9 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
-| 0.4j Mobile surface | 25 | 14 | 0 | 2 | 36 | 0 |
+| 0.4j Mobile surface | 25 | 14 | 0 | 2 | 37 | 0 |
 | 0.4k Settings, updates, privacy | 11 | 0 | 3 | 6 | 0 | 12 |
 | 0.4l System docs and intake | 7 | 11 | 6 | 1 | 0 | 0 |
 
@@ -500,7 +500,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `verify_system_doc` | system-docs · write | ✗ none | 3 | ✓ 0.4l: stamps HEAD (sysdocs-intake) |  |  |
 | l | `write_system_doc` | system-docs · write | ✗ none | 3 | ✓ 0.4l: creates in the agent's name (was recorded as a person's); update renames the file with the title; unknown uid refused (sysdocs-intake); bug 47 |  |  |
 
-## Mobile RPC methods (85)
+## Mobile RPC methods (86)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -542,6 +542,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `plan.template.create` | write | ✗ none | 1 | ✓ 0.4j: plan with items; desktop told with the plan; unknown template refused (phone-plans); bug 37 |  |  |
 | c | `plan.template.list` | read | ✗ none | 1 | ✓ 0.4j: same templates as the desktop (phone-plans) |  |  |
 | c | `plan.update` | write | ✗ none | 1 | ✓ 0.4j: the desktop's edit path — desktop told, status checked, unknown refused (phone-plans); bugs 37, 38 |  |  |
+| c | `stack.summary` | read | ✗ none | 1 |  |  |  |
 | d | `criteria.awaiting` | read | 1 | 1 | ✓ 0.4j: empty until the agent submits, then the criterion; empty after deciding (phone-sync-and-tools), mobile-approvals unit |  |  |
 | d | `criteria.list` | read | ✗ none | 1 | ✓ 0.4j: the item's criteria (phone-sync-and-tools), mobile-approvals unit |  |  |
 | d | `criterion.decide` | write | 1 | 1 | ✓ 0.4j: approved from the phone (phone-sync-and-tools), mobile-approvals unit |  |  |
@@ -708,7 +709,7 @@ records that — but "✗ none" is proof of a gap.
 | k | `settings/WebcamQrScanner.tsx` |  | n/a | n/a |  |  |  |
 | l | `system-docs/SystemDocsPanel.tsx` |  | n/a | n/a |  | ✓ 0.5a — empty state is content |  |
 
-## Mobile screens (36)
+## Mobile screens (37)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -742,6 +743,7 @@ records that — but "✗ none" is proof of a gap.
 | j | `review-queue.tsx` |  | n/a | 1 |  |  |  |
 | j | `settings.tsx` |  | n/a | n/a |  |  |  |
 | j | `signal-detail.tsx` |  | n/a | 1 |  |  |  |
+| j | `stack.tsx` |  | n/a | 1 |  |  |  |
 | j | `system-doc-detail.tsx` |  | n/a | n/a |  |  |  |
 | j | `system-docs.tsx` |  | n/a | n/a |  |  |  |
 | j | `terminal-detail.tsx` |  | n/a | n/a |  |  |  |

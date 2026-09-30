@@ -196,6 +196,13 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="stack"
+          options={{
+            title: 'Stack',
+            headerStyle: { backgroundColor: '#0a0c18' },
+          }}
+        />
+        <Stack.Screen
           name="plan-review"
           options={{
             title: 'Review',

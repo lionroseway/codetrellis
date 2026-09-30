@@ -173,7 +173,7 @@
   - [x] B6.4 The Stack tab (#234; carried #235, pinning a baseline no longer freezes the server)
   - [x] B6.4b The Timeline follows the stack's selection (#236)
   - [ ] B6.5 One clock — in review
-  - [ ] B6.6 The stack on the phone
+  - [ ] B6.6 The stack on the phone — built, PR after B6.5
   - [ ] B6.7 Done-when and docs
 - [ ] B7 Conferring
 - [ ] B8 Grounding
@@ -307,6 +307,26 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: B6.6 — the stack on the phone
+
+A **Stack** button in the Plans tab's header opens every plan under way, away
+from the desk. One card per plan: its label (ticket key when it has one) and
+title, progress, "needs you", each overlap in words with its detail, **On
+it** (each unfinished task someone has, with its branch) and **Waiting**
+(each task's wait, in the desktop's own sentence). A card opens the plan.
+
+`stack.summary` (read row in `peer-capabilities.ts`) returns what
+`/api/stack` returns, for an opened project only, through
+`peerProjectRoot`; the phone summarises it in `mobile/lib/stack.ts`
+(`whoIsOn`, `waitsIn`). Sending the whole stack keeps one answer for the
+window, agents and the phone; the summary is a view.
+
+Tests: harness `stack.test.ts` gains "a paired phone gets the same stack,
+for an opened project only" (equal to REST; `/etc` refused). Phone
+`tests/phone/stack.spec.ts` (3): the full stack with a screenshot, empty,
+and an error; `tabs.spec.ts` checks the Plans header's Stack and Review
+queue buttons lead there. Inventory: `stack` RPCs map to domain c.
 
 ### 2026-09-30: B6.5 — one clock: the stack at a past moment
 

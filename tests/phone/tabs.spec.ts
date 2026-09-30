@@ -20,6 +20,14 @@ test('plans: each with its progress', async ({ page }) => {
   await expect(page.getByText('Partial refunds')).toBeVisible();
   await expect(page.getByText('Invoice currency')).toBeVisible();
   await shot(page, 'plans-list');
+
+  // The ways into every plan at once (B6.6) and what to merge first (A5.6).
+  await page.getByText('Stack', { exact: true }).click();
+  await page.getByText('Review queue', { exact: true }).click();
+  expect(await navigations(page)).toEqual([
+    { action: 'push', to: '/stack' },
+    { action: 'push', to: '/review-queue' },
+  ]);
 });
 
 test('activity: the agents and what they posted', async ({ page }) => {

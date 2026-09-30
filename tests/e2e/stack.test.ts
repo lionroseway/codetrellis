@@ -5,12 +5,12 @@
  * Two active plans and a completed one. Exports is called by its ticket key,
  * its tasks are worked on a branch set on their section, and "Deploy exports"
  * waits on Billing's "Migrate schema". The completed plan is not in the stack.
- * An agent's `get_stack` answers the same, and a project that was never
- * opened is refused.
+ * An agent's `get_stack` answers the same, and so does a paired phone's
+ * `stack.summary` (B6.6); a project that was never opened is refused.
  */
 
 import { test, expect } from '@playwright/test';
-import { setupHarness, type Harness } from '../harness';
+import { setupHarness, pairPhone, type Harness } from '../harness';
 import type { ScriptedAgent } from '../harness/scripted-agent';
 import type { Stack } from '../../src/shared/types/stack';
 
@@ -84,6 +84,18 @@ test.describe.serial('The stack', () => {
   test('an agent\'s get_stack answers the same', async () => {
     const viaMcp = JSON.parse((await agent.callTool('get_stack', { project_path: root })).answer) as Stack;
     expect(viaMcp).toEqual(await stack());
+  });
+
+  test('a paired phone gets the same stack, for an opened project only (B6.6)', async () => {
+    const phone = await pairPhone(h.client, { alias: 'Stack phone' });
+    try {
+      const got = await phone.rpc('stack.summary', { projectPath: root }) as Stack;
+      expect(got).toEqual(await stack());
+      expect(got.plans.find((p) => p.uid === exportsPlan)!.label).toBe('JIRA-150');
+      expect(await phone.rpcError('stack.summary', { projectPath: '/etc' })).toMatch(/not|trusted|opened/i);
+    } finally {
+      await phone.close();
+    }
   });
 
   test('a project that was never opened is refused', async () => {

@@ -47,6 +47,7 @@ Routes are file-based under `mobile/app/`, with `_layout.tsx` driving a Stack at
 - `signal-detail` — one overlap between lines of work, and the person's answer to it (Phase 32 A4.5b; see below)
 - `workstreams`, `workstream-detail` — the lines of work, and one line's files and recent turns (Phase 32 A4.5b)
 - `plan-review`, `review-queue` — one plan's review, and which line of work to merge first and why (Phase 29; queue Phase 32 A5.6; see below)
+- `stack` — every plan under way: progress, overlaps in words, who is on what and what is waiting (Phase 32 B6.6; see below)
 - `body-editor` *(modal)* — content editor
 - `connection-switcher` *(modal)* — switch between paired desktops
 - `doc-viewer` — document rendering
@@ -209,6 +210,20 @@ photographed by `tests/phone/awareness.spec.ts`.
 `tests/phone/review-queue.spec.ts` photographs both screens. The harness
 checks the RPC from a paired phone in `review-queue.test.ts` and
 `awareness-m5.test.ts`.
+
+### The stack (Phase 32 B6.6)
+
+- **`stack.summary`** (read) returns what `/api/stack` does (B6.2), for an
+  opened project only; a nominated `projectPath` goes through
+  `resolveTrustedProjectRoot`. The phone summarises it.
+- **`stack`**, from the Plans tab's header, shows one card per plan under
+  way: its label (the ticket key when it has one), progress, "needs you",
+  each overlap in words with its detail, **On it** (each unfinished task
+  someone has, with its branch) and **Waiting** (each task's wait, in the
+  desktop's sentence). A card opens `plan-detail`.
+
+`tests/phone/stack.spec.ts` photographs it; the harness checks the RPC from
+a paired phone in `stack.test.ts`.
 
 ## Seeing the screens (Phase 32 A4.5a)
 
