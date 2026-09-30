@@ -41,6 +41,8 @@
     "test": "playwright test",
     "test:unit": "node --import tsx --test 'src/**/*.test.ts' 'tools/**/*.test.ts'",
     "inventory": "tsx tools/inventory/run.ts",
+    "status": "tsx tools/status/run.ts",
+    "status:check": "tsx tools/status/run.ts --check",
     "inventory:check": "tsx tools/inventory/run.ts --check",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",

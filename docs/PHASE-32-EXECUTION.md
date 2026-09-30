@@ -31,6 +31,15 @@ lives **in the repo**, never only in a conversation.
 - **Now:** current step, status, the very next action, blockers, last
   updated. It must always be true.
 - **Checklist:** every step in this plan, with a box.
+
+Now and the checklist are **data**: they live in
+`docs/PHASE-32-STATUS.yaml` (each step's id, status — `todo`,
+`building`, `in_review`, `done` — and PRs), and `npm run status` writes
+them into the log between its status markers. Edit the YAML, never the
+generated block; `tools/status/status.test.ts` fails when the two
+disagree, or when a step is in review with no PR. (The owner's ask,
+2026-09-30: status a program can read, as the inventory already is.)
+The rest of the log stays prose:
 - **Baseline:** the test and tool numbers the work is measured against.
 - **Decisions:** what was decided, why, and when.
 - **Entries:** a dated, newest-first record of what happened.
@@ -39,14 +48,16 @@ lives **in the repo**, never only in a conversation.
 
 Update the log **before** it's needed, not after:
 
-1. At the **start** of a step: set Now, and tick the step in progress.
+1. At the **start** of a step: set Now, and mark the step `building`
+   (in the YAML; then `npm run status`).
 2. After **every decision**, or anything surprising.
 3. **Before** any command that takes more than a few minutes (harness,
    package, big refactor), with what's running and why.
 4. At least every **30 minutes** of work, even if it's only "still on X,
    next is Y".
-5. At the **end** of a step: tick it, record test counts, the PR link,
-   and the next step.
+5. At the **end** of a step: mark it `in_review` with its PR, then
+   `done` when merged; record test counts in an entry, and set Now to the
+   next step.
 
 If a session could end right now, the log must be enough for the next
 one to continue without asking.

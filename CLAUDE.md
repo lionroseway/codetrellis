@@ -37,7 +37,10 @@ The team's design docs (vision, UX, plans) live alongside these at the
 **Read [`docs/PHASE-32-LOG.md`](docs/PHASE-32-LOG.md) first.** Its
 **Now** block names the current step and the very next action. The work
 is long-running and runs across sessions, so the log, not the
-conversation, is the state. Update it at the start and end of every
+conversation, is the state. **Now and the checklist are data** in
+[`docs/PHASE-32-STATUS.yaml`](docs/PHASE-32-STATUS.yaml) (each step's id,
+status and PRs); edit that and run `npm run status`, which writes them
+into the log. `tools/status/status.test.ts` fails when they disagree. Update it at the start and end of every
 step, after every decision, before any long command, and at least every
 30 minutes ([`docs/PHASE-32-EXECUTION.md`](docs/PHASE-32-EXECUTION.md)
 §1).
