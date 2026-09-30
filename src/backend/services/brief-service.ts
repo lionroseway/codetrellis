@@ -28,6 +28,7 @@ import { TEXT_EXTS } from '../../shared/lib/locator';
 import type { PlanItem } from '../../shared/types';
 import { listWorkstreams } from './workstream-service';
 import { resolveSection, branchOfRoot, whereWorked } from './section-workstreams';
+import { readSoFar } from './material-footprints';
 import type { ItemCriterion } from '../../shared/types/criteria';
 
 const MAX_BODY_CHARS = 20_000;
@@ -202,6 +203,8 @@ export async function getBrief(itemUid: string, opts: { workstreamRoot?: string 
     materials: materialsFor(items, item),
     criteria,
     sent_back: criteria.filter((c) => c.state === 'sent_back').length,
+    // What this task has read through read_material, and the hash each saw (A6.2).
+    read_so_far: readSoFar(item.uid),
     ...skillsBlock(item, plan?.projectPath ?? null, opts.workstreamRoot ?? null),
     ...worktreeBlock(item, plan?.projectPath ?? null, opts.workstreamRoot ?? null),
     how_to_work: HOW_TO_WORK,

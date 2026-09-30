@@ -76,6 +76,8 @@ describe('get_brief', () => {
 
     const b = await brief.getBrief(ITEM);
     assert.ok(b);
+    // Nothing read through read_material yet (A6.2).
+    assert.deepEqual(b.read_so_far, []);
     assert.equal(b.item.ref, 'task 9f2c41ab');
     assert.equal(b.item.body, 'Summarise Q3 for the board.');
     assert.equal(b.plan.title, 'Board pack');

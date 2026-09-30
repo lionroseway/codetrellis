@@ -22,6 +22,7 @@ import { quoteMaterial } from '../../services/material-reader/quote';
 import { listWorkstreams } from '../../services/workstream-service';
 import { readProjectSkill, listProjectSkills } from '../../services/skills-service';
 import { recordSkillRead } from '../../services/skill-use-service';
+import { recordMaterialRead } from '../../services/material-footprints';
 import { resolveSection, branchOfRoot, claimRefusal, offeredTo, elsewhereLine, cleanBranch, workstreamOfBranch, whereWorked } from '../../services/section-workstreams';
 
 /**
@@ -815,7 +816,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       description:
         'Everything you need to work an item, in one call: its goal and body, the guide (the plan\'s pages, in order), ' +
         'the materials you were given (name, type, size, and what read_material returns for each), every acceptance ' +
-        'criterion with its kind, policy, state and what it still needs, and any note a person sent back. Start here, ' +
+        'criterion with its kind, policy, state and what it still needs, any note a person sent back, and what this ' +
+        'task has read so far (read_so_far: each material, the parts, by whom, and the file\'s hash then). Start here, ' +
         'and call it again after a person sends something back. Read materials with read_material.',
       inputSchema: { item_uid: z.string() },
     },
@@ -870,6 +872,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
     async ({ attachment_uid, locator }, extra: any) => {
       const read = await deps.readMaterial(attachment_uid, locator ?? null);
       if (!read.ok) return { content: [{ type: 'text' as const, text: read.reason }], isError: true };
+
+      // The task's footprint (A6.2): who read which material, and its hash then.
+      recordMaterialRead({ attachmentUid: attachment_uid, sessionId: deps.sessionId, locator: locator ?? null });
 
       const where = read.kind === 'text' ? read.reply.where : null;
       const summary = `Read ${read.name}${where ? ` — ${where}` : ''}`;

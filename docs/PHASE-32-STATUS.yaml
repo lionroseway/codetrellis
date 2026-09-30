@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — A6.1: task workstreams"
-  status: "A6 refined (#251). A6.1 built: get_brief binds a session to its task; tasks are lines of work over MCP, REST, the strip and the phone; notices and get_awareness match a session's task. Harness, unit, browser and phone green locally"
-  next: Merge A6.1 when CI is green; then A6.2 on feat/phase-32-a6-2-material-footprints (read_material records the session and the file's hash; a task's footprint)
+  step: "Wave 2 — A6.2: material footprints"
+  status: "A6.1 merged (#252). A6.2 built: read_material keeps who read which material, the part and the file's hash then (material_reads), counted for the session's brief task; a task's footprint is its reads, outputs and cited parts; get_brief shows read_so_far. Unit and harness green locally"
+  next: Merge A6.2 when CI is green; then A6.3 on feat/phase-32-a6-3-material-signals (contract, stale-base, version-split, collision, drift for materials, computed inside refreshSignals)
   blockers: none
   updated: 2026-09-30
 sections:
