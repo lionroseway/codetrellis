@@ -17,7 +17,7 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 250 | 248 | 0 | 0 | 217 | 0 |
+| REST routes | 251 | 249 | 0 | 0 | 217 | 0 |
 | MCP tools | 202 | 202 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 89 | 78 | 0 | 0 | 78 | 0 |
 | Frontend components | 114 | n/a | n/a | n/a | 0 | 23 |
@@ -34,7 +34,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4d Criteria and sign-off | 9 | 7 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 12 | 7 | 1 | 0 | 0 |
-| 0.4g Agents and MCP | 25 | 32 | 10 | 28 | 0 | 0 |
+| 0.4g Agents and MCP | 26 | 32 | 10 | 28 | 0 | 0 |
 | 0.4h Drift, governance, review | 11 | 25 | 9 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 37 | 0 |
@@ -48,7 +48,7 @@ records that — but "✗ none" is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (250)
+## REST routes (251)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -69,7 +69,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 158 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 159 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -168,9 +168,9 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/items/:uid/skill-arrivals/accept` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/spec-proposals` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/worktree` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans` |  | 1 | 85 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans` |  | 1 | 86 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 2 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `POST /api/plans/:planUid/items` |  | ✗ none | 51 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:planUid/items` |  | ✗ none | 52 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 2 | ✓ 0.4c: exercised by criteria-loops (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/docs` |  | ✗ none | 7 | ✓ 0.4c: exercised by full-loop, phone-plans, plan-docs, plan-export, +2 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -230,6 +230,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `GET /api/workstreams/changes` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/workstreams/commits` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/workstreams/folder-requests` |  | ✗ none | 1 |  |  |  |
+| g | `GET /api/workstreams/tasks` |  | ✗ none | 1 |  |  |  |
 | g | `POST /api/awareness/:id/reply` |  | ✗ none | 1 |  |  |  |
 | g | `POST /api/awareness/:id/state` |  | ✗ none | 9 |  |  |  |
 | g | `POST /api/breakpoint-hits/:ref/answer` |  | ✗ none | 9 |  |  |  |
@@ -399,7 +400,7 @@ records that — but "✗ none" is proof of a gap.
 | d | `list_criteria` | plan-item · read | ✗ none | 3 | ✓ 0.4d: migrated line verbatim plus the gate, with decided_by (criteria-signoff) |  |  |
 | d | `run_checks` | plan-item · read | ✗ none | 1 | ✓ 0.4d: names the stale criterion and the changed file; approves nothing (criteria-loops) |  |  |
 | d | `submit_criterion` | plan-item · write | ✗ none | 5 | ✓ 0.4d: submitting is not approving; agent policy self-approves in the agent's name (criteria-signoff) |  |  |
-| e | `get_brief` | plan-item · read | ✗ none | 4 | ✓ 0.4e: item, guide from pages, own files + pages' materials only, still_needs; unknown refused (brief-surface) |  |  |
+| e | `get_brief` | plan-item · read | ✗ none | 5 | ✓ 0.4e: item, guide from pages, own files + pages' materials only, still_needs; unknown refused (brief-surface) |  |  |
 | e | `list_materials` | plan-item · read | ✗ none | 1 | ✓ 0.4e: every file item by item in tree order, outputs included; unknown refused (brief-surface) |  |  |
 | e | `read_material` | plan-item · files | ✗ none | 1 | ✓ 0.4e: CSV by {range} (bug 24), text by {lines}, image as itself; read logged on the item (brief-surface, read unit) |  |  |
 | e | `record_artefact` | plan-item · write | ✗ none | 4 | ✓ 0.4e: agent records an output (brief-surface, criteria-loops) |  |  |
@@ -422,13 +423,13 @@ records that — but "✗ none" is proof of a gap.
 | g | `clipboard_write` | ui · write | ✗ none | 1 | ✓ 0.4g: sends the text to the window (agent-ui-tools) |  |  |
 | g | `declare_intent` | awareness · write | ✗ none | 2 |  |  |  |
 | g | `get_app_guide` | ui · read | ✗ none | 3 | ✓ 0.4g: every flavour distinct; summary names this project's plans; unknown flavour refused (agent-ui-tools) |  |  |
-| g | `get_awareness` | awareness · read | ✗ none | 7 |  |  |  |
+| g | `get_awareness` | awareness · read | ✗ none | 8 |  |  |  |
 | g | `get_budget` | budget · read | ✗ none | 1 | ✓ 0.4g: ceiling, spent, forecast, notes; unknown plan refused (agent-ui-tools) |  |  |
 | g | `get_log_path` | ui · read | ✗ none | 1 | ✓ 0.4g: today's file in the data dir; naming it creates nothing (agent-ui-tools), logger-path unit; bug 28 |  |  |
 | g | `get_logs` | ui · read | ✗ none | 1 | ✓ 0.4g: says when there is no log file; tail and filter of the desktop log (agent-ui-tools); bug 28 |  |  |
 | g | `get_settings` | ui · read | ✗ none | 1 | ✓ 0.4g: reads back what update_settings wrote; no secrets in settings (cdev-phase5) |  |  |
 | g | `get_state_at` | awareness · read | ✗ none | 2 |  |  |  |
-| g | `list_workstreams` | awareness · read | ✗ none | 3 |  |  |  |
+| g | `list_workstreams` | awareness · read | ✗ none | 4 |  |  |  |
 | g | `navigate_item_back` | session · write | ✗ none | 1 | ✓ 0.4g: selection steps back (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `navigate_item_forward` | session · write | ✗ none | 1 | ✓ 0.4g: and forward (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `navigate_to` | session · write | ✗ none | 1 | ✓ 0.4g: every target's payload; unknown plan/item/file refused (agent-ui-tools); bug 27 |  |  |
@@ -576,7 +577,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `budget.acknowledge` | write | 1 | 1 | ✓ 0.4j: unflagged, desktop told (phone-sync-and-tools), mobile-budget unit |  |  |
 | g | `budget.get` | read | 1 | 1 | ✓ 0.4j: agent's change flagged (phone-sync-and-tools), mobile-budget unit |  |  |
 | g | `workstreams.detail` | read | ✗ none | 1 |  |  |  |
-| g | `workstreams.list` | read | ✗ none | 1 |  |  |  |
+| g | `workstreams.list` | read | ✗ none | 2 |  |  |  |
 | h | `deviation.list` | read | ✗ none | 1 | ✓ 0.4j: same as REST; unknown plan refused (phone-plans) |  |  |
 | h | `deviation.resolve` | write | ✗ none | 1 | ✓ 0.4j: resolved as the person; bad action and unknown id refused (phone-plans) |  |  |
 | h | `freeze.acknowledge` | write | ✗ none | 1 | ✓ 0.4k: unflags in the person's name, audited, desktop told; bad id refused (freeze-flags) |  |  |

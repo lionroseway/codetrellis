@@ -76,7 +76,7 @@ export function heartbeat(sessionId: string): void {
 export function getActiveSessions(): AgentSessionInfo[] {
   const result = getDb().exec(
     `SELECT session_id, agent_type, model, active_plan_uid, connected_at, last_seen, status, capabilities,
-            workstream_root, host_terminal_id
+            workstream_root, host_terminal_id, brief_item_uid
      FROM agent_sessions WHERE status = 'active' ORDER BY connected_at DESC`
   );
   if (!result[0]) return [];
@@ -87,7 +87,21 @@ export function getActiveSessions(): AgentSessionInfo[] {
     capabilities: (() => { try { return JSON.parse(r[7] as string ?? '[]'); } catch { return []; } })(),
     workstreamRoot: (r[8] as string | null) ?? null,
     hostTerminalId: (r[9] as string | null) ?? null,
+    briefItemUid: (r[10] as string | null) ?? null,
   }));
+}
+
+/**
+ * Record the task a session works on (Phase 32 A6.1): the item it called
+ * `get_brief` on, the latest winning. Only ever the calling session's own
+ * id, from the MCP transport; the item was found before this is called.
+ */
+export function bindBrief(sessionId: string, itemUid: string, now = Date.now()): void {
+  getDb().run(
+    'UPDATE agent_sessions SET brief_item_uid = ?, brief_bound_at = ? WHERE session_id = ?',
+    [itemUid, now, sessionId],
+  );
+  markDirty();
 }
 
 /**

@@ -105,6 +105,31 @@ export async function listWorkstreams(): Promise<PhoneWorkstream[]> {
   return (await rpc<{ workstreams: PhoneWorkstream[] }>('workstreams.list', {})).workstreams;
 }
 
+/**
+ * A task worked as a line of work (Phase 32 A6.1): a session on it through
+ * its brief, for work that is not code and has no folder.
+ */
+export interface PhoneTaskWorkstream {
+  id: string;
+  itemUid: string;
+  /** "Task · Q3 summary" */
+  name: string;
+  planUid: string;
+  planTitle: string;
+  status: string;
+  agents: Array<{ agentType: string; model: string | null; lastSeen: number | null }>;
+  materials: number;
+  outputs: number;
+  signals: number;
+  needsYou: number;
+}
+
+/** The lines of work and the tasks worked as workstreams, in one call. */
+export async function listLinesOfWork(): Promise<{ workstreams: PhoneWorkstream[]; tasks: PhoneTaskWorkstream[] }> {
+  const r = await rpc<{ workstreams: PhoneWorkstream[]; tasks?: PhoneTaskWorkstream[] }>('workstreams.list', {});
+  return { workstreams: r.workstreams ?? [], tasks: Array.isArray(r.tasks) ? r.tasks : [] };
+}
+
 export async function getWorkstream(id: string): Promise<PhoneWorkstreamDetail> {
   return (await rpc<{ workstream: PhoneWorkstreamDetail }>('workstreams.detail', { id })).workstream;
 }

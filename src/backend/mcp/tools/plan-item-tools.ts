@@ -823,6 +823,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const workstreamRoot = deps.sessionService.getActiveSessions().find((s) => s.sessionId === deps.sessionId)?.workstreamRoot ?? null;
       const brief = await deps.briefService.getBrief(item_uid, { workstreamRoot });
       if (!brief) return { content: [{ type: 'text' as const, text: `Item ${item_uid} not found` }], isError: true };
+      // The task is this session's workstream from now on (A6.1): a Claude
+      // Desktop session has no folder, and its brief names what it works on.
+      deps.sessionService.bindBrief(deps.sessionId, item_uid);
       return { content: [{ type: 'text' as const, text: JSON.stringify(brief, null, 2) }] };
     },
   );

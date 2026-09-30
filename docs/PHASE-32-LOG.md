@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — A6: the Brief, refined into six parts |
-| **Status** | B7 is done (#240–#250). A6 is refined (EXECUTION §5, A6.1–A6.6): a task becomes a workstream, its materials a footprint, and material signals come from the same refresh as code signals |
-| **In flight** | A6 building on `feat/phase-32-a6-refine` |
-| **Last merged** | B7.7 (#250, `287c0c4`) |
-| **Next action** | Merge the A6 refine; then build A6.1 on feat/phase-32-a6-1-task-workstreams (get_brief binds the session to its task; tasks listed as workstreams; notices match a session's task) |
+| **Stage / step** | Wave 2 — A6.1: task workstreams |
+| **Status** | A6 refined (#251). A6.1 built: get_brief binds a session to its task; tasks are lines of work over MCP, REST, the strip and the phone; notices and get_awareness match a session's task. Harness, unit, browser and phone green locally |
+| **In flight** | A6.1 building on `feat/phase-32-a6-1-task-workstreams` |
+| **Last merged** | A6 (#251, `540f901`) |
+| **Next action** | Merge A6.1 when CI is green; then A6.2 on feat/phase-32-a6-2-material-footprints (read_material records the session and the file's hash; a task's footprint) |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
-> Read from git at `origin/feat/phase-32` `287c0c4`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `540f901`, with open PRs from GitHub.
 
 ---
 
@@ -113,8 +113,8 @@
   - [x] A5.5 The Review tab (#228)
   - [x] A5.6 The queue on the phone (#229)
   - [x] A5.7 M5 done-when, end to end, and docs (#230)
-- [ ] A6 The Brief — building
-  - [ ] A6.1 Task workstreams (a session binds to the task it asks get_brief about)
+- [x] A6 The Brief (#251)
+  - [ ] A6.1 Task workstreams (a session binds to the task it asks get_brief about) — building
   - [ ] A6.2 Material footprints (who read what, and its hash then)
   - [ ] A6.3 Material signals in the one refresh (contract, stale-base, version-split, collision, drift)
   - [ ] A6.4 Other work affected on the Brief, in get_brief, the inbox and the phone
@@ -336,6 +336,37 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: A6.1 — tasks as workstreams
+
+A6 refined merged (#251). A6.1 is built:
+
+- **Bound by the brief.** `get_brief(item_uid)` binds the calling session
+  to that task (`agent_sessions.brief_item_uid`, the latest winning), from
+  the MCP transport's own session id. A task is then the workstream
+  `task:<item uid>`.
+- **Kept beside git's workstreams, not inside them** (a decision):
+  `listWorkstreams` returns git's folders and branches, which the code
+  signals, the review queue and the stack all read; a task has no folder,
+  branch or changed files, and mixing it in would make each of those treat
+  it as one. So `services/task-workstreams.ts` lists tasks on their own:
+  every task a live session is on, and with `include_idle` every task with
+  recorded materials or outputs.
+- **Everywhere a line of work shows.** `list_workstreams` gains `tasks`
+  (with `yours`); `GET /api/workstreams/tasks`; the phone's
+  `workstreams.list` gains `tasks` and the Lines of work screen a TASKS
+  section; the strip a "Task · Q3 summary" chip whose popover says it is
+  work that is not code, in which plan, with what was recorded on it.
+- **Told about its own work.** `noticeFor` and `get_awareness` match a
+  session's folder and its task (`your_task`), so a signal naming a task
+  reaches only that task's sessions.
+- Tests: harness `task-workstreams.test.ts` (4: nothing before a brief; two
+  sessions on two tasks, the same over MCP, REST and the phone; the latest
+  brief wins; `your_task`); unit `awareness-notices.test.ts` (a task's
+  session told once, another task's not, a session with both hears both);
+  browser `e2e/agent/task-workstreams.spec.ts` (screenshots
+  `task-workstream-chip`, `task-workstream-popover`); phone
+  `tests/phone/awareness.spec.ts` (`workstreams-tasks`).
 
 ### 2026-09-30: A6 refined — the Brief
 

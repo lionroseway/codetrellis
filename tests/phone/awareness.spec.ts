@@ -150,6 +150,29 @@ test.describe('Lines of work', () => {
     expect(await navigations(page)).toEqual([{ action: 'push', to: '/workstream-detail?id=%2Fwork%2Facme-checkout' }]);
   });
 
+  test('tasks worked through their brief (A6.1) follow the lines of work', async ({ page }) => {
+    await openScreen(page, 'workstreams', {
+      rpc: {
+        'workstreams.list': {
+          ...LIST,
+          tasks: [
+            { id: 'task:i7', itemUid: 'i7', name: 'Task · Q3 summary', planUid: 'p2', planTitle: 'Quarter close', status: 'in_progress',
+              agents: [{ agentType: 'claude-desktop', model: null, lastSeen: now - 20_000 }], materials: 2, outputs: 1, signals: 1, needsYou: 1 },
+            { id: 'task:i8', itemUid: 'i8', name: 'Task · Board pack', planUid: 'p2', planTitle: 'Quarter close', status: 'pending',
+              agents: [{ agentType: 'claude-desktop', model: null, lastSeen: now - 90_000 }], materials: 1, outputs: 0, signals: 0, needsYou: 0 },
+          ],
+        },
+      },
+    });
+    await expect(page.getByTestId('task-workstream')).toHaveCount(2);
+    await expect(page.getByTestId('task-workstream').first()).toContainText('Task · Q3 summary');
+    await expect(page.getByTestId('task-workstream').first()).toContainText('Quarter close · 2 materials · 1 output · 1 overlap');
+    await expect(page.getByTestId('task-workstream').first()).toContainText('⚠ 1');
+    await expect(page.getByTestId('task-workstream').nth(1)).toContainText('claude-desktop');
+    await page.getByTestId('task-workstreams').scrollIntoViewIfNeeded();
+    await shot(page, 'workstreams-tasks');
+  });
+
   test('one line: its files with line counts and its turns in the Timeline\'s words', async ({ page }) => {
     await openScreen(page, 'workstream-detail', {
       rpc: {

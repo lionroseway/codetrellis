@@ -76,6 +76,24 @@ describe('the notice on a tool result', () => {
     assert.match(notices.noticeFor('agent-a', 'list_plans', PROJECT)!, /1 new signal .*\n- medium collision/);
   });
 
+  test('a session on a task (get_brief, A6.1) is told about signals naming its task, once, and only its own', () => {
+    signal('mat', 'high', 'open', ['task:item-q3', 'task:item-board']);
+    signal('code', 'high', 'open', [AUTH, BILLING]);
+    session('desktop-q3', null);
+    session('desktop-hr', null);
+    db.getDb().run(`UPDATE agent_sessions SET agent_type = 'claude-desktop', brief_item_uid = 'item-q3' WHERE session_id = 'desktop-q3'`);
+    db.getDb().run(`UPDATE agent_sessions SET agent_type = 'claude-desktop', brief_item_uid = 'item-hr' WHERE session_id = 'desktop-hr'`);
+    const told = notices.noticeFor('desktop-q3', 'read_material', PROJECT);
+    assert.match(told!, /1 new signal affects your work/);
+    assert.match(told!, /src\/mat\.ts/);
+    assert.equal(notices.noticeFor('desktop-q3', 'read_material', PROJECT), null, 'once');
+    assert.equal(notices.noticeFor('desktop-hr', 'read_material', PROJECT), null, 'another task is not told');
+    // A session with a folder and a task hears about both.
+    session('both', AUTH);
+    db.getDb().run(`UPDATE agent_sessions SET brief_item_uid = 'item-board' WHERE session_id = 'both'`);
+    assert.match(notices.noticeFor('both', 'list_plans', PROJECT)!, /2 new signals affect your work/);
+  });
+
   test('a signal the person acknowledged still concerns the agent', () => {
     signal('acked', 'high', 'acknowledged');
     session('agent-a', AUTH);
