@@ -16,7 +16,11 @@
  *    not yet answered by then;
  *  - **the signals open then**: from `awareness_signal_spans` (each opening
  *    of a signal, kept from B5.2 on), and for a signal open since before
- *    spans were kept, its row's first sighting and resolution.
+ *    spans were kept, its row's first sighting and resolution;
+ *  - **the stack then** (B6.5): every plan under way, each task as it was
+ *    (who was on it, its branch, what it waited on), from the version every
+ *    create and update writes to `plan_item_versions`. An item deleted since
+ *    is gone from that table too, so it is not shown.
  *
  * The lanes up to `at` are already `/api/agent-events?before=`; they are
  * not repeated here.
@@ -26,7 +30,10 @@ import { getDb } from './database';
 import { computeTrellisDiff, type TrellisDiff } from './trellis-service';
 import { listFrames, type ReplayFrame } from './replay-frames';
 import { getHit } from './breakpoint-service';
-import type { AwarenessSignal, BreakpointHit } from '../../shared/types';
+import { listAllItems } from './plan-item-service';
+import { stackThen, type PlanThen } from './stack-service';
+import type { AwarenessSignal, BreakpointHit, Plan, PlanItem } from '../../shared/types';
+import type { Stack } from '../../shared/types/stack';
 
 export interface TaskAt {
   uid: string;
@@ -37,6 +44,12 @@ export interface TaskAt {
   status: string | null;
   /** Its status now, when that differs. */
   statusNow?: string | null;
+  /** Who was on it then (B6.5). */
+  assignee: string | null;
+  /** The branch it was worked on then, its own or a section's above it. */
+  workstream: string | null;
+  /** What it depended on then. */
+  dependencies: string[];
 }
 
 /** A hit as the inbox shows one; `answeredAt` says when it was answered, if it has been since. */
@@ -69,6 +82,8 @@ export interface StateAt {
   tasks: TaskAt[];
   waiting: WaitingAt[];
   signals: SignalAt[];
+  /** Every plan under way then, as the Stack tab shows it (B6.5). */
+  stack: Stack;
 }
 
 const trimRoot = (p: string): string => p.replace(/[\\/]+$/, '');
@@ -82,25 +97,36 @@ function frameAt(projectPath: string, at: number): ReplayFrame | null {
   return listFrames(projectPath, { to: at, limit: 1, newestFirst: true })[0] ?? null;
 }
 
-/** Each action's status at `at`, for the project's plans. */
-function tasksAt(projectPath: string, at: number): TaskAt[] {
-  const plans = rows('SELECT uid, title FROM plans WHERE project_path = ? OR project_path = ?', [projectPath, trimRoot(projectPath)]);
-  if (plans.length === 0) return [];
-  const titles = new Map(plans.map((r) => [r[0] as string, r[1] as string]));
-  const marks = plans.map(() => '?').join(',');
-  const items = rows(
-    `SELECT uid, plan_uid, title, status FROM plan_items
-     WHERE plan_uid IN (${marks}) AND kind = 'action' AND created_at <= ? ORDER BY plan_uid, created_at`,
-    [...titles.keys(), at],
+/** The fields a version keeps that the stack reads, and what each is when the version left it out. */
+const KEPT: Array<[keyof PlanItem, unknown]> = [
+  ['title', ''], ['assignee', null], ['assigneeType', null], ['dependencies', []], ['workstream', null],
+  ['fileSpecs', []], ['symbolSpecs', []], ['parentUid', null],
+];
+
+/**
+ * Each item of the project's plans made by `at`, as it was then. Every
+ * create and update writes the item's fields to `plan_item_versions`, so
+ * the last version by `at` says who was on it, its branch and what it
+ * waited on; the status comes from the status changes in `plan_events`,
+ * which are kept with their before and after. `assigneeSession` is not
+ * versioned: it is kept only while the assignee is the one there now.
+ */
+export function itemsAt(projectPath: string, at: number): PlanThen[] {
+  const plans = rows(
+    // The plan list's order, so rows keep their places as the cursor moves.
+    'SELECT uid, title, status FROM plans WHERE (project_path = ? OR project_path = ?) AND created_at <= ? ORDER BY updated_at DESC',
+    [projectPath, trimRoot(projectPath), at],
   );
-  if (items.length === 0) return [];
+  if (plans.length === 0) return [];
+  const uids = plans.map((r) => r[0] as string);
+  const marks = uids.map(() => '?').join(',');
 
   // Each item's status changes, oldest first.
   const changes = new Map<string, Array<{ when: number; before: string | null; after: string | null }>>();
   for (const r of rows(
     `SELECT item_uid, created_at, before_state, after_state FROM plan_events
      WHERE plan_uid IN (${marks}) AND event_type = 'status_changed' ORDER BY created_at, id`,
-    [...titles.keys()],
+    uids,
   )) {
     const list = changes.get(r[0] as string) ?? [];
     list.push({
@@ -110,18 +136,62 @@ function tasksAt(projectPath: string, at: number): TaskAt[] {
     });
     changes.set(r[0] as string, list);
   }
-
-  return items.map((r) => {
-    const uid = r[0] as string;
-    const now = (r[3] as string | null) ?? null;
+  const statusThen = (uid: string, now: string | null): string | null => {
     const list = changes.get(uid) ?? [];
     const lastBy = [...list].reverse().find((c) => c.when <= at);
     const firstAfter = list.find((c) => c.when > at);
-    const status = lastBy ? lastBy.after : firstAfter ? firstAfter.before : now;
-    const task: TaskAt = { uid, planUid: r[1] as string, planTitle: titles.get(r[1] as string) ?? '', title: r[2] as string, status };
+    return lastBy ? lastBy.after : firstAfter ? firstAfter.before : now;
+  };
+
+  // The last version of each item by `at`.
+  const snapshot = new Map<string, Record<string, unknown>>();
+  for (const r of rows(
+    `SELECT v.item_uid, v.meta_snapshot FROM plan_item_versions v JOIN plan_items i ON i.uid = v.item_uid
+     WHERE i.plan_uid IN (${marks}) AND v.created_at <= ? ORDER BY v.item_uid, v.version`,
+    [...uids, at],
+  )) snapshot.set(r[0] as string, parse<Record<string, unknown>>(r[1], {}));
+
+  const out: PlanThen[] = [];
+  for (const r of plans) {
+    const planUid = r[0] as string;
+    const items = listAllItems(planUid).filter((i) => i.createdAt <= at).map((now) => {
+      const then: PlanItem = { ...now };
+      const snap = snapshot.get(now.uid);
+      if (snap) {
+        for (const [key, missing] of KEPT) (then as unknown as Record<string, unknown>)[key] = snap[key] ?? missing;
+      }
+      if (then.assignee !== now.assignee) then.assigneeSession = null;
+      if (now.kind === 'action') then.status = statusThen(now.uid, now.status ?? null) as PlanItem['status'];
+      return then;
+    });
+    const status = r[2] as Plan['status'];
+    // A plan finished since, with a task still open then, was under way then;
+    // plan status changes are not kept, so that is the one sign of it.
+    const finishedNow = status === 'completed' || status === 'archived';
+    const openThen = items.some((i) => i.kind === 'action' && i.status !== 'done' && i.status !== 'skipped');
+    out.push({ plan: { uid: planUid, title: r[1] as string, status: finishedNow && openThen ? 'in_progress' : status }, items });
+  }
+  return out;
+}
+
+/** Each action's status at `at`, and who was on it, for the project's plans; taken from the stack then. */
+function tasksAt(then: PlanThen[], stack: Stack): TaskAt[] {
+  const rowOf = new Map(stack.plans.flatMap((p) => p.tasks.map((t) => [t.uid, t] as const)));
+  const nowStatus = new Map<string, string | null>();
+  for (const p of then) for (const i of listAllItems(p.plan.uid)) nowStatus.set(i.uid, i.status ?? null);
+  return then.flatMap((p) => p.items.filter((i) => i.kind === 'action').map((i) => {
+    const row = rowOf.get(i.uid);
+    const status = i.status ?? null;
+    const now = nowStatus.get(i.uid) ?? null;
+    const task: TaskAt = {
+      uid: i.uid, planUid: p.plan.uid, planTitle: p.plan.title, title: i.title, status,
+      assignee: i.assignee ?? null,
+      workstream: row?.workstream ?? null,
+      dependencies: i.dependencies ?? [],
+    };
     if (status !== now) task.statusNow = now;
     return task;
-  });
+  }));
 }
 
 /** Breakpoint hits in the project made by `at` and not answered by then. */
@@ -168,13 +238,24 @@ function signalsAt(projectPath: string, at: number): SignalAt[] {
  */
 export function stateAt(projectPath: string, at: number, holdsProject: boolean): StateAt {
   const frame = frameAt(projectPath, at);
+  const waiting = waitingAt(projectPath, at);
+  const signals = signalsAt(projectPath, at);
+  const then = itemsAt(projectPath, at);
+  const stack = stackThen(
+    projectPath,
+    then.filter((p) => p.plan.status !== 'completed' && p.plan.status !== 'archived'),
+    // Open then, whatever became of them since.
+    signals.map((sig) => ({ ...sig, kind: sig.kind as AwarenessSignal['kind'], severity: sig.severity as AwarenessSignal['severity'], state: 'open' as const })),
+    waiting,
+  );
   return {
     at,
     projectPath: trimRoot(projectPath),
     frame,
     sinceFrame: frame && holdsProject ? computeTrellisDiff(frame.id) : null,
-    tasks: tasksAt(projectPath, at),
-    waiting: waitingAt(projectPath, at),
-    signals: signalsAt(projectPath, at),
+    tasks: tasksAt(then, stack),
+    waiting,
+    signals,
+    stack,
   };
 }
