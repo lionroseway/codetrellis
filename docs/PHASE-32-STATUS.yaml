@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — B7.7: the I1 done-when and the docs"
-  status: "B7.6 merged (#249). B7.7 built: the I1 journey end to end in one harness test (the window, an MCP client and the phone agree), the agent guide's When the spec is wrong section, awareness.md's conferring section. B7 is done when this merges"
-  next: Merge B7.7 when CI is green; then step 8 of Wave 2, A6 (the Brief), refined into parts in EXECUTION first
+  step: "Wave 2 — A6: the Brief, refined into six parts"
+  status: "B7 is done (#240–#250). A6 is refined (EXECUTION §5, A6.1–A6.6): a task becomes a workstream, its materials a footprint, and material signals come from the same refresh as code signals"
+  next: Merge the A6 refine; then build A6.1 on feat/phase-32-a6-1-task-workstreams (get_brief binds the session to its task; tasks listed as workstreams; notices match a session's task)
   blockers: none
   updated: 2026-09-30
 sections:
@@ -263,6 +263,19 @@ sections:
             title: M5 done-when, end to end, and docs
       - id: A6
         title: The Brief
+        items:
+          - id: A6.1
+            title: Task workstreams (a session binds to the task it asks get_brief about)
+          - id: A6.2
+            title: Material footprints (who read what, and its hash then)
+          - id: A6.3
+            title: Material signals in the one refresh (contract, stale-base, version-split, collision, drift)
+          - id: A6.4
+            title: Other work affected on the Brief, in get_brief, the inbox and the phone
+          - id: A6.5
+            title: Sign-off packs list the signals that touched the task
+          - id: A6.6
+            title: M6 done-when and docs
       - id: A7
         title: Rules
       - title: "`plan-by-hand` failed once in CI when its plan workspace dropped back to the plan list while `plan/list.spec.ts` created and deleted plans on the other worker (#147). It doesn't reproduce as a pair (5/5 on base and on the branch). Find which broadcast leaves the workspace, so a person's open plan survives someone else's plan changes."

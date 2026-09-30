@@ -472,6 +472,41 @@ and it is off for every branch review parallel work produces.
 | A5.6 | The queue on the phone: a `review.queue` RPC with its `peer-capabilities` row, and a screen listing the queue with the order and reasons. It opens to the existing `plan-review` and approvals screens (31.6b) | harness (the RPC from a paired phone); phone spec with a screenshot |
 | A5.7 | M5 done-when as a test: reviewing a branch that changes a function another open workstream imports says so in the review and in the PR body, and the queue puts it first with that reason. `docs/claude/awareness.md`, `docs/claude/mcp-tools.md` and `docs/claude/mobile-companion.md` gain review | harness end to end |
 
+### A6: The Brief (M6)
+
+Refined 2026-09-30 (log entry "A6 refined"). Work that is not code has the
+same parallel problem (awareness spec §10): one analyst runs several Claude
+Desktop sessions on several tasks, and the tasks share source material.
+Phase 31 already records materials, outputs and citations, hashes them and
+watches them (`artefact-watcher.ts`), but it handles each task on its own:
+a check run and a notice per task, and nothing names the others. A6 makes
+a task a workstream and its materials a footprint, so the awareness engine
+that already tells code agents tells these ones too, in the same inbox.
+
+Three things decide the shape:
+
+- **A task workstream is `task:<item uid>`**, beside the folder roots in a
+  signal's `workstreams`. Claude Desktop has no folder, so a session binds
+  to the task it calls `get_brief` on (the latest wins), kept on the session
+  as its brief task, separate from its folder. `noticeFor` tells a session
+  about signals naming its folder or its task.
+- **Material signals come from the same refresh.** `refreshSignals`
+  reconciles every signal of a project at once, so the material rules run
+  inside it (`computeMaterialSignals`, pure, beside `computeSignals`).
+  Otherwise each refresh would resolve the other's signals.
+- **What is recorded is added to the one `read_material` handler**: which
+  session read which material, and the file's hash when it did. Nothing is
+  read back out of the materials themselves.
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| A6.1 | Task workstreams. `get_brief(item_uid)` binds the calling session to that task (`sessions.brief_item_uid`, latest wins, never from a request body naming another session). `list_workstreams` and `/api/workstreams` list each task with a bound session or a recorded material as a workstream: kind `task`, its title and plan, its sessions and agents. The lines-of-work strip and the phone's list show them ("Task · Q3 summary · Claude Desktop"). `noticeFor` also matches a session's task | unit (binding, latest wins); harness: two MCP clients call `get_brief` on two tasks and both tasks are listed with their sessions; a signal naming one task is told to that task's session only |
+| A6.2 | Material footprints. `read_material` records the session and the file's sha256 at the read (`material_reads`: item, session, attachment, path, hash, locator, at). A task's footprint is what its sessions read (paths, hashes, locators), the outputs it recorded, and the parts its citations name (Phase 31 §7.5). `get_brief` shows what the task has read. The file's hash at the read comes from the attachment's current hash, re-taken as every read already does | unit (the footprint of a task); harness: two reads of one material by two sessions keep who and which hash |
+| A6.3 | Material signals, in `refreshSignals`: `contract` (a material changed and outputs in other tasks cite the part that changed; high when one was signed off), `stale-base` (a material changed after a task started using it), `version-split` (new kind: two tasks read different versions of one material), `collision` (two tasks record the same output file), `drift` (a task reads a material that is not in its brief). One signal per material, naming every task, in words from `signal-words.ts` ("`sales-2026.xlsx` changed. Two reports in two tasks cite `Summary!B2:F9`; one was already signed off"). The artefact watcher refreshes on a change; each task's criteria still go stale as they do now | unit (each rule, and no signal from one task alone); harness: replacing a spreadsheet two tasks read raises one signal naming both |
+| A6.4 | Where it shows. The Brief page (`BriefWorkspace`) gains "Other work affected" per task, in words: "The sales spreadsheet changed. This report and the board pack both use it." `get_brief` gains `affectedByOtherWork`, because a Claude Desktop agent reads its brief first. The inline notice, the digest, the Awareness tab and the phone's Needs you carry material signals like any other: one inbox | browser with screenshots (the Brief line, the Awareness card); phone spec with a screenshot |
+| A6.5 | Sign-off packs (31.7b) list the signals that touched the task and how each was resolved, as PR bodies do (A5.2) | unit (the pack's rows); harness: a pack for a task a material signal named lists it with its outcome |
+| A6.6 | M6 done-when: replacing a spreadsheet that two tasks cite tells both tasks' agents on their next call, and shows once in the digest. `docs/claude/awareness.md` gains the Brief; the guide tells a Claude Desktop agent what "Other work affected" means | harness end to end |
+
 ### A3–A7
 
 Refined into sub-steps when next. Scope is per the awareness spec:
@@ -482,7 +517,7 @@ Refined into sub-steps when next. Scope is per the awareness spec:
 | A3 | M3 | Digest, intended and cooldown, `parallel` guide flavour, user skill and optional hook installer (Add to Claude Desktop pattern), `docs/claude/awareness.md` |
 | A4 | M4 | Mobile: Needs you, workstreams, signal detail, push for high |
 | A5 | M5, §9 | Review: other work in flight, `commit:` edges from footprints, queue with order, opt-in criterion check |
-| A6 | M6, §10 | Brief: task binding via `get_brief`, `material_read` session and hash, grouped material signals, version-split |
+| A6 | M6, §10 | Refined above (A6.1–A6.6) |
 | A7 | M7 | Rules format, `rule` signals, `check_conformity` made true |
 
 ### A8: Any agent
