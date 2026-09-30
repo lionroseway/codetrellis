@@ -1,5 +1,6 @@
 /**
- * Phase 32 B6.3 — where two plans in the stack meet, declared or actual.
+ * Phase 32 B6.3 — where two plans in the stack meet, declared or actual;
+ * HD3 — and where two plans' tasks meet over a material.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -35,7 +36,7 @@ test('two plans that plan to change the same file overlap, in words, from each s
   ], []);
   const [fromBilling] = out.get('b')!;
   assert.equal(fromBilling.words, '⚠ overlaps JIRA-150');
-  assert.deepEqual(fromBilling.declared, { files: ['src/a.ts'], symbols: ['validate'] });
+  assert.deepEqual(fromBilling.declared, { files: ['src/a.ts'], symbols: ['validate'], materials: [] });
   assert.equal(fromBilling.detail, 'Both plan to change validate and src/a.ts.');
   assert.equal(fromBilling.high, false);
   assert.equal(out.get('e')![0].words, '⚠ overlaps Billing v2');
@@ -61,4 +62,54 @@ test('two spellings of one folder are the same line of work', () => {
   const plans = [plan('b', 'B', { roots: ['/link/billing'] }), plan('e', 'E', { roots: ['/wt/exports'] })];
   const canon = (r: string) => r.replace('/link/', '/wt/');
   assert.equal(stackOverlaps(plans, [signal({})], canon).get('b')!.length, 1);
+});
+
+// HD3: a material signal names tasks (`task:<uid>`), not folders.
+const material = (over: Partial<AwarenessSignal>) => signal({
+  id: 'm1', kind: 'version-split', severity: 'medium', subject: { material: 'data/sales-2026.xlsx' },
+  workstreams: ['task:t-board', 'task:t-forecast'],
+  summary: "Two tasks are working from different versions of sales-2026.xlsx", ...over,
+});
+
+test('a material signal between two plans\' tasks is an overlap between the plans, from each side', () => {
+  const plans = [
+    plan('q3', 'Q3 board pack', { roots: ['task:t-board', 'task:t-notes'] }),
+    plan('fc', 'Forecast refresh', { roots: ['task:t-forecast'] }),
+    plan('o', 'Other', { roots: ['task:t-other'] }),
+  ];
+  for (const kind of ['version-split', 'stale-base', 'contract', 'collision'] as const) {
+    const out = stackOverlaps(plans, [material({ kind })]);
+    const [fromBoard] = out.get('q3')!;
+    assert.equal(fromBoard.words, '⚠ overlaps Forecast refresh', kind);
+    assert.deepEqual(fromBoard.actual.map((s) => s.kind), [kind]);
+    assert.equal(out.get('fc')![0].words, '⚠ overlaps Q3 board pack');
+    assert.deepEqual(out.get('o'), []);
+  }
+  assert.equal(stackOverlaps(plans, [material({})], (r) => r, 'then').get('q3')![0].detail,
+    'Open then: Two tasks are working from different versions of sales-2026.xlsx');
+});
+
+test('two tasks of one plan are not an overlap between plans; a code stale-base names one line of work', () => {
+  const plans = [
+    plan('q3', 'Q3 board pack', { roots: ['task:t-board', 'task:t-forecast'] }),
+    plan('fc', 'Forecast refresh', { roots: ['/wt/forecast'] }),
+  ];
+  assert.deepEqual(stackOverlaps(plans, [material({})]).get('q3'), []);
+  // A stale-base with no material is about one branch falling behind, even if it names two folders.
+  const codeStale = signal({ kind: 'stale-base', subject: {}, workstreams: ['task:t-board', '/wt/forecast'] });
+  assert.deepEqual(stackOverlaps(plans, [codeStale]).get('q3'), []);
+  // The same shape about a material does meet.
+  assert.equal(stackOverlaps(plans, [material({ kind: 'stale-base', workstreams: ['task:t-board', '/wt/forecast'] })]).get('q3')!.length, 1);
+});
+
+test('two plans whose briefs list the same material overlap, declared, by the file\'s name', () => {
+  const out = stackOverlaps([
+    plan('q3', 'Q3 board pack', { materials: new Set(['data/sales-2026.xlsx', 'policy.pdf']) }),
+    plan('fc', 'Forecast refresh', { materials: new Set(['data/sales-2026.xlsx']) }),
+    plan('o', 'Other', { materials: new Set(['other.docx']) }),
+  ], []);
+  const [fromBoard] = out.get('q3')!;
+  assert.deepEqual(fromBoard.declared, { files: [], symbols: [], materials: ['data/sales-2026.xlsx'] });
+  assert.equal(fromBoard.detail, 'Both rely on sales-2026.xlsx.');
+  assert.deepEqual(out.get('o'), []);
 });

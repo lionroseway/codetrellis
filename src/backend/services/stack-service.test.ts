@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { PlanItem } from '../../shared/types';
-import { stackPlanOf, type StackSources } from './stack-service';
+import { readWords, stackPlanOf, type StackSources } from './stack-service';
 
 const item = (uid: string, planUid: string, over: Partial<PlanItem> = {}) =>
   ({ uid, planUid, parentUid: null, kind: 'action', title: uid, status: 'pending', dependencies: [], ...over }) as PlanItem;
@@ -57,4 +57,18 @@ test('each task says who is on it, where it is worked, and what it waits on acro
   assert.equal(deploy.dependencies[0].planTitle, null);
   assert.equal(deploy.waits, '"Deploy exports" waits on "Migrate schema" in plan "Billing v2".');
   assert.equal(build.waits, null);
+});
+
+// HD3: which copy of a material a task worked from, in words.
+test('a task\'s reads say which version of each material it worked from', () => {
+  const at = Date.UTC(2026, 8, 22, 9, 30);
+  assert.equal(readWords('finance/sales-2026.xlsx', '3f9c2e1a7b4d5e6f', at), 'read sales-2026.xlsx on 22 Sept (version 3f9c2e1)');
+  assert.equal(readWords('policy.pdf', null, at), 'read policy.pdf on 22 Sept');
+  const reads = [{ path: 'finance/sales-2026.xlsx', sha256: 'abc1234', at, words: readWords('finance/sales-2026.xlsx', 'abc1234', at) }];
+  const row = stackPlanOf({ uid: 'q3', title: 'Q3 board pack', status: 'in_progress' },
+    [item('board', 'q3'), item('page', 'q3', { kind: 'object' })],
+    { ...sources, readsOf: (uid) => (uid === 'board' ? reads : []) });
+  assert.deepEqual(row.tasks.find((t) => t.uid === 'board')!.reads, reads);
+  // A page reads nothing: its tasks do.
+  assert.deepEqual(row.tasks.find((t) => t.uid === 'page')!.reads, []);
 });

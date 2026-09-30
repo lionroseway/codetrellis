@@ -4,10 +4,13 @@
  * or actual", in words: "⚠ overlaps JIRA-150").
  *
  * Declared: both plans' unfinished tasks name the same file (a file spec, or
- * the file a symbol spec lives in) or the same function. Actual: an open
- * collision or contract signal between the lines of work the two plans'
- * tasks are worked on. Signals are keyed by workstream root, so a plan's
- * roots come from its tasks' branches, the way the review queue maps them.
+ * the file a symbol spec lives in) or the same function, or list the same
+ * material in their briefs. Actual: an open collision or contract signal
+ * between the lines of work the two plans' tasks are worked on, or a
+ * material signal between two of their tasks. Signals are keyed by
+ * workstream, so a plan's roots are its tasks' branch folders, the way the
+ * review queue maps them, and its tasks themselves (`task:<uid>`, A6.1),
+ * which is how a material signal names them (HD3).
  *
  * Pure: the caller passes each plan's footprint and the signals.
  */
@@ -22,8 +25,10 @@ export interface PlanFootprint {
   files: ReadonlySet<string>;
   /** Functions its unfinished tasks name, keyed `file#name` (or `name` when no file is given), shown by name. */
   symbols: ReadonlyMap<string, string>;
-  /** The workstream roots its tasks are worked in, as signals name them. */
+  /** The workstream roots its tasks are worked in, and its tasks (`task:<uid>`), as signals name them. */
   roots: readonly string[];
+  /** Materials its unfinished tasks' briefs list, project-relative (HD3). */
+  materials?: ReadonlySet<string>;
 }
 
 /** What a plan's unfinished tasks say they will touch. */
@@ -48,6 +53,21 @@ export function declaredFootprint(items: readonly PlanItem[]): { files: Set<stri
 
 const OPEN: ReadonlySet<string> = new Set(['open', 'acknowledged', 'intended']);
 
+type OverlapInput = Pick<AwarenessSignal, 'id' | 'kind' | 'severity' | 'summary' | 'workstreams' | 'state'> & { subject?: AwarenessSignal['subject'] };
+
+/**
+ * Whether a signal says two plans meet. A collision or a contract always
+ * does. A material's changed version or split versions (A6.3) do too: two
+ * tasks working from one spreadsheet is the business form of two branches
+ * touching one file. Code stale-base and drift are about one line of work.
+ */
+function meets(s: OverlapInput): s is OverlapInput & { kind: StackOverlapSignal['kind'] } {
+  if (s.kind === 'collision' || s.kind === 'contract') return true;
+  return (s.kind === 'version-split' || s.kind === 'stale-base') && !!s.subject?.material;
+}
+
+const baseName = (p: string): string => p.split(/[\\/]/).pop() || p;
+
 function list(names: string[]): string {
   const shown = names.slice(0, 3);
   const more = names.length - shown.length;
@@ -62,7 +82,7 @@ function list(names: string[]): string {
  */
 export function stackOverlaps(
   plans: readonly PlanFootprint[],
-  signals: readonly Pick<AwarenessSignal, 'id' | 'kind' | 'severity' | 'summary' | 'workstreams' | 'state'>[],
+  signals: readonly OverlapInput[],
   canon: (root: string) => string = (r) => r,
   /** "now" for the live stack; "then" for the stack at a past moment (B6.5). */
   when: 'now' | 'then' = 'now',
@@ -72,7 +92,7 @@ export function stackOverlaps(
   const plansAt = (root: string) => plans.filter((p) => p.roots.some((r) => canon(r) === canon(root)));
 
   for (const s of signals) {
-    if ((s.kind !== 'collision' && s.kind !== 'contract') || !OPEN.has(s.state)) continue;
+    if (!meets(s) || !OPEN.has(s.state)) continue;
     const seen = new Set<string>();
     for (let i = 0; i < s.workstreams.length; i++) {
       for (let j = i + 1; j < s.workstreams.length; j++) {
@@ -98,11 +118,13 @@ export function stackOverlaps(
       const b = plans[j];
       const files = [...a.files].filter((f) => b.files.has(f)).sort();
       const symbols = [...a.symbols.keys()].filter((k) => b.symbols.has(k)).map((k) => a.symbols.get(k)!).sort();
+      const materials = [...(a.materials ?? [])].filter((m) => b.materials?.has(m)).sort();
       const signalsBetween = actual.get(pairKey(a.uid, b.uid)) ?? [];
-      if (files.length === 0 && symbols.length === 0 && signalsBetween.length === 0) continue;
+      if (files.length === 0 && symbols.length === 0 && materials.length === 0 && signalsBetween.length === 0) continue;
 
       const parts: string[] = [];
       if (symbols.length || files.length) parts.push(`Both plan to change ${list([...symbols, ...files])}.`);
+      if (materials.length) parts.push(`Both rely on ${list(materials.map(baseName))}.`);
       if (signalsBetween.length) parts.push(`Open ${when}: ${signalsBetween.map((s) => s.summary).join('; ')}`);
       const detail = parts.join(' ');
       const high = signalsBetween.some((s) => s.severity === 'high');
@@ -110,7 +132,7 @@ export function stackOverlaps(
         out.get(me.uid)!.push({
           withPlanUid: other.uid,
           withLabel: other.label,
-          declared: { files, symbols },
+          declared: { files, symbols, materials },
           actual: signalsBetween,
           high,
           words: `⚠ overlaps ${other.label}`,

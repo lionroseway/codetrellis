@@ -247,6 +247,7 @@ export function stateAt(projectPath: string, at: number, holdsProject: boolean):
     // Open then, whatever became of them since.
     signals.map((sig) => ({ ...sig, kind: sig.kind as AwarenessSignal['kind'], severity: sig.severity as AwarenessSignal['severity'], state: 'open' as const })),
     waiting,
+    at,
   );
   return {
     at,

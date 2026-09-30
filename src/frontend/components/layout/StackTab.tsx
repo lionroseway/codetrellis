@@ -20,6 +20,11 @@ import type { Stack, StackPlan, StackTask, StackDependency } from '@shared/types
  * narrows the Timeline to its work (B6.4b). The stack is the same answer an
  * agent gets from `get_stack`.
  *
+ * Work that is not code (HD3): two plans whose tasks share a spreadsheet or
+ * a document meet here too, and each task says which version of each
+ * material it had read, so the stack at a past moment answers "which copy
+ * was this built from?".
+ *
  * One clock (B6.5): while replay is on, the tab shows the stack at the
  * cursor, as it was then, from `/api/replay/state`: who was on each task,
  * its branch, what it waited on and where plans met, at that moment.
@@ -196,17 +201,21 @@ function PlanRow({ plan, open, onToggle, focused }: { plan: StackPlan; open: boo
       </div>
 
       {plan.overlaps.length > 0 && (
-        <div className="px-7 pb-1.5 flex flex-wrap gap-1.5">
+        <div className="px-7 pb-1.5 space-y-0.5">
           {plan.overlaps.map((o) => (
-            <span
-              key={o.withPlanUid}
-              data-testid="stack-overlap"
-              data-with-plan-uid={o.withPlanUid}
-              className={`px-1.5 rounded ${o.high ? 'bg-red-500/10 text-red-300' : 'bg-amber-500/10 text-amber-300'}`}
-              title={o.detail}
-            >
-              {o.words}
-            </span>
+            // What they share is said, not hidden in a hover (HD3): "Both rely
+            // on sales-2026.xlsx" is the part a person acts on.
+            <div key={o.withPlanUid} className="flex items-baseline gap-1.5 min-w-0">
+              <span
+                data-testid="stack-overlap"
+                data-with-plan-uid={o.withPlanUid}
+                className={`px-1.5 rounded shrink-0 ${o.high ? 'bg-red-500/10 text-red-300' : 'bg-amber-500/10 text-amber-300'}`}
+                title={o.detail}
+              >
+                {o.words}
+              </span>
+              <span className="truncate text-foreground-subtle" data-testid="stack-overlap-detail" title={o.detail}>{o.detail}</span>
+            </div>
           ))}
         </div>
       )}
@@ -238,6 +247,7 @@ function TaskTree({ tasks, planUid }: { tasks: StackTask[]; planUid: string }) {
 }
 
 function TaskLine({ task, planUid, depth }: { task: StackTask; planUid: string; depth: number }) {
+  const reads = task.reads ?? [];
   const unmet = task.dependencies.filter((d) => !d.met);
   const met = task.dependencies.filter((d) => d.met);
   return (
@@ -256,6 +266,14 @@ function TaskLine({ task, planUid, depth }: { task: StackTask; planUid: string; 
         {task.assignee && <span className="px-1 rounded bg-white/[0.05] text-foreground-muted shrink-0" data-testid="stack-assignee">{task.assignee}</span>}
         {task.workstream && <span className="text-sky-300/80 shrink-0" data-testid="stack-workstream">⎇ {task.workstream}</span>}
       </div>
+      {reads.length > 0 && (
+        // Which copy of each material the task worked from (HD3): at a past
+        // moment, the version it had read then.
+        <div className="pl-3 text-foreground-subtle truncate" data-testid="stack-reads" title={reads.map((r) => `${r.words} · ${r.path}`).join('\n')}>
+          {reads.slice(0, 2).map((r) => r.words).join('; ')}
+          {reads.length > 2 ? `; and ${reads.length - 2} more` : ''}
+        </div>
+      )}
       {(unmet.length > 0 || met.length > 0) && (
         <div className="pl-3 space-y-px">
           {unmet.map((d) => <DependencyLine key={d.uid} dep={d} ownPlan={planUid} />)}
