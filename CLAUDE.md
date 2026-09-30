@@ -37,7 +37,15 @@ The team's design docs (vision, UX, plans) live alongside these at the
 **Read [`docs/PHASE-32-LOG.md`](docs/PHASE-32-LOG.md) first.** Its
 **Now** block names the current step and the very next action. The work
 is long-running and runs across sessions, so the log, not the
-conversation, is the state. Update it at the start and end of every
+conversation, is the state. **Now and the checklist are generated.**
+[`docs/PHASE-32-STATUS.yaml`](docs/PHASE-32-STATUS.yaml) holds only intent
+(steps, titles, order, parts, follow-ups, next action); whether a step is
+building, in review or done, and its PRs, is **read from git and GitHub**
+(its branch `feat/phase-32-<id>-…`, its squash commit `Phase 32 <id>: …
+(#N)`). Edit the YAML and run `npm run status` (it needs
+`git fetch origin feat/phase-32`); `tools/status/status.test.ts` fails when
+the log's items differ from the YAML. Name every step branch and merge
+title that way, or git cannot see the step. Update it at the start and end of every
 step, after every decision, before any long command, and at least every
 30 minutes ([`docs/PHASE-32-EXECUTION.md`](docs/PHASE-32-EXECUTION.md)
 §1).

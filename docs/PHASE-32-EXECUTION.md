@@ -31,6 +31,31 @@ lives **in the repo**, never only in a conversation.
 - **Now:** current step, status, the very next action, blockers, last
   updated. It must always be true.
 - **Checklist:** every step in this plan, with a box.
+
+Now and the checklist are **generated**, and only the intent is written.
+`docs/PHASE-32-STATUS.yaml` holds the steps (id, title, order, parts),
+follow-ups, the next action and blockers. A step's state is read, not
+kept: `npm run status` reads git and GitHub (`tools/status/git-facts.ts`)
+and writes both into the log between its status markers.
+
+- **done**: a first-parent squash commit on `feat/phase-32` titled
+  `Phase 32 <id>: … (#N)`. The title is the record, so name every step's
+  merge that way.
+- **in review**: an open PR from the step's branch.
+- **building**: the step's branch `feat/phase-32-<id>-<slug>` exists with
+  no PR yet (offline: only the branch checked out).
+- Only what git cannot see may be written (`status: done`, `prs`): Stage
+  0, whose merges came in through `main`, and follow-ups with no branch.
+
+The block is a snapshot labelled with the commit it was read at.
+`tools/status/status.test.ts` fails when the log's items differ from the
+YAML (it needs no history, so CI's shallow checkout runs it), and
+`npm run status:check` says, with history, whether the snapshot is
+behind. (The owner's ask and then his point, 2026-09-30: status a program
+can read, and the state of a step with a branch is a fact to read, not a
+line to keep. The end state is C2: the plan lives in CodeTrellis, and
+status is what the app itself reads from git, for any host: C2.6.) The rest of the log stays
+prose:
 - **Baseline:** the test and tool numbers the work is measured against.
 - **Decisions:** what was decided, why, and when.
 - **Entries:** a dated, newest-first record of what happened.
@@ -39,14 +64,17 @@ lives **in the repo**, never only in a conversation.
 
 Update the log **before** it's needed, not after:
 
-1. At the **start** of a step: set Now, and tick the step in progress.
+1. At the **start** of a step: set Now's step and next action in the
+   YAML, cut the step's branch, and run `npm run status` (it reads the
+   branch as `building`).
 2. After **every decision**, or anything surprising.
 3. **Before** any command that takes more than a few minutes (harness,
    package, big refactor), with what's running and why.
 4. At least every **30 minutes** of work, even if it's only "still on X,
    next is Y".
-5. At the **end** of a step: tick it, record test counts, the PR link,
-   and the next step.
+5. At the **end** of a step: open its PR (git and GitHub then say
+   `in review`, and `done` once the squash merge lands), record test
+   counts in an entry, set Now to the next step, and run `npm run status`.
 
 If a session could end right now, the log must be enough for the next
 one to continue without asking.
@@ -618,7 +646,7 @@ verbatim in a notice title.
 | Step | Scope (shared-work doc) |
 |---|---|
 | C1 | Skills: model fields, skills index and picker, brief/claim/next delivery, proof of use, safety flag on pulled skills |
-| C2 | Team status: STATUS.md per plan and index, ticket refs exported, signed approvals |
+| C2 | Team status through git: state read from git for any host, a host adapter only when turned on (GitHub, GitLab, Bitbucket), STATUS.md per plan and index, ticket refs exported, signed approvals, Phase 32's own plan moved in |
 | C3 | Linked planning repo |
 | C4 | Recurring playbooks |
 | C5 | One plan across worktrees: sections of a plan assigned to workstreams (owner's ask, 2026-09-28) |
@@ -631,6 +659,35 @@ verbatim in a notice title.
 | C1.2 | The picker in the routing panel: required or recommended, why, where; the project's skills searchable, inherited ones shown as such, a link marked "people only" | unit; browser |
 | C1.3 | Proof of use: the Claude Code watcher records each `Skill` call as `skill_used` against the session's task; the task, the Timeline and the sign-off pack say "✓ used", "○ recommended, not used", or unknown for other clients; a task launched from a CodeTrellis terminal preset gets the skills line in its opening prompt | unit; harness; browser |
 | C1.4 | A new skill arriving in a pulled plan file is flagged once in the inbox, with who added it and in which commit, before any agent is told to use it | unit; harness; browser |
+
+### C2: Team status through git
+
+Refined 2026-09-30 from the owner's two points: status a program can
+read, and read from git rather than kept; and not everyone is on GitHub.
+Design: shared-work doc C-2, §5 and §6. Git is the catch-all for what it
+can prove (building, pushed, merged, for any host or none); what only a
+host knows (in review, checks, approvals, closed) comes through an
+adapter the person turns on per project.
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| C2.1 | Each item's state from git, for any host: `building` (its workstream branch exists), `pushed` (on the remote), `merged` (ancestry for a merge or fast-forward; the branch's changes in the base for a squash or rebase, reusing bug 53's check; or the merge commit naming the item's key), each with its source and the commit that proves it. In the plan tree, the item page and the plan's MCP tools; no network | unit (the three merge shapes); harness with real repositories: merge, squash, rebase, a branch that stopped (stays "pushed", never "merged") |
+| C2.2 | The review-host interface and the GitHub adapter: host chosen from the remote URL; off until turned on per project in Settings, which names the host and what it will ask; token in the OS keychain; a public repo read without one. Open PR for a branch, its checks and approvals, merged or closed. Without it the words are git's ("pushed, not merged") | unit on recorded API answers; harness against a local stand-in host: nothing is requested until turned on, then open / merged / closed |
+| C2.3 | GitLab (merge requests, pipelines) and Bitbucket (pull requests, build statuses) on the same interface, each read against its API documentation; Azure DevOps and Gitea recorded as follow-ups on the same shape | unit on recorded answers per host; harness: the same journey on each stand-in |
+| C2.4 | STATUS.md per plan and `.codetrellis/STATUS.md` (C-2 §1) from the same states, each saying its source; lineage "ticket → plan → PR #N (open)" only when a host says so, else "branch pushed" | unit (rendering from fixtures, with and without a host); harness (write-through produces it) |
+| C2.5 | Ticket refs in the plan files; approvals as signed statements, verified on import (C-2 §2–3) | unit; harness |
+| C2.6 | Teammates' plans after a pull (C-2 §4); and Phase 32's own plan in CodeTrellis, each step an item whose workstream is its branch: `npm run status` reads from the app, or goes. C2 done-when | harness (journey below); browser with screenshots |
+
+**Journey (C2).** Priya's team is on Bitbucket; Sam's on GitHub. Each
+opens a plan whose tasks are worked on branches. With nothing turned on,
+both see the same honest states from git: "building", "pushed, not
+merged", "merged (squash, 3 Oct)". Sam turns on GitHub for his project:
+Settings says it will read pull requests and checks for
+`github.com/acme/app`, and his tasks now say "in review (#118), checks
+passing". Priya turns on Bitbucket, and hers say the same from Bitbucket.
+An agent asking either plan for its state gets the same words, with where
+they came from. Nothing was requested from any host before it was turned
+on.
 
 ### C5: One plan, several worktrees
 

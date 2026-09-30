@@ -1,0 +1,508 @@
+# Phase 32 status — the Now block and the checklist, as data.
+#
+# Hand-edited. `npm run status` writes the Now and Checklist sections of
+# docs/PHASE-32-LOG.md from this file and git; a unit test fails when the
+# LOG's items differ from these. The dated entries stay prose in the LOG.
+# See tools/status/status.ts and git-facts.ts.
+#
+# Only intent is written here. Whether a step is building, in review or
+# done, and its PRs, are read from git and GitHub by `npm run status` (a step
+# has a branch, feat/phase-32-<id>-…, and lands as `Phase 32 <id>: … (#N)`).
+#
+# An item: id (when it has one), title, followUp (found on the way, not
+# planned), items (its parts). Only for what git cannot see: status (done)
+# and prs (PRs whose merge commit does not name the id).
+now:
+  step: "Wave 2 — the status as data (the owner's ask), then B7.5"
+  status: "B7.1–B7.4 merged: tasks say what spec they rely on; an agent proposes a change; the affected agents are told once and weigh in; a person accepts, amends or rejects it, and relying tasks say \"spec changed\". Now: the checklist's state is read from git and GitHub, and only intent is written (docs/PHASE-32-STATUS.yaml)"
+  next: Merge #246 (status read from git; C2 refined for any host) when green; then B7.5, spec breakpoints cover proposals and plan documents
+  blockers: none
+  updated: 2026-09-30
+sections:
+  - title: Setup
+    items:
+      - title: Integration branch `feat/phase-32` cut from `main` (`a4665b2`)
+        status: done
+      - title: Plan docs PR [#111](https://github.com/lionroseway/codetrellis/pull/111) into `feat/phase-32`
+        status: done
+      - title: "CI and security run on PRs into `feat/phase-*` (in #111)"
+        status: done
+      - title: Execution plan and this log
+        status: done
+      - title: CLAUDE.md points every session here
+        status: done
+  - title: "Stage 0: ground truth"
+    items:
+      - id: "0.1"
+        title: Baseline (Node 26, clean `npm ci`, all suites)
+        status: done
+      - id: "0.2"
+        title: Inventory and verification matrix
+        status: done
+      - id: "0.3"
+        title: Test mapping and coverage guards (+ enable CI lint, bug 12)
+        status: done
+      - id: 0.3b
+        title: "Skipped tests: 16 harness tests to reseed or make deterministic"
+        status: done
+        prs:
+          - 115
+      - id: 0.4a
+        title: Project and scan
+        status: done
+        prs:
+          - 116
+      - id: 0.4b
+        title: Graph
+        status: done
+        prs:
+          - 117
+      - id: 0.4c-1
+        title: Plans
+        status: done
+        prs:
+          - 118
+      - id: 0.4c-3
+        title: Plan deletion only by human confirmation (MCP can ask, not delete)
+        status: done
+        prs:
+          - 119
+      - id: 0.4c-2
+        title: Items, incl. retiring the V1 task API
+        status: done
+        prs:
+          - 120
+      - id: 0.4d
+        title: Criteria and sign-off
+        status: done
+        prs:
+          - 121
+      - id: 0.4e
+        title: Brief and viewer
+        status: done
+        prs:
+          - 122
+      - id: 0.4f
+        title: Channels and presence
+        status: done
+        prs:
+          - 123
+      - id: 0.4g
+        title: Agents and MCP
+        status: done
+        prs:
+          - 124
+      - id: 0.4h
+        title: Drift, governance, review
+        status: done
+        prs:
+          - 125
+      - id: 0.4i
+        title: Terminals and audio
+        status: done
+        prs:
+          - 127
+      - id: 0.4j
+        title: Mobile surface
+        status: done
+        prs:
+          - 128
+      - id: 0.4k
+        title: Settings, updates, privacy
+        status: done
+        prs:
+          - 129
+      - id: 0.4l
+        title: System docs and intake
+        status: done
+        prs:
+          - 130
+      - id: "0.5"
+        title: "UX audit — desktop (#131, #132, #133); the 31 phone screens after the release (owner's decision)"
+        status: done
+      - id: "0.6"
+        title: Known bugs 4–9
+        status: done
+        prs:
+          - 134
+      - id: "0.7"
+        title: Stage review
+        status: done
+        prs:
+          - 135
+      - id: "0.8"
+        title: Release — v0.1.17, desktop and companion
+        status: done
+        prs:
+          - 136
+          - 137
+          - 138
+  - title: "Track A: awareness"
+    items:
+      - title: "Carried 1: the coverage guard credits calls, not names (bug 50)"
+        status: done
+        prs:
+          - 141
+      - title: "Owner's report: update download shows progress and asks where to save (bug 51)"
+        status: done
+        prs:
+          - 142
+      - title: "Carried 2: no tool or handler writes a fixed author (structural test; bug 52)"
+        status: done
+        prs:
+          - 143
+      - title: "Carried 3: harness and browser suites run in CI, sharded"
+        status: done
+        prs:
+          - 144
+      - id: A0
+        title: Parallel-work bugs 1–3
+      - id: A1.1
+        title: Session binding
+      - id: A1.2
+        title: Multi-session Claude watcher
+      - id: A1.3
+        title: Workstream discovery and strip
+      - id: A1.4
+        title: Folder watching
+      - id: A1.5
+        title: Footprint symbols
+      - id: A1.6
+        title: Signals engine (collision, stale-base) and tools
+      - id: A1.7
+        title: "Branch and clone workstreams (A1.7a branches #152; A1.7b bug 46 #153; A1.7c clones #154)"
+        status: done
+      - id: A1.8
+        title: Awareness tab
+      - title: "Bug 53: a squash-merged branch is not live work (A1.7a, #158)"
+        status: done
+      - title: "Carried 2b: unverified is tagged and explained everywhere; local API changes can be turned off (owner's decision)"
+        status: done
+        prs:
+          - 159
+      - id: A2.1
+        title: Signatures (TS/JS, Python)
+      - id: A2.2
+        title: Import accuracy
+      - id: A2.3
+        title: "`contract` signal"
+      - id: A2.4
+        title: "`declare_intent`"
+      - id: A2.5
+        title: "`drift` signal"
+      - id: A2.6
+        title: Inline notices, `acknowledge_signal`, the M2 "done when" (#163) — **M2 done**
+      - id: A2
+        title: "Meaning (signatures, contract, drift, notices, intent): M2 done"
+        status: done
+        prs:
+          - 163
+      - id: A3
+        title: "Distilled (M3), refined in EXECUTION §4: M3 done"
+        status: done
+        prs:
+          - 168
+        items:
+          - id: A3.1
+            title: The digest
+          - id: A3.2
+            title: Intended and cooldown
+          - id: A3.3
+            title: "`parallel` guide flavour"
+          - id: A3.4
+            title: User skill and optional hook, offered from Settings
+          - id: A3.5
+            title: '`docs/claude/awareness.md`; M3 "done when"'
+      - id: A2.7
+        title: Signatures for Go, Rust, Java, C#, Kotlin, Swift, Ruby, PHP (owner's ask, 2026-09-28)
+      - id: A8
+        title: "Any agent (owner's ask, 2026-09-28), refined in EXECUTION §4:"
+        status: done
+        items:
+          - id: A8.1
+            title: Parity table; `check_breakpoint` in the guide for every agent; journeys run by a client with no hook
+          - id: A8.2
+            title: Client-neutral pre-edit check in the connector
+          - id: A8.3
+            title: Hook adapters for other clients, each checked against its docs (Gemini CLI, from its own source; others wait on the same check)
+          - id: A8.4
+            title: Proof of use from MCP calls (`get_skill`), labelled by source
+      - id: A4
+        title: "Mobile, refined in EXECUTION §4: done (#215–#221)"
+        items:
+          - id: A4.1
+            title: "Reply to the agents about a signal (shared by desktop and phone) ([#215](https://github.com/lionroseway/codetrellis/pull/215), which also carried the refinement, #214)"
+          - id: A4.2
+            title: The phone's signal RPC and live count
+          - id: A4.3
+            title: Workstreams on the phone
+          - id: A4.4
+            title: Push for a high signal
+          - id: A4.5a
+            title: A way to see the phone's screens
+          - id: A4.5b
+            title: The phone's new screens (Needs you, signal detail, workstreams, the push tap)
+          - id: A4.6
+            title: M4 done-when, end to end, and docs
+      - id: A5
+        title: "Review (the feature, M5), refined in EXECUTION §4:"
+        items:
+          - id: A5.1
+            title: "`commit:` sides get their dependency edges; the picker offers each line of work's branch"
+          - id: A5.2
+            title: '"Other work in flight" in `review_plan` and `get_pr_draft`'
+          - id: A5.3
+            title: The opt-in "no open high signals" check
+          - id: A5.4
+            title: The review queue and `get_review_queue`
+          - id: A5.5
+            title: The Review tab
+          - id: A5.6
+            title: The queue on the phone
+          - id: A5.7
+            title: M5 done-when, end to end, and docs
+      - id: A6
+        title: The Brief
+      - id: A7
+        title: Rules
+      - title: "`plan-by-hand` failed once in CI when its plan workspace dropped back to the plan list while `plan/list.spec.ts` created and deleted plans on the other worker (#147). It doesn't reproduce as a pair (5/5 on base and on the branch). Find which broadcast leaves the workspace, so a person's open plan survives someone else's plan changes."
+        followUp: true
+      - title: "two browser tests failed once on #167 and passed on re-run: `realtime/plan-events.spec.ts:18` (a reset connection mid-POST; also 2/3 locally on the base branch) and `external-refs/refs-panel.spec.ts:77` (a fixed 3 s `isVisible`). Both are queued as separate fixes; neither touches A3.4's code."
+        followUp: true
+      - title: "two browser tests failed once on the docs-only #184 and passed on re-run: `graph/layout-controls.spec.ts:38` (0 nodes after Tree → Map; the spec already names a rescan on the other worker as the cause of an empty graph, and polls 20 s) and `review-regressions/pr55-ui.spec.ts:431` (the linked-ticket chip never appeared, on the sample-app fixture). Neither touches a Phase 32 file; each needs its root cause found, not a longer wait. **Fixed at the source by #195 and #196:** a scan answers \"scanning\" and every graph answer names its project; a canvas keeps its graph through another project's scan, and an empty one rescans its own."
+        status: done
+        followUp: true
+      - title: "listing workstreams in a clone with many recent remote branches is slow: 133 remote refs made the first `/api/workstreams` take 11.6 s and each later one about 1.2 s, all synchronous in the Express process, while the window polls it. Found locally during B3.2 (it stalled \"Add to plan\"); CI's single-branch checkout never sees it. Cache branch workstreams by ref SHA and move the git work off the request path."
+        followUp: true
+      - title: '`graph/context-menu.spec.ts:49` failed on #188 with the canvas still on "Building dependency graph…" after 15 s (the scan had finished; laying out the whole repository beside a second worker was slow). `gotoWithProject` now waits 30 s for the canvas (#188). That covers the slow-layout case only; the blank-graph-on-rescan case below still needs its fix at the source.'
+        followUp: true
+      - title: "with another project scanned, about 20 extra nodes appear on a canvas showing its own graph (seen writing graph-own-project.spec, #196). Probably another endpoint answering for whichever project was scanned last (`/api/diff`'s working-tree ghosts): the same one-project-at-a-time class as #195, on a different route. **Fixed by HD1:** it was `/api/diff`: after another project's scan it diffed that project's files against this one and sent them, 45 added and 45 removed on the sample app."
+        status: done
+        followUp: true
+      - title: "`agent/workstream-strip.spec.ts:89` failed once on #205 (653c3e1): the chip read `[expanded]`, but `workstream-popover` never appeared and the test ran out of its 30 s (36.1 s; its siblings took about 9 s). Nothing in #205 touches the strip; it passed on the previous commit, locally 18 of 18 twice, and on the one re-run. Its cause is not found: the failure snapshot CI prints is cut at 20 KB, before the end of `<body>` where the popover is portalled. Next time it fails, keep the whole error context (raise the `head -c` limit in CI for that file). **Failed again on #212** (browser 1/3) beside `graph/edge-visuals.spec.ts:32`, both at 30 s. `edge-visuals` counts edges after a fixed `waitForTimeout(2000)` three times over; that class (a fixed wait, then a count) is what `onboarding-to-plan` had until #213 polled it. Poll both specs on what they wait for."
+        followUp: true
+      - title: "on this container, several browser specs fail on the base too and pass in CI: `awareness-tab.spec` (the served signals never render), `context-menu.spec:12` and `plan/create.spec:16` (the first test of a spec on a cold start), and `graph-breakpoints`' clear toast. Worth one look at why this machine differs, so local runs can be trusted again."
+        followUp: true
+      - title: "Browser robustness, 2026-09-29 (#195, #197, #198, all on base): guide Escape attached before paint; plan-to-graph right-clicks on reachable nodes; graph-breakpoints right-click on the node itself; awareness-tab told times early in their minute; plan create waits for the workspace and the save; recents never re-add a removed project after a late load; New plan opens before the list refreshes."
+        status: done
+      - title: "`graph/context-menu.spec.ts:38` failed on #186 with no graph at all (`.react-flow` never rendered in 15 s), the same empty-graph class as `layout-controls.spec.ts:38` on #184: a rescan on the other worker blanks every open graph. Worth fixing at the source (keep the last graph on screen while a rescan runs) rather than lengthening waits. **Fixed at the source by #195 and #196:** a scan answers \"scanning\" and every graph answer names its project; a canvas keeps its graph through another project's scan, and an empty one rescans its own."
+        status: done
+        followUp: true
+      - title: the browser `serial` project runs in every CI shard; run it in one, to reclaim ~3 min per PR.
+        followUp: true
+      - title: "`e2e/golden-chain/onboarding-to-plan.spec.ts` imports `API` and never uses it, a lint error that predates #213. `npm run lint` covers `src/` only, so nothing reports it; either lint `e2e/` too or drop the import the next time the spec is touched. Dropped in #227, which touched the spec."
+        status: done
+        followUp: true
+      - title: "#219 (A4.4, backend only) failed browser 3/3 on `review-regressions/pr55-ui.spec.ts:431` (the linked-ticket chip again, after #195/#196 were thought to fix it) and `golden-chain/onboarding-to-plan.spec.ts:80` (the canvas task detail never appeared, even with #213's 10 s poll; 3 of 3 locally on its own). Neither touches an A4 file. Both need the page captured before `afterEach` clears it, so the next failure shows what was on screen instead of only the missing element. **Both found.** pr55-ui was a lost click in a moving plan list, fixed in #225. onboarding-to-plan:80 failed again on #227 (482e18c), and the cause is in the spec: once the workspace is up, the item's title shows in six places (the tree, the board, the next-item strip…). `getByText('First task').first()` took whichever existed first, so with the tree not yet rendered the click landed on another list's button and no canvas detail came. The spec now finds and clicks the items inside `plan-item-tree`."
+        status: done
+        followUp: true
+      - title: "`graph/node-click.spec.ts:68` failed on #224: `reachableNodes` (`e2e/helpers/setup.ts`) waited on `.react-flow__node` `.first()`, and the first node was `cluster:billingcore`, which stayed hidden on all 34 checks while others were in the DOM. **Fixed:** it waits for a visible node; the polling after it already handles layout and cover."
+        status: done
+        followUp: true
+      - title: "`review-regressions/pr55-ui.spec.ts:431` failed again, on #224. The page snapshot shows the plan list still up after the click on \"ct-m8 ticket chip\": the plan never opened, or opened and dropped back. That is the same class as the `plan-by-hand` follow-up above (a plan workspace dropping back while another worker changes plans). The server log also showed another project's scan refused while one ran (\"serving file tree only\"), though the spec's own open helper retries that. Find which broadcast leaves the workspace; do not lengthen the wait. **Fixed in #225, three causes, none a broadcast leaving the workspace:** (1) the spec clicked `getByText('ct-m8 ticket chip')`, which the \"New plan created\" toast also matches; it now clicks the plan row's own button. (2) Every plan created on the other worker refetches the list, and an older `fetchPlans` answer could land after a newer one and put rows back where they were, moving the row under the pointer; the store now drops an out-of-order answer (`plan-store.test.ts`). (3) A real UX bug the retry exposed: the row of the plan already active did nothing, because the workspace opened only when the active plan *changed*, so a minimised plan could not be reopened from its own row. It opens now (`plan/reopen-active-plan.spec.ts`, which fails without the fix)."
+        status: done
+        followUp: true
+      - title: "`graph/graph-own-project.spec.ts:23` failed on #225 (0465ca2): three clusters (`broken`, `evidencepreview`, `paths`) were missing after the other project's scan. They were still in the graph. The canvas mounts only nodes in view (`onlyRenderVisibleElements`), and this repository's graph is fitted at the 0.1 minimum zoom with nodes past the edge: locally 117 nodes, 114 in the DOM. So the DOM ids moved with the viewport. The spec now reads the whole graph from the minimap, which draws every node at its layout position. A new file added mid-test fails it with exactly one new node, and other runs pass unchanged."
+        status: done
+        followUp: true
+      - title: "`project/folder-picker.spec.ts` \"Go button browses to typed path\" failed on #225 (ff50abc): the path input still said the home folder after `/tmp` was typed and Go pressed. The cause was a real bug: the picker's opening browse could answer after a later one and put its folder back, over a Go or over a path typed while it loaded. Browses are now numbered, only the latest one applies, and a path typed since a browse was sent is kept. Two new specs delay the opening listing and fail without the fix."
+        status: done
+        followUp: true
+      - title: "`graph/graph-breakpoints.spec.ts:34` failed on #225 (ff50abc). `reachableNodes` found a visible node, then no node that stayed uncovered and still for 15 s, on the sample app at Files depth in Map layout. The page snapshot showed the sample app's graph loaded (status bar 196, 34/73 imports) but no nodes or edges in the canvas. It does not reproduce locally, even with the CPU throttled 6×: 21 nodes, the minimap and DOM agree, and the view settles at once. The helper's error now says what it saw (nodes in the DOM and the minimap, zero-size, what covers them, the viewport, whether they were still moving), so the next failure names the cause. The prime suspect is the shared backend switching projects under the canvas (the AST tables hold one project at a time). **Then `graph/multi-select.spec.ts:40` failed the same way on #226 (no node visible for 15 s on a fresh sample-app page), and a cause was found in the canvas:** when the backend holds another project's graph, an empty canvas rescans its own project. A refused rescan (the scan route answers 200 with `astError` \"already in progress\" while the other scan runs) was treated as success, and the canvas asked again at once. Its comment said it waited a second, but only a thrown error did. So it spent all 120 tries in a few seconds and stayed empty. A refusal now waits a second. `graph/canvas-rescan-wait.spec.ts` reproduces it with the refusals intercepted: 18 ms between rescans without the fix, a second with it, and the graph arrives. The helper's first wait now reports what the canvas held too."
+        status: done
+        followUp: true
+      - title: "`graph/node-click.spec.ts:43` failed on #226 (665f996), and this time the helper's new message named the cause: `{\"inDom\":14,\"zeroSize\":0,\"inMinimap\":0,…}`. That is 14 nodes with a size, none visible, and none in the minimap, which is React Flow 12's state for nodes it has not measured (it draws them `visibility: hidden` and the minimap skips them). The canvas rebuilds every node object when its overlays change (selection, plan highlight, work counts, collisions), and `preserveNodePositions` kept only the position and dropped `measured`. So every such change hid the whole graph for a frame. When a rebuild landed in the same batch as React Flow's dimension change, the node stayed unmeasured and the observer effect did not run again: nothing had changed size, so the ResizeObserver never fired and the canvas stayed empty. This is the likeliest root cause of the empty-canvas failures (graph-breakpoints, multi-select, node-click). The function moved to `lib/preserve-node-positions.ts` and keeps `measured`. `graph/nodes-stay-drawn.spec.ts` watches every node while nodes are selected and cleared: all 14 went hidden without the fix, none with it. (The refused-rescan loop fixed alongside is a real bug too, but it did not explain nodes that were in the DOM and unmeasured.) CLAUDE.md said ReactFlow 11, as did AGENTS.md and `docs/claude/architecture.md`; the installed package is `@xyflow/react` 12.11.6. All three say React Flow 12 since A5.7."
+        status: done
+        followUp: true
+      - title: "CI's `npm ci` runs `better-sqlite3`'s install script, so node-gyp downloads the Node headers on every job. On #224 (be91267), Harness (1/4) died there before any test ran: node-gyp's bundled undici crashed (`assert(!this.paused)`) reading the Node 26.10.0 headers. The module ships prebuilds, and CLAUDE.md says npm 11.19+ skips install scripts, which is not what CI does. Find out why the scripts run (npm config or the setup action), and whether `npm ci --ignore-scripts` plus the load checks CLAUDE.md gives is safe for `better-sqlite3` and `node-pty`."
+        followUp: true
+      - title: "`graph/edge-visuals.spec.ts:12` timed out on #226 (d4236dc) at 32 s, with the graph's edges in the DOM. The test had the default 30 s budget, but `gotoWithProject` itself waits up to 60 s for another project's scan and 30 s for the canvas, so a project opened while another scan ran ran out of test time inside the helper. 75 specs open a project on the default budget. The helper now raises the test's timeout to cover its own waits (at least 120 s; a longer budget a test set is kept)."
+        status: done
+        followUp: true
+      - title: "`golden-chain/onboarding-to-plan.spec.ts:80` failed again on #227 (2d3ced2), after the click was scoped to `plan-item-tree`. The tree item was there and clicked, and the item's detail still did not show within 10 s. It passes locally, 15 of 15, 4 of 4 with the CPU throttled 6×, and with test 188 run first. Test 188 leaves no plan behind. `selectItem` is not a toggle. Candidates, not confirmed: the workspace's hydrate effect runs twice on open and fetches the items twice; an agent's navigation broadcast from the MCP specs that run just before; the workspace closing. The failure now prints what was on screen at that moment (tree, selected row, which texts are there), because the page snapshot is taken after `afterEach` deletes the plan. **Found, and it was the first candidate.** The diagnostic (adb03d9) said the row was selected and neither the body nor the status was on the page. Opening a plan loads its items twice: `resetForPlan` changes the store's plan id, which re-runs the workspace's effect while the first load is out. The list carries summaries without a body. When the second answer landed after the item had been opened, it put the summary back over the full item, so `BodyEditor` saw an empty body and fell into its editor, and a textarea's value is not page text. A person saw the same thing: a task opened quickly after its plan showed an empty editor where its body was. Fixed in `plan-items-store`: one load per plan at a time, the summary adds to an item's full fields rather than replacing them, and a list for a plan no longer open is dropped. `plan-items-store.test.ts` fails without it (two list requests, and the stale list wins)."
+        status: done
+        followUp: true
+      - title: "`golden-chain/websocket-events.spec.ts:97` failed on #226 (115d49c, browser 1/3): a socket opened from the page did not report `open` within three seconds, and the check said only `false`. The backend parses synchronously, so an upgrade that arrives during a scan waits for it, and the open project there was this repository. That is likely, not confirmed. Its sibling at :19 had the same three-second timer. Both now share `openSocket`, which gives the upgrade 15 s and says how it ended (`open`, `error`, `closed <code>`, `no answer`), so a repeat names its cause."
+        status: done
+        followUp: true
+      - title: a picker on the item page to set what a task relies on (B7.1 shows the links; agents and REST set them).
+        followUp: true
+      - title: our own late plan export was re-imported over newer state and undid an agent's claim (found in B7.4); a write is now recognised by its content
+        status: done
+        prs:
+          - 244
+        followUp: true
+      - title: "`graph/edge-visuals.spec.ts:32` clicks `getByRole('button', { name: 'Files' })`, which is not exact. In a checkout with branches it also matches the TopBar's workstream chips, whose titles say \"N files changed\", and fails in strict mode. It fails locally (seen on #226 and on B6.4's run) and passes in CI, which has no such branches. The fix is `exact: true`; it belongs to the next change to that spec."
+        followUp: true
+      - title: "`graph/canvas-rescan-wait.spec.ts:23` timed out once on B6.4's local run, waiting 30 s for `.react-flow` in `gotoWithProject` while the other worker loaded the repository's graph. It passed twice alone, and in CI on every run since #227. Watch it; if it fails in CI, the wait needs the same budget the helper gives other waits."
+        followUp: true
+      - title: browser shards now take about 16–25 minutes each (up from 15–19 at the Wave 1 review). The serial project, which runs the sample-app specs since HD2, is most of the rise; see the serial-project follow-up above.
+        followUp: true
+  - title: "Track B: observability"
+    items:
+      - id: B1
+        title: "Agent event log, refined in EXECUTION §5: done"
+        status: done
+        prs:
+          - 169
+          - 170
+        items:
+          - id: B1.1
+            title: "`agent_events`, `GET /api/agent-events`, the Timeline survives a reload"
+          - id: B1.2
+            title: Body edits as events; agent time; SDK-refused calls
+      - id: B2
+        title: "Timeline lanes, refined in EXECUTION §5:"
+        status: done
+        items:
+          - id: B2.1
+            title: "Lanes per workstream: ● turns, ✎ edits, ⚠ signals, hover and click"
+          - id: B2.2
+            title: ◆ commits and merges, ✓ / ✗ checks
+      - id: B3
+        title: "Line changes and overlays, refined in EXECUTION §5:"
+        status: done
+        items:
+          - id: B3.1
+            title: "Line changes per workstream from git: REST and `get_line_changes`"
+          - id: B3.2
+            title: "The code view: gutter marks, who changed what, Compare with…"
+          - id: B3.3
+            title: Overlay list; line counts on file nodes; a signal chip focuses the graph (split in two, EXECUTION §5)
+            status: done
+            items:
+              - id: B3.3a
+                title: Overlays turned on and off; each other workstream's line counts and collision zones on file nodes
+              - id: B3.3b
+                title: A signal chip focuses the graph; "Show changes" on a file node
+      - id: B4
+        title: "Breakpoints, refined in EXECUTION §5:"
+        status: done
+        items:
+          - id: B4.1
+            title: Task and spec breakpoints at the interception; `await_decision`; answers over REST; Timeline events
+          - id: B4.2
+            title: Code breakpoints; the hook pauses; breach for other clients
+          - id: B4.2b
+            title: Signal breakpoints
+          - id: B4.2c
+            title: Function-level breakpoints and breaches
+          - id: B4.3a
+            title: The waiting list, answering, Ask me first on a task, what is set
+          - id: B4.3b
+            title: Graph node action, ⏸ on nodes, lane spans
+          - id: B4.4
+            title: The phone and push
+      - id: HD1
+        title: The extra graph nodes after another project's scan (Wave 2 hardening)
+      - id: HD2
+        title: Browser graph specs on the sample app (Wave 2 hardening)
+      - id: B5
+        title: Replay
+        status: done
+        items:
+          - id: B5.1
+            title: "Frames: project, SHA, session; turn end, status change, commit"
+          - id: B5.2
+            title: The state at a moment
+          - id: B5.3
+            title: One clock in the window
+          - id: B5.4
+            title: Catch-up, and `get_state_at`
+      - id: B6
+        title: "Stack view, refined in EXECUTION §5:"
+        items:
+          - id: B6.1
+            title: Dependencies resolve across plans (bug 11)
+          - id: B6.2
+            title: "The stack: `/api/stack` and `get_stack`"
+          - id: B6.3
+            title: Overlap bands, declared and actual
+          - id: B6.4
+            title: "The Stack tab (#234; carried #235, pinning a baseline no longer freezes the server)"
+          - id: B6.4b
+            title: The Timeline follows the stack's selection
+          - id: B6.5
+            title: One clock
+          - id: B6.6
+            title: The stack on the phone
+          - id: B6.7
+            title: Done-when and docs
+      - id: B7
+        title: Conferring
+        items:
+          - id: B7.1
+            title: Tasks say what they rely on (`spec_links`, sections by heading)
+          - id: B7.2
+            title: Propose a spec change, with the tasks it affects
+          - id: B7.3
+            title: Affected agents told once; their replies kept
+          - id: B7.4
+            title: "The decision is a person's: accept, amend, reject; tasks marked \"spec changed\""
+          - id: B7.5
+            title: Spec breakpoints cover proposals and plan documents
+          - id: B7.6
+            title: The phone
+          - id: B7.7
+            title: I1 done-when and docs
+      - id: B8
+        title: Grounding
+      - id: B9
+        title: Play-forward
+      - id: B10
+        title: The record
+  - title: "Track C: shared ways of working"
+    items:
+      - id: C1
+        title: Skills on tasks
+        status: done
+        items:
+          - id: C1.1
+            title: Fields, index, brief/claim/next delivery, link never to agents
+          - id: C1.2
+            title: The picker in the routing panel
+          - id: C1.3
+            title: Proof of use; the skills line in a copied task prompt
+          - id: C1.4
+            title: A skill arriving in a pulled plan file is flagged once
+      - id: C2
+        title: Team status through git (git first for any host; a host adapter only when turned on), refined in EXECUTION §6
+        items:
+          - id: C2.1
+            title: Each item's state from git, for any host or none (building, pushed, merged, with its source)
+          - id: C2.2
+            title: The review-host interface, and GitHub behind it, off until turned on per project
+          - id: C2.3
+            title: GitLab and Bitbucket on the same interface (Azure DevOps, Gitea later)
+          - id: C2.4
+            title: STATUS.md per plan and an index, each state saying its source
+          - id: C2.5
+            title: Ticket refs in the plan files; approvals as signed statements
+          - id: C2.6
+            title: Teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when
+      - id: C3
+        title: Linked planning repo
+      - id: C4
+        title: Recurring playbooks
+      - id: C5
+        title: "One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:"
+        status: done
+        items:
+          - id: C5.1
+            title: "`workstream` on an item, inherited; `assign_workstream`; next and claim respect it"
+          - id: C5.2
+            title: Start a worktree for a section; a start command for any agent
+          - id: C5.3
+            title: "Workstream chips, progress per worktree, sections named in collisions, split in two:"
+            items:
+              - id: C5.3a
+                title: ⎇ worktree on each section in the plan tree; progress per worktree; lanes name their sections
+              - id: C5.3b
+                title: A collision between two sections of one plan names both; readiness to merge per section
+  - title: Phase end
+    items:
+      - title: "`main` merged in, full suite green on Node 26"
+      - title: Packaged macOS build verified (needs a person on macOS)
+      - title: Mobile build verified (needs a device)
+      - title: Final direction review
+      - title: "`feat/phase-32` → `main`"
