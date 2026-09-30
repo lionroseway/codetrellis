@@ -74,7 +74,7 @@ test.describe('Spec links', () => {
     await expect(card).toContainText('Spec change proposed');
     await expect(card).toContainText('to § Fields');
     await expect(card).toContainText('Why: Amounts are ambiguous for EU customers.');
-    await expect(card).toContainText('2 tasks in 2 plans rely on this. A person decides; the page is unchanged until then.');
+    await expect(card).toContainText('2 tasks in 2 plans rely on this. A person decides, in Awareness; the page is unchanged until then.');
     await expect(page.getByText('- currency (ISO 4217, required)')).toHaveCount(0);
     await shot(page, 'spec-proposed');
 

@@ -19,6 +19,7 @@ export function agentName(agent: string | null): string {
 
 const DOING: Record<BreakpointHit['action'], string> = {
   claim: 'claim', done: 'mark done', edit: 'change the description of', delete: 'delete', edit_code: 'change', breach: 'change',
+  propose: 'change the spec',
 };
 
 /** What the held call is about, in words: a function in its file (B4.2c), a file, or the item. */
@@ -44,6 +45,7 @@ export function hitWhy(hit: BreakpointHit): string {
     case 'spec': return 'You asked to be asked before an agent changes this description.';
     case 'code': return 'You asked to be asked before this code changes. The edit was not made.';
     case 'signal': return 'A serious signal names this workstream, and you asked to be asked while one is open.';
+    case 'proposal': return 'A spec others rely on would change. Nothing changes until you decide.';
     default: return 'You set a breakpoint here.';
   }
 }

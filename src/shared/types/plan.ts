@@ -778,7 +778,9 @@ export type PlanEventType =
   | 'kind_transmuted'
   | 'plan_status_changed'
   /** Phase 31 §5.1 — an agent read a material through read_material. */
-  | 'material_read';
+  | 'material_read'
+  /** Phase 32 B7.4 — a spec this task relies on changed, by an accepted proposal. */
+  | 'spec_changed';
 
 export interface PlanEvent {
   id: number;

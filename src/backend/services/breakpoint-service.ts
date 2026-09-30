@@ -173,6 +173,7 @@ export function setBreakpoint(input: {
   by: string; byType: string; now?: number;
 }): { breakpoint: Breakpoint; created: boolean } {
   if (!BREAKPOINT_KINDS.includes(input.kind as BreakpointKind)) throw new BreakpointError(`kind must be one of ${BREAKPOINT_KINDS.join(', ')}`, 400);
+  if (input.kind === 'proposal') throw new BreakpointError('A proposal breakpoint is raised by a spec change being proposed, not set', 400);
   if (input.kind === 'code') return setCodeBreakpoint(input);
   if (input.kind === 'signal') return setSignalBreakpoint(input);
   const item = typeof input.itemUid === 'string' ? itemRow(input.itemUid) : null;
@@ -266,6 +267,8 @@ function setSignalBreakpoint(input: { signal?: unknown; note?: unknown; projectR
 export function clearBreakpoint(input: { id: string; by: string; byType: string; now?: number }): { cleared: boolean; released: BreakpointHit[] } {
   const bp = getBreakpoint(input.id);
   if (!bp) return { cleared: false, released: [] };
+  // Clearing would let a spec change through with nobody deciding it (B7.4).
+  if (bp.kind === 'proposal') throw new BreakpointError('A spec proposal is decided on the proposal: accept, amend or reject', 400);
   const now = input.now ?? Date.now();
   getDb().run('UPDATE breakpoints SET cleared_at = ?, cleared_by = ?, cleared_by_type = ? WHERE id = ?', [now, input.by, input.byType, bp.id]);
   const released: BreakpointHit[] = [];
@@ -446,7 +449,7 @@ export function enforce(tool: string, args: unknown, caller: Caller, now = Date.
 
 const DOING: Record<BreakpointAction, string> = {
   claim: 'claiming', done: 'marking done', edit: 'changing the description of', delete: 'deleting',
-  edit_code: 'changing', breach: 'changing',
+  edit_code: 'changing', breach: 'changing', propose: 'changing the spec',
 };
 
 /** What the hit is about, in words: the file, or the item's title. */
@@ -497,6 +500,16 @@ export function decisionView(hit: BreakpointHit): Record<string, unknown> {
     return {
       status: 'waiting', ref: hit.ref, waitingSince: new Date(hit.hitAt).toISOString(),
       message: 'Still waiting for a person. Call await_decision again with the same ref. Do not make the paused call again until they answer.',
+    };
+  }
+  // A spec proposal (B7.4): accepted (continue) or not (stop), with the person's words.
+  if (hit.action === 'propose') {
+    return {
+      status: 'answered', ref: hit.ref, decision: hit.decision === 'stop' ? 'rejected' : 'accepted', note: hit.note,
+      by: hit.answeredByType, at: new Date(hit.answeredAt).toISOString(),
+      message: hit.decision === 'stop'
+        ? 'The spec change was not accepted. Carry on with the spec as it is; the note says why.'
+        : 'The spec change was accepted and the page has its new version. Work to it.',
     };
   }
   // A function breakpoint names the function in its file (B4.2c).

@@ -395,7 +395,9 @@ export const SCHEMA_PLANS_CORE = `
     decided_at INTEGER,
     decided_by TEXT,
     decided_by_type TEXT,
-    decision_note TEXT
+    decision_note TEXT,
+    hit_ref TEXT,
+    decided_text TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_spec_proposals_page ON spec_proposals(page_uid, status);
 
@@ -425,6 +427,25 @@ export const SCHEMA_PLANS_CORE = `
     created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_spec_proposal_impacts ON spec_proposal_impacts(proposal_uid);
+
+  -- Phase 32 B7.4: a task whose spec changed under it, by an accepted
+  -- proposal. Flagged until the agent holding it has been told (read_at).
+  CREATE TABLE IF NOT EXISTS spec_change_flags (
+    item_uid TEXT NOT NULL,
+    proposal_uid TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    read_at INTEGER,
+    read_by_session TEXT,
+    PRIMARY KEY (item_uid, proposal_uid)
+  );
+
+  -- Phase 32 B7.4: the proposing session told of the decision, once.
+  CREATE TABLE IF NOT EXISTS spec_proposal_outcome_reads (
+    proposal_uid TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    read_at INTEGER NOT NULL,
+    PRIMARY KEY (proposal_uid, session_id)
+  );
 
   -- Phase 32 A1.7c: folders an agent reported that the person said "not now"
   -- to. Asked once per folder, not once per connection.

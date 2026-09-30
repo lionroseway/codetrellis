@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronDown, ChevronRight, Pause, OctagonAlert, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Pause, OctagonAlert, X, PenLine } from 'lucide-react';
 import { useReplayState } from '../../stores/replay-store';
 import { hhmm } from '../../lib/replay';
 import { useBreakpointsStore } from '../../stores/breakpoints-store';
@@ -7,7 +7,7 @@ import { useAwarenessStore } from '../../stores/awareness-store';
 import { useProjectStore } from '../../stores/project-store';
 import { useToastStore } from '../../stores/toast-store';
 import { ago, sideLabel } from '../../lib/awareness-view';
-import { hitHeadline, hitWhy, decisionLabels, breakpointLabel } from '../../lib/breakpoint-view';
+import { hitHeadline, hitWhy, decisionLabels, breakpointLabel, agentName } from '../../lib/breakpoint-view';
 import { SIGNAL_BREAK_KINDS, type BreakpointHit, type BreakpointDecision } from '@shared/types';
 
 /**
@@ -18,6 +18,9 @@ import { SIGNAL_BREAK_KINDS, type BreakpointHit, type BreakpointDecision } from 
  * A pause says what the agent wanted and why it waits; a breach says what
  * already happened and that it could not be stopped. Either is answered
  * continue, continue with a note the agent reads, or stop.
+ *
+ * A proposed spec change (B7.4) waits here too, as its own card: what would
+ * change and why, what each relying plan said, and Accept, Amend or Reject.
  */
 
 const REFRESH_MS = 30_000;
@@ -66,7 +69,9 @@ export function BreakpointsWaiting({ now: liveNow }: { now: number }) {
         <div role="alert" className="text-[10px] text-danger px-1 mb-1">Could not refresh the breakpoints ({error}). What is shown may be out of date.</div>
       )}
       <div className="space-y-1.5">
-        {waiting.map((h) => <WaitingCard key={h.ref} hit={h} now={now} replayed={!!replay} />)}
+        {waiting.map((h) => (h.kind === 'proposal'
+          ? <ProposalCard key={h.ref} hit={h} now={now} replayed={!!replay} />
+          : <WaitingCard key={h.ref} hit={h} now={now} replayed={!!replay} />))}
       </div>
     </section>
   );
@@ -139,6 +144,155 @@ function WaitingCard({ hit, now, replayed = false }: { hit: BreakpointHit; now: 
         ))}
         {error && <span role="alert" className="text-[10px] text-danger">{error}</span>}
       </div>
+      </>)}
+    </div>
+  );
+}
+
+interface ProposalView {
+  uid: string; pageUid: string; pageTitle: string; section: string; sectionTitle: string | null;
+  beforeText: string; proposedText: string; why: string; author: string; affectedWords: string | null;
+  affected: Array<{ itemUid: string }>; pageChangedSince: boolean; status: string;
+  evidence: { tests?: string[]; files?: string[]; commits?: string[]; note?: string };
+  impacts: Array<{ id: number; impact: 'none' | 'changes'; words: string; tasks: number | null; itemTitle: string | null; planTitle: string | null; author: string }>;
+}
+
+const clip = (text: string) => text.replace(/\n+$/, '');
+
+/** A proposed spec change waiting on the person (B7.4): decided here, never by an agent. */
+function ProposalCard({ hit, now, replayed = false }: { hit: BreakpointHit; now: number; replayed?: boolean }) {
+  const refresh = useBreakpointsStore((s) => s.refresh);
+  const [p, setP] = useState<ProposalView | null>(null);
+  const [amending, setAmending] = useState(false);
+  const [text, setText] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const uid = hit.breakpointTarget;
+
+  useEffect(() => {
+    if (!uid) return;
+    let live = true;
+    const load = () => fetch(`/api/spec-proposals/${encodeURIComponent(uid)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body: ProposalView | null) => { if (live && body) setP(body); })
+      .catch(() => { /* the card still shows who and when */ });
+    void load();
+    window.addEventListener('spec-proposals-changed', load);
+    return () => { live = false; window.removeEventListener('spec-proposals-changed', load); };
+  }, [uid]);
+
+  const decide = async (decision: 'accept' | 'amend' | 'reject') => {
+    if (!uid) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/spec-proposals/${encodeURIComponent(uid)}/decision`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision, note: note.trim() || undefined, ...(decision === 'amend' ? { text } : {}) }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      const told = (body.flagged ?? []).length;
+      useToastStore.getState().addToast(decision === 'reject'
+        ? { type: 'info', title: 'Proposal rejected', message: 'The page is unchanged; the proposer is told why.' }
+        : { type: 'success', title: 'Spec updated', message: told ? `${told} relying ${told === 1 ? 'task is' : 'tasks are'} marked "spec changed"; their agents are told.` : 'Nothing relied on it yet.' });
+      setError(null);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const where = p ? `${p.section ? `§ ${p.sectionTitle ?? p.section} of ` : ''}“${p.pageTitle}”` : `“${hit.itemTitle ?? 'a spec page'}”`;
+  const ev = p ? [
+    p.evidence.tests?.length ? `tests ${p.evidence.tests.join(', ')}` : null,
+    p.evidence.files?.length ? `files ${p.evidence.files.join(', ')}` : null,
+    p.evidence.commits?.length ? `commits ${p.evidence.commits.join(', ')}` : null,
+    p.evidence.note ?? null,
+  ].filter(Boolean).join('; ') : '';
+  const replies = p?.impacts.length ?? 0;
+  const relying = p?.affected.length ?? 0;
+  return (
+    <div data-testid="proposal-waiting" data-ref={hit.ref} data-proposal={uid ?? ''}
+      className="rounded-md border border-border-subtle border-l-2 border-l-violet-400/70 bg-surface/40 px-2.5 py-2">
+      <div className="flex items-center gap-1.5">
+        <span className="flex items-center gap-1 text-[8px] uppercase font-semibold px-1 rounded bg-violet-400/15 text-violet-200"><PenLine size={9} /> Spec change</span>
+        <span className="ml-auto text-[9px] text-foreground-subtle" title={new Date(hit.hitAt).toLocaleString()}>proposed {ago(hit.hitAt, now)}</span>
+      </div>
+      <div className="mt-1 text-[11px] text-foreground leading-snug" data-testid="proposal-headline">
+        ✎ {agentName(hit.agent)} proposes a change to {where}
+      </div>
+      {p && <div className="mt-0.5 text-[10px] text-foreground leading-snug">Why: {p.why}</div>}
+      {ev && <div className="text-[10px] text-foreground-subtle leading-snug">Evidence: {ev}</div>}
+      {p && (
+        <div className="mt-1 grid grid-cols-1 gap-1" data-testid="proposal-diff">
+          <div>
+            <div className="text-[9px] uppercase tracking-wider text-foreground-subtle">Now</div>
+            <pre className="max-h-24 overflow-auto whitespace-pre-wrap text-[10px] px-1.5 py-1 rounded bg-background/40 text-foreground-muted">{clip(p.beforeText) || '(empty)'}</pre>
+          </div>
+          <div>
+            <div className="text-[9px] uppercase tracking-wider text-foreground-subtle">Proposed</div>
+            <pre className="max-h-24 overflow-auto whitespace-pre-wrap text-[10px] px-1.5 py-1 rounded bg-violet-400/[0.06] text-foreground">{clip(p.proposedText)}</pre>
+          </div>
+        </div>
+      )}
+      {p && (
+        <div className="mt-1 text-[10px]" data-testid="proposal-impacts">
+          <div className="text-foreground-muted">
+            {relying ? `${p.affectedWords}. ${replies} of ${relying} replied.` : 'Nothing relies on this page yet.'}
+          </div>
+          {p.impacts.map((i) => (
+            <div key={i.id} className="flex flex-wrap gap-x-1.5 pl-2" data-testid="proposal-impact">
+              <span className={`shrink-0 whitespace-nowrap ${i.impact === 'changes' ? 'text-amber-300' : 'text-emerald-300'}`}>
+                {i.impact === 'changes' ? `Changes${i.tasks !== null ? ` ${i.tasks} ${i.tasks === 1 ? 'task' : 'tasks'}` : ''}` : 'No impact'}
+              </span>
+              <span className="shrink-0 whitespace-nowrap text-foreground-muted">{i.itemTitle ? `${i.itemTitle}${i.planTitle ? ` (${i.planTitle})` : ''}` : i.author}</span>
+              {i.words && <span className="text-foreground">— {i.words}</span>}
+            </div>
+          ))}
+          {p.pageChangedSince && <div className="text-amber-300">The page has changed since this was proposed.</div>}
+        </div>
+      )}
+      {replayed ? (
+        <div data-testid="breakpoint-replayed" className="mt-1.5 text-[10px] text-foreground-subtle">
+          {hit.answeredAt ? `Decided later, at ${hhmm(hit.answeredAt)}.` : 'Not decided yet. Go back to live to decide it.'}
+        </div>
+      ) : (<>
+        {amending && (
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            aria-label="The text as it should read"
+            rows={Math.min(10, Math.max(3, text.split('\n').length))}
+            className="mt-1.5 w-full font-mono text-[10px] px-2 py-1 rounded border border-accent/40 bg-background/40 text-foreground focus:outline-none focus:border-accent/60"
+          />
+        )}
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          maxLength={1000}
+          aria-label="A note for the proposer"
+          placeholder="A note for the proposer (optional)"
+          className="mt-1.5 w-full text-[10px] px-2 py-1 rounded border border-border-subtle bg-background/40 text-foreground placeholder:text-foreground-subtle focus:outline-none focus:border-accent/60"
+        />
+        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+          {amending ? (<>
+            <button onClick={() => decide('amend')} disabled={busy || !text.trim()}
+              className="text-[10px] px-2 py-0.5 rounded border border-accent/50 bg-accent/10 text-foreground hover:bg-accent/20 disabled:opacity-50">Accept amended</button>
+            <button onClick={() => setAmending(false)} disabled={busy}
+              className="text-[10px] px-2 py-0.5 rounded border border-border-subtle text-foreground-muted hover:text-foreground hover:bg-surface-hover disabled:opacity-50">Cancel</button>
+          </>) : (<>
+            <button onClick={() => decide('accept')} disabled={busy || !p}
+              className="text-[10px] px-2 py-0.5 rounded border border-accent/50 bg-accent/10 text-foreground hover:bg-accent/20 disabled:opacity-50">Accept</button>
+            <button onClick={() => { setText(p ? clip(p.proposedText) : ''); setAmending(true); }} disabled={busy || !p}
+              className="text-[10px] px-2 py-0.5 rounded border border-border-subtle text-foreground-muted hover:text-foreground hover:bg-surface-hover disabled:opacity-50">Amend</button>
+            <button onClick={() => decide('reject')} disabled={busy || !p}
+              className="text-[10px] px-2 py-0.5 rounded border border-border-subtle text-foreground-muted hover:text-foreground hover:bg-surface-hover disabled:opacity-50">Reject</button>
+          </>)}
+          {error && <span role="alert" className="text-[10px] text-danger">{error}</span>}
+        </div>
       </>)}
     </div>
   );

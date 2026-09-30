@@ -8,7 +8,9 @@
  * since the link was made says so rather than disappearing. A page with an
  * open proposal says so: which section, by whom, why, and who it affects;
  * a person decides it from the inbox (B7.4). Beneath it, what each agent
- * doing relying work said it would mean for them (B7.3).
+ * doing relying work said it would mean for them (B7.3). A task whose spec
+ * changed by an accepted proposal says so, and whether its agent has been
+ * told yet (B7.4).
  */
 
 import { useEffect, useState } from 'react';
@@ -18,7 +20,8 @@ import type { PlanItem } from '@shared/types';
 
 interface Out { pageUid: string; pageTitle: string; planUid: string; planTitle: string; section: string; sectionTitle: string | null; sectionMissing: boolean }
 interface In { itemUid: string; title: string; status: string | null; assignee: string | null; planUid: string; planTitle: string; section: string; sectionTitle: string | null }
-interface Links { reliesOn: Out[]; reliedOnBy: In[]; words: string | null }
+interface Changed { proposalUid: string; pageUid: string; pageTitle: string; section: string; sectionTitle: string | null; at: number; toldAt: number | null }
+interface Links { reliesOn: Out[]; reliedOnBy: In[]; words: string | null; specChanged?: Changed[] }
 interface Impact { id: number; impact: 'none' | 'changes'; words: string; tasks: number | null; itemTitle: string | null; planTitle: string | null; author: string }
 interface Proposal { uid: string; section: string; sectionTitle: string | null; why: string; author: string; affectedWords: string | null; pageChangedSince: boolean; impacts: Impact[] }
 
@@ -47,7 +50,8 @@ export function SpecLinksPanel({ item }: { item: PlanItem }) {
 
   if (!links) return null;
   const { reliesOn, reliedOnBy, words } = links;
-  if (reliesOn.length === 0 && reliedOnBy.length === 0 && proposals.length === 0) return null;
+  const changed = links.specChanged ?? [];
+  if (reliesOn.length === 0 && reliedOnBy.length === 0 && proposals.length === 0 && changed.length === 0) return null;
 
   return (
     <section className="space-y-2 text-[12px]" data-testid="spec-links">
@@ -62,7 +66,7 @@ export function SpecLinksPanel({ item }: { item: PlanItem }) {
           </div>
           <div className="text-foreground">Why: {p.why}</div>
           <div className="text-foreground-subtle">
-            {p.affectedWords ?? 'Nothing relies on this page yet'}. A person decides; the page is unchanged until then.
+            {p.affectedWords ?? 'Nothing relies on this page yet'}. A person decides, in Awareness; the page is unchanged until then.
             {p.pageChangedSince && <span className="text-amber-300"> The page has changed since this was proposed.</span>}
           </div>
           {p.impacts.length > 0 && (
@@ -81,6 +85,17 @@ export function SpecLinksPanel({ item }: { item: PlanItem }) {
               ))}
             </ul>
           )}
+        </div>
+      ))}
+      {changed.map((c) => (
+        <div key={c.proposalUid} className="flex flex-wrap items-center gap-1.5 rounded border border-violet-400/30 bg-violet-400/[0.05] px-2.5 py-1" data-testid="spec-changed">
+          <PenLine size={12} className="text-violet-200" />
+          <span className="font-medium text-violet-200">Spec changed</span>
+          <button onClick={() => { const r = reliesOn.find((x) => x.pageUid === c.pageUid); if (r) void revealPlanItem(r.planUid, c.pageUid); }} className="text-foreground hover:underline">
+            {c.section ? `§ ${c.sectionTitle ?? c.section} of ` : ''}{c.pageTitle}
+          </button>
+          <span className="text-foreground-subtle">at {new Date(c.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          <span className="text-foreground-muted">· {c.toldAt ? 'its agent has been told' : 'its agent is told on its next step'}</span>
         </div>
       ))}
       {reliesOn.length > 0 && (

@@ -94,6 +94,7 @@ function answer(params: Record<string, unknown>, peer: PeerContext, ctx: PhoneBr
   }
   const hit = getHit(ref);
   if (!hit) throw new Error('No such breakpoint hit');
+  if (hit.kind === 'proposal') throw new Error('A spec proposal is decided on the proposal: accept, amend or reject.');
   const workstreams = workstreamsOf(ctx.projectRoot);
   if (hit.answeredAt !== null) return { hit: toPhoneHit(hit, workstreams), alreadyAnswered: true };
   const answered = answerHit({ ref, decision, note: params.note, by: ctx.who.author, byType: ctx.who.authorType });
