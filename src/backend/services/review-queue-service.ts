@@ -22,39 +22,9 @@ import { listWorktrees } from './worktree-service';
 import { loadSignals } from './awareness-service';
 import { isSafeGitRef } from './git-safety';
 import { mergeOrder, type OrderDependency } from '../../shared/lib/merge-order';
+import type { ReviewQueue, ReviewQueueLine, ReviewQueueStatus } from '../../shared/types/review';
 
-export type ReviewQueueStatus = 'ready' | 'held' | 'waiting' | 'in-progress' | 'unavailable';
-
-export interface ReviewQueueLine {
-  planUid: string;
-  planTitle: string;
-  branch: string;
-  /** The line of work, as signals name it: its folder, or `branch:<name>`. */
-  workstream: string;
-  items: number;
-  criteria: CriteriaSummary;
-  filesChanged: number;
-  blastRadius: number;
-  unplannedEdges: number;
-  openSignals: number;
-  openHigh: number;
-  ready: boolean;
-  status: ReviewQueueStatus;
-  /** Why it has that status, in a sentence. */
-  statusWords: string;
-  /** 1-based suggested place. */
-  position: number;
-  /** Why it goes there. */
-  reason: string;
-  /** Set when the branch could not be reviewed. */
-  error?: string;
-}
-
-export interface ReviewQueue {
-  /** What each line is reviewed against: the main checkout's branch. */
-  base: string | null;
-  lines: ReviewQueueLine[];
-}
+export type { ReviewQueue, ReviewQueueLine, ReviewQueueStatus } from '../../shared/types/review';
 
 const DONE: ReadonlySet<string> = new Set(['completed', 'archived']);
 

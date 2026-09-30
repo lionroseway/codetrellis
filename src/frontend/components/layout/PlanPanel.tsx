@@ -8,6 +8,7 @@ import { CommentThread } from '../plan/CommentThread';
 import { ProposedChanges } from '../plan/ProposedChanges';
 import { AgentTurnList, useAgentTurns } from './AgentTurns';
 import { AwarenessTab, useAwarenessFeed } from './AwarenessTab';
+import { ReviewTab } from './ReviewTab';
 import { useBreakpointsFeed } from './Breakpoints';
 import { TimelineLanes } from './TimelineLanes';
 import { ReplayBar, ReplayStart } from './ReplayBar';
@@ -71,6 +72,8 @@ export function PlanPanel() {
     // What overlaps between parallel lines of work (A1.8). The number is what
     // still needs you, not every signal: answered ones are listed below it.
     { key: 'awareness', label: 'Awareness', count: needsYou || undefined },
+    // What is in review and a suggested merge order (A5.5).
+    { key: 'review', label: 'Review' },
     { key: 'changes', label: 'Changes', count: fileChanges.length || undefined },
     // Proposed Changes (Phase 12 §B) requires an active plan — task
     // fields are the source of truth.
@@ -150,6 +153,8 @@ export function PlanPanel() {
         )}
 
         {activeTab === 'awareness' && <AwarenessTab />}
+
+        {activeTab === 'review' && <ReviewTab />}
 
         {activeTab === 'changes' && (
           <div className="text-[11px]">
