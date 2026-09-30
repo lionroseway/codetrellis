@@ -22,6 +22,10 @@ import { resolveSection } from './section-workstreams';
 import { getPlanExternalRefs } from './external-intake-service';
 import { getExternalRefs } from './external-refs-service';
 import { listHits } from './breakpoint-service';
+import { listWorktrees } from './worktree-service';
+import { loadSignals } from './awareness-service';
+import { declaredFootprint, stackOverlaps, type PlanFootprint } from './stack-overlaps';
+import fs from 'node:fs';
 
 const DONE: ReadonlySet<string> = new Set(['completed', 'archived']);
 
@@ -84,6 +88,7 @@ export function stackPlanOf(
     progress: { done: actions.filter((a) => a.status === 'done').length, total: actions.length },
     needsYou: sources.waitingHits(plan.uid),
     tasks,
+    overlaps: [],
   };
 }
 
@@ -98,12 +103,32 @@ const sources: StackSources = {
   waitingHits: (planUid) => listHits({ state: 'waiting', planUid }).length,
 };
 
-/** Every active plan in `projectPath`, in the plan list's order. */
+const canon = (p: string): string => {
+  if (p.startsWith('branch:')) return p;
+  try { return fs.realpathSync.native(p); } catch { return p; }
+};
+
+/** Every active plan in `projectPath`, in the plan list's order, with where each meets another (B6.3). */
 export function buildStack(projectPath: string): Stack {
   const plans = listPlans(projectPath).filter((p) => !DONE.has(p.status));
-  return {
-    project: projectPath,
-    plans: plans.map((p) => stackPlanOf(p, listAllItems(p.uid), sources)),
-  };
+  let worktrees: ReturnType<typeof listWorktrees> = [];
+  try { worktrees = listWorktrees(projectPath); } catch { /* not a git repository */ }
+  const rootOf = (branch: string) => worktrees.find((w) => w.branch === branch)?.path ?? `branch:${branch}`;
+
+  const rows: StackPlan[] = [];
+  const footprints: PlanFootprint[] = [];
+  for (const plan of plans) {
+    const items = listAllItems(plan.uid);
+    const row = stackPlanOf(plan, items, sources);
+    rows.push(row);
+    const branches = [...new Set(row.tasks.map((t) => t.workstream).filter((b): b is string => !!b))];
+    footprints.push({ uid: row.uid, label: row.label, ...declaredFootprint(items), roots: branches.map(rootOf) });
+  }
+
+  let signals: ReturnType<typeof loadSignals> = [];
+  try { signals = loadSignals(projectPath); } catch { /* awareness not started for this project */ }
+  const overlaps = stackOverlaps(footprints, signals, canon);
+  for (const row of rows) row.overlaps = overlaps.get(row.uid) ?? [];
+  return { project: projectPath, plans: rows };
 }
 

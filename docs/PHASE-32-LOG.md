@@ -167,7 +167,7 @@
 - [ ] B6 Stack view, refined in EXECUTION §5:
   - [x] B6.1 Dependencies resolve across plans (bug 11) (#231)
   - [ ] B6.2 The stack: `/api/stack` and `get_stack` — in review
-  - [ ] B6.3 Overlap bands, declared and actual
+  - [ ] B6.3 Overlap bands, declared and actual — built, PR after B6.2
   - [ ] B6.4 The Stack tab
   - [ ] B6.5 One clock
   - [ ] B6.6 The stack on the phone
@@ -304,6 +304,37 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: B6.3 — overlap bands: where two plans meet
+Each plan in the stack now carries `overlaps`: every other active plan it
+meets, from its own side, as "⚠ overlaps JIRA-150" (the other plan's label).
+The rule is pure, in `src/backend/services/stack-overlaps.ts`.
+- **Declared.** Both plans' unfinished tasks name the same file (a file spec,
+  or the file a symbol spec lives in) or the same function. A done or
+  skipped task no longer declares anything, and nor does a page. The detail
+  reads "Both plan to change validate and src/a.ts." and lists three things
+  before "and N more".
+- **Actual.** An open collision or contract signal (open, acknowledged or
+  intended, not dismissed or resolved) between the lines of work the two
+  plans' tasks are worked on. Signals are keyed by workstream root, so a
+  plan's roots come from its tasks' branches through the worktree list, as
+  the review queue maps them, compared by real path. The detail adds "Open
+  now:" and the signal's own summary. A high signal marks the overlap
+  `high`, and high overlaps sort first.
+- **Decided.**
+  - One overlap per pair of plans, carrying both kinds, not one per signal.
+    The band is about the two plans; the signals are its evidence.
+  - A task with no branch has no root, so it can only overlap by
+    declaration. A signal needs a line of work.
+- **Tests.**
+  - Unit: `stack-overlaps.test.ts` (4): the footprint (unfinished actions
+    only, no folders), a declared overlap from each side, an actual one that
+    a resolved signal or a drift does not make, and two spellings of one
+    folder.
+  - Harness: `tests/e2e/stack-overlaps.test.ts` (3). Two real worktrees make
+    a contract signal, and both plans name the same file. The overlap is
+    declared and actual, and high. Once the signal is dismissed, it is what
+    the plans declare. `get_stack` carries the same.
 
 ### 2026-09-30: B6.2 — the stack: every active plan at once
 `GET /api/stack?project` and a read-only `get_stack` MCP tool (a `read` row
