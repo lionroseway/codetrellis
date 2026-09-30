@@ -149,7 +149,7 @@ test.describe('Awareness tab', () => {
     await tabButton(page).click();
 
     await card(page, 'refreshToken').getByRole('button', { name: 'Acknowledge' }).click();
-    expect(sent).toEqual([{ id: 'c1', state: 'acknowledged', project: expect.any(String) }]);
+    await expect.poll(() => sent).toEqual([{ id: 'c1', state: 'acknowledged', project: expect.any(String) }]);
 
     const seen = page.getByTestId('awareness-seen').getByTestId('awareness-signal');
     await expect(seen).toHaveCount(1);
@@ -242,7 +242,7 @@ test.describe('Awareness tab', () => {
 
     // Intended: the change is meant, and the importing side will follow.
     await c.getByRole('button', { name: 'Intended' }).click();
-    expect(sent).toEqual([{ id: 'k1', state: 'intended', project: expect.any(String) }]);
+    await expect.poll(() => sent).toEqual([{ id: 'k1', state: 'intended', project: expect.any(String) }]);
     await expect(page.getByTestId('awareness-set-aside')).toContainText('Set aside 1');
   });
 
@@ -268,7 +268,7 @@ test.describe('Awareness tab', () => {
     await shot(page, 'awareness-drift');
 
     await d.getByRole('button', { name: 'Intended' }).click();
-    expect(sent).toEqual([{ id: 'd1', state: 'intended', project: expect.any(String) }]);
+    await expect.poll(() => sent).toEqual([{ id: 'd1', state: 'intended', project: expect.any(String) }]);
   });
 
   test('who was told, and what each agent said, sit beside the person\'s answer (A2.6)', async ({ page }) => {
