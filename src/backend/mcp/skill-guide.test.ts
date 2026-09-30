@@ -128,6 +128,17 @@ describe('the guide tells an agent what to offer, and what it may be refused', (
     assert.match(g, /Settings → MCP Server/);
   });
 
+  test('a wrong spec is proposed, not edited, and the replies and the outcome are explained (B7.7)', () => {
+    const g = summary();
+    assert.match(g, /When the spec is wrong/);
+    for (const t of ['propose_spec_change', 'reply_to_spec_proposal', 'relies_on', 'get_spec_links', 'await_decision']) {
+      assert.match(g, new RegExp(`\\b${t}\\b`), t);
+    }
+    assert.match(g, /── CodeTrellis: spec change proposed ──/);
+    assert.match(g, /── CodeTrellis: spec changed ──/);
+    assert.match(g, /no tool decides one/);
+  });
+
   test('every flavour builds without throwing', () => {
     for (const f of FLAVOURS) {
       assert.ok(buildSkillGuide(f).length > 200, f);

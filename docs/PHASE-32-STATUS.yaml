@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — B7.6: proposals on the phone"
-  status: "B7.5 merged (#247, #248). B7.6 built: a proposal waits in the phone's Waiting on you with every reply, and is accepted or rejected there as the person; proposal.list, proposal.get, proposal.decide. Harness, unit and phone spec green locally"
-  next: Merge B7.6 when CI is green; then B7.7, I1 end to end (two plans told once, both replies, accepted; the window, an MCP client and the phone agree) and the docs
+  step: "Wave 2 — B7.7: the I1 done-when and the docs"
+  status: "B7.6 merged (#249). B7.7 built: the I1 journey end to end in one harness test (the window, an MCP client and the phone agree), the agent guide's When the spec is wrong section, awareness.md's conferring section. B7 is done when this merges"
+  next: Merge B7.7 when CI is green; then step 8 of Wave 2, A6 (the Brief), refined into parts in EXECUTION first
   blockers: none
   updated: 2026-09-30
 sections:

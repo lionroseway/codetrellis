@@ -298,6 +298,46 @@ the signal behind it, and the wait across plans.
 - **The phone** (B6.6, `mobile/app/stack.tsx`). A card per plan from the
   Plans header: progress, needs you, overlaps in words, On it and Waiting.
 
+## Conferring: when the spec is wrong (B7, I1)
+
+A plan's spec lives in pages (Object items). When an agent finds one is
+wrong, the change is proposed, the plans relying on it say what it means
+for them, and a person decides. The I1 "done when": the billing agent
+proposes adding `currency` to the invoice format's Fields with the failing
+test; two other plans rely on that section; their agents are told once and
+reply "no change needed" and "one new column"; Sam sees one proposal with
+both impacts and accepts it; the page has a new version, both tasks are
+marked "spec changed" and their agents told. The window, any MCP client
+and the phone agree throughout.
+
+- **What relies on what** (B7.1, `services/spec-links-service.ts`). A task
+  names the pages, or headings by their slug, it relies on (`relies_on` on
+  `add_item` / `update_item`, `PUT /api/items/:uid/relies-on`); a page shows
+  "Relied on by 2 tasks in 2 plans". Sections come from
+  `shared/lib/spec-sections.ts`.
+- **A proposal** (B7.2, `services/spec-proposals-service.ts`).
+  `propose_spec_change` keeps the page's version then, the text, why, the
+  evidence and every task relying on it, and changes nothing.
+- **Told once, and a reply** (B7.3). Each session holding a relying task is
+  told on its next call ("── CodeTrellis: spec change proposed ──"), never
+  the proposer; `reply_to_spec_proposal` keeps `none` or `changes` with a
+  sentence, from that plan, and posts a `weigh-in` in the proposer's plan.
+- **A person decides** (B7.4). The proposal waits in the inbox as a
+  `proposal` breakpoint hit (Accept, Amend, Reject), decided over REST or the
+  phone only, never a tool. Accepting writes the page's new version as the
+  person and flags every relying task "spec changed" until its agent is told
+  ("── CodeTrellis: spec changed ──"); the proposer is told the outcome once
+  and can `await_decision` on it. Deleting the page or plan withdraws it.
+- **Guarded pages and documents** (B7.5). A `spec` breakpoint on a page
+  others rely on holds a direct edit and says who relies on it and to
+  propose instead; a proposal to it is not held and carries the person's
+  note. A legacy plan document is guarded too: its file edited on disk is
+  held as "changed on disk" (`services/plan-doc-guard.ts`), apply the file
+  or keep the app's version.
+- **The phone** (B7.6, `services/mobile-proposals.ts`). The proposal in
+  Waiting on you with every reply, in the words the window uses
+  (`shared/lib/proposal-words.ts`), accepted or rejected as the person.
+
 ## Any agent: what every client gets (A8)
 
 CodeTrellis is agent-agnostic. The rule: a feature ships with the path
@@ -317,6 +357,7 @@ run as a plain `codex` client with no hook and no watcher in
 | Code and function breakpoints | `check_breakpoint(path, old_text)` before an edit (the guide tells every agent to); an edit made without checking is a breach on its next call. A client whose hooks run a command, or a wrapper script: the connector's `--check-edit <path>` exits 2 when held (A8.2) | Claude Code's `PreToolUse` hook and Gemini CLI's `BeforeTool` hook (A8.3) make the check themselves and hold the edit before it is made, sending the replaced text |
 | Signal breakpoints | claims, finishes and spec edits pause while the signal is open | hooked edits pause too |
 | Skills | the task's skills, where to find them, in `get_brief`, `claim_item` and `get_next_item` (C1.1); `get_skill(name)` loads one and is the proof of use, labelled "read through CodeTrellis" (A8.4) | Claude Code's session log also proves a skill it loaded itself (C1.3), labelled "session log" |
+| Spec proposals (B7) | `propose_spec_change`, `reply_to_spec_proposal`, `get_spec_links`, `list_spec_proposals`; the notices ride on the agent's next call; `await_decision` on the proposal. The person decides in the window or on the phone | — |
 | Setup | the MCP connector config (Settings → MCP Server: a JSON entry for Claude Desktop, Cursor and most clients) | Claude Code's skill and hook installer (A3.4); Gemini CLI's hook installer (A8.3) |
 
 ## Rules to keep
@@ -383,9 +424,16 @@ run as a plain `codex` client with no hook and no watcher in
     across plans. The window, an MCP client and a paired phone return the
     same stack; `get_state_at` before the second plan existed has the first
     alone; and once the awaited task is done the wait is gone for all three.
+  - `spec-links`, `spec-proposals`, `spec-impacts`, `spec-decide`,
+    `spec-held-edits`, `plan-doc-guard`, `phone-proposals`;
+  - `conferring-i1`, the I1 "done when": one proposal with the failing test,
+    two relying plans told once and replying, the proposer never told of its
+    own; one proposal with both impacts for Sam, the same from REST, an MCP
+    client and a paired phone; accepted as the person, a new page version,
+    both tasks marked "spec changed" and each agent told once.
 - Phone screens: `tests/phone/awareness.spec.ts` (`npm run test:phone`)
   photographs Needs you, the overlap and its reply, and the lines of work;
   `tests/phone/review-queue.spec.ts`, the queue and the review a line opens;
-  `tests/phone/stack.spec.ts`, the stack.
-- Browser: `e2e/plan/stack-tab.spec.ts`, `stack-follow.spec.ts`, `stack-replay.spec.ts`, `cross-plan-waits.spec.ts`, `e2e/agent/review-tab.spec.ts`, `e2e/agent/awareness-tab.spec.ts`, `e2e/agent/awareness-reply.spec.ts`, `e2e/agent/workstream-strip.spec.ts`,
+  `tests/phone/stack.spec.ts`, the stack; `tests/phone/proposals.spec.ts`, a proposal waiting.
+- Browser: `e2e/plan/spec-links.spec.ts`, `spec-decide.spec.ts`, `spec-held-edit.spec.ts`, `plan-doc-guard.spec.ts`, `e2e/plan/stack-tab.spec.ts`, `stack-follow.spec.ts`, `stack-replay.spec.ts`, `cross-plan-waits.spec.ts`, `e2e/agent/review-tab.spec.ts`, `e2e/agent/awareness-tab.spec.ts`, `e2e/agent/awareness-reply.spec.ts`, `e2e/agent/workstream-strip.spec.ts`,
   `e2e/settings/mcp-server.spec.ts`.
