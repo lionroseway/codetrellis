@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { ClipboardList, Plus, FolderInput, Layers, Trash2, Search, X, CheckSquare, Square, AlertTriangle, RefreshCw, FolderOpen } from 'lucide-react';
 import { usePlanStore } from '../../stores/plan-store';
 import { useProjectStore } from '../../stores/project-store';
+import { useUiStore } from '../../stores/ui-store';
 import { useToastStore } from '../../stores/toast-store';
 import { StatusBadge } from './StatusBadge';
 import { CrossRepoSection } from './CrossRepoSection';
@@ -551,7 +552,10 @@ export function PlanList() {
                 }
               </button>
               <button
-                onClick={() => setActivePlan(plan.uid)}
+                // The workspace opens when the active plan changes, so the
+                // plan already active (minimised, or navigated away from)
+                // opened nothing when clicked. It opens it now.
+                onClick={() => (activePlanUid === plan.uid ? useUiStore.getState().setWorkspaceMode('plan') : setActivePlan(plan.uid))}
                 className="flex-1 min-w-0 text-left"
                 title="Click to open the plan workspace"
               >

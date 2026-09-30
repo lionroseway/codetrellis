@@ -7,7 +7,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { gotoWelcome, gotoWithProject, seedPlan, openPlan, cleanupPlans, API, FIXTURE_PATH } from '../helpers/setup';
+import { gotoWelcome, gotoWithProject, seedPlan, openPlan, cleanupPlans, FIXTURE_PATH } from '../helpers/setup';
 
 test.describe('Onboarding → Plan journey', () => {
   const PLAN_TITLE = 'E2E Onboarding Journey Plan';
@@ -91,16 +91,34 @@ test.describe('Onboarding → Plan journey', () => {
     await openPlan(page, PLAN_TITLE);
 
     // --- Step 1: Both items should be in the tree ---
-    await expect(page.getByText('First task').first()).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText('Second task').first()).toBeVisible({ timeout: 3000 });
+    // In the tree itself: the item's title shows in six places once the
+    // workspace is up (the tree, the board, the next-item strip…), and
+    // `getByText(…).first()` took whichever was there first. On CI the tree
+    // had not rendered yet, the click landed on another list's button, and
+    // the canvas detail never came (#227, Browser suite 3/3).
+    const tree = page.getByTestId('plan-item-tree');
+    await expect(tree.getByText('First task')).toBeVisible({ timeout: 5000 });
+    await expect(tree.getByText('Second task')).toBeVisible({ timeout: 3000 });
 
     // --- Step 2: Click an item to see its canvas detail ---
     // Polled, not a fixed wait: on a loaded runner the canvas detail took
     // longer than the one second this used to allow (#208, #212). A failed
     // page's snapshot is taken after afterEach has deleted the plan, so a
     // failure here looks like the plan vanished; it had not.
-    await page.getByText('First task').first().click();
+    await tree.getByText('First task').click();
     const bodyText = () => page.evaluate(() => document.body.textContent || '');
+    // What was on screen when the detail did not come, taken here: the page
+    // snapshot Playwright keeps is taken after afterEach deletes the plan.
+    const onScreen = () => page.evaluate(() => {
+      const body = document.body.textContent || '';
+      const selected = document.querySelector('[data-testid="plan-item-tree"] .ring-accent\\/30');
+      return JSON.stringify({
+        tree: !!document.querySelector('[data-testid="plan-item-tree"]'),
+        selectedRow: selected?.textContent?.trim().slice(0, 60) ?? null,
+        has: ['First task', 'Do the first thing', 'pending', 'Status', 'E2E Onboarding Journey Plan'].filter((w) => body.includes(w)),
+        start: body.replace(/\s+/g, ' ').slice(0, 400),
+      });
+    });
     await expect.poll(async () => {
       const text = await bodyText();
       return text.includes('First task') && (
@@ -108,10 +126,12 @@ test.describe('Onboarding → Plan journey', () => {
         text.includes('pending') ||
         text.includes('Status')
       );
-    }, { timeout: 10_000, message: 'the first task\'s detail shows on the canvas' }).toBe(true);
+    }, { timeout: 10_000, message: 'the first task\'s detail shows on the canvas' }).toBe(true).catch(async (e: Error) => {
+      throw new Error(`${e.message}\nOn screen then: ${await onScreen()}`);
+    });
 
     // --- Step 3: Switch between items ---
-    await page.getByText('Second task').first().click();
+    await tree.getByText('Second task').click();
     await expect.poll(async () => (await bodyText()).includes('Do the second thing'), {
       timeout: 10_000, message: 'the second task\'s detail shows on the canvas',
     }).toBe(true);

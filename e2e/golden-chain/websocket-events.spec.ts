@@ -6,8 +6,27 @@
  * API mutations → broadcast() → WS → useWebSocket hook → Zustand → UI.
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { gotoWithProject, seedPlan, cleanupPlans, API } from '../helpers/setup';
+
+/**
+ * Opens a socket from the page and says how it ended: `open`, `error`,
+ * `closed <code>` or `no answer`. It used to give the upgrade three seconds
+ * and report a bare `false`. The backend parses synchronously, so while it
+ * scans a project the size of this repository the upgrade waits behind the
+ * scan, and on a loaded runner that can be longer than three seconds. #226
+ * (browser 1/3) failed there with nothing to say whether it had waited or
+ * been refused; now the failure says which.
+ */
+function openSocket(page: Page): Promise<string> {
+  return page.evaluate(() => new Promise<string>((resolve) => {
+    const ws = new WebSocket(`ws://${window.location.host}/ws`);
+    ws.onopen = () => { ws.close(); resolve('open'); };
+    ws.onerror = () => resolve('error');
+    ws.onclose = (e) => resolve(`closed ${e.code}`);
+    setTimeout(() => resolve('no answer'), 15_000);
+  }));
+}
 
 test.describe('WebSocket event pipeline', () => {
   const PLAN_TITLE = 'E2E WS Events Plan';
@@ -20,17 +39,7 @@ test.describe('WebSocket event pipeline', () => {
     await gotoWithProject(page);
 
     // The useWebSocket hook should have connected
-    const wsConnected = await page.evaluate(() => {
-      return new Promise<boolean>((resolve) => {
-        // Check for console log from the hook
-        // Or verify the WS connection state
-        const ws = new WebSocket(`ws://${window.location.host}/ws`);
-        ws.onopen = () => { ws.close(); resolve(true); };
-        ws.onerror = () => resolve(false);
-        setTimeout(() => resolve(false), 3000);
-      });
-    });
-    expect(wsConnected).toBe(true);
+    expect(await openSocket(page)).toBe('open');
   });
 
   test('plan-created broadcast → plan appears in list without refresh', async ({ page, request }) => {
@@ -97,23 +106,10 @@ test.describe('WebSocket event pipeline', () => {
   test('file-changed broadcast → agent store marks file', async ({ page }) => {
     await gotoWithProject(page);
 
-    // Simulate a file-changed broadcast by sending it through the WS
-    const injected = await page.evaluate(() => {
-      return new Promise<boolean>((resolve) => {
-        const ws = new WebSocket(`ws://${window.location.host}/ws`);
-        ws.onopen = () => {
-          // Send a file-changed event as if we were the server
-          // NOTE: The server broadcasts TO clients; clients can't
-          // broadcast back. But we can test that the frontend WS
-          // connection is alive by verifying it opens.
-          ws.close();
-          resolve(true);
-        };
-        ws.onerror = () => resolve(false);
-        setTimeout(() => resolve(false), 3000);
-      });
-    });
-    expect(injected).toBe(true);
+    // NOTE: The server broadcasts TO clients; clients can't broadcast
+    // back. So this checks that the frontend WS connection is alive by
+    // verifying it opens.
+    expect(await openSocket(page)).toBe('open');
   });
 
   test('session-registered broadcast → "Agent connected" toast', async ({ page, request }) => {
