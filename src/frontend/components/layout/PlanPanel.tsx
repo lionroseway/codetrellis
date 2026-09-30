@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X, Maximize2, Minimize2 } from 'lucide-react';
 import { useUiStore, type PlanPanelTab } from '../../stores/ui-store';
 import { useAgentStore } from '../../stores/agent-store';
@@ -13,6 +13,8 @@ import { StackTab } from './StackTab';
 import { useBreakpointsFeed } from './Breakpoints';
 import { TimelineLanes } from './TimelineLanes';
 import { ReplayBar, ReplayStart } from './ReplayBar';
+import { useGraphStore } from '../../stores/graph-store';
+import { turnInPlan } from '../../lib/stack-timeline';
 
 type Tab = PlanPanelTab;
 
@@ -49,7 +51,15 @@ export function PlanPanel() {
   // Phase 22 wrote that view into `AgentPanel`, which `PlanPanel` had
   // already replaced in this slot, so nothing ever rendered it. See
   // `AgentTurns.tsx`.
-  const turns = useAgentTurns(events);
+  const allTurns = useAgentTurns(events);
+  // Phase 32 B6.4b — one selection: a plan chosen in the Stack tab narrows
+  // the Timeline to its work, until "Show all" lets it go.
+  const stackFocus = useGraphStore((s) => s.stackFocus);
+  const turns = useMemo(() => {
+    if (!stackFocus) return allTurns;
+    const scope = { planUid: stackFocus.planUid, taskUids: new Set(stackFocus.taskUids), sessions: new Set(stackFocus.sessions) };
+    return allTurns.filter((t) => turnInPlan(t, scope));
+  }, [allTurns, stackFocus]);
   // A turn clicked on the lanes (B2.1): opened and brought into view below.
   const [focusTurn, setFocusTurn] = useState<{ turnId: string; seq: number } | null>(null);
 
@@ -144,6 +154,24 @@ export function PlanPanel() {
 
         {activeTab === 'timeline' && (
           <div className="text-[11px]">
+            {/* Pinned while the Timeline scrolls: a filter nobody can see reads as missing work. */}
+            {stackFocus && (
+              <div className="sticky -top-2 z-10 bg-surface-solid pt-1.5 pb-1">
+                <div data-testid="timeline-following" className="flex items-center gap-2 mx-2 px-2 py-1 rounded border border-accent/30 bg-accent/[0.05] text-foreground-muted">
+                  <span>
+                    Showing <span className="text-foreground font-medium">{stackFocus.label}</span>&rsquo;s work: {turns.length} of {allTurns.length} {allTurns.length === 1 ? 'turn' : 'turns'}
+                  </span>
+                  <span className="flex-1" />
+                  <button
+                    data-testid="timeline-show-all"
+                    className="text-accent hover:underline"
+                    onClick={() => useGraphStore.getState().setStackFocus(null)}
+                  >
+                    Show all
+                  </button>
+                </div>
+              </div>
+            )}
             <ReplayStart />
             <TimelineLanes
               turns={turns}

@@ -13,9 +13,10 @@ import type { Stack, StackPlan, StackTask, StackDependency } from '@shared/types
  * branch it is worked on, what it waits on (a task in another plan is a link
  * to it), and where the plan meets another, in words.
  *
- * "Show on graph" draws a plan's footprint (the files its tasks name) on the
- * graph, whatever plan is open. It is the same answer an agent gets from
- * `get_stack`.
+ * "Follow" is one selection across the window: it draws a plan's footprint
+ * (the files its tasks name) on the graph, whatever plan is open, and
+ * narrows the Timeline to its work (B6.4b). The stack is the same answer an
+ * agent gets from `get_stack`.
  */
 
 const REFRESH_MS = 30_000;
@@ -112,7 +113,13 @@ function PlanRow({ plan, open, onToggle, focused }: { plan: StackPlan; open: boo
   const showOnGraph = () => {
     const graph = useGraphStore.getState();
     if (focused) { graph.setStackFocus(null); return; }
-    graph.setStackFocus({ planUid: plan.uid, label: plan.label, paths });
+    graph.setStackFocus({
+      planUid: plan.uid,
+      label: plan.label,
+      paths,
+      taskUids: plan.tasks.map((t) => t.uid),
+      sessions: [...new Set(plan.tasks.map((t) => t.assigneeSession).filter((x): x is string => !!x))],
+    });
     if (paths[0]) graph.focusNode(paths[0], false);
   };
 
@@ -142,13 +149,15 @@ function PlanRow({ plan, open, onToggle, focused }: { plan: StackPlan; open: boo
         <span className="flex-1" />
         <button
           onClick={showOnGraph}
-          disabled={paths.length === 0}
+          disabled={plan.tasks.length === 0}
           data-testid="stack-show-on-graph"
           aria-pressed={focused}
           className={`flex items-center gap-1 px-1.5 rounded border transition-colors disabled:opacity-40 ${focused ? 'border-accent/40 text-accent' : 'border-border-subtle text-foreground-muted hover:text-foreground'}`}
-          title={paths.length ? (focused ? 'Stop showing this plan on the graph' : `Show the ${paths.length} files this plan's tasks name on the graph`) : 'No task in this plan names a file yet'}
+          title={focused
+            ? 'Stop following this plan'
+            : `Show this plan's work: ${paths.length ? `the ${paths.length} files its tasks name on the graph, and ` : ''}its turns in the Timeline`}
         >
-          <Crosshair size={10} /> {focused ? 'On the graph' : 'Show on graph'}
+          <Crosshair size={10} /> {focused ? 'Following' : 'Follow'}
         </button>
         <button
           onClick={() => { void usePlanStore.getState().setActivePlan(plan.uid); }}

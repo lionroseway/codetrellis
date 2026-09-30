@@ -27,6 +27,8 @@ export interface StackTask {
   status: string | null;
   assignee: string | null;
   assigneeType: string | null;
+  /** The agent session that claimed it, so the Timeline can follow the plan (B6.4b). */
+  assigneeSession: string | null;
   /** The branch this task is worked on, its own or inherited from a section above it. */
   workstream: string | null;
   ticketKey: string | null;

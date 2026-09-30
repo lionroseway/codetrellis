@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B6.4: the Stack tab |
-| **Status** | A5 done (M5 met). B6.1–B6.3 merged (#231–#233): dependencies across plans, `/api/stack` and `get_stack`, overlap bands. B6.4 in review: the Stack tab, and "Show on graph" for a plan's footprint |
-| **Next action** | Merge B6.4 when green; then B6.4b, the Timeline follows the stack's selection |
+| **Stage / step** | Wave 2 — B6.4b: the Timeline follows the stack |
+| **Status** | A5 done (M5 met). B6.1–B6.4 merged (#231–#234): dependencies across plans, `/api/stack` and `get_stack`, overlap bands, the Stack tab. #234 also carried #235: pinning a baseline no longer holds the server. B6.4b in review: Follow a plan and the Timeline narrows to its work |
+| **Next action** | Merge B6.4b when green; then B6.5, one clock (the stack at a past moment) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b6-4-stack-tab` |
+| **Branch** | `feat/phase-32-b6-4b-timeline-follows` |
 | **Last updated** | 2026-09-30 |
 
 ---
@@ -170,8 +170,8 @@
   - [x] B6.1 Dependencies resolve across plans (bug 11) (#231)
   - [x] B6.2 The stack: `/api/stack` and `get_stack` (#232)
   - [x] B6.3 Overlap bands, declared and actual (#233)
-  - [ ] B6.4 The Stack tab — in review
-  - [ ] B6.4b The Timeline follows the stack's selection
+  - [x] B6.4 The Stack tab (#234; carried #235, pinning a baseline no longer freezes the server)
+  - [ ] B6.4b The Timeline follows the stack's selection — in review
   - [ ] B6.5 One clock
   - [ ] B6.6 The stack on the phone
   - [ ] B6.7 Done-when and docs
@@ -308,6 +308,37 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-30: B6.4b — one selection: the Timeline follows the stack
+Following a plan in the Stack tab now narrows the Timeline to its work, the
+other half of design rule 9 ("one selection").
+- **What is a plan's work** (`src/frontend/lib/stack-timeline.ts`, pure). A
+  turn counts when its session is the one on one of the plan's tasks (each
+  stack task now carries `assigneeSession`), or when any call in it names
+  the plan or one of its tasks. A call's arguments arrive as an object when
+  live and as a JSON string when stored, possibly cut short. A uid is a
+  UUID, so finding it in the text is exact, and it survives the cut.
+- **The button is now "Follow" / "Following"**, because it does both: the
+  plan's footprint on the graph, and its turns in the Timeline. The focus in
+  the graph store carries the plan's task uids and sessions.
+- **The Timeline says so.** "Showing JIRA-150's work: 1 of 2 turns", with
+  **Show all**, which lets the selection go everywhere at once: graph,
+  Timeline and stack. The tab's count is the filtered count.
+- **Limit.** The lanes above the turn list still show commits and signals
+  from the awareness feed, which belong to workstreams, not plans. Only the
+  turns are narrowed.
+- **Tests.**
+  - Unit: `stack-timeline.test.ts` (3): the session, a call naming the plan
+    or a task (a bulk call too), and stored and cut-short arguments.
+  - Browser: `e2e/plan/stack-follow.spec.ts`, with screenshot
+    `stack-follow-timeline`. Two MCP agents each leave a note on one plan's
+    task. Following Billing leaves only its agent's turn, with the bar.
+    Show all brings the other back and lets the stack row go.
+    `stack-tab.spec.ts` now expects "Following".
+
+The bar is pinned to the top of the Timeline: the first screenshot showed
+the Timeline scrolled past it, and a filter nobody can see reads as missing
+work. The spec scrolls to the bottom and checks the bar is still in view.
+
 ### 2026-09-30: Pinning a baseline froze the server
 
 B6.4's CI (#234, browser 1/3) failed `websocket-events.spec.ts:106`: a socket
@@ -334,6 +365,7 @@ Tests: `git-blobs.test.ts` (3, real git: contents at the commit not the
 tree, missing paths and directories left out, option-shaped refs refused);
 the 15 harness baseline tests; the baseline and WebSocket browser specs run
 side by side on two workers (21 passed).
+
 
 ### 2026-09-30: B6.4 — the Stack tab
 A **Stack** tab beside Plans in `PlanPanel` (`StackTab.tsx`) shows every plan
