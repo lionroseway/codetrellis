@@ -14,8 +14,8 @@
 # and prs (PRs whose merge commit does not name the id).
 now:
   step: "Wave 2 — HD3: business clashes in the Stack"
-  status: "C2.1 merged (#259): each item's state from git (building, pushed, merged), with its proof commit and source. The plan now takes in business work (log entry \"Business work in the plan\"): HD3 added after C2.1, C2.4 reads status rather than writing STATUS.md, B9 projects materials, and C3's shared plans folder can be carried by git or a cloud-synced folder"
-  next: "HD3 on feat/phase-32-hd3-business-clashes-stack: stackOverlaps maps task: workstreams to their plans and counts material signals; declared materials from briefs; the same at a past moment and on the phone; stateAt gains each task's material reads. Then C2.2 on feat/phase-32-c2-2-review-host-github"
+  status: "HD3 built: a material clash between two plans' tasks (contract, collision, or a version-split or stale-base about a material) is an overlap in the Stack, and both plans' briefs listing one material is a declared one (\"Both rely on sales-2026.xlsx.\"); each task carries its latest read of each material (\"read sales-2026.xlsx on 22 Sept (version 3f9c2e1)\"), by the moment in the stack at a moment; the overlap's detail is on the row, not only on hover. Unit (1712), harness (stack-materials and 43 related), browser (stack specs, 2 shots) green locally"
+  next: "Merge HD3 when CI is green; then C2.2 on feat/phase-32-c2-2-review-host-github (the review-host interface and GitHub behind it, off until turned on per project)"
   blockers: none
   updated: 2026-09-30
 sections:

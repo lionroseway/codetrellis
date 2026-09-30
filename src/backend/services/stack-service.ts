@@ -14,7 +14,7 @@
  * MCP scope keep it to opened projects.
  */
 import type { Plan, PlanItem } from '../../shared/types';
-import type { Stack, StackDependency, StackPlan, StackTask } from '../../shared/types/stack';
+import type { Stack, StackDependency, StackPlan, StackRead, StackTask } from '../../shared/types/stack';
 import { listPlans } from './plan-service';
 import { listAllItems, dependencyLookup } from './plan-item-service';
 import { dependencyState, waitSentence, type DependencyLookup } from './plan-dependencies';
@@ -25,6 +25,9 @@ import { listHits } from './breakpoint-service';
 import { listWorktrees } from './worktree-service';
 import { loadSignals } from './awareness-service';
 import { declaredFootprint, stackOverlaps, type PlanFootprint } from './stack-overlaps';
+import { getDb } from './database';
+import { isSettled } from './plan-dependencies';
+import { taskWorkstreamId, TASK_PREFIX } from './task-workstreams';
 import fs from 'node:fs';
 
 const DONE: ReadonlySet<string> = new Set(['completed', 'archived']);
@@ -33,6 +36,44 @@ export interface StackSources extends DependencyLookup {
   planTicketKey(planUid: string): string | null;
   itemTicketKey(itemUid: string): string | null;
   waitingHits(planUid: string): number;
+  /** The task's latest read of each material, by then for a past moment (HD3). */
+  readsOf?(itemUid: string): StackRead[];
+  /** Materials attached, as a brief lists them, to these items (HD3). */
+  materialsOn?(itemUids: readonly string[]): string[];
+}
+
+const DAY_MONTH = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+
+/** `read sales-2026.xlsx on 22 Sept (version 3f9c2e1)`: which copy of a material a task worked from. */
+export function readWords(path: string, sha256: string | null, at: number): string {
+  const name = path.split(/[\\/]/).pop() || path;
+  return `read ${name} on ${DAY_MONTH.format(new Date(at))}${sha256 ? ` (version ${sha256.slice(0, 7)})` : ''}`;
+}
+
+/** Each material's latest read by the task, up to `before` when given (A6.2's `material_reads`). */
+function readsFromDb(itemUid: string, before?: number): StackRead[] {
+  const res = getDb().exec(
+    `SELECT path, sha256, at FROM material_reads WHERE item_uid = ?${before !== undefined ? ' AND at <= ?' : ''} ORDER BY at, rowid`,
+    before !== undefined ? [itemUid, before] : [itemUid],
+  );
+  const latest = new Map<string, StackRead>();
+  for (const [path, sha, at] of res[0]?.values ?? []) {
+    const p = String(path);
+    latest.delete(p);
+    latest.set(p, { path: p, sha256: (sha as string | null) ?? null, at: Number(at), words: readWords(p, (sha as string | null) ?? null, Number(at)) });
+  }
+  return [...latest.values()];
+}
+
+/** Materials attached to these items, as their briefs list them, attached by `before` when given. */
+function materialsFromDb(itemUids: readonly string[], before?: number): string[] {
+  if (!itemUids.length) return [];
+  const marks = itemUids.map(() => '?').join(',');
+  const res = getDb().exec(
+    `SELECT DISTINCT value FROM attachments WHERE role = 'material' AND target_uid IN (${marks})${before !== undefined ? ' AND created_at <= ?' : ''}`,
+    before !== undefined ? [...itemUids, before] : [...itemUids],
+  );
+  return (res[0]?.values ?? []).map((r) => String(r[0]));
 }
 
 /** The files an item names: its file specs (and where they move to), and the files its symbol specs live in. */
@@ -90,6 +131,7 @@ export function stackPlanOf(
       files: filesOf(item),
       dependencies,
       waits: state.met ? null : waitSentence(item.title, state),
+      reads: item.kind === 'action' ? (sources.readsOf?.(item.uid) ?? []) : [],
     };
   });
 
@@ -115,10 +157,12 @@ const sources: StackSources = {
   planTicketKey: (planUid) => getPlanExternalRefs(planUid).find((r) => r.externalKey)?.externalKey ?? null,
   itemTicketKey: (itemUid) => getExternalRefs(itemUid).find((r) => r.externalKey)?.externalKey ?? null,
   waitingHits: (planUid) => listHits({ state: 'waiting', planUid }).length,
+  readsOf: (itemUid) => readsFromDb(itemUid),
+  materialsOn: (itemUids) => materialsFromDb(itemUids),
 };
 
 const canon = (p: string): string => {
-  if (p.startsWith('branch:')) return p;
+  if (p.startsWith('branch:') || p.startsWith(TASK_PREFIX)) return p;
   try { return fs.realpathSync.native(p); } catch { return p; }
 };
 
@@ -148,7 +192,13 @@ function assemble(
     const row = stackPlanOf(plan, items, from);
     rows.push(row);
     const branches = [...new Set(row.tasks.map((t) => t.workstream).filter((b): b is string => !!b))];
-    footprints.push({ uid: row.uid, label: row.label, ...declaredFootprint(items), roots: branches.map(rootOf) });
+    // A material signal names tasks, not folders (A6.1), so each task is a root too.
+    const tasks = items.filter((i) => i.kind === 'action').map((i) => taskWorkstreamId(i.uid));
+    // What the unfinished tasks' briefs list: their own materials and their plan's pages'.
+    const briefItems = items.filter((i) => i.kind === 'object' || (i.kind === 'action' && !isSettled(i))).map((i) => i.uid);
+    const hasOpenTask = items.some((i) => i.kind === 'action' && !isSettled(i));
+    const materials = new Set(hasOpenTask ? (from.materialsOn?.(briefItems) ?? []) : []);
+    footprints.push({ uid: row.uid, label: row.label, ...declaredFootprint(items), roots: [...branches.map(rootOf), ...tasks], materials });
   }
   const overlaps = stackOverlaps(footprints, signals, canon, when);
   for (const row of rows) row.overlaps = overlaps.get(row.uid) ?? [];
@@ -180,6 +230,8 @@ export function stackThen(
   plans: PlanThen[],
   signalsThen: readonly OverlapSignal[],
   waitingThen: ReadonlyArray<{ planUid: string | null }>,
+  /** The moment, for what tasks had read and briefs listed by then (HD3). */
+  at?: number,
 ): Stack {
   const byUid = new Map<string, PlanItem>();
   for (const p of plans) for (const i of p.items) byUid.set(i.uid, i);
@@ -192,6 +244,8 @@ export function stackThen(
     planTicketKey: sources.planTicketKey,
     itemTicketKey: sources.itemTicketKey,
     waitingHits: (planUid) => waitingThen.filter((h) => h.planUid === planUid).length,
+    readsOf: (itemUid) => readsFromDb(itemUid, at),
+    materialsOn: (itemUids) => materialsFromDb(itemUids, at),
   };
   return assemble(projectPath, plans.map((p) => p.plan), (uid) => itemsOf.get(uid) ?? [], then, signalsThen, 'then');
 }

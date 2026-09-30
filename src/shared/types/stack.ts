@@ -37,6 +37,24 @@ export interface StackTask {
   dependencies: StackDependency[];
   /** `"Deploy" waits on "Migrate" in plan "Billing v2".` — `null` when nothing holds it. */
   waits: string | null;
+  /**
+   * The materials its sessions had read, the latest read of each, by then
+   * for the stack at a moment (HD3): which version of a spreadsheet the
+   * task was working from.
+   */
+  reads: StackRead[];
+}
+
+/** A task's latest read of one material (A6.2's `material_reads`). */
+export interface StackRead {
+  /** Project-relative: the material's identity across tasks. */
+  path: string;
+  /** The file's hash when it was read; null when it could not be taken. */
+  sha256: string | null;
+  /** Epoch ms of the read. */
+  at: number;
+  /** `read sales-2026.xlsx on 22 Sept (version 3f9c2e1)` */
+  words: string;
 }
 
 export interface StackPlan {
@@ -58,21 +76,24 @@ export interface StackPlan {
 /** An open awareness signal between the two plans' lines of work. */
 export interface StackOverlapSignal {
   id: string;
-  kind: 'collision' | 'contract';
+  /** A material's changed or split versions count too (HD3): the business form of two lines of work meeting. */
+  kind: 'collision' | 'contract' | 'version-split' | 'stale-base';
   severity: 'high' | 'medium' | 'low';
   summary: string;
 }
 
 /**
  * Phase 32 B6.3 — where this plan meets another. Declared: both plans'
- * unfinished tasks name the same files or functions. Actual: an open
- * collision or contract signal between the lines of work their tasks are
- * worked on. Either, or both.
+ * unfinished tasks name the same files or functions, or list the same
+ * material in their briefs (HD3). Actual: an open collision or contract
+ * signal between the lines of work their tasks are worked on, or a material
+ * signal between two of their tasks (HD3). Either, or both.
  */
 export interface StackOverlap {
   withPlanUid: string;
   withLabel: string;
-  declared: { files: string[]; symbols: string[] };
+  /** `materials` are project-relative paths of materials both plans' briefs list (HD3). */
+  declared: { files: string[]; symbols: string[]; materials: string[] };
   actual: StackOverlapSignal[];
   /** A high signal is open between them. */
   high: boolean;
