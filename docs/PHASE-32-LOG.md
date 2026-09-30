@@ -21,7 +21,7 @@
 | **Status** | B7.1–B7.4 merged: tasks say what spec they rely on; an agent proposes a change; the affected agents are told once and weigh in; a person accepts, amends or rejects it, and relying tasks say "spec changed". Now: the checklist's state is read from git and GitHub, and only intent is written (docs/PHASE-32-STATUS.yaml) |
 | **In flight** | #246 in review on `feat/phase-32-status-yaml` |
 | **Last merged** | B7.4 (#245, `e0a0a49`) |
-| **Next action** | Merge the status-as-data PR when green; then B7.5, spec breakpoints cover proposals and plan documents |
+| **Next action** | Merge |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
@@ -199,10 +199,15 @@
   - [x] C1.2 The picker in the routing panel (#176)
   - [x] C1.3 Proof of use; the skills line in a copied task prompt (#177)
   - [x] C1.4 A skill arriving in a pulled plan file is flagged once (#178)
-- [ ] C2 Team status through git
+- [ ] C2 Team status through git (git first for any host; a host adapter only when turned on), refined in EXECUTION §6
+  - [ ] C2.1 Each item's state from git, for any host or none (building, pushed, merged, with its source)
+  - [ ] C2.2 The review-host interface, and GitHub behind it, off until turned on per project
+  - [ ] C2.3 GitLab and Bitbucket on the same interface (Azure DevOps, Gitea later)
+  - [ ] C2.4 STATUS.md per plan and an index, each state saying its source
+  - [ ] C2.5 Ticket refs in the plan files; approvals as signed statements
+  - [ ] C2.6 Teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when
 - [ ] C3 Linked planning repo
 - [ ] C4 Recurring playbooks
-- [ ] Follow-up: the Phase 32 plan itself becomes a CodeTrellis plan, each step an item whose workstream is its branch, so its status is what the app reads from git (the owner's point, 2026-09-30); part of C2
 - [x] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
   - [x] C5.1 `workstream` on an item, inherited; `assign_workstream`; next and claim respect it (#186)
   - [x] C5.2 Start a worktree for a section; a start command for any agent (#187)
@@ -323,6 +328,30 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-30: C2 refined: git first, for any host
+
+The owner's next point: not everyone is on GitHub; Bitbucket, GitLab and
+others too. Is git the catch-all? For most of it, yes, and C2 is now
+refined that way (EXECUTION §6, shared-work doc C-2 §5–6):
+
+- **Git proves, for any host or none**: building (the branch exists),
+  pushed (it is on the remote), merged (ancestry, or for a squash or
+  rebase the branch's changes in the base, as bug 53 already checks, or
+  the merge commit naming the item). Everything the app reads today is
+  local git; nothing in `src/` speaks to a host's API.
+- **Only a host knows**: in review, checks, approvals, closed without
+  merging. Those come through one review-host interface with an adapter
+  per host, chosen from the remote URL: GitHub, then GitLab and Bitbucket
+  (Azure DevOps and Gitea later on the same shape).
+- **Off until the person turns it on, per project**, because it is a
+  remote surface and the update check is the only request the app makes
+  on its own; tokens in the OS keychain. Without one, the words are git's
+  ("pushed, not merged", never "in review"), and every state says its
+  source, to people and to agents alike.
+- **Six parts** (C2.1–C2.6), ending with Phase 32's own plan moved into
+  CodeTrellis. `tools/status/` stays GitHub-only on purpose: it serves
+  this one repository until C2.6 replaces it.
+
 ### 2026-09-30: The status as data, read from git
 
 The owner asked for status a program can read, rather than Markdown; then
@@ -363,7 +392,7 @@ they had drifted (a Now block still describing the step before).
   (B6.4b, not B6.4); git's facts win, a part-done parent is building, what
   git cannot see stays written, a PR the title names is not repeated;
   only todo or done can be written; a log without markers is refused.
-- **The end state is C2** (a follow-up there): the Phase 32 plan becomes a
+- **The end state is C2.6**: the Phase 32 plan becomes a
   CodeTrellis plan, each step an item whose workstream is its branch, so
   its status is what the app itself reads from git (B2.2's merges, bug
   53's squash detection, the Stack tab).

@@ -15,7 +15,7 @@
 now:
   step: "Wave 2 — the status as data (the owner's ask), then B7.5"
   status: "B7.1–B7.4 merged: tasks say what spec they rely on; an agent proposes a change; the affected agents are told once and weigh in; a person accepts, amends or rejects it, and relying tasks say \"spec changed\". Now: the checklist's state is read from git and GitHub, and only intent is written (docs/PHASE-32-STATUS.yaml)"
-  next: Merge the status-as-data PR when green; then B7.5, spec breakpoints cover proposals and plan documents
+  next: Merge #246 (status read from git; C2 refined for any host) when green; then B7.5, spec breakpoints cover proposals and plan documents
   blockers: none
   updated: 2026-09-30
 sections:
@@ -466,13 +466,24 @@ sections:
           - id: C1.4
             title: A skill arriving in a pulled plan file is flagged once
       - id: C2
-        title: Team status through git
+        title: Team status through git (git first for any host; a host adapter only when turned on), refined in EXECUTION §6
+        items:
+          - id: C2.1
+            title: Each item's state from git, for any host or none (building, pushed, merged, with its source)
+          - id: C2.2
+            title: The review-host interface, and GitHub behind it, off until turned on per project
+          - id: C2.3
+            title: GitLab and Bitbucket on the same interface (Azure DevOps, Gitea later)
+          - id: C2.4
+            title: STATUS.md per plan and an index, each state saying its source
+          - id: C2.5
+            title: Ticket refs in the plan files; approvals as signed statements
+          - id: C2.6
+            title: Teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when
       - id: C3
         title: Linked planning repo
       - id: C4
         title: Recurring playbooks
-      - title: the Phase 32 plan itself becomes a CodeTrellis plan, each step an item whose workstream is its branch, so its status is what the app reads from git (the owner's point, 2026-09-30); part of C2
-        followUp: true
       - id: C5
         title: "One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:"
         status: done

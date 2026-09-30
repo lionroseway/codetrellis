@@ -16,6 +16,12 @@
  *   is merged, yet names B7). Offline, only the branch checked out here
  *   counts as building.
  *
+ * This reads GitHub because this repository is on GitHub, and it serves
+ * this one plan until C2.6 moves Phase 32 into CodeTrellis. The product's
+ * own reading is host-neutral: git for what git proves, and a review-host
+ * adapter (GitHub, GitLab, Bitbucket) only when the person turns one on
+ * (EXECUTION §6, C2.1–C2.3).
+ *
  * A branch is `feat/phase-32-<id with dots as dashes, lowercase>-<slug>`
  * (`feat/phase-32-b6-4b-timeline-follows` is B6.4b); the longest id that
  * fits wins, so B6.4 does not claim B6.4b's branch.

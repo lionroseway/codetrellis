@@ -181,6 +181,48 @@ appear with their author, and the stack view (B6) shows them like any
 other. Fetching stays manual or opt-in; the app never fetches on its
 own.
 
+**5. Where status comes from: git first, a host only if asked** (the
+owner's point, 2026-09-30). Teams use GitHub, GitLab, Bitbucket, Azure
+DevOps, Gitea, a self-hosted server, or no host at all. Everything the app
+reads today (workstreams, Timeline lanes, squash-merge detection) is local
+git, and C2 keeps it that way for everything git can prove:
+
+| State | How it is known | Needs a host? |
+|---|---|---|
+| Building | the item's workstream branch exists | no |
+| Pushed | the branch is on the remote | no |
+| Merged | the work reached the base: ancestry for a merge or fast-forward; for a squash or rebase, the branch's changes are in the base (bug 53's check), or the merge commit names the item's key | no |
+| In review | an open PR / MR | **yes** |
+| Checks, approvals, review comments | the host's CI and review | **yes** |
+| Closed without merging | the host; git only sees a branch that stopped | **yes** |
+
+What only a host knows comes through a small **review-host interface**
+(open reviews for a branch, their checks and approvals, merged or closed),
+with one adapter per host, chosen from the remote URL: GitHub first, then
+GitLab and Bitbucket; Azure DevOps and Gitea later, on the same interface.
+
+- **Off until the person turns it on, per project.** CLAUDE.md: the only
+  request the app makes on its own is the update check, and remote
+  surfaces are off by default. An adapter is a remote surface. Settings
+  name the host and what will be asked; nothing is sent before that.
+- **Credentials in the OS keychain**, per host, never in the repo, a plan
+  file or the database. A public repo can be read without one.
+- **Honest words without one.** With no adapter the app says what git
+  proves: "pushed, not merged", never "in review", and a closed branch
+  reads "stopped" rather than a guess. Each state carries its source
+  (git, or which host), in the window, STATUS.md and to agents.
+- **Agents read it the same way**: the plan's MCP tools report each item's
+  state with its source, so an agent on a Bitbucket project is not told
+  less than one on GitHub, only honestly less when no adapter is on.
+
+**6. The first plan to use it is Phase 32's own.** Phase 32's status is
+generated today by `npm run status` (`tools/status/`), which reads the
+same facts for this one GitHub repository: the squash commit titled
+`Phase 32 <id>: … (#N)`, open PRs, step branches. C2 ends with that plan
+in CodeTrellis, each step an item whose workstream is its branch, and its
+status what the app itself reads; the script then reads from the app, or
+goes.
+
 ## C-3. A separate repo for CodeTrellis files
 
 ### What exists
