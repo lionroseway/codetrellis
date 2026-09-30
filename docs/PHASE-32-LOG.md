@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B6.4b: the Timeline follows the stack |
-| **Status** | A5 done (M5 met). B6.1–B6.4 merged (#231–#234): dependencies across plans, `/api/stack` and `get_stack`, overlap bands, the Stack tab. #234 also carried #235: pinning a baseline no longer holds the server. B6.4b in review: Follow a plan and the Timeline narrows to its work |
-| **Next action** | Merge B6.4b when green; then B6.5, one clock (the stack at a past moment) |
+| **Stage / step** | Wave 2 — B6.5: one clock, the stack at a past moment |
+| **Status** | A5 done (M5 met). B6.1–B6.4b merged (#231–#234, #236): dependencies across plans, `/api/stack` and `get_stack`, overlap bands, the Stack tab, and Follow narrowing the Timeline. B6.5 in review: while replaying, the Stack tab shows the stack as it was at the cursor |
+| **Next action** | Merge B6.5 when green; then B6.6, the stack on the phone |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b6-4b-timeline-follows` |
+| **Branch** | `feat/phase-32-b6-5-one-clock` |
 | **Last updated** | 2026-09-30 |
 
 ---
@@ -171,8 +171,8 @@
   - [x] B6.2 The stack: `/api/stack` and `get_stack` (#232)
   - [x] B6.3 Overlap bands, declared and actual (#233)
   - [x] B6.4 The Stack tab (#234; carried #235, pinning a baseline no longer freezes the server)
-  - [ ] B6.4b The Timeline follows the stack's selection — in review
-  - [ ] B6.5 One clock — built, PR after B6.4b
+  - [x] B6.4b The Timeline follows the stack's selection (#236)
+  - [ ] B6.5 One clock — in review
   - [ ] B6.6 The stack on the phone
   - [ ] B6.7 Done-when and docs
 - [ ] B7 Conferring
