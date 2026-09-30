@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — A6.4: other work affected |
-| **Status** | A6.3 merged (#255). A6.4 built: the Brief page's Other work affected (a line per material signal from the task's side, briefLine), get_brief's affected_by_other_work, the Awareness card's material detail (each task's sentence, no graph buttons) and the phone (tasks by title with ↔, the file listed). Unit, harness (102 neighbouring), browser and phone specs green locally, with screenshots |
-| **In flight** | A6.4 building on `feat/phase-32-a6-4-other-work-affected` |
-| **Last merged** | A6.3 (#255, `0ffb03e`) |
-| **Next action** | Merge A6.4 when CI is green; then A6.5 on feat/phase-32-a6-5-signoff-pack-signals (sign-off packs list the signals that touched the task and how each was resolved) |
+| **Stage / step** | Wave 2 — A6.5: sign-off packs list the signals |
+| **Status** | A6.4 merged (#256). A6.5 built: the sign-off pack lists each material signal that named a task, from its side, with how it ended (fixed, acknowledged by whom, intended, set aside) and agents' notes, in the data and the page. Unit, harness and browser (with a shot of the pack's section) green locally |
+| **In flight** | A6.5 building on `feat/phase-32-a6-5-signoff-pack-signals` |
+| **Last merged** | A6.4 (#256, `acf2392`) |
+| **Next action** | Merge A6.5 when CI is green; then A6.6 on feat/phase-32-a6-6-m6-done-when (replacing a spreadsheet two tasks cite tells both agents on their next call and shows once in the digest; awareness.md and the guide gain the Brief) |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
-> Read from git at `origin/feat/phase-32` `0ffb03e`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `acf2392`, with open PRs from GitHub.
 
 ---
 
@@ -117,8 +117,8 @@
   - [x] A6.1 Task workstreams (a session binds to the task it asks get_brief about) (#252)
   - [x] A6.2 Material footprints (who read what, and its hash then) (#253)
   - [x] A6.3 Material signals in the one refresh (contract, stale-base, version-split, collision, drift) (#255)
-  - [ ] A6.4 Other work affected on the Brief, in get_brief, the inbox and the phone — building
-  - [ ] A6.5 Sign-off packs list the signals that touched the task
+  - [x] A6.4 Other work affected on the Brief, in get_brief, the inbox and the phone (#256)
+  - [ ] A6.5 Sign-off packs list the signals that touched the task — building
   - [ ] A6.6 M6 done-when and docs
 - [ ] A7 Rules
 - [ ] Follow-up: `plan-by-hand` failed once in CI when its plan workspace dropped back to the plan list while `plan/list.spec.ts` created and deleted plans on the other worker (#147). It doesn't reproduce as a pair (5/5 on base and on the branch). Find which broadcast leaves the workspace, so a person's open plan survives someone else's plan changes.
@@ -336,6 +336,33 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: A6.5 — sign-off packs list the signals
+
+A6.4 merged (#256). A6.5 is built:
+
+- **The pack gains `signals`** (optional, so a pack made before still reads
+  and verifies): every material signal that named one of the plan's tasks,
+  live or resolved, per task. Each row has the heading, the line from the
+  task's side (`briefLine`), the outcome and its words from the same code
+  a PR body uses (`otherWorkInFlight`, A5.2): fixed, acknowledged by whom,
+  marked intended, set aside, or still open; and the notes agents left.
+- **As stored, not recomputed** (a decision): building a pack records what
+  was known; refreshing first would let the act of exporting change the
+  record.
+- **The page** gains "Other work that touched these tasks": task, what
+  happened, how it ended, every value escaped like the rest of the page.
+  Its JSON carries the rows, so a saved pack keeps them.
+- Found while testing: an answer given in the app over plain HTTP (the
+  browser tests) is recorded as unverified, and the pack says "someone
+  through the local API, not verified as the person". That is the
+  authorship rule working, not a bug.
+
+Tests: unit `signoff-pack.test.ts` (the rows, their words, none for another
+plan's task, the page's section and data); harness `material-signals`
+(a real pack lists the dismissed contract and the two fixed signals per
+task, answered first); browser `brief-other-work` continues to the pack
+(shot `signoff-pack-signals`).
 
 ### 2026-09-30: A6.4 — other work affected
 

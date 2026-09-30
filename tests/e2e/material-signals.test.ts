@@ -22,6 +22,7 @@ test.describe.serial('Material signals', () => {
   test.setTimeout(120_000);
   let h: Harness;
   let root: string;
+  let plan: string;
   const items: Record<string, string> = {};
   const sales: Record<string, string> = {};
   const agents: Record<string, ScriptedAgent> = {};
@@ -42,7 +43,7 @@ test.describe.serial('Material signals', () => {
     await h.client.scanProject(root);
     fs.mkdirSync(path.join(root, 'data'), { recursive: true });
     replace('region,q3\nEMEA,120\n');
-    const plan = (await h.client.createPlan({ title: 'Quarter close', projectPath: root })).uid;
+    plan = (await h.client.createPlan({ title: 'Quarter close', projectPath: root })).uid;
     for (const [who, title] of [['report', 'Q3 report'], ['pack', 'Board pack']] as const) {
       items[title] = await post(`/api/plans/${plan}/items`, { kind: 'action', title });
       const res = await h.client.raw('POST', `/api/items/${items[title]}/artefacts`, { path: 'data/sales.csv', role: 'material' });
@@ -113,5 +114,23 @@ test.describe.serial('Material signals', () => {
     const [s] = await signals();
     expect((await h.client.raw('POST', `/api/awareness/${s.id}/state?project=${encodeURIComponent(root)}`, { state: 'dismissed' })).ok).toBe(true);
     expect(await affected('pack', 'Board pack')).toEqual([]);
+  });
+
+  test('the sign-off pack lists each signal that touched a task, and how it ended (A6.5)', async () => {
+    const pack = (await (await h.client.raw('GET', `/api/plans/${plan}/signoff-pack`)).json()) as {
+      signals: Array<{ itemTitle: string; heading: string; outcome: string; says: string; outcomeWords: string }>;
+    };
+    const of = (title: string) => pack.signals.filter((x) => x.itemTitle === title).map((x) => [x.heading, x.outcome]);
+    // The contract was set aside over the local API; the earlier two are gone.
+    // Answered before fixed, then by severity, as a PR body orders them.
+    expect(of('Board pack')).toEqual([['Changed material', 'dismissed'], ['Different versions', 'fixed'], ['Material changed', 'fixed']]);
+    expect(of('Q3 report').map((x) => x[0]).sort()).toEqual(['Changed material', 'Different versions', 'Material changed']);
+    const set = pack.signals.find((x) => x.itemTitle === 'Board pack' && x.outcome === 'dismissed')!;
+    expect(set.says).toBe('data/sales.csv changed since “Q3 report” cited line 2. This task uses it too.');
+    expect(set.outcomeWords).toBe('Set aside by someone through the local API, not verified as the person.');
+
+    const html = await (await h.client.raw('GET', `/api/plans/${plan}/signoff-pack.html`)).text();
+    expect(html).toContain('<h2>Other work that touched these tasks</h2>');
+    expect(html).toContain('data/sales.csv changed since “Q3 report” cited line 2. This task uses it too.');
   });
 });
