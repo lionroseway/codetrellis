@@ -69,7 +69,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 157 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 158 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -168,9 +168,9 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/items/:uid/skill-arrivals/accept` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/spec-proposals` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/worktree` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans` |  | 1 | 84 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans` |  | 1 | 85 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 2 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `POST /api/plans/:planUid/items` |  | ✗ none | 50 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:planUid/items` |  | ✗ none | 51 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 2 | ✓ 0.4c: exercised by criteria-loops (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/docs` |  | ✗ none | 7 | ✓ 0.4c: exercised by full-loop, phone-plans, plan-docs, plan-export, +2 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -184,9 +184,9 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/plans/import` |  | ✗ none | 3 | ✓ 0.4c: exercised by plan-export, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/import-external` |  | ✗ none | 1 | ✓ 0.4c-1: issue checklist becomes Actions; unknown source 400 (plan-rest) |  |  |
 | c | `POST /api/plans/prune-orphans` |  | ✗ none | 1 | ✓ 0.4c-1: removes only the opened project's current orphans; everything else skipped (plan-rest) |  |  |
-| c | `POST /api/spec-proposals/:uid/decision` |  | ✗ none | 1 |  |  |  |
+| c | `POST /api/spec-proposals/:uid/decision` |  | ✗ none | 2 |  |  |  |
 | c | `PUT /api/items/:uid` |  | ✗ none | 19 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
-| c | `PUT /api/items/:uid/relies-on` |  | ✗ none | 6 |  |  |  |
+| c | `PUT /api/items/:uid/relies-on` |  | ✗ none | 7 |  |  |  |
 | c | `PUT /api/items/:uid/workstream` |  | ✗ none | 8 |  |  |  |
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 3 | ✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `PUT /api/plan-phases/:phaseUid` |  | ✗ none | 2 | ✓ 0.4c: exercised by full-loop, plan-phases (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -342,7 +342,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `add_plan_scope` | plan · write | ✗ none | 3 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-cross-repo, cdev-stitched-view (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `assign_workstream` | plan-item · write | ✗ none | 1 |  |  |  |
 | c | `bulk_add_items` | plan-item · write | ✗ none | 1 | ✓ 0.7: a tree in one call, parents by temporary id, authored by the calling agent; unknown plan refused (item-batch-search-import) |  |  |
-| c | `claim_item` | plan-item · write | ✗ none | 28 | ✓ 0.4c: exercised by agent-loop, multi-agent, plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `claim_item` | plan-item · write | ✗ none | 29 | ✓ 0.4c: exercised by agent-loop, multi-agent, plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `copy_plan_as_prompt` | plan · read | ✗ none | 1 | ✓ 0.4c-1: whole plan or one item; unknown plan is an error (plan-tools) |  |  |
 | c | `create_plan` | plan · write | ✗ none | 20 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-channels, cdev-cross-repo, cdev-phase11, +15 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `create_plan_from_template` | plan · write | ✗ none | 1 | ✓ 0.4c-1: items copied, statuses reset; unknown template errors (plan-tools) |  |  |
@@ -357,7 +357,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `get_plan_summary` | plan-item · read | ✗ none | 1 | ✓ 0.4c-2: counts by kind, byStatus, completion (item-surface) |  |  |
 | c | `get_plan_timeline` | plan-item · read | ✗ none | 1 | ✓ 0.4c: exercised by plan-items (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `get_skill` | plan-item · read | ✗ none | 1 |  |  |  |
-| c | `get_spec_links` | plan · read | ✗ none | 4 |  |  |  |
+| c | `get_spec_links` | plan · read | ✗ none | 5 |  |  |  |
 | c | `get_stack` | plan · read | ✗ none | 3 |  |  |  |
 | c | `import_external` | plan · write | ✗ none | 1 | ✓ 0.7: plan and items authored by the caller, in the open project, shared by default; no project refused (item-batch-search-import) |  |  |
 | c | `import_plan_from_files` | plan · files | ✗ none | 1 | ✓ 0.4c: exercised by cdev-phase3-demo (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -370,16 +370,16 @@ records that — but "✗ none" is proof of a gap.
 | c | `list_plan_templates` | plan · read | ✗ none | 1 | ✓ 0.4c-1: built-ins; project templates with project_root (plan-tools) |  |  |
 | c | `list_plans` | plan · read | ✗ none | 14 | ✓ 0.4c: exercised by plan-tools, transport-auth (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `list_plans_by_repo` | plan · read | ✗ none | 1 | ✓ 0.4c: exercised by cdev-cross-repo (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `list_spec_proposals` | plan · read | ✗ none | 3 |  |  |  |
+| c | `list_spec_proposals` | plan · read | ✗ none | 4 |  |  |  |
 | c | `move_item` | plan-item · write | ✗ none | 3 | ✓ 0.4c-2: refuses cycles and foreign/missing parents (item-surface; bug 23) |  |  |
 | c | `prepare_contributor_branch` | contribution · write | ✗ none | 1 | ✓ 0.4c: exercised by cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `promote_to_contribution` | contribution · write | ✗ none | 1 | ✓ 0.4c: exercised by cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `propose_spec_change` | plan · write | ✗ none | 5 |  |  |  |
+| c | `propose_spec_change` | plan · write | ✗ none | 6 |  |  |  |
 | c | `publish_plan_as_template` | plan · write | ✗ none | 1 | ✓ 0.4c-1: writes template.yaml; appears in the list (plan-tools) |  |  |
 | c | `read_item_full` | plan-item · read | ✗ none | 2 | ✓ 0.4c: exercised by plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `remove_external_ref` | plan-item · write | ✗ none | 1 | ✓ 0.4c-2: (item-surface) |  |  |
 | c | `remove_plan_scope` | plan · write | ✗ none | 1 | ✓ 0.4c: exercised by cdev-cross-repo (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `reply_to_spec_proposal` | plan · write | ✗ none | 3 |  |  |  |
+| c | `reply_to_spec_proposal` | plan · write | ✗ none | 4 |  |  |  |
 | c | `request_plan_deletion` | plan · write | ✗ none | 1 | ✓ 0.4c-3: asks the window, deletes nothing; refuses unknown, archived and unopened-project plans; typed confirmation in the app (plan-tools, e2e plan-deletion-request) |  |  |
 | c | `resolve_pantry_references` | contribution · read | ✗ none | 1 | ✓ 0.4c: exercised by cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `resolve_reference` | plan-item · read | ✗ none | 1 | ✓ 0.4c: exercised by short-references (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -404,7 +404,7 @@ records that — but "✗ none" is proof of a gap.
 | e | `read_material` | plan-item · files | ✗ none | 1 | ✓ 0.4e: CSV by {range} (bug 24), text by {lines}, image as itself; read logged on the item (brief-surface, read unit) |  |  |
 | e | `record_artefact` | plan-item · write | ✗ none | 4 | ✓ 0.4e: agent records an output (brief-surface, criteria-loops) |  |  |
 | f | `await_ack` | presence · write | ✗ none | 1 | ✓ 0.4f: released by ack; instant when already acked; unknown card an error at once; dismissed → via dismissed (presence-channels; bug 25) |  |  |
-| f | `await_decision` | presence · read | ✗ none | 7 |  |  |  |
+| f | `await_decision` | presence · read | ✗ none | 8 |  |  |  |
 | f | `await_user_input` | presence · write | ✗ none | 1 | ✓ 0.4f: gets the reply; a newer question supersedes an older wait at once (presence-channels; bug 25) |  |  |
 | f | `check_breakpoint` | presence · read | ✗ none | 2 |  |  |  |
 | f | `dismiss_channel_event` | channel · write | ✗ none | 1 | ✓ 0.4f: dismissed, broadcast, gone from the open list; unknown an error (presence-channels) |  |  |
@@ -553,7 +553,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `plan.template.list` | read | ✗ none | 1 | ✓ 0.4j: same templates as the desktop (phone-plans) |  |  |
 | c | `plan.update` | write | ✗ none | 1 | ✓ 0.4j: the desktop's edit path — desktop told, status checked, unknown refused (phone-plans); bugs 37, 38 |  |  |
 | c | `proposal.decide` | write | 1 | 1 |  |  |  |
-| c | `proposal.get` | read | 1 | 1 |  |  |  |
+| c | `proposal.get` | read | 1 | 2 |  |  |  |
 | c | `proposal.list` | read | 1 | 1 |  |  |  |
 | c | `stack.summary` | read | ✗ none | 2 |  |  |  |
 | d | `criteria.awaiting` | read | 1 | 1 | ✓ 0.4j: empty until the agent submits, then the criterion; empty after deciding (phone-sync-and-tools), mobile-approvals unit |  |  |

@@ -242,7 +242,28 @@ claim, finish, spec edit or hooked file edit pauses the same way, and the
 message says which signal.
 
 Never work around a breakpoint (another tool, a different item or file):
-it is the person's explicit ask.`;
+it is the person's explicit ask.
+
+## When the spec is wrong
+
+A task can say which spec pages (and headings) it relies on: \`relies_on\`
+on \`add_item\` / \`update_item\`, read back with \`get_spec_links\`. Set it,
+so you are told when that spec changes.
+
+If the spec your work follows is wrong, **propose the change instead of
+editing the page**: \`propose_spec_change(page_uid, section, text, why,
+evidence)\`, with the failing test as evidence. The page is not changed;
+the answer lists every task relying on it, in any plan. Their agents are
+told once ("── CodeTrellis: spec change proposed ──") and reply with
+\`reply_to_spec_proposal(uid, impact, words)\`: \`none\`, or \`changes\` with a
+sentence. A person decides (accept, amend or reject); no tool decides one.
+\`await_decision(hitRef)\` waits for it, and you are told the outcome once.
+
+When a spec you rely on changes, your next call says so
+("── CodeTrellis: spec changed ──"): re-read the page and re-plan what it
+touches. A direct
+edit to a page others rely on is saved but names who relies on it; a page
+the person guards pauses the edit and says to propose instead.`;
 
 // ── Philosophy — what CodeTrellis is and how to think about it ──────
 

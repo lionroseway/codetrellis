@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B7.6: proposals on the phone |
-| **Status** | B7.5 merged (#247, #248). B7.6 built: a proposal waits in the phone's Waiting on you with every reply, and is accepted or rejected there as the person; proposal.list, proposal.get, proposal.decide. Harness, unit and phone spec green locally |
-| **In flight** | B7.6 building on `feat/phase-32-b7-6-phone` |
-| **Last merged** | B7.5b (#248, `8e739b9`) |
-| **Next action** | Merge B7.6 when CI is green; then B7.7, I1 end to end (two plans told once, both replies, accepted; the window, an MCP client and the phone agree) and the docs |
+| **Stage / step** | Wave 2 — B7.7: the I1 done-when and the docs |
+| **Status** | B7.6 merged (#249). B7.7 built: the I1 journey end to end in one harness test (the window, an MCP client and the phone agree), the agent guide's When the spec is wrong section, awareness.md's conferring section. B7 is done when this merges |
+| **In flight** | B7.7 building on `feat/phase-32-b7-7-done-when` |
+| **Last merged** | B7.6 (#249, `af08991`) |
+| **Next action** | Merge B7.7 when CI is green; then step 8 of Wave 2, A6 (the Brief), refined into parts in EXECUTION first |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
-> Read from git at `origin/feat/phase-32` `8e739b9`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `af08991`, with open PRs from GitHub.
 
 ---
 
@@ -190,8 +190,8 @@
     - [x] B7.5a A spec breakpoint on a relied-on page holds a direct edit and says to propose; proposals carry its note (#247)
     - [x] B7.5b Legacy plan documents guarded like pages (an import from disk is held) (#248)
   - [ ] Follow-up: Linking a plan schedules one more export ~200 ms later; an edit to its files in that window is overwritten, not imported (found building B7.5b)
-  - [ ] B7.6 The phone — building
-  - [ ] B7.7 I1 done-when and docs
+  - [x] B7.6 The phone (#249)
+  - [ ] B7.7 I1 done-when and docs — building
 - [ ] B8 Grounding
 - [ ] B9 Play-forward
 - [ ] B10 The record
@@ -330,6 +330,34 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: B7.7 — the I1 done-when; B7 complete
+
+B7.6 merged (#249). The CI run first went red on Harness 4/4, which died
+in `npm ci` before any test (node-gyp crashed fetching Node's headers for
+`better-sqlite3`'s rebuild); a comment on the PR said so, and the one
+re-run passed.
+
+B7.7 is built, and closes B7:
+
+- **The I1 "done when"** (`tests/e2e/conferring-i1.test.ts`, 4 steps). The
+  billing agent (codex) proposes a new Fields section with the failing test
+  as evidence. Checkout (claude-code) and Exports (aider) rely on it; each is
+  told once on its next call and never again, and the proposer is never told
+  of its own. They reply "checkout: no change needed" and "exports: one new
+  column". Sam sees one proposal with both impacts; REST, `list_spec_proposals`
+  over MCP and the phone's `proposal.get` give the same impacts, and the
+  phone says "2 tasks in 2 plans rely on this. 2 of 2 replied." Sam accepts:
+  the proposer's wait returns accepted with Sam's note, the page has the new
+  text, both tasks are flagged "spec changed", each agent is told once, and
+  all three surfaces say accepted.
+- **The agent guide** gains "When the spec is wrong" in the part every agent
+  reads on connect: set `relies_on`, propose rather than edit, reply when
+  told, a person decides, re-plan when told the spec changed, and what a
+  guarded page does. `skill-guide.test.ts` checks it.
+- **Docs**: `docs/claude/awareness.md` has a conferring section (B7.1–B7.6),
+  a parity-table row (every step works for any MCP client) and its tests;
+  `mcp-tools.md` covers B7.5 and B7.6.
 
 ### 2026-09-30: B7.6 — proposals on the phone
 
