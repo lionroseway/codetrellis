@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — HD3: business clashes in the Stack"
-  status: "C2.1 merged (#259): each item's state from git (building, pushed, merged), with its proof commit and source. The plan now takes in business work (log entry \"Business work in the plan\"): HD3 added after C2.1, C2.4 reads status rather than writing STATUS.md, B9 projects materials, and C3's shared plans folder can be carried by git or a cloud-synced folder"
-  next: "HD3 on feat/phase-32-hd3-business-clashes-stack: stackOverlaps maps task: workstreams to their plans and counts material signals; declared materials from briefs; the same at a past moment and on the phone; stateAt gains each task's material reads. Then C2.2 on feat/phase-32-c2-2-review-host-github"
+  step: "Wave 2 — C2.2a: turning a review host on"
+  status: "HD3 merged (#262). C2.2 split in two: C2.2a built, turning a review host on with no request yet: the host read from the origin remote (GitHub supported; GitLab and Bitbucket recognised), a per-device switch per project that a changed remote turns off, turning on and saving a token for the app window only, the token per host in the OS keychain (Electron safeStorage) or memory only and saying so, Settings → Review hosts, Telemetry. Unit (1713), harness (review-host-switch 7 against a stand-in GitHub asked nothing; grant-guard, updates), browser (review-host-settings with a shot, modal-chrome) green locally"
+  next: "Merge C2.2a when CI is green; then C2.2b on feat/phase-32-c2-2b-review-host-github (the GitHub adapter behind activeReviewHost: open, merged and closed pull requests, checks and approvals; in review and closed, from GitHub)"
   blockers: none
   updated: 2026-09-30
 sections:

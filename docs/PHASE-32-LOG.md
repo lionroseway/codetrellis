@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — HD3: business clashes in the Stack |
-| **Status** | C2.1 merged (#259): each item's state from git (building, pushed, merged), with its proof commit and source. The plan now takes in business work (log entry "Business work in the plan"): HD3 added after C2.1, C2.4 reads status rather than writing STATUS.md, B9 projects materials, and C3's shared plans folder can be carried by git or a cloud-synced folder |
-| **In flight** | HD3 in review (#262) on `feat/phase-32-hd3-business-clashes-stack`; C2.2a building on `feat/phase-32-c2-2a-review-host-switch` |
-| **Last merged** | C2.1 (#259, `578a36f`) |
-| **Next action** | HD3 on feat/phase-32-hd3-business-clashes-stack: stackOverlaps maps task: workstreams to their plans and counts material signals; declared materials from briefs; the same at a past moment and on the phone; stateAt gains each task's material reads. Then C2.2 on feat/phase-32-c2-2-review-host-github |
+| **Stage / step** | Wave 2 — C2.2a: turning a review host on |
+| **Status** | HD3 merged (#262). C2.2 split in two: C2.2a built, turning a review host on with no request yet: the host read from the origin remote (GitHub supported; GitLab and Bitbucket recognised), a per-device switch per project that a changed remote turns off, turning on and saving a token for the app window only, the token per host in the OS keychain (Electron safeStorage) or memory only and saying so, Settings → Review hosts, Telemetry. Unit (1713), harness (review-host-switch 7 against a stand-in GitHub asked nothing; grant-guard, updates), browser (review-host-settings with a shot, modal-chrome) green locally |
+| **In flight** | C2.2a building on `feat/phase-32-c2-2a-review-host-switch` |
+| **Last merged** | HD3 (#262, `2514cb0`) |
+| **Next action** | Merge C2.2a when CI is green; then C2.2b on feat/phase-32-c2-2b-review-host-github (the GitHub adapter behind activeReviewHost: open, merged and closed pull requests, checks and approvals; in review and closed, from GitHub) |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
-> Read from git at `origin/feat/phase-32` `657854c`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `2514cb0`, with open PRs from GitHub.
 
 ---
 
@@ -187,7 +187,7 @@
   - [x] B6.5 One clock (#237)
   - [x] B6.6 The stack on the phone (#238)
   - [x] B6.7 Done-when and docs (#239)
-- [ ] HD3 Business clashes in the Stack: a material clash between two plans is an overlap, live and at a past moment; a task in the past says which version it read (after C2.1) (#262) — in review
+- [x] HD3 Business clashes in the Stack: a material clash between two plans is an overlap, live and at a past moment; a task in the past says which version it read (after C2.1) (#262)
 - [ ] B7 Conferring — building
   - [x] B7.1 Tasks say what they rely on (`spec_links`, sections by heading) (#241)
   - [x] B7.2 Propose a spec change, with the tasks it affects (#242)
@@ -342,6 +342,76 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: C2.2a — turning a review host on
+
+C2.2 is split in two (EXECUTION §6): C2.2a turns a host on and keeps its
+token, with no request; C2.2b reads GitHub behind it. What the research
+found shaped it: nothing in the app kept a secret for the person, the only
+outbound request of its own is the update check, `.codetrellis/config.json`
+is committed with the repository, and the harness backend runs under plain
+Node with no Electron.
+
+- **The host from the remote** (`review-host/detect.ts`): GitHub supported;
+  GitLab and Bitbucket recognised and told their adapter is coming (C2.3);
+  anything else named and left to git. A token pasted into a remote URL is
+  never carried into what is shown.
+- **A per-device switch per project** (`review-host/switch.ts`, table
+  `review_hosts`), never the committed config, so a cloned repository
+  cannot turn a request on. It records the repository it was turned on for;
+  a remote pointed at another switches it off and says so.
+- **Only the person turns it on.** Turning on and saving a token are grants
+  (the app window only, as `grant-guard.ts` rules); turning off and
+  forgetting narrow reach and are anyone's.
+- **The token** (`secret-store.ts`), per host: in the desktop app,
+  encrypted by Electron's `safeStorage` with a key the OS keychain holds,
+  only ciphertext on disk (0600, named by the key's hash); under plain Node,
+  or on Linux with no keyring (Electron's `basic_text`), in memory only
+  until the app quits, and Settings says so. Never plain text on disk, the
+  database or a response.
+- **Settings → Review hosts** names the host and what would be read before
+  anything is, and where a token is kept; Telemetry lists the review host
+  among what can leave the machine.
+
+Tests: unit (`detect`, `secret-store`); harness `review-host-switch.test.ts`
+against a stand-in GitHub that must be asked nothing, including the grant
+refusal from plain HTTP; browser `review-host-settings.spec.ts` with shot
+`review-host-settings`; `modal-chrome` and the UX audit list the new
+section. `activeReviewHost` is the one gate C2.2b asks before a request.
+
+### 2026-09-30: HD3 — business clashes in the Stack
+
+The first of the business-work fixes (log entry "Business work in the
+plan"), on what the app already records:
+
+- **Tasks are roots.** A plan's roots in the stack are its branch folders
+  and now its tasks (`task:<uid>`), which is how A6's material signals name
+  them. A material `contract` or `collision`, or a `version-split` or
+  `stale-base` whose subject is a material, between two plans' tasks is an
+  actual overlap. A code stale-base or drift never pairs two plans, even if
+  it names two lines of work, and two tasks of one plan are not an overlap
+  between plans.
+- **Declared materials.** Both plans' unfinished tasks' briefs listing one
+  material (role `material` on the task or on a page of its plan) is a
+  declared overlap: "Both rely on sales-2026.xlsx." At a past moment, only
+  what was attached by then counts.
+- **Which copy.** Each task carries `reads`: its latest read of each
+  material from `material_reads`, by the moment for the stack at a moment,
+  in words ("read sales-2026.xlsx on 22 Sept (version 3f9c2e1)").
+- **Said, not hovered.** Each overlap's detail is now on the row under its
+  chip, for code overlaps too: what the plans share is the part a person
+  acts on, and a business user should not have to discover a hover.
+- **The phone** needed nothing: its stack card already shows each
+  overlap's words and detail, and `stack.summary` is the same object.
+
+Tests: `stack-overlaps.test.ts` (task roots, the four material kinds, a
+code stale-base that must not pair, one plan's two tasks, declared
+materials), `stack-service.test.ts` (the read words, a page reads nothing);
+harness `stack-materials.test.ts` on a real workbook (declared at once;
+each task's version; replaced and re-read, the actual band; looking back
+before the replacement; the phone equals REST); browser
+`stack-materials.spec.ts` with shots `stack-materials` and
+`stack-materials-then`.
 
 ### 2026-09-30: Business work in the plan
 

@@ -338,6 +338,18 @@ the signal behind it, and the wait across plans.
   an item deleted since cannot be shown.
 - **The phone** (B6.6, `mobile/app/stack.tsx`). A card per plan from the
   Plans header: progress, needs you, overlaps in words, On it and Waiting.
+- **Work that is not code** (HD3). A plan's roots include its tasks
+  (`task:<uid>`), which is how a material signal names them (A6.1), so a
+  material `contract` or `collision`, or a `version-split` or `stale-base`
+  whose subject is a material, between two plans' tasks is an actual
+  overlap. Declared: both plans' unfinished tasks' briefs list the same
+  material (role `material` on the task or on a page of its plan), and the
+  detail says "Both rely on sales-2026.xlsx." A code stale-base or drift
+  never pairs plans. Each task carries `reads`, its latest read of each
+  material from `material_reads` (by the moment, in the stack at a moment),
+  in words: "read sales-2026.xlsx on 22 Sept (version 3f9c2e1)". The tab
+  shows each overlap's detail on the row, not only on hover. Harness:
+  `stack-materials.test.ts`; browser: `stack-materials.spec.ts`.
 
 ## Conferring: when the spec is wrong (B7, I1)
 
