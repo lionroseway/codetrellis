@@ -411,6 +411,7 @@ edges.
 | \`claim_item(uid, ...)\` | Atomically claim an Action; returns full context, file conflicts, and \`waits_on\` when a dependency is not finished yet (the claim still goes through) |
 | \`get_next_item(plan_uid, parent_uid?)\` | Next claimable Action respecting deps + approval gates. A dependency may be a task in another plan; when nothing is ready it says what the first task waits on, and where |
 | \`get_stack(project_path?)\` | Every active plan and its tasks at once: ticket keys, progress, who is on each task, its branch, its dependencies across plans with what it waits on, and where plans meet ("⚠ overlaps JIRA-150") |
+| \`get_spec_links(uid, section?)\` | For a task, the spec pages (and headings) it relies on; for a page, every task relying on it in any plan. Say what your task relies on with \`relies_on\` on \`add_item\` / \`update_item\`, so you are told when that spec changes |
 | \`assign_workstream(item_uid, workstream)\` | Which worktree a section is worked in (its branch, inherited below). Agents elsewhere are not offered its tasks and cannot claim them; \`get_next_item\` says how many were left out, and \`get_brief\` says where a task is worked |
 | \`get_brief(item_uid)\` | One read: the item, the guide, its materials, each criterion and what it still needs, any note sent back |
 | \`get_skill(name)\` | Load a project skill the task names (\`.claude/skills/<name>/SKILL.md\`) and follow it; reading it here shows the person the skill was used, whatever your client |

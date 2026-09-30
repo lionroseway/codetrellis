@@ -29,6 +29,7 @@ import { TargetsStrip } from './TargetsStrip';
 import { ItemRoutingPanel } from './ItemRoutingPanel';
 import { DriftIndicator } from './DriftIndicator';
 import { ExternalRefsPanel } from './ExternalRefsPanel';
+import { SpecLinksPanel } from './SpecLinksPanel';
 import { CriteriaBlock } from './CriteriaBlock';
 import { PlanTemplateChooser } from './PlanTemplateChooser';
 import { PlanImportModal } from './PlanImportModal';
@@ -144,6 +145,7 @@ export function PlanItemCanvas() {
         <div className="max-w-[42rem] mx-auto px-10 py-10 space-y-10">
           <ItemHeaderProperties item={item} />
           <ItemChannelBand itemUid={item.uid} />
+          <SpecLinksPanel item={item} />
           <BodyEditor key={item.uid} item={item} />
           <TargetsStrip item={item} />
           <CriteriaBlock itemUid={item.uid} criteria={ctx?.criteria ?? []} attachments={ctx?.attachments ?? []} />

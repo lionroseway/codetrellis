@@ -359,6 +359,20 @@ export const SCHEMA_PLANS_CORE = `
     PRIMARY KEY (reply_id, session_id)
   );
 
+  -- Phase 32 B7.1: what a task relies on, a spec page or one section of it
+  -- (a heading, by slug; '' for the whole page). Who relies on a page is
+  -- read back across every plan of its project.
+  CREATE TABLE IF NOT EXISTS spec_links (
+    item_uid TEXT NOT NULL,
+    page_uid TEXT NOT NULL,
+    section TEXT NOT NULL DEFAULT '',
+    author TEXT NOT NULL,
+    author_type TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (item_uid, page_uid, section)
+  );
+  CREATE INDEX IF NOT EXISTS idx_spec_links_page ON spec_links(page_uid);
+
   -- Phase 32 A1.7c: folders an agent reported that the person said "not now"
   -- to. Asked once per folder, not once per connection.
   CREATE TABLE IF NOT EXISTS folder_request_dismissals (
