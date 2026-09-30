@@ -316,6 +316,27 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-30: An agent's claim undone by our own export
+
+Found writing B7.4's browser spec, which failed about one run in three: a
+task claimed by an agent was back to pending, unassigned, a few hundred
+milliseconds later. Traced to the plan-file watcher. A linked plan is
+exported on every change (write-through), and the watcher skips files we
+wrote, but only within one second of writing them. On a busy machine
+chokidar's write-finish polling reported our own export after that second,
+so it was taken for an outside edit and the plan re-imported from it,
+overwriting whatever the database had gained since (the claim) with the
+older state on disk. Nothing surfaced it, since an import is silent.
+
+Fix (`services/self-write-tracker.ts`): a stamp keeps a hash of the file as
+we wrote it, and an event on a file that still reads that way is ours,
+however late. Anyone else's edit changes the content and is imported as
+before. A deletion, with nothing to compare, keeps the time window. Unit
+test `self-write-tracker.test.ts` (4); the sync harness tests
+(`plan-export`, `manifest-conflicts`, `cdev-channels`, `cdev-system-docs`,
+`next-up-and-sync`, `external-sync-endpoint`: 21) and the plan-file browser
+specs (`import-export`, `plan-by-hand`: 8) still pass.
+
 ### 2026-09-30: B7.3 — the affected agents are told once, and weigh in
 
 A proposal (B7.2) listed who relied on the page; nobody told them.
