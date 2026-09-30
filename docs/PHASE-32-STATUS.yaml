@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — the status as data (the owner's ask), then B7.5"
-  status: "B7.1–B7.4 merged: tasks say what spec they rely on; an agent proposes a change; the affected agents are told once and weigh in; a person accepts, amends or rejects it, and relying tasks say \"spec changed\". Now: the checklist's state is read from git and GitHub, and only intent is written (docs/PHASE-32-STATUS.yaml)"
-  next: Merge #246 (status read from git; C2 refined for any host) when green; then B7.5, spec breakpoints cover proposals and plan documents
+  step: "Wave 2 — B7.5a: a spec breakpoint on a relied-on page holds a direct edit and says to propose"
+  status: "B7.5a built: the held edit and the inbox name who relies on the page; a proposal carries the breakpoint's note. Harness, unit and browser green locally"
+  next: Merge B7.5a when CI is green; then B7.5b on feat/phase-32-b7-5b-plan-docs, legacy plan documents guarded like pages (a held import from disk)
   blockers: none
   updated: 2026-09-30
 sections:
@@ -441,6 +441,11 @@ sections:
             title: "The decision is a person's: accept, amend, reject; tasks marked \"spec changed\""
           - id: B7.5
             title: Spec breakpoints cover proposals and plan documents
+            items:
+              - id: B7.5a
+                title: A spec breakpoint on a relied-on page holds a direct edit and says to propose; proposals carry its note
+              - id: B7.5b
+                title: Legacy plan documents guarded like pages (an import from disk is held)
           - id: B7.6
             title: The phone
           - id: B7.7

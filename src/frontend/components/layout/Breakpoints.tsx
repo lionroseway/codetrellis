@@ -107,7 +107,7 @@ function WaitingCard({ hit, now, replayed = false }: { hit: BreakpointHit; now: 
         </span>
       </div>
       <div className="mt-1 text-[11px] text-foreground leading-snug">{hitHeadline(hit, where)}</div>
-      <div className="mt-0.5 text-[10px] text-foreground-muted leading-snug">{hitWhy(hit)}</div>
+      <div className="mt-0.5 text-[10px] text-foreground-muted leading-snug" data-testid="breakpoint-why">{hitWhy(hit)}</div>
       {hit.breakpointNote && (
         <div className="mt-1 pl-2 border-l border-accent/30 text-[10px] text-foreground-subtle">
           Your note on the breakpoint: <span className="italic text-foreground-muted">&ldquo;{hit.breakpointNote}&rdquo;</span>
@@ -155,6 +155,8 @@ interface ProposalView {
   affected: Array<{ itemUid: string }>; pageChangedSince: boolean; status: string;
   evidence: { tests?: string[]; files?: string[]; commits?: string[]; note?: string };
   impacts: Array<{ id: number; impact: 'none' | 'changes'; words: string; tasks: number | null; itemTitle: string | null; planTitle: string | null; author: string }>;
+  /** A spec breakpoint the person set on the page (B7.5a): it does not hold a proposal, but its note is shown. */
+  pageBreakpoint?: { id: string; note: string | null } | null;
 }
 
 const clip = (text: string) => text.replace(/\n+$/, '');
@@ -225,6 +227,13 @@ function ProposalCard({ hit, now, replayed = false }: { hit: BreakpointHit; now:
         ✎ {agentName(hit.agent)} proposes a change to {where}
       </div>
       {p && <div className="mt-0.5 text-[10px] text-foreground leading-snug">Why: {p.why}</div>}
+      {p?.pageBreakpoint && (
+        <div className="mt-1 pl-2 border-l border-accent/30 text-[10px] text-foreground-subtle" data-testid="proposal-guard">
+          You guard this page with a breakpoint{p.pageBreakpoint.note
+            ? <>: <span className="italic text-foreground-muted">&ldquo;{p.pageBreakpoint.note}&rdquo;</span></>
+            : '.'}
+        </div>
+      )}
       {ev && <div className="text-[10px] text-foreground-subtle leading-snug">Evidence: {ev}</div>}
       {p && (
         <div className="mt-1 grid grid-cols-1 gap-1" data-testid="proposal-diff">

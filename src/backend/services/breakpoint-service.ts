@@ -42,6 +42,7 @@ import { recordBreakpointEvent } from './agent-event-log';
 import type { Breakpoint, BreakpointHit, BreakpointKind, BreakpointAction, BreakpointDecision as Decision } from '../../shared/types';
 import { BREAKPOINT_KINDS, SIGNAL_BREAK_KINDS, BREAKPOINT_DECISIONS as DECISIONS } from '../../shared/types';
 import { pushForBreakpoint } from './push-notification-service';
+import { reliedOnBy } from './spec-links-service';
 export { BREAKPOINT_KINDS, SIGNAL_BREAK_KINDS, DECISIONS };
 export type { Breakpoint, BreakpointHit, BreakpointKind, BreakpointAction, Decision };
 
@@ -294,6 +295,20 @@ function breakpointFor(kind: BreakpointKind, action: BreakpointAction, chain: It
   return null;
 }
 
+/**
+ * The spec breakpoint a person set on an item or one of its parents, if any
+ * (B7.5a): a proposal to a guarded page is not held (a person decides it
+ * already), but its card shows what the person said when they guarded it.
+ */
+export function specBreakpointOn(itemUid: string): Breakpoint | null {
+  try {
+    const chain = lineage(itemUid);
+    return chain.length ? breakpointFor('spec', 'edit', chain) : null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Hits ───────────────────────────────────────────────────────────
 
 interface HitRow {
@@ -308,7 +323,16 @@ export const HIT_SELECT = `SELECT h.*, b.kind, b.note AS bp_note, b.target AS bp
 
 export function toHitRow(r: unknown): BreakpointHit { return toHit(r as HitRow); }
 
+/** For a spec edit held on a page others rely on (B7.5a): how many tasks, in how many plans. */
+function relianceOf(r: HitRow): { tasks: number; plans: number } | null {
+  if (r.kind !== 'spec' || r.action !== 'edit' || Number(r.breach) === 1) return null;
+  const rel = reliedOnBy(r.item_uid);
+  if (rel.length === 0) return null;
+  return { tasks: new Set(rel.map((x) => x.itemUid)).size, plans: new Set(rel.map((x) => x.planUid)).size };
+}
+
 function toHit(r: HitRow): BreakpointHit {
+  const reliedOn = relianceOf(r);
   return {
     ref: r.ref, breakpointId: r.breakpoint_id, kind: (r.kind as BreakpointKind) ?? null, breakpointNote: r.bp_note ?? null, breakpointTarget: r.bp_target ?? null,
     tool: r.tool, action: r.action as BreakpointAction, itemUid: r.item_uid, itemTitle: r.title ?? null,
@@ -316,6 +340,7 @@ function toHit(r: HitRow): BreakpointHit {
     agent: r.agent, sessionId: r.session_id, workstreamRoot: r.workstream_root, hitAt: Number(r.hit_at),
     decision: (r.decision as Decision) ?? null, note: r.note, answeredAt: r.answered_at === null ? null : Number(r.answered_at),
     answeredBy: r.answered_by, answeredByType: r.answered_by_type,
+    ...(reliedOn ? { reliedOn } : {}),
   };
 }
 
@@ -350,6 +375,7 @@ export function hitPayload(hit: BreakpointHit): Record<string, unknown> {
     ref: hit.ref, kind: hit.kind, action: hit.action, tool: hit.tool, itemUid: hit.itemUid, itemTitle: hit.itemTitle,
     ...(hit.path ? { path: hit.path } : {}), ...(hit.breach ? { breach: true } : {}), ...(hit.signalId ? { signalId: hit.signalId } : {}),
     planUid: hit.planUid, agent: hit.agent, ...(hit.workstreamRoot ? { workstreamRoot: hit.workstreamRoot } : {}),
+    ...(hit.reliedOn ? { reliedOn: hit.reliedOn } : {}),
   };
 }
 
@@ -467,18 +493,42 @@ function said(hit: BreakpointHit): string {
   return hit.answeredByType === 'human' ? 'A person' : `Someone (${hit.answeredByType ?? 'unknown'})`;
 }
 
+/**
+ * What a held edit to a page others rely on adds (B7.5a): who relies on it,
+ * and that proposing the change lets their agents weigh in. Proposing is not
+ * working around the pause: a person still decides, and nothing changes first.
+ */
+function reliance(hit: BreakpointHit): { reliedOnBy: Array<{ uid: string; title: string; plan: string }>; line: string } | null {
+  if (!hit.reliedOn) return null;
+  const rel = reliedOnBy(hit.itemUid);
+  if (rel.length === 0) return null;
+  const names = rel.slice(0, 4).map((a) => `"${a.title}" (${a.planTitle})`).join(', ');
+  const more = rel.length > 4 ? ` and ${rel.length - 4} more` : '';
+  const tasks = new Set(rel.map((x) => x.itemUid)).size;
+  const plans = new Set(rel.map((x) => x.planUid)).size;
+  return {
+    reliedOnBy: rel.map((a) => ({ uid: a.itemUid, title: a.title, plan: a.planTitle })),
+    line:
+      ` ${tasks} ${tasks === 1 ? 'task' : 'tasks'} in ${plans} ${plans === 1 ? 'plan' : 'plans'} ${tasks === 1 ? 'relies' : 'rely'} on this page: ${names}${more}. ` +
+      'To change a spec others rely on, propose it instead: propose_spec_change(page_uid, section, text, why) is not held, tells their agents so they can say what it means for their work, ' +
+      'and a person decides it. If you propose instead, await the proposal\'s decision rather than this one: this pause stays in the person\'s inbox for them to answer.',
+  };
+}
+
 /** The result a held call returns instead of acting. */
 export function pausedResult(hit: BreakpointHit): { content: Array<{ type: 'text'; text: string }>; _meta: { summary: string } } {
   const what = `${DOING[hit.action]} “${subjectOf(hit)}”`;
+  const rel = reliance(hit);
   const body = {
     paused: true,
     status: 'paused: waiting for a decision',
     ref: hit.ref,
     breakpoint: { kind: hit.kind, note: hit.breakpointNote },
+    ...(rel ? { reliedOnBy: rel.reliedOnBy } : {}),
     message:
       `paused: waiting for a decision. A person set a breakpoint and wants to be asked before ${what}. ` +
       'Nothing was done. Call await_decision with this ref and wait for their answer, calling it again while it says it is still waiting ' +
-      '(this can take a long time; do not work around it). If they say continue, make the same call again.',
+      `(this can take a long time; do not work around it). If they say continue, make the same call again.${rel ? rel.line : ''}`,
   };
   return { content: [{ type: 'text', text: JSON.stringify(body, null, 2) }], _meta: { summary: `Paused at a breakpoint before ${what}` } };
 }

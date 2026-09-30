@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — the status as data (the owner's ask), then B7.5 |
-| **Status** | B7.1–B7.4 merged: tasks say what spec they rely on; an agent proposes a change; the affected agents are told once and weigh in; a person accepts, amends or rejects it, and relying tasks say "spec changed". Now: the checklist's state is read from git and GitHub, and only intent is written (docs/PHASE-32-STATUS.yaml) |
-| **In flight** | #246 in review on `feat/phase-32-status-yaml` |
+| **Stage / step** | Wave 2 — B7.5a: a spec breakpoint on a relied-on page holds a direct edit and says to propose |
+| **Status** | B7.5a built: the held edit and the inbox name who relies on the page; a proposal carries the breakpoint's note. Harness, unit and browser green locally |
+| **In flight** | B7.5a building on `feat/phase-32-b7-5a-held-edits` |
 | **Last merged** | B7.4 (#245, `e0a0a49`) |
-| **Next action** | Merge |
+| **Next action** | Merge B7.5a when CI is green; then B7.5b on feat/phase-32-b7-5b-plan-docs, legacy plan documents guarded like pages (a held import from disk) |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
-> Read from git at `origin/feat/phase-32` `e0a0a49`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `d0c0643`, with open PRs from GitHub.
 
 ---
 
@@ -186,7 +186,9 @@
   - [x] B7.2 Propose a spec change, with the tasks it affects (#242)
   - [x] B7.3 Affected agents told once; their replies kept (#243)
   - [x] B7.4 The decision is a person's: accept, amend, reject; tasks marked "spec changed" (#245)
-  - [ ] B7.5 Spec breakpoints cover proposals and plan documents
+  - [ ] B7.5 Spec breakpoints cover proposals and plan documents — building
+    - [ ] B7.5a A spec breakpoint on a relied-on page holds a direct edit and says to propose; proposals carry its note — building
+    - [ ] B7.5b Legacy plan documents guarded like pages (an import from disk is held)
   - [ ] B7.6 The phone
   - [ ] B7.7 I1 done-when and docs
 - [ ] B8 Grounding
@@ -327,6 +329,34 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: B7.5a — a guarded page others rely on says to propose
+
+B7.5 was split in two while planning it (EXECUTION §5): B7.5a, pages
+others rely on, and B7.5b, legacy plan documents, which agents change on
+disk where nothing can be paused. B7.5a is built:
+
+- **A held direct edit says who relies on the page.** A `spec`
+  breakpoint already held `update_item` (body, title, template) and
+  `restore_item_version`. When tasks rely on the page, the paused result
+  now lists them (`reliedOnBy`) and says to propose instead:
+  `propose_spec_change` is not held, tells their agents, and a person
+  decides it. It also says the pause stays in the person's inbox, so an
+  agent that proposes awaits the proposal, not the edit. Proposing is
+  not working around the pause: nothing changes until a person decides.
+- **The inbox says the same.** A hit gains `reliedOn` (`{tasks, plans}`),
+  read when the hit is, so the count is current; `hitWhy` reads "2 tasks
+  in 2 plans rely on this page; the agent was told a proposal would let
+  their agents weigh in." The phone's list uses the same words.
+- **A proposal is not held, and carries the person's note.** A proposal
+  gains `pageBreakpoint` (the spec breakpoint on the page or a parent,
+  with its note); the proposer's answer and the proposal's card show it
+  ("You guard this page with a breakpoint: …").
+- Tests: harness `spec-held-edits.test.ts` (3: held with the words and
+  restore too; a proposal not held, with the note over MCP and REST; a
+  page nothing relies on held as before); unit `breakpoint-view.test.ts`
+  (the words); browser `spec-held-edit.spec.ts` with screenshots
+  `spec-held-edit` and `spec-proposal-guarded`.
 
 ### 2026-09-30: C2 refined: git first, for any host
 
