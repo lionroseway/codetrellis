@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B6.3: overlap bands, where two plans meet |
-| **Status** | A5 done (M5 met). B6.1 (#231) and B6.2 (#232) merged: dependencies resolve across plans, and `/api/stack` / `get_stack` give every active plan at once. B6.3 in review: each plan's overlaps with the others, declared and actual, in words |
-| **Next action** | Merge B6.3 when green; then B6.4, the Stack tab |
+| **Stage / step** | Wave 2 — B6.4: the Stack tab |
+| **Status** | A5 done (M5 met). B6.1–B6.3 merged (#231–#233): dependencies across plans, `/api/stack` and `get_stack`, overlap bands. B6.4 in review: the Stack tab, and "Show on graph" for a plan's footprint |
+| **Next action** | Merge B6.4 when green; then B6.4b, the Timeline follows the stack's selection |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b6-3-overlap-bands` |
+| **Branch** | `feat/phase-32-b6-4-stack-tab` |
 | **Last updated** | 2026-09-30 |
 
 ---
@@ -169,8 +169,8 @@
 - [ ] B6 Stack view, refined in EXECUTION §5:
   - [x] B6.1 Dependencies resolve across plans (bug 11) (#231)
   - [x] B6.2 The stack: `/api/stack` and `get_stack` (#232)
-  - [ ] B6.3 Overlap bands, declared and actual — in review
-  - [ ] B6.4 The Stack tab — built, PR after B6.3
+  - [x] B6.3 Overlap bands, declared and actual (#233)
+  - [ ] B6.4 The Stack tab — in review
   - [ ] B6.4b The Timeline follows the stack's selection
   - [ ] B6.5 One clock
   - [ ] B6.6 The stack on the phone
