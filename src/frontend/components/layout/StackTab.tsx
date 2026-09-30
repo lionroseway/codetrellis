@@ -175,6 +175,7 @@ function PlanRow({ plan, open, onToggle, focused }: { plan: StackPlan; open: boo
             <span
               key={o.withPlanUid}
               data-testid="stack-overlap"
+              data-with-plan-uid={o.withPlanUid}
               className={`px-1.5 rounded ${o.high ? 'bg-red-500/10 text-red-300' : 'bg-amber-500/10 text-amber-300'}`}
               title={o.detail}
             >
