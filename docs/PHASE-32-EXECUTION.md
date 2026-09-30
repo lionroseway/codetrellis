@@ -576,6 +576,43 @@ says so and leads there. Selecting a plan shows its footprint on the graph
 and its work in the Timeline; moving the clock back shows what was in
 flight then.
 
+### B7: Conferring
+
+Refined 2026-09-30 (log entry "B7 refined"). An agent that finds the spec
+is wrong can only edit the page directly or not at all. Spec pages are
+versioned plan items (`kind = 'object'`) and every body edit records a
+`spec_edited` agent event, but nothing links a task to the page or section
+it relies on, so nobody can be told when it changes. Channel events carry
+the right words (`weigh-in`, `need-decision`, `steer`) but are addressed to
+a plan, never to an agent, and agents only see them by polling. Breakpoints
+already raise decisions from services (signals, breaches) and deliver the
+answer; the inline notices of A2.6 already tell a session once on its next
+call. The "Proposed" tab is the code-change feed and keeps its name; B7
+says "spec change".
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| B7.1 | Tasks say what they rely on: a page, or a section of it (a markdown heading, addressed by its slug: `shared/lib/spec-sections.ts`). Set on `add_item` / `update_item` (`relies_on`) and REST, refused when it names no page or no heading; kept in `spec_links`. The reverse, "who relies on this", across every plan in the project. A task shows "Relies on: Invoice format › Fields"; a page shows "Relied on by 3 tasks in 2 plans" | unit (slugs, sections, reverse lookup); harness (links across plans, refusals); browser, with screenshots |
+| B7.2 | Propose: `propose_spec_change(page, section?, text, why, evidence?)` (capability `write`) and REST. A `spec_proposals` row keeps the page's version it was made against, the proposed text, why, the evidence (a failing test, a file, a commit) and the author from the transport. It lists every task relying on that page or section, in any plan, when it is made. A direct edit to a page other tasks rely on still works but its result says who relies on it and suggests proposing instead | unit (affected tasks); harness (a proposal naming tasks in two plans; the author is the calling session; a page changed since the proposal's version is said so) |
+| B7.3 | Addressed, once: each session holding an affected task is told on its next call ("── CodeTrellis: spec change proposed ──", with the change, why and the page), once per session, never to the proposer or anyone else. `reply_to_spec_proposal(uid, impact, words)` (`none` / `changes` with a sentence and a task count) records the impact from that plan, and a `weigh-in` in the proposer's plan | unit (who is told); harness (two agents told once each, a third not; their replies kept with who and which plan) |
+| B7.4 | The decision is a person's: a `proposal` breakpoint kind, raised by the service when the proposal is made, so the inbox (Awareness tab, count, push) shows "✎ Spec change proposed" with every impact beside it and Accept, Amend (edit the text, then accept) and Reject. Decided over REST (`personFrom`) and the phone only, never by an MCP tool. Accept writes the page's new version (author: the person, change summary naming the proposal); every relying task is marked "spec changed" (a `plan_events` row, and a flag until its agent reads it) and its agent is told once. Reject tells the proposer. `await_decision` works on it | harness (accept: a new version, tasks marked, agents told once; reject; an MCP client cannot decide); browser, with screenshots: the card, amend, accept |
+| B7.5 | Spec breakpoints cover proposals and plan documents: a `spec` breakpoint on a relied-on page holds a direct edit and says to propose instead; legacy plan documents are guarded like pages | harness |
+| B7.6 | The phone: the proposal in Needs you with every impact, Accept / Reject from the phone (the person, from their phone); `proposal.list`, `proposal.get`, `proposal.decide` RPCs with their capability rows | harness (the phone's view equals REST; a decision is the person's); phone spec with screenshots |
+| B7.7 | Done-when and docs: I1 end to end. The billing agent proposes adding `currency` to the invoice format with a failing test; two other plans rely on that section; their agents are told once and reply "no change needed" and "one new column"; Sam sees one proposal with both impacts and accepts; the page has a new version, both plans' tasks are marked "spec changed" and their agents are told. The window, an MCP client and the phone agree. `docs/claude/awareness.md` and the guides | harness end to end |
+
+**Journey (I1).** The billing agent finds the invoice format cannot carry
+currency and proposes the change with the failing test as evidence.
+CodeTrellis finds the two other plans relying on that section and tells
+their agents on their next step; they reply with the impact. Sam sees one
+proposal with both impacts, in the window or on the phone, and accepts. The
+spec gets a new version, the linked tasks say "spec changed", and their
+agents re-plan.
+
+**Rules.** Only a person decides a proposal (the transport's author, never
+a name in the request). A proposal never edits the page until accepted.
+Agents are told what changed and by whom, never another agent's words
+verbatim in a notice title.
+
 ## 6. Track C: shared ways of working
 
 | Step | Scope (shared-work doc) |
