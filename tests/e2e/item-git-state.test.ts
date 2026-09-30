@@ -117,7 +117,8 @@ test.describe.serial('Each item\'s state from git', () => {
     const byTitle = Object.fromEntries(got.git_state.items.map((i) => [i.title, i]));
     expect(byTitle['abandoned section']).toMatchObject({ state: 'pushed', says: 'pushed, not merged', source: 'git' });
     expect(byTitle['billing section'].says).toMatch(/^merged into .+ \(squash or rebase, /);
-    expect(got.git_state.note).toContain('need a host');
+    // No host turned on: the note says what one would add, and where the person turns it on (C2.2).
+    expect(got.git_state.note).toContain('need a review host, which the person turns on in Settings → Review hosts');
 
     const brief = JSON.parse((await agent.callTool('get_brief', { item_uid: uid.task })).answer) as { git_state: { branch: string; state: string; says: string } | null };
     expect(brief.git_state).toMatchObject({ branch: 'billing', state: 'merged' });

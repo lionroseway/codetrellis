@@ -3,7 +3,7 @@
  */
 
 import { z } from 'zod';
-import { planGitStates } from '../../services/item-git-state';
+import { planGitStatesFresh } from '../../services/item-git-state';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { resultWithMeta, authorFromExtra } from '../helpers';
@@ -62,7 +62,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
     {
       description: 'Read a plan by its UID. Returns plan metadata, a summary of its items (count by kind, status breakdown), and git_state: ' +
         'for each item worked on a branch, what git proves (building, pushed, or merged and how), with the commit and source. ' +
-        'Git cannot see a review or a closed branch; those need a host. Use list_items to browse the item tree.',
+        'Where the person turned on a review host for the project, it also says in review (with checks and approvals) or closed, ' +
+        'with source github. Use list_items to browse the item tree.',
       inputSchema: { plan_uid: z.string().describe('Plan UID') },
     },
     async ({ plan_uid }) => {
@@ -81,7 +82,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         createdAt: plan.createdAt, updatedAt: plan.updatedAt,
         items: { total: items.length, objects: objectCount, actions: actionCount, byStatus: statusCounts },
         // Phase 32 C2.1 — what git proves about each item's branch.
-        git_state: gitStateForAgent(plan_uid, items),
+        git_state: await gitStateForAgent(plan_uid, items),
       }, null, 2) }] };
     },
   );
@@ -659,8 +660,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
 }
 
 /** The plan's git states for an agent: each item by title, the words, and where they came from. */
-function gitStateForAgent(planUid: string, items: Array<{ uid: string; title: string }>) {
-  const states = planGitStates(planUid);
+async function gitStateForAgent(planUid: string, items: Array<{ uid: string; title: string }>) {
+  const states = await planGitStatesFresh(planUid);
   if (!states || states.items.length === 0) return { base: states?.base ?? null, items: [], note: 'No item is worked on a branch yet (assign_workstream sets one).' };
   const title = new Map(items.map((i) => [i.uid, i.title]));
   return {
@@ -668,7 +669,10 @@ function gitStateForAgent(planUid: string, items: Array<{ uid: string; title: st
     items: states.items.map((s) => ({
       item_uid: s.itemUid, title: title.get(s.itemUid) ?? null, branch: s.branch, state: s.state, says: s.words,
       ...(s.how ? { how: s.how } : {}), commit: s.commit, source: s.source,
+      ...(s.review ? { pull_request: s.review } : {}), ...(s.hostNote ? { host_note: s.hostNote } : {}),
     })),
-    note: 'From git alone: building, pushed and merged. In review, checks and closed need a host, which is not asked.',
+    note: states.items.some((s) => s.source !== 'git' || s.hostNote)
+      ? 'From git, and from the review host the person turned on where it says more: source names which.'
+      : 'From git alone: building, pushed and merged. In review, checks and closed need a review host, which the person turns on in Settings → Review hosts; none is asked.',
   };
 }
