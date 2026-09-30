@@ -1138,7 +1138,7 @@ export function MainCanvas() {
       {replayAt !== null && (
         <div data-testid="replay-canvas" className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-10 rounded-full border border-accent/40 bg-background/80 px-3 py-1 text-[11px] text-accent shadow">
           As it was at {hhmm(replayAt)}
-          {replayGraph ? ` · ${replayGraph.files.length} files` : ''} · replaying
+          {replayGraph ? ` · ${replayGraph.files.length} ${replayGraph.files.length === 1 ? 'file' : 'files'}` : ''} · replaying
         </div>
       )}
       <div className="pointer-events-none absolute inset-0 opacity-45 [background-image:radial-gradient(circle_at_center,rgba(59,130,246,0.08)_0,transparent_46%),linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:100%_100%,28px_28px,28px_28px]" />

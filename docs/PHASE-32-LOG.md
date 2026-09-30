@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B6.4b: the Timeline follows the stack |
-| **Status** | A5 done (M5 met). B6.1–B6.4 merged (#231–#234): dependencies across plans, `/api/stack` and `get_stack`, overlap bands, the Stack tab. #234 also carried #235: pinning a baseline no longer holds the server. B6.4b in review: Follow a plan and the Timeline narrows to its work |
-| **Next action** | Merge B6.4b when green; then B6.5, one clock (the stack at a past moment) |
+| **Stage / step** | Wave 2 — B6.5: one clock, the stack at a past moment |
+| **Status** | A5 done (M5 met). B6.1–B6.4b merged (#231–#234, #236): dependencies across plans, `/api/stack` and `get_stack`, overlap bands, the Stack tab, and Follow narrowing the Timeline. B6.5 in review: while replaying, the Stack tab shows the stack as it was at the cursor |
+| **Next action** | Merge B6.5 when green; then B6.6, the stack on the phone |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b6-4b-timeline-follows` |
+| **Branch** | `feat/phase-32-b6-5-one-clock` |
 | **Last updated** | 2026-09-30 |
 
 ---
@@ -171,8 +171,8 @@
   - [x] B6.2 The stack: `/api/stack` and `get_stack` (#232)
   - [x] B6.3 Overlap bands, declared and actual (#233)
   - [x] B6.4 The Stack tab (#234; carried #235, pinning a baseline no longer freezes the server)
-  - [ ] B6.4b The Timeline follows the stack's selection — in review
-  - [ ] B6.5 One clock
+  - [x] B6.4b The Timeline follows the stack's selection (#236)
+  - [ ] B6.5 One clock — in review
   - [ ] B6.6 The stack on the phone
   - [ ] B6.7 Done-when and docs
 - [ ] B7 Conferring
@@ -307,6 +307,45 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: B6.5 — one clock: the stack at a past moment
+
+While replay is on, the Stack tab shows the stack at the cursor, as it was
+then: the plans under way, who was on each task, its branch, what it waited
+on and where plans met. A line says "The stack at 06:56, as it was then",
+and "Back to live" (the replay bar's, above every tab) brings today back.
+
+Nothing new is recorded. Every create and update already writes the item's
+fields to `plan_item_versions` (`meta_snapshot`: assignee, dependencies,
+workstream, file and symbol specs, parent), so `itemsAt` in
+`replay-state.ts` takes each item's last version by the moment, and its
+status from the status changes in `plan_events` as B5.2 did. `stackThen`
+in `stack-service.ts` builds the rows with the same `stackPlanOf` and
+overlap code as the live stack (one `assemble`), fed the items as they were,
+the signals open then and what was waiting then. `/api/replay/state` and
+`get_state_at` now carry `stack`, and each task in `tasks` gains `assignee`,
+`workstream` and `dependencies`.
+
+Decisions:
+- **A plan finished since, with a task still open then, was under way then.**
+  Plan status changes are not kept, so that is the one sign of it.
+- **Ticket keys are today's.** A key is a name, not a state.
+- **`assigneeSession` is kept only while the assignee is the same one now**;
+  it is not versioned.
+- **Rows keep the plan list's order** (`updated_at DESC`), so they do not
+  jump as the cursor moves.
+- **An item deleted since cannot be shown**: deletion removes its versions too.
+- Overlap details say "Open then:" instead of "Open now:" in the past.
+
+Also: the canvas's replay note said "1 files"; it now says "1 file".
+
+Tests: harness `stack-at.test.ts` (4): before a plan existed it is absent;
+at the next moment Codex is on Billing's task, Exports' task waits on it
+across plans and is worked on `exports-v1`; afterwards the wait is met and
+the section moved to `exports-v2`; and the stack now from replay equals the
+live stack. The B5 replay harness tests still pass unchanged. Browser
+`e2e/plan/stack-replay.spec.ts`: three served moments on the Stack tab,
+then Back to live; screenshot `stack-replay`.
 
 ### 2026-09-30: B6.4b — one selection: the Timeline follows the stack
 Following a plan in the Stack tab now narrows the Timeline to its work, the

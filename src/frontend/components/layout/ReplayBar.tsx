@@ -5,8 +5,9 @@
  * above every tab while replay is on: it says which moments are being
  * watched and between which two times, steps and plays them with the
  * transport bar the code view already uses, and goes back to live. While it
- * is on, the lanes, the graph, the plan's task statuses and the inbox show
- * the moment at the cursor; live events keep arriving underneath.
+ * is on, the lanes, the graph, the plan's task statuses, the stack (B6.5)
+ * and the inbox show the moment at the cursor; live events keep arriving
+ * underneath.
  */
 
 import { History, Radio } from 'lucide-react';
@@ -29,7 +30,7 @@ export function ReplayStart() {
       type="button"
       onClick={() => { void enter(root); }}
       className="mb-2 flex items-center gap-1.5 text-[10.5px] text-foreground-muted hover:text-foreground px-2 py-1 rounded-md border border-white/[0.06] hover:bg-surface-hover transition-colors"
-      title="Step through the last two hours as they were: the graph, the tasks and the inbox at each recorded moment"
+      title="Step through the last two hours as they were: the graph, the tasks, the stack and the inbox at each recorded moment"
       data-testid="replay-start"
     >
       <History size={11} />

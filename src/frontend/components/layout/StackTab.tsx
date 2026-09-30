@@ -4,6 +4,8 @@ import { useProjectStore } from '../../stores/project-store';
 import { useGraphStore } from '../../stores/graph-store';
 import { usePlanStore } from '../../stores/plan-store';
 import { revealPlanItem } from '../../lib/open-plan-item';
+import { useReplayStore } from '../../stores/replay-store';
+import { hhmm } from '../../lib/replay';
 import type { Stack, StackPlan, StackTask, StackDependency } from '@shared/types';
 
 /**
@@ -17,6 +19,10 @@ import type { Stack, StackPlan, StackTask, StackDependency } from '@shared/types
  * (the files its tasks name) on the graph, whatever plan is open, and
  * narrows the Timeline to its work (B6.4b). The stack is the same answer an
  * agent gets from `get_stack`.
+ *
+ * One clock (B6.5): while replay is on, the tab shows the stack at the
+ * cursor, as it was then, from `/api/replay/state`: who was on each task,
+ * its branch, what it waited on and where plans met, at that moment.
  */
 
 const REFRESH_MS = 30_000;
@@ -36,6 +42,8 @@ export function StackTab() {
   const [error, setError] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const focus = useGraphStore((s) => s.stackFocus);
+  const replaying = useReplayStore((s) => s.active);
+  const replayState = useReplayStore((s) => s.state);
 
   const load = useCallback(async () => {
     if (!root) return;
@@ -62,12 +70,21 @@ export function StackTab() {
   }, [load]);
 
   // A focused plan that left the stack (finished, archived) leaves the graph too.
+  // Only the live stack decides: a plan not yet made at a replayed moment has not left.
   useEffect(() => {
+    if (replaying) return;
     if (focus && stack && !stack.plans.some((p) => p.uid === focus.planUid)) useGraphStore.getState().setStackFocus(null);
-  }, [focus, stack]);
+  }, [focus, stack, replaying]);
 
   if (!root) return <div className="text-[11px] text-foreground-subtle py-6 text-center">Open a project to see its plans together.</div>;
-  if (!stack && !error) return <div className="text-[11px] text-foreground-subtle py-6 text-center">Reading the stack…</div>;
+
+  // While replaying, the stack at the cursor; live reads keep arriving underneath for when replay ends.
+  const then = replaying ? replayState?.stack ?? null : null;
+  const shown = replaying ? then : stack;
+  if (replaying && !then) {
+    return <div className="text-[11px] text-foreground-subtle py-6 text-center">Reading the stack at this moment…</div>;
+  }
+  if (!shown && !error) return <div className="text-[11px] text-foreground-subtle py-6 text-center">Reading the stack…</div>;
 
   const toggle = (uid: string) => setCollapsed((c) => {
     const next = new Set(c);
@@ -77,21 +94,30 @@ export function StackTab() {
 
   return (
     <div className="text-[11px] space-y-2" data-testid="stack-tab">
-      {error && <div className="text-red-400 px-2">Could not read the stack: {error}</div>}
-      {stack && stack.plans.length === 0 && (
-        <div className="text-foreground-subtle py-6 px-4 text-center leading-relaxed" data-testid="stack-empty">
-          No plan in this project is under way. A plan shows here from when it is created until it is completed or archived.
+      {error && !replaying && <div className="text-red-400 px-2">Could not read the stack: {error}</div>}
+      {then && replayState && (
+        <div className="px-2 text-accent/90" data-testid="stack-then">
+          The stack at {hhmm(replayState.at)}, as it was then. Links open the plan as it is now.
         </div>
       )}
-      {stack && stack.plans.length > 0 && (
+      {shown && shown.plans.length === 0 && (
+        <div className="text-foreground-subtle py-6 px-4 text-center leading-relaxed" data-testid="stack-empty">
+          {then
+            ? 'No plan in this project was under way at this moment.'
+            : 'No plan in this project is under way. A plan shows here from when it is created until it is completed or archived.'}
+        </div>
+      )}
+      {shown && shown.plans.length > 0 && (
         <>
           <div className="flex items-center gap-1.5 px-2 text-foreground-muted">
             <Layers size={12} />
             <span>
-              {stack.plans.length} {stack.plans.length === 1 ? 'plan' : 'plans'} under way, with who is on what and where they meet.
+              {then
+                ? `${shown.plans.length} ${shown.plans.length === 1 ? 'plan was' : 'plans were'} under way, with who was on what and where they met.`
+                : `${shown.plans.length} ${shown.plans.length === 1 ? 'plan' : 'plans'} under way, with who is on what and where they meet.`}
             </span>
           </div>
-          {stack.plans.map((plan) => (
+          {shown.plans.map((plan) => (
             <PlanRow
               key={plan.uid}
               plan={plan}

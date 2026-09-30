@@ -62,8 +62,10 @@ function list(names: string[]): string {
  */
 export function stackOverlaps(
   plans: readonly PlanFootprint[],
-  signals: readonly AwarenessSignal[],
+  signals: readonly Pick<AwarenessSignal, 'id' | 'kind' | 'severity' | 'summary' | 'workstreams' | 'state'>[],
   canon: (root: string) => string = (r) => r,
+  /** "now" for the live stack; "then" for the stack at a past moment (B6.5). */
+  when: 'now' | 'then' = 'now',
 ): Map<string, StackOverlap[]> {
   const pairKey = (a: string, b: string) => (a < b ? `${a}\0${b}` : `${b}\0${a}`);
   const actual = new Map<string, StackOverlapSignal[]>();
@@ -101,7 +103,7 @@ export function stackOverlaps(
 
       const parts: string[] = [];
       if (symbols.length || files.length) parts.push(`Both plan to change ${list([...symbols, ...files])}.`);
-      if (signalsBetween.length) parts.push(`Open now: ${signalsBetween.map((s) => s.summary).join('; ')}`);
+      if (signalsBetween.length) parts.push(`Open ${when}: ${signalsBetween.map((s) => s.summary).join('; ')}`);
       const detail = parts.join(' ');
       const high = signalsBetween.some((s) => s.severity === 'high');
       for (const [me, other] of [[a, b], [b, a]] as const) {

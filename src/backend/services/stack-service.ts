@@ -122,27 +122,76 @@ const canon = (p: string): string => {
   try { return fs.realpathSync.native(p); } catch { return p; }
 };
 
-/** Every active plan in `projectPath`, in the plan list's order, with where each meets another (B6.3). */
-export function buildStack(projectPath: string): Stack {
-  const plans = listPlans(projectPath).filter((p) => !DONE.has(p.status));
+/** The worktree root each branch is checked out at, as signals name workstreams. */
+function branchRoots(projectPath: string): (branch: string) => string {
   let worktrees: ReturnType<typeof listWorktrees> = [];
   try { worktrees = listWorktrees(projectPath); } catch { /* not a git repository */ }
-  const rootOf = (branch: string) => worktrees.find((w) => w.branch === branch)?.path ?? `branch:${branch}`;
+  return (branch) => worktrees.find((w) => w.branch === branch)?.path ?? `branch:${branch}`;
+}
 
+type OverlapSignal = Parameters<typeof stackOverlaps>[1][number];
+
+/** Rows for `plans`, with where each meets another: the one assembly the live stack and the stack at a moment share. */
+function assemble(
+  projectPath: string,
+  plans: Array<Pick<Plan, 'uid' | 'title' | 'status'>>,
+  itemsOf: (planUid: string) => PlanItem[],
+  from: StackSources,
+  signals: readonly OverlapSignal[],
+  when: 'now' | 'then',
+): Stack {
+  const rootOf = branchRoots(projectPath);
   const rows: StackPlan[] = [];
   const footprints: PlanFootprint[] = [];
   for (const plan of plans) {
-    const items = listAllItems(plan.uid);
-    const row = stackPlanOf(plan, items, sources);
+    const items = itemsOf(plan.uid);
+    const row = stackPlanOf(plan, items, from);
     rows.push(row);
     const branches = [...new Set(row.tasks.map((t) => t.workstream).filter((b): b is string => !!b))];
     footprints.push({ uid: row.uid, label: row.label, ...declaredFootprint(items), roots: branches.map(rootOf) });
   }
-
-  let signals: ReturnType<typeof loadSignals> = [];
-  try { signals = loadSignals(projectPath); } catch { /* awareness not started for this project */ }
-  const overlaps = stackOverlaps(footprints, signals, canon);
+  const overlaps = stackOverlaps(footprints, signals, canon, when);
   for (const row of rows) row.overlaps = overlaps.get(row.uid) ?? [];
   return { project: projectPath, plans: rows };
 }
 
+/** Every active plan in `projectPath`, in the plan list's order, with where each meets another (B6.3). */
+export function buildStack(projectPath: string): Stack {
+  const plans = listPlans(projectPath).filter((p) => !DONE.has(p.status));
+  let signals: ReturnType<typeof loadSignals> = [];
+  try { signals = loadSignals(projectPath); } catch { /* awareness not started for this project */ }
+  return assemble(projectPath, plans, listAllItems, sources, signals, 'now');
+}
+
+/** A plan as it was at a moment, and its items as they were then (from replay-state's `itemsAt`). */
+export interface PlanThen {
+  plan: Pick<Plan, 'uid' | 'title' | 'status'>;
+  items: PlanItem[];
+}
+
+/**
+ * Phase 32 B6.5 — the stack at a moment: the same rows, built from each
+ * item as it was then (who was on it, its branch, what it waited on, its
+ * status), with the signals open then and what was waiting on a person
+ * then. Ticket keys are today's: a key is a name, not a state.
+ */
+export function stackThen(
+  projectPath: string,
+  plans: PlanThen[],
+  signalsThen: readonly OverlapSignal[],
+  waitingThen: ReadonlyArray<{ planUid: string | null }>,
+): Stack {
+  const byUid = new Map<string, PlanItem>();
+  for (const p of plans) for (const i of p.items) byUid.set(i.uid, i);
+  const titles = new Map(plans.map((p) => [p.plan.uid, p.plan.title]));
+  const itemsOf = new Map(plans.map((p) => [p.plan.uid, p.items]));
+  const then: StackSources = {
+    // A task made later did not exist then, so a dependency on it reads as missing.
+    getItem: (uid) => byUid.get(uid) ?? null,
+    planTitle: (planUid) => titles.get(planUid) ?? null,
+    planTicketKey: sources.planTicketKey,
+    itemTicketKey: sources.itemTicketKey,
+    waitingHits: (planUid) => waitingThen.filter((h) => h.planUid === planUid).length,
+  };
+  return assemble(projectPath, plans.map((p) => p.plan), (uid) => itemsOf.get(uid) ?? [], then, signalsThen, 'then');
+}

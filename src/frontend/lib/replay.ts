@@ -10,7 +10,7 @@
  * Pure, so the words and the mapping are tested without a browser.
  */
 
-import type { AwarenessSignal, BreakpointHit } from '@shared/types';
+import type { AwarenessSignal, BreakpointHit, Stack } from '@shared/types';
 import type { PlaybackFrame } from '../components/inspector/PlaybackBar';
 
 /** How far back replay looks by default: the lanes' own widest window. */
@@ -48,12 +48,18 @@ export interface ReplayState {
   projectPath: string;
   frame: ReplayFrameInfo | null;
   sinceFrame: ReplayDiff | null;
-  tasks: Array<{ uid: string; planUid: string; planTitle: string; title: string; status: string | null; statusNow?: string | null }>;
+  tasks: Array<{
+    uid: string; planUid: string; planTitle: string; title: string; status: string | null; statusNow?: string | null;
+    /** Who was on it, its branch and what it depended on, then (B6.5). */
+    assignee?: string | null; workstream?: string | null; dependencies?: string[];
+  }>;
   waiting: BreakpointHit[];
   signals: Array<{
     id: string; kind: AwarenessSignal['kind']; subject: AwarenessSignal['subject']; severity: AwarenessSignal['severity'];
     summary: string; workstreams: string[]; openedAt: number; closedAt: number | null;
   }>;
+  /** Every plan under way then, as the Stack tab shows it (B6.5); absent from a server older than that. */
+  stack?: Stack;
 }
 
 const pad = (n: number): string => String(n).padStart(2, '0');
