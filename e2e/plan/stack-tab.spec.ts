@@ -47,10 +47,13 @@ test.describe('The Stack tab', () => {
     await expect(billingRow).toBeVisible({ timeout: 10_000 });
     await expect(exportsRow).toBeVisible();
 
-    // Where they meet, in words, from each side.
-    await expect(exportsRow.getByTestId('stack-overlap')).toHaveText(`⚠ overlaps ${BILLING}`);
-    await expect(billingRow.getByTestId('stack-overlap')).toHaveText(`⚠ overlaps ${EXPORTS}`);
-    await expect(exportsRow.getByTestId('stack-overlap')).toHaveAttribute('title', `Both plan to change ${SHARED_FILE}.`);
+    // Where they meet, in words, from each side. Other workers' plans may name
+    // the same file and overlap too, so each side is picked by the plan it meets.
+    const overlapWith = (row: typeof billingRow, uid: string) =>
+      row.locator(`[data-testid="stack-overlap"][data-with-plan-uid="${uid}"]`);
+    await expect(overlapWith(exportsRow, billing.uid)).toHaveText(`⚠ overlaps ${BILLING}`);
+    await expect(overlapWith(billingRow, exportsPlan.uid)).toHaveText(`⚠ overlaps ${EXPORTS}`);
+    await expect(overlapWith(exportsRow, billing.uid)).toHaveAttribute('title', `Both plan to change ${SHARED_FILE}.`);
 
     // The wait across plans, in words.
     await expect(exportsRow.getByTestId('stack-dependency')).toHaveText(`↑ waits on “Migrate schema” in plan “${BILLING}”`);
