@@ -96,14 +96,14 @@
   - [x] A4.5a A way to see the phone's screens (#218)
   - [x] A4.5b The phone's new screens (Needs you, signal detail, workstreams, the push tap) (#220)
   - [x] A4.6 M4 done-when, end to end, and docs (#221)
-- [ ] A5 Review (the feature, M5), refined in EXECUTION §4:
+- [x] A5 Review (the feature, M5), refined in EXECUTION §4:
   - [x] A5.1 `commit:` sides get their dependency edges; the picker offers each line of work's branch (#222)
   - [x] A5.2 "Other work in flight" in `review_plan` and `get_pr_draft` (#223)
   - [x] A5.3 The opt-in "no open high signals" check (#224)
   - [x] A5.4 The review queue and `get_review_queue` (#226)
   - [x] A5.5 The Review tab (#228)
-  - [ ] A5.6 The queue on the phone — in review
-  - [ ] A5.7 M5 done-when, end to end, and docs
+  - [x] A5.6 The queue on the phone (#229)
+  - [x] A5.7 M5 done-when, end to end, and docs (#230)
 - [ ] A6 The Brief
 - [ ] A7 Rules
 - [ ] Follow-up: `plan-by-hand` failed once in CI when its plan workspace
@@ -129,7 +129,7 @@
 - [x] Follow-up: `graph/graph-own-project.spec.ts:23` failed on #225 (0465ca2): three clusters (`broken`, `evidencepreview`, `paths`) were missing after the other project's scan. They were still in the graph. The canvas mounts only nodes in view (`onlyRenderVisibleElements`), and this repository's graph is fitted at the 0.1 minimum zoom with nodes past the edge: locally 117 nodes, 114 in the DOM. So the DOM ids moved with the viewport. The spec now reads the whole graph from the minimap, which draws every node at its layout position. A new file added mid-test fails it with exactly one new node, and other runs pass unchanged.
 - [x] Follow-up: `project/folder-picker.spec.ts` "Go button browses to typed path" failed on #225 (ff50abc): the path input still said the home folder after `/tmp` was typed and Go pressed. The cause was a real bug: the picker's opening browse could answer after a later one and put its folder back, over a Go or over a path typed while it loaded. Browses are now numbered, only the latest one applies, and a path typed since a browse was sent is kept. Two new specs delay the opening listing and fail without the fix.
 - [x] Follow-up: `graph/graph-breakpoints.spec.ts:34` failed on #225 (ff50abc). `reachableNodes` found a visible node, then no node that stayed uncovered and still for 15 s, on the sample app at Files depth in Map layout. The page snapshot showed the sample app's graph loaded (status bar 196, 34/73 imports) but no nodes or edges in the canvas. It does not reproduce locally, even with the CPU throttled 6×: 21 nodes, the minimap and DOM agree, and the view settles at once. The helper's error now says what it saw (nodes in the DOM and the minimap, zero-size, what covers them, the viewport, whether they were still moving), so the next failure names the cause. The prime suspect is the shared backend switching projects under the canvas (the AST tables hold one project at a time). **Then `graph/multi-select.spec.ts:40` failed the same way on #226 (no node visible for 15 s on a fresh sample-app page), and a cause was found in the canvas:** when the backend holds another project's graph, an empty canvas rescans its own project. A refused rescan (the scan route answers 200 with `astError` "already in progress" while the other scan runs) was treated as success, and the canvas asked again at once. Its comment said it waited a second, but only a thrown error did. So it spent all 120 tries in a few seconds and stayed empty. A refusal now waits a second. `graph/canvas-rescan-wait.spec.ts` reproduces it with the refusals intercepted: 18 ms between rescans without the fix, a second with it, and the graph arrives. The helper's first wait now reports what the canvas held too.
-- [x] Follow-up: `graph/node-click.spec.ts:43` failed on #226 (665f996), and this time the helper's new message named the cause: `{"inDom":14,"zeroSize":0,"inMinimap":0,…}`. That is 14 nodes with a size, none visible, and none in the minimap, which is React Flow 12's state for nodes it has not measured (it draws them `visibility: hidden` and the minimap skips them). The canvas rebuilds every node object when its overlays change (selection, plan highlight, work counts, collisions), and `preserveNodePositions` kept only the position and dropped `measured`. So every such change hid the whole graph for a frame. When a rebuild landed in the same batch as React Flow's dimension change, the node stayed unmeasured and the observer effect did not run again: nothing had changed size, so the ResizeObserver never fired and the canvas stayed empty. This is the likeliest root cause of the empty-canvas failures (graph-breakpoints, multi-select, node-click). The function moved to `lib/preserve-node-positions.ts` and keeps `measured`. `graph/nodes-stay-drawn.spec.ts` watches every node while nodes are selected and cleared: all 14 went hidden without the fix, none with it. (The refused-rescan loop fixed alongside is a real bug too, but it did not explain nodes that were in the DOM and unmeasured.) CLAUDE.md still says ReactFlow 11; the installed package is `@xyflow/react` 12.11.6.
+- [x] Follow-up: `graph/node-click.spec.ts:43` failed on #226 (665f996), and this time the helper's new message named the cause: `{"inDom":14,"zeroSize":0,"inMinimap":0,…}`. That is 14 nodes with a size, none visible, and none in the minimap, which is React Flow 12's state for nodes it has not measured (it draws them `visibility: hidden` and the minimap skips them). The canvas rebuilds every node object when its overlays change (selection, plan highlight, work counts, collisions), and `preserveNodePositions` kept only the position and dropped `measured`. So every such change hid the whole graph for a frame. When a rebuild landed in the same batch as React Flow's dimension change, the node stayed unmeasured and the observer effect did not run again: nothing had changed size, so the ResizeObserver never fired and the canvas stayed empty. This is the likeliest root cause of the empty-canvas failures (graph-breakpoints, multi-select, node-click). The function moved to `lib/preserve-node-positions.ts` and keeps `measured`. `graph/nodes-stay-drawn.spec.ts` watches every node while nodes are selected and cleared: all 14 went hidden without the fix, none with it. (The refused-rescan loop fixed alongside is a real bug too, but it did not explain nodes that were in the DOM and unmeasured.) CLAUDE.md said ReactFlow 11, as did AGENTS.md and `docs/claude/architecture.md`; the installed package is `@xyflow/react` 12.11.6. All three say React Flow 12 since A5.7.
 - [ ] Follow-up: CI's `npm ci` runs `better-sqlite3`'s install script, so node-gyp downloads the Node headers on every job. On #224 (be91267), Harness (1/4) died there before any test ran: node-gyp's bundled undici crashed (`assert(!this.paused)`) reading the Node 26.10.0 headers. The module ships prebuilds, and CLAUDE.md says npm 11.19+ skips install scripts, which is not what CI does. Find out why the scripts run (npm config or the setup action), and whether `npm ci --ignore-scripts` plus the load checks CLAUDE.md gives is safe for `better-sqlite3` and `node-pty`.
 - [x] Follow-up: `graph/edge-visuals.spec.ts:12` timed out on #226 (d4236dc) at 32 s, with the graph's edges in the DOM. The test had the default 30 s budget, but `gotoWithProject` itself waits up to 60 s for another project's scan and 30 s for the canvas, so a project opened while another scan ran ran out of test time inside the helper. 75 specs open a project on the default budget. The helper now raises the test's timeout to cover its own waits (at least 120 s; a longer budget a test set is kept).
 - [x] Follow-up: `golden-chain/onboarding-to-plan.spec.ts:80` failed again on #227 (2d3ced2), after the click was scoped to `plan-item-tree`. The tree item was there and clicked, and the item's detail still did not show within 10 s. It passes locally, 15 of 15, 4 of 4 with the CPU throttled 6×, and with test 188 run first. Test 188 leaves no plan behind. `selectItem` is not a toggle. Candidates, not confirmed: the workspace's hydrate effect runs twice on open and fetches the items twice; an agent's navigation broadcast from the MCP specs that run just before; the workspace closing. The failure now prints what was on screen at that moment (tree, selected row, which texts are there), because the page snapshot is taken after `afterEach` deletes the plan. **Found, and it was the first candidate.** The diagnostic (adb03d9) said the row was selected and neither the body nor the status was on the page. Opening a plan loads its items twice: `resetForPlan` changes the store's plan id, which re-runs the workspace's effect while the first load is out. The list carries summaries without a body. When the second answer landed after the item had been opened, it put the summary back over the full item, so `BodyEditor` saw an empty body and fell into its editor, and a textarea's value is not page text. A person saw the same thing: a task opened quickly after its plan showed an empty editor where its body was. Fixed in `plan-items-store`: one load per plan at a time, the summary adds to an item's full fields rather than replacing them, and a list for a plan no longer open is dropped. `plan-items-store.test.ts` fails without it (two list requests, and the stale list wins).
@@ -379,6 +379,34 @@ tab (B6.4), one clock (B6.5), the phone (B6.6), and done-when with docs
 - The stack covers the one held project, and refuses another, as B5.1 does.
 - Bug 11 is fixed first (B6.1): every later part draws or counts
   dependencies, and would otherwise draw a wait that never ends.
+### 2026-09-29: A5.7 — M5 done-when, and the docs
+**M5 is met.** Review knows what else is in flight.
+
+`tests/e2e/awareness-m5.test.ts` sets up two real worktrees with committed
+work: billing-v2 changes `validateCreateUser`'s signature, and
+checkout-fix's work imports it. There is one plan, with an item on each
+branch, and every comparison is commit to commit against main's branch.
+- A `claude-code` agent's `review_plan` of billing-v2 says, in JSON and in
+  markdown: "Merging this changes validateCreateUser; checkout-fix imports
+  it and will need updating."
+- A `codex` agent's `get_pr_draft` carries the same line and warns while
+  the overlap is open.
+- A `cursor` agent's `get_review_queue` puts billing-v2 first, with the
+  reason "Before checkout-fix: it imports validateCreateUser, which this
+  changes, and will need updating after." Both lines are held.
+- A paired phone gets the same queue and the same review. Once the overlap
+  is marked intended, both lines are ready and the order stands.
+
+**Docs.**
+- `docs/claude/awareness.md` gains "Review: what else is in flight":
+  - commit-side edges, other work in flight, the opt-in hold, the queue
+    and its order, and where each shows;
+  - a row in the any-agent table;
+  - the new tests.
+- `docs/claude/mcp-tools.md` gains the `review-tools.ts` row, which it
+  never had.
+- `docs/claude/mobile-companion.md` gains the review queue's RPC, both
+  screens and their routes.
 
 ### 2026-09-29: A5.6 — the queue on the phone
 The phone asks "what should merge next, and why" too.

@@ -20,7 +20,7 @@ src/
     parsers/            Per-language tree-sitter parser plugins
     resolvers/          Per-language import/symbol resolvers
     callsites/          Per-language HTTP/SQL/subprocess callsite extractors
-  frontend/             React 19 + Tailwind 4 + ReactFlow 11 renderer
+  frontend/             React 19 + Tailwind 4 + React Flow 12 renderer
     components/         Domain component trees
     stores/             Zustand stores, one per domain
     bridge/             Runtime transport switch (HTTP / IPC / WebRTC)
