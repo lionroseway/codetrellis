@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | Wave 2 — B7.4: the decision is a person's |
-| **Status** | B6 done. B7 refined (#240); B7.1 merged (#241): tasks say what spec they rely on. B7.2 merged (#242): `propose_spec_change`. B7.3 merged (#243): each agent holding a relying task is told once; `reply_to_spec_proposal` keeps the impact. B7.4 built on `feat/phase-32-b7-4-decide`, waiting on #244: each agent holding a relying task is told once, never the proposer; `reply_to_spec_proposal` keeps the impact and posts a weigh-in |
-| **Next action** | Merge #244 (a claim undone by our own late export) when green, then open B7.4's PR; then B7.5, spec breakpoints cover proposals and plan documents |
+| **Status** | B6 done. B7 refined (#240); B7.1 merged (#241): tasks say what spec they rely on. B7.2 merged (#242): `propose_spec_change`. B7.3 merged (#243): each agent holding a relying task is told once; `reply_to_spec_proposal` keeps the impact. #244 merged (our own late export no longer undoes a claim). B7.4 in review: each agent holding a relying task is told once, never the proposer; `reply_to_spec_proposal` keeps the impact and posts a weigh-in |
+| **Next action** | Merge B7.4 when green; then B7.5, spec breakpoints cover proposals and plan documents |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-b7-4-decide` |
 | **Last updated** | 2026-09-30 |
@@ -180,7 +180,7 @@
   - [x] B7.1 Tasks say what they rely on (`spec_links`, sections by heading) (#241)
   - [x] B7.2 Propose a spec change, with the tasks it affects (#242)
   - [x] B7.3 Affected agents told once; their replies kept (#243)
-  - [ ] B7.4 The decision is a person's: accept, amend, reject; tasks marked "spec changed" — built, PR after #244
+  - [ ] B7.4 The decision is a person's: accept, amend, reject; tasks marked "spec changed" — in review
   - [ ] B7.5 Spec breakpoints cover proposals and plan documents
   - [ ] B7.6 The phone
   - [ ] B7.7 I1 done-when and docs
@@ -350,7 +350,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   B7.6 gives it the card.
 
 Found on the way: an agent's claim undone by our own late export (entry
-above, #244). B7.4's browser spec failed about one run in three until it
+below, #244, merged). B7.4's browser spec failed about one run in three until it
 was fixed, and six in six after.
 
 Tests: harness `spec-decide.test.ts` (7: in the inbox and awaitable; not
