@@ -19,13 +19,13 @@
 |---|---|
 | **Stage / step** | Wave 2 — A6.6: the M6 done-when (A6 done) |
 | **Status** | A6.5 merged (#257). A6.6 built: the M6 done-when harness (awareness-m6: a replaced workbook two tasks cite is one signal naming both, told once to each agent, said from each side in its brief, one digest line on desktop and phone); awareness.md gains the Brief; the guide gains 'When other tasks share your files'. That closes A6 |
-| **In flight** | A6.6 building on `feat/phase-32-a6-6-m6-done-when` |
-| **Last merged** | A6.5 (#257, `4d1c177`) |
+| **In flight** | C2.1 in review (#259) on `feat/phase-32-c2-1-item-state-from-git`; #260 in review on `fix/phase-32-body-editor-title-poll` |
+| **Last merged** | A6.6 (#258, `e029f11`) |
 | **Next action** | Merge A6.6 when CI is green; then C2 (team status), refining it into sub-steps first as the plan says |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
-> Read from git at `origin/feat/phase-32` `4d1c177`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `e029f11`, with open PRs from GitHub.
 
 ---
 
@@ -119,7 +119,7 @@
   - [x] A6.3 Material signals in the one refresh (contract, stale-base, version-split, collision, drift) (#255)
   - [x] A6.4 Other work affected on the Brief, in get_brief, the inbox and the phone (#256)
   - [x] A6.5 Sign-off packs list the signals that touched the task (#257)
-  - [ ] A6.6 M6 done-when and docs — building
+  - [x] A6.6 M6 done-when and docs (#258)
 - [ ] A7 Rules
 - [ ] Follow-up: `plan-by-hand` failed once in CI when its plan workspace dropped back to the plan list while `plan/list.spec.ts` created and deleted plans on the other worker (#147). It doesn't reproduce as a pair (5/5 on base and on the branch). Find which broadcast leaves the workspace, so a person's open plan survives someone else's plan changes.
 - [ ] Follow-up: two browser tests failed once on #167 and passed on re-run: `realtime/plan-events.spec.ts:18` (a reset connection mid-POST; also 2/3 locally on the base branch) and `external-refs/refs-panel.spec.ts:77` (a fixed 3 s `isVisible`). Both are queued as separate fixes; neither touches A3.4's code.
@@ -187,6 +187,7 @@
   - [x] B6.5 One clock (#237)
   - [x] B6.6 The stack on the phone (#238)
   - [x] B6.7 Done-when and docs (#239)
+- [ ] HD3 Business clashes in the Stack: a material clash between two plans is an overlap, live and at a past moment; a task in the past says which version it read (after C2.1)
 - [ ] B7 Conferring — building
   - [x] B7.1 Tasks say what they rely on (`spec_links`, sections by heading) (#241)
   - [x] B7.2 Propose a spec change, with the tasks it affects (#242)
@@ -199,7 +200,7 @@
   - [x] B7.6 The phone (#249)
   - [x] B7.7 I1 done-when and docs (#250)
 - [ ] B8 Grounding
-- [ ] B9 Play-forward
+- [ ] B9 Play-forward (code, and the materials tasks rely on)
 - [ ] B10 The record
 
 ### Track C: shared ways of working
@@ -208,14 +209,14 @@
   - [x] C1.2 The picker in the routing panel (#176)
   - [x] C1.3 Proof of use; the skills line in a copied task prompt (#177)
   - [x] C1.4 A skill arriving in a pulled plan file is flagged once (#178)
-- [ ] C2 Team status through git (git first for any host; a host adapter only when turned on), refined in EXECUTION §6
-  - [ ] C2.1 Each item's state from git, for any host or none (building, pushed, merged, with its source)
+- [ ] C2 Team status through git (git first for any host; a host adapter only when turned on), refined in EXECUTION §6 — building
+  - [ ] C2.1 Each item's state from git, for any host or none (building, pushed, merged, with its source) (#259) — in review
   - [ ] C2.2 The review-host interface, and GitHub behind it, off until turned on per project
   - [ ] C2.3 GitLab and Bitbucket on the same interface (Azure DevOps, Gitea later)
-  - [ ] C2.4 STATUS.md per plan and an index, each state saying its source
+  - [ ] C2.4 Status read, not written: intent in the plan's YAML, state from git, a host or the plan itself, each saying its source; no STATUS.md
   - [ ] C2.5 Ticket refs in the plan files; approvals as signed statements
   - [ ] C2.6 Teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when
-- [ ] C3 Linked planning repo
+- [ ] C3 A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice)
 - [ ] C4 Recurring playbooks
 - [x] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
   - [x] C5.1 `workstream` on an item, inherited; `assign_workstream`; next and claim respect it (#186)
@@ -332,10 +333,49 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-29 | Wave 2 opens with HD1 (the extra graph nodes after another project's scan) and HD2 (the browser specs that click graph nodes move to the committed sample app); B5 follows, and the phone (A4) stays after it. The Rust, Java and PHP call sites are not scheduled | The owner's answer to the Wave 1 direction review. The extra nodes are the one-project-at-a-time class #195 and #196 fixed on other routes; most CI noise since #194 came from specs clicking a graph of this repository, which every PR changes |
 | 2026-09-29 | Replay frames are taken only when a turn ends, an item's status changes or a commit lands, only for the project the server holds, and a frame whose graph is unchanged points at the last one | Replay steps between recorded moments (observability §6.2); a timer would copy graphs nothing changed, and a capture must never switch the held project under the window |
 | 2026-09-29 | A signal's openings are kept as rows of `awareness_signal_spans`, not as app events in `agent_events` (B5.2) | App events would show in the Timeline as rows beside the ⚠ marks the lanes already draw from signals, and a span is two times on one row where events would be two rows to pair up. The refinement had said app events; this is the same record, kept where it reads |
+| 2026-09-30 | Business work gets the same footing as code in four places, each where it already lives: HD3 (material clashes in the Stack, live and at a moment, and the version a task had read), C2.4 (status for a task with no branch read from the plan), B9 (play-forward projects materials), C3 (a synced folder can carry the shared plans) | The owner's questions after A6. A6 raised material signals, but the Stack mapped signals to plans only through branch folders, replay kept no material versions, and play-forward and team status were designed around code. Each fix reads telemetry the app already records (`material_reads`, signal spans, the plan's own records) |
+| 2026-09-30 | No STATUS.md. C2.4 becomes status read, not written: intent in the plan's YAML, state derived (git for a task on a branch, a host when on, the plan itself otherwise), each state saying its source, shown in the window, on the phone and in `get_plan` | The owner's point: status a program can read, as Phase 32's own tracker moved to YAML with state read from git (#246). The shared-work doc's STATUS.md predated that decision. A committed summary drifts, and one rewritten on every change is noise in git and a clash in a synced folder. An export for people without the app is left to C3 |
+| 2026-09-30 | C3's shared plans folder can be carried by git or by a cloud-synced folder (OneDrive, SharePoint, Google Drive, Dropbox), in one layout: each writer adds only its own records and never edits another's, state is read from all of them, records are signed with the device's pairing key, and a real disagreement is a signal | The owner's idea: business teams already share a synced folder the way developers share a repository. A sync has no merge, so clashes are made impossible rather than resolved: two writers never touch one file. The same layout ends merge conflicts in a git planning repo. The sync client moves the files, so the app still makes no request of its own; anyone can write to the folder, so authorship comes from a signature, not a field |
 
 ---
 
 ## Entries
+
+### 2026-09-30: Business work in the plan
+
+While C2.1 was in review the owner asked what the business side gets from
+this phase: does replay, clash detection and play-forward work for it,
+and is there a fallback to rely on. Checking the code answered it:
+
+- **Clash detection works** (A6): a shared spreadsheet, document or PDF
+  raises one signal naming every task, told to each agent once, on the
+  Brief, the phone and in the sign-off pack.
+- **The Stack did not see it.** `stackOverlaps` counts only `collision`
+  and `contract` signals and maps a signal's workstreams to plans through
+  the plans' branch folders, so a `task:` workstream never reached a plan.
+- **Replay** rebuilds a task's status at any moment, but not which version
+  of a material it had read, though `material_reads` keeps it with a time.
+- **Play-forward** (B9, not built) was designed around code only.
+- **C2.1's git states** apply only to a task on a branch; for everything
+  else the plan's own records (status, evidence, sign-off, each with who
+  recorded it) are the fallback, and were not named as a source.
+
+The owner agreed all three fixes, and added two points:
+
+- **No STATUS.md.** Status a program can read was already decided for
+  Phase 32's own tracker (#246); C2.4 now reads status rather than writing
+  a summary.
+- **A synced folder as transport.** Business teams share OneDrive or
+  SharePoint folders the way developers share repositories. C3's shared
+  plans folder is designed for both, laid out so a sync cannot clash.
+
+Written into the plan docs: EXECUTION §2 (the order and why), HD3 (new, in
+Track B after B6), C2.4 reworded, C3's design, B9's scope; the shared-work
+doc's C-2 §1 and C-3; the observability doc's stack, play-forward and
+zones; the awareness spec §10.4. The order is now C2.1 → HD3 → C2.2–C2.6.
+Open questions recorded for C3: which sync providers first, what people
+without the app see, and whether teammates' material reads are shared by
+default.
 
 ### 2026-09-30: A6.6 — the M6 done-when; A6 done
 

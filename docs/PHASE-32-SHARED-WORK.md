@@ -13,8 +13,9 @@ These four belong together because each one is about **work that other
 people, or later runs, have to repeat or read**. They also reinforce each
 other:
 - A recurring playbook carries its skills.
-- The git status file shows which skills each task used.
-- A separate planning repo is just where those status files live.
+- A task's status says which skills it used, read from its records.
+- A shared plans folder, carried by git or by a cloud-synced folder, is
+  where those records live, for developers and business teams alike.
 
 ---
 
@@ -130,7 +131,9 @@ designed (`docs/cdev/03`, `04`) and partly built (`plan-conflict-service`).
 
 **Gaps:**
 - **It's machine-readable, not people-readable.** A teammate on GitHub
-  sees YAML, not status.
+  sees YAML, not status. That is the right source (the owner's point,
+  2026-09-30: status a program can read); what was missing is a view,
+  and the view belongs in the app, not in another file.
 - **Ticket links aren't in the files.** `external_refs` and
   `plan_external_refs` aren't serialised, so ticket → plan lineage stops
   at the machine that did the intake.
@@ -142,10 +145,26 @@ designed (`docs/cdev/03`, `04`) and partly built (`plan-conflict-service`).
 
 ### Design
 
-**1. `STATUS.md` per plan, and one index.** Generated on the same
-write-through, plain markdown readable on GitHub:
+**1. Status is read, not written** (the owner's point, 2026-09-30,
+replacing a generated `STATUS.md` per plan). Phase 32's own tracker moved
+from Markdown to YAML holding only intent, with state read from git
+(#246); plans work the same way:
 
-```markdown
+- **Intent is written**, in the plan's YAML files: what the plan and its
+  tasks are, their refs, and the approvals (below).
+- **State is derived**, each with its source: git for a task on a branch
+  (building, pushed, merged, §5), a host when one is turned on (in review,
+  checks), and the plan itself for everything else ("in progress, from
+  the plan": its status, evidence and sign-off, each with who recorded
+  it). A task with no branch, such as an analyst's report, is never shown
+  as less certain than a code task beside it.
+- **No summary file.** A generated file that is committed drifts (the
+  hand-kept Now block did), and one rewritten on every change is noise in
+  git and a clash waiting to happen in a synced folder (C-3). The view
+  below is what the plan's status says in the window, on the phone and to
+  an agent's `get_plan`; it is not a file:
+
+```text
 # Billing v2 · JIRA-142
 ████████░░ 8 of 10 tasks · updated 26 Sep 14:02
 
@@ -164,7 +183,9 @@ write-through, plain markdown readable on GitHub:
 JIRA-142 → this plan → PR #118 (open) → 14 commits
 ```
 
-`.codetrellis/STATUS.md` lists every plan in the repo with one line each.
+Whether people without the app get an export (generated on demand, never
+committed or rewritten on a change) is an open question for C3, which
+decides what a shared folder holds for them.
 
 **2. Ticket links exported.** `plan.yaml` and item files gain `refs`
 (ticket keys and URLs), so lineage survives git.
@@ -210,7 +231,8 @@ GitLab and Bitbucket; Azure DevOps and Gitea later, on the same interface.
 - **Honest words without one.** With no adapter the app says what git
   proves: "pushed, not merged", never "in review", and a closed branch
   reads "stopped" rather than a guess. Each state carries its source
-  (git, or which host), in the window, STATUS.md and to agents.
+  (git, which host, or the plan), in the window, on the phone and to
+  agents.
 - **Agents read it the same way**: the plan's MCP tools report each item's
   state with its source, so an agent on a Bitbucket project is not told
   less than one on GitHub, only honestly less when no adapter is on.
@@ -255,8 +277,78 @@ can name its planning repo:
   user confirms it once, the same consent pattern as clones in A §5.1.
 - If the clone isn't on this machine, the pointers show plan stubs, as
   today, with "clone the planning repo to see full plans".
-- STATUS files (C-2) are written in the planning repo, so the planning
-  repo becomes the org's status board.
+- The planning repo becomes the org's status board: every plan's records
+  are there, and the app reads status from them (C-2 §1), writing no
+  summary file.
+
+**Carried by git or by a synced folder** (the owner's point, 2026-09-30).
+A business team shares a OneDrive, SharePoint, Google Drive or Dropbox
+folder the way developers share a repository: everyone has a copy, and it
+carries changes between them with no server of ours. So the plans folder
+can live in either, with one layout. A sync is not git, and the layout is
+chosen for that:
+
+| | git | cloud-synced folder |
+|---|---|---|
+| Two people edit one file | a merge conflict to resolve | last writer wins, or a "conflicted copy" appears |
+| History | complete | partial, per file |
+| Arrival | a whole commit at once | file by file, in any order, some still placeholders |
+| Who wrote it | the commit author (claimed) | nothing |
+
+So sync clashes cannot happen by construction, rather than being handled
+after:
+
+1. **One writer per file, only ever added.** Each person's app writes
+   only its own records, `.codetrellis/records/<plan>/<task>/<writer>-<counter>.yaml`,
+   and the state everyone sees is read from all of them. Two people
+   acting at once make two files, so neither a sync nor git has anything
+   to fight over; the same layout ends merge conflicts in a git planning
+   repo. A writer compacts only its own records.
+2. **Partial arrival is normal.** A record not yet synced leaves a
+   teammate behind, never wrong; reading a record twice changes nothing;
+   a "conflicted copy" a sync client makes is read as one more record,
+   never dropped.
+3. **A real disagreement is a signal, never a silent pick.** "Sam marked
+   this done and Alex marked it blocked within the same minute" goes to
+   the inbox naming both, as awareness treats every clash.
+4. **Order does not trust clocks.** Laptop clocks drift, so each record
+   carries its writer's counter and the last counter it had seen from
+   each other writer, as well as a time.
+
+Three things need care:
+
+- **Trust.** Anyone who can write to the folder can write a file claiming
+  to be anyone. Every record's author comes from how it arrived (the
+  authorship rule), so each device signs its records with the key it
+  already holds for pairing, the same mechanism as signed approvals
+  (C-2 §3); an unsigned or unverifiable record reads "unverified", as a
+  plain HTTP call does. Records are untrusted input: parsed safely, size
+  limited, read through the confined-file helper, and never a source of a
+  path or project root.
+- **Files on demand.** OneDrive and its peers leave placeholders that
+  download when opened. The app never reads a whole folder to hash it:
+  only files already on the device, or cited by a task, are hashed, and a
+  placeholder is shown as "not on this device".
+- **Paths differ per machine** (`C:\Users\Sam\OneDrive - Acme\…`), so a
+  material is known by its place in the shared folder and its content
+  hash, never by its full path.
+
+It stays within the security rules: off by default and turned on per
+folder; the sync client moves the files, so the update check stays the
+only request the app makes on its own.
+
+**Teammates' material reads.** With the team's say-so, each app also
+writes which version of each material its tasks read (A6.2) as records.
+A6's signals then work across people: "Alex's task used last week's
+`sales-2026.xlsx`; Sam replaced it on Tuesday." This is the most useful
+part and the most revealing (who opened which file), so it is a separate
+switch from sharing plans.
+
+**Open questions for the owner, when C3 is next:** which providers are
+detected and tested first (OneDrive and SharePoint are the likely start;
+Google Drive and Dropbox look the same on disk); what people without the
+app see in the folder (nothing, or an export on demand); and whether
+teammates' material reads are shared by default once a folder is on.
 
 ## C-4. Recurring plans
 
@@ -307,14 +399,19 @@ Each part lands with:
   - skill resolution: cascade and new fields round-tripping through plan
     files
   - skill location confinement
-  - STATUS.md rendering from fixtures
+  - state derivation: a task with no branch says "from the plan"
+  - records: reading all writers' records, a duplicate, a conflicted
+    copy, a record not yet arrived, two writers disagreeing
   - signed-approval verify: valid, tampered, unknown key
   - recurrence period and uid derivation
   - missed-run detection
 - **Harness tests**
   - A brief shows recommended skills.
   - A watcher fixture with a `Skill` call marks "used".
-  - Write-through produces STATUS.md.
+  - A state change writes no summary file.
+  - Two apps on one synced folder (two data dirs, one folder) each write
+    only their own records and read the same state; a disagreement is a
+    signal; an unsigned record reads "unverified".
   - A linked planning repo round-trip.
   - A recurring playbook creates exactly one W40 run, even when triggered
     twice.

@@ -135,7 +135,11 @@ up?"**: what's in flight, what overlaps, and what's waiting on what.
 - **Tasks nested underneath**, each showing who is on it, in which
   workstream.
 - **Overlap bands** where two plans touch the same files or functions,
-  declared or actual, with "⚠ overlaps JIRA-150" in words.
+  or rely on the same material (a spreadsheet, a document, a PDF their
+  tasks read), declared or actual, with "⚠ overlaps JIRA-150" in words.
+  Materials were added 2026-09-30 (EXECUTION HD3): a business team's
+  plans clash over a shared spreadsheet the way code plans clash over a
+  file.
 - **Dependencies drawn**, including across plans. Cross-plan
   dependencies aren't represented today: an item can list another plan's
   item as a dependency, but it never counts as done.
@@ -191,7 +195,10 @@ diff in the code view. Here it drives everything.
    say it *will* be: files planned but not yet created, dependencies
    planned but not yet added. This is the existing planned-state
    projection, extended from one plan to every active plan. That's where
-   future collisions show up before anyone has written a line.
+   future collisions show up before anyone has written a line. It
+   projects the materials tasks say they rely on as well as the code they
+   plan to change, so two plans about to work from one spreadsheet show a
+   future overlap too (2026-09-30).
 
 The chrome always says which one you're watching and between which two
 points.
@@ -231,6 +238,10 @@ workstreams are working at once. It's the visual form of the
   hours is worth more attention than one that opened a minute ago.
 - **Future zones:** in play-forward (§6.3), zones that *will* form if
   the plans go ahead are drawn dashed, as "◇ planned overlap".
+- **Materials have zones too, in words.** A spreadsheet two tasks rely
+  on is not on the code graph, so its clash is a band in the stack and a
+  line on each task's Brief (A6, HD3) rather than a drawn zone, with the
+  same seriousness rules: a changed part another task cites is serious.
 
 ## 8. Conferring: when an agent finds the spec is wrong
 
@@ -456,7 +467,7 @@ spec). Track B is this surface. B depends on A only where noted.
 | **B6** Stack view | Plans, tasks and tickets stacked, with overlap bands and drawn dependencies, including cross-plan | A-M1 |
 | **B7** Conferring | Spec proposals, task → spec links, addressed events, decision as breakpoint | B4, A-M2 (notices) |
 | **B8** Grounding | Per-test results, tests mapped to code, grounding overlay and task line | B3 |
-| **B9** Play-forward | Every active plan's planned state projected, with future collision zones | B3, B6 |
+| **B9** Play-forward | Every active plan's planned state projected, code and the materials tasks rely on, with future collision zones | B3, B6, HD3 |
 | **B10** The record | Tamper-evident log, signed packs, retention settings, evidence export | B1, B4, B5 |
 
 Suggested order: B1 → B2 → B4 → B3 → B5 → B6 → B7 → B8 → B9 → B10.

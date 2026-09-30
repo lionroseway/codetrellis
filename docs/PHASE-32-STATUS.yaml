@@ -441,6 +441,8 @@ sections:
             title: The stack on the phone
           - id: B6.7
             title: Done-when and docs
+      - id: HD3
+        title: "Business clashes in the Stack: a material clash between two plans is an overlap, live and at a past moment; a task in the past says which version it read (after C2.1)"
       - id: B7
         title: Conferring
         items:
@@ -468,7 +470,7 @@ sections:
       - id: B8
         title: Grounding
       - id: B9
-        title: Play-forward
+        title: Play-forward (code, and the materials tasks rely on)
       - id: B10
         title: The record
   - title: "Track C: shared ways of working"
@@ -495,13 +497,13 @@ sections:
           - id: C2.3
             title: GitLab and Bitbucket on the same interface (Azure DevOps, Gitea later)
           - id: C2.4
-            title: STATUS.md per plan and an index, each state saying its source
+            title: "Status read, not written: intent in the plan's YAML, state from git, a host or the plan itself, each saying its source; no STATUS.md"
           - id: C2.5
             title: Ticket refs in the plan files; approvals as signed statements
           - id: C2.6
             title: Teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when
       - id: C3
-        title: Linked planning repo
+        title: "A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice)"
       - id: C4
         title: Recurring playbooks
       - id: C5
