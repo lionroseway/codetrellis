@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — A6.6: the M6 done-when (A6 done)"
-  status: "A6.5 merged (#257). A6.6 built: the M6 done-when harness (awareness-m6: a replaced workbook two tasks cite is one signal naming both, told once to each agent, said from each side in its brief, one digest line on desktop and phone); awareness.md gains the Brief; the guide gains 'When other tasks share your files'. That closes A6"
-  next: Merge A6.6 when CI is green; then C2 (team status), refining it into sub-steps first as the plan says
+  step: "Wave 2 — C2.1: each item's state from git"
+  status: "A6 done (#251–#258). C2 was already refined (EXECUTION §6). C2.1 built: building, pushed and merged (merge or fast-forward, squash or rebase by content, or a gone branch a commit names) read from local refs for any host or none, each with its proof commit and source; on the plan tree, the item page, get_plan, get_brief and GET /api/plans/:uid/git-state. Unit (12, real repositories), harness (4, with a remote), browser (2 shots) green locally"
+  next: Merge C2.1 when CI is green; then C2.2 on feat/phase-32-c2-2-review-host-github (the review-host interface and GitHub behind it, off until turned on per project)
   blockers: none
   updated: 2026-09-30
 sections:

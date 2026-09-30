@@ -10,6 +10,8 @@ import { progressByWorktree, worktreeReadiness } from '../../../lib/section-work
 import { useAwarenessStore } from '../../../stores/awareness-store';
 import { useReplayStore } from '../../../stores/replay-store';
 import type { PlanItem, PlanItemKind, TaskStatus } from '@shared/types';
+import { usePlanGitStates, GIT_STATE_TONE, type PlanItemGitState } from '../../../lib/plan-git-state';
+import { gitStateChip } from '@shared/lib/git-state-words';
 
 const STATUS_ICON: Record<TaskStatus, { Icon: typeof Circle; tint: string }> = {
   pending: { Icon: Circle, tint: 'text-zinc-500' },
@@ -62,6 +64,9 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
   // C5.3b — and whether each is ready to merge.
   const workstreams = useAwarenessStore((s) => s.workstreams);
   const signals = useAwarenessStore((s) => s.signals);
+  // C2.1 — what git proves about each section's branch.
+  const branchesNonce = useMemo(() => Object.values(itemsByUid).map((i) => `${i.uid}:${i.workstream ?? ''}`).join('|'), [itemsByUid]);
+  const gitStates = usePlanGitStates(planUid, branchesNonce);
   const localCount = useMemo(
     () => Object.values(itemsByUid).filter((i) => i.visibility === 'local').length,
     [itemsByUid],
@@ -155,6 +160,7 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
           setDrag={setDrag}
           isDropTarget={isDropTarget}
           onDrop={handleDrop}
+          gitState={gitStates[uid]}
         />
         {isOpen && childUids.length > 0 && (
           <div>{childUids.map((c) => renderNode(c, depth + 1))}</div>
@@ -258,7 +264,7 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
 
 function ItemRow({
   item, depth, isSelected, hasChildren, isOpen, onToggle, onClick,
-  drag, setDrag, isDropTarget, onDrop,
+  drag, setDrag, isDropTarget, onDrop, gitState,
 }: {
   item: PlanItem;
   depth: number;
@@ -271,6 +277,7 @@ function ItemRow({
   setDrag: (d: DragState) => void;
   isDropTarget: boolean;
   onDrop: (targetUid: string, position: DropPosition) => void;
+  gitState?: PlanItemGitState;
 }) {
   const createItem = usePlanItemsStore((s) => s.createItem);
   const updateItem = usePlanItemsStore((s) => s.updateItem);
@@ -399,6 +406,17 @@ function ItemRow({
           className="shrink-0 max-w-[45%] truncate rounded border border-sky-400/25 bg-sky-500/10 px-1 font-mono text-[10px] text-sky-300"
         >
           ⎇ {item.workstream}
+        </span>
+      )}
+      {/* C2.1 — what git proves about that branch, on the section that names it. */}
+      {item.workstream && gitState && gitState.state !== 'none' && (
+        <span
+          data-testid="item-git-state"
+          data-state={gitState.state}
+          title={`${gitState.words} — from git${gitState.commit ? `, ${gitState.commit.slice(0, 7)}` : ''}`}
+          className={`shrink-0 rounded border px-1 text-[10px] ${GIT_STATE_TONE[gitState.state] ?? ''}`}
+        >
+          {gitStateChip(gitState)}
         </span>
       )}
       {item.kind === 'action' && typeof item.progressPercent === 'number' && item.progressPercent > 0 && (

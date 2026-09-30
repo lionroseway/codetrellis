@@ -77,6 +77,7 @@ import { reviewQueue } from './services/review-queue-service';
 import { buildStack } from './services/stack-service';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
+import { planGitStates } from './services/item-git-state';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
 import { buildPlaybackSequence } from './services/playback-service';
 import * as commentService from './services/comment-service';
@@ -2364,6 +2365,17 @@ app.get('/api/plans/:uid/next-task', (req, res) => {
 app.get('/api/plans/:uid/waits', (req, res) => {
   if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
   res.json({ waits: planItemService.planWaits(req.params.uid) });
+});
+
+/**
+ * Phase 32 C2.1 — each item's state from git, for any host or none:
+ * building, pushed or merged, with the commit that proves it. Read from
+ * local refs only; nothing is fetched and no host is asked.
+ */
+app.get('/api/plans/:uid/git-state', (req, res) => {
+  const states = planGitStates(req.params.uid);
+  if (!states) { res.status(404).json({ error: 'Plan not found' }); return; }
+  res.json(states);
 });
 
 /** Delete a task attachment. */
