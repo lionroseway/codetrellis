@@ -28,6 +28,7 @@ import { holdsProject } from '../../services/replay-frames';
 import { importersOf, type Importer } from '../../services/importers';
 import { enforceEdit, editView } from '../../services/code-breakpoints';
 import { enforceSignalsForSession, signalHeldText } from '../../services/signal-breakpoints';
+import { listTaskWorkstreams, sessionWorkstreams } from '../../services/task-workstreams';
 
 /** The workstream this connection is bound to (A1.1), or null. */
 function callerWorkstream(sessionId: string): string | null {
@@ -49,7 +50,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         'A folder with two or more agents is a "shared" checkout, where their edits cannot be told apart — prefer a ' +
         'worktree of your own. `yours` marks the workstream this connection is bound to. Check the others\' changed ' +
         'files before editing the same ones. Idle worktrees (no agent, nothing changed) are left out unless ' +
-        'include_idle is true.',
+        'include_idle is true. `tasks` lists work that is not code: each task a session is on because it called ' +
+        'get_brief for it (with include_idle, also tasks with recorded materials or outputs); `yours` marks your task.',
       inputSchema: {
         project_path: z.string().optional().describe('Absolute path of an opened project. Defaults to the active project.'),
         include_idle: z.boolean().optional().describe('Also list worktrees with no agent in them.'),
@@ -69,7 +71,11 @@ export function register(server: McpServer, deps: ToolDeps): void {
         } : {}),
         yours: w.agents.some((a) => a.sessionId === deps.sessionId),
       }));
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ project_path: root, workstreams }, null, 2) }] };
+      // Tasks worked as workstreams (A6.1): a session bound by get_brief, not a folder.
+      const tasks = listTaskWorkstreams(root, { includeIdle: include_idle === true }).map((t) => ({
+        ...t, yours: t.agents.some((a) => a.sessionId === deps.sessionId),
+      }));
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ project_path: root, workstreams, tasks }, null, 2) }] };
     },
   );
 
@@ -97,11 +103,18 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (!root) return noProject;
       refreshSignals(root);
       const workstream = callerWorkstream(deps.sessionId);
-      const signals = listSignals(root, { workstream });
-      const all = workstream ? listSignals(root).length : signals.length;
+      // Its folder and its task (A6.1): a Claude Desktop session has only the task.
+      const mine = sessionWorkstreams(getActiveSessions().find((s) => s.sessionId === deps.sessionId));
+      const byId = new Map<string, ReturnType<typeof listSignals>[number]>();
+      if (mine.length) for (const w of mine) for (const s of listSignals(root, { workstream: w })) byId.set(s.id, s);
+      const rank = { high: 0, medium: 1, low: 2 } as const;
+      const signals = mine.length
+        ? [...byId.values()].sort((a, b) => rank[a.severity] - rank[b.severity] || b.lastSeen - a.lastSeen)
+        : listSignals(root);
+      const all = mine.length ? listSignals(root).length : signals.length;
       // Reading them is being told (A2.6): no notice repeats these later.
       const agentType = getActiveSessions().find((s) => s.sessionId === deps.sessionId)?.agentType ?? 'agent';
-      if (workstream) markTold(root, signals.map((s) => s.id), deps.sessionId, agentType);
+      if (mine.length) markTold(root, signals.map((s) => s.id), deps.sessionId, agentType);
       // Its own note only: another agent's words are never passed on.
       const told = toldFor(signals.map((s) => s.id));
       const yourNote = (id: string) => told.get(id)?.find((t) => t.sessionId === deps.sessionId)?.note;
@@ -117,6 +130,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
           text: JSON.stringify({
             project_path: root,
             your_workstream: workstream,
+            your_task: mine.find((w) => w.startsWith('task:')) ?? null,
             digest,
             signals: signals.map(({ id, kind, severity, summary, subject, workstreams, firstSeen, state }) => ({
               id, kind, severity, summary, subject, workstreams, first_seen: firstSeen, state,

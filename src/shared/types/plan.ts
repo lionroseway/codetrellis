@@ -286,6 +286,12 @@ export interface AgentSessionInfo {
    * none of them.
    */
   workstreamRoot?: string | null;
+  /**
+   * Phase 32 A6.1 — the task it works on: the item it last called
+   * `get_brief` on. A task is a workstream of its own (`task:<uid>`), for a
+   * session with no folder (Claude Desktop) and beside one with a folder.
+   */
+  briefItemUid?: string | null;
   /** The CodeTrellis terminal it runs in, when it said so and that terminal exists. */
   hostTerminalId?: string | null;
 }

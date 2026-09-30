@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { GitBranch, Users, AlertTriangle, FileText, FolderPlus } from 'lucide-react';
+import { GitBranch, Users, AlertTriangle, FileText, FolderPlus, ClipboardList } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
 import { usePlanStore } from '../../stores/plan-store';
 import { useToastStore } from '../../stores/toast-store';
@@ -33,6 +33,18 @@ interface FolderRequestView {
   reportedAt: number;
 }
 
+/** A task worked as a workstream (A6.1): a session on it through get_brief. */
+interface TaskWorkstreamView {
+  id: string;
+  itemUid: string;
+  title: string;
+  planTitle: string;
+  status: string;
+  agents: Workstream['agents'];
+  materials: number;
+  outputs: number;
+}
+
 const folderName = (folder: string) => folder.split(/[\\/]/).filter(Boolean).pop() ?? folder;
 
 export function WorkstreamStrip() {
@@ -41,14 +53,20 @@ export function WorkstreamStrip() {
   const [all, setAll] = useState<Workstream[]>([]);
   const [signals, setSignals] = useState<AwarenessSignal[]>([]);
   const [requests, setRequests] = useState<FolderRequestView[]>([]);
+  const [tasks, setTasks] = useState<TaskWorkstreamView[]>([]);
   const [open, setOpen] = useState<{ root: string | null; top: number; left: number } | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(() => {
-    if (!root) { setAll([]); setSignals([]); return; }
+    if (!root) { setAll([]); setSignals([]); setTasks([]); return; }
     fetch(`/api/workstreams?project=${encodeURIComponent(root)}`)
       .then((r) => (r.ok ? r.json() : []))
       .then((ws: Workstream[]) => setAll(Array.isArray(ws) ? ws : []))
+      .catch(() => {});
+    // Tasks a session is on through get_brief (A6.1): work with no folder.
+    fetch(`/api/workstreams/tasks?project=${encodeURIComponent(root)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((ts: TaskWorkstreamView[]) => setTasks(Array.isArray(ts) ? ts : []))
       .catch(() => {});
     // Folders an agent reported that are not opened (A1.7c).
     fetch('/api/workstreams/folder-requests')
@@ -96,7 +114,7 @@ export function WorkstreamStrip() {
   }, [open]);
 
   const shown = stripWorkstreams(all, signals);
-  if (shown.length === 0 && requests.length === 0) return null;
+  if (shown.length === 0 && requests.length === 0 && tasks.length === 0) return null;
 
   const chips = shown.length > MAX_CHIPS ? shown.slice(0, MAX_CHIPS - 1) : shown;
   const overflow = shown.length - chips.length;
@@ -108,6 +126,7 @@ export function WorkstreamStrip() {
   // From an overlap to where it is answered (A1.8).
   const review = () => { setOpen(null); useUiStore.getState().openPlanPanelTab('awareness'); };
   const listed = open ? (open.root === null ? shown.slice(chips.length) : shown.filter((w) => w.root === open.root)) : [];
+  const openTask = open?.root?.startsWith('task:') ? tasks.find((t) => t.id === open.root) ?? null : null;
   const openRequest = open?.root?.startsWith('request:') ? requests.find((r) => `request:${r.id}` === open.root) ?? null : null;
   const answer = async (r: FolderRequestView, action: 'include' | 'dismiss') => {
     setOpen(null);
@@ -162,6 +181,33 @@ export function WorkstreamStrip() {
           </button>
         );
       })}
+      {/* A task a session is on (A6.1): work that is not code, with no folder. */}
+      {tasks.map((t) => {
+        const sev = chipSeverity(signalsFor(t.id, signals));
+        return (
+          <button
+            key={t.id}
+            data-testid="task-workstream-chip"
+            onClick={(e) => toggle(e, t.id)}
+            aria-expanded={open?.root === t.id}
+            title={[`Task · ${t.title}`, t.planTitle, t.agents.length === 0 ? 'no agent working' : null, signalWords(signalsFor(t.id, signals))].filter(Boolean).join(' — ')}
+            data-severity={sev ?? undefined}
+            className={`flex items-center gap-1.5 max-w-[180px] text-[11px] px-2 py-1 rounded-lg border bg-surface transition-all ${
+              sev === 'high' ? 'border-danger/70 text-foreground' : sev === 'medium' ? 'border-warning/50 text-foreground' : 'border-border text-foreground hover:border-border-glow'
+            } ${open?.root === t.id ? 'border-border-glow' : ''}`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${t.agents.length > 0 ? 'bg-success' : 'bg-foreground-subtle'}`} aria-hidden />
+            <ClipboardList size={11} className="text-foreground-subtle shrink-0" aria-hidden />
+            <span className="truncate">Task · {t.title}</span>
+            <span className="flex items-center -space-x-0.5 shrink-0" aria-hidden>
+              {t.agents.slice(0, 3).map((a) => {
+                const { Icon, tint } = agentBadge(a.agentType);
+                return <Icon key={a.sessionId} size={11} className={tint} />;
+              })}
+            </span>
+          </button>
+        );
+      })}
       {/* An agent in a folder that is not opened (A1.7c): asked, never assumed. */}
       {requests.map((r) => (
         <button
@@ -185,6 +231,46 @@ export function WorkstreamStrip() {
         >
           +{overflow}
         </button>
+      )}
+
+      {openTask && open && createPortal(
+        <div
+          data-workstream-popover
+          data-testid="task-workstream-popover"
+          style={{ position: 'fixed', top: open.top, left: Math.min(open.left, window.innerWidth - 300), zIndex: 9999 }}
+          className="w-72 bg-surface-solid/95 backdrop-blur-xl border border-white/[0.08] rounded-lg shadow-[0_0_20px_rgba(0,0,0,0.5)] py-1"
+        >
+          <div className="px-3 py-2">
+            <div className="flex items-center gap-1.5">
+              <ClipboardList size={12} className="text-foreground-subtle shrink-0" />
+              <span className="text-[12px] font-medium text-foreground truncate">{openTask.title}</span>
+            </div>
+            <div className="mt-0.5 text-[10px] text-foreground-muted">
+              A task in {openTask.planTitle}. Work that is not code: its agents are on it through its brief, not a folder.
+            </div>
+            <div className="mt-1 text-[10px] text-foreground-subtle">
+              {openTask.materials} {openTask.materials === 1 ? 'material' : 'materials'} · {openTask.outputs} {openTask.outputs === 1 ? 'output' : 'outputs'}
+            </div>
+          </div>
+          <Overlaps signals={signalsFor(openTask.id, signals)} onReview={review} />
+          <div className="px-3 pb-2">
+            <div className="flex items-center gap-1 text-[9px] uppercase tracking-wider text-foreground-subtle mb-1">
+              <Users size={10} /> {openTask.agents.length === 0 ? 'No agent on it now' : openTask.agents.length === 1 ? '1 agent' : `${openTask.agents.length} agents`}
+            </div>
+            {openTask.agents.map((a) => {
+              const { Icon, tint, label } = agentBadge(a.agentType);
+              return (
+                <div key={a.sessionId} data-testid="task-workstream-agent" className="flex items-center gap-2 py-0.5">
+                  <Icon size={11} className={tint} />
+                  <span className="text-[11px] text-foreground">{label}</span>
+                  {a.model && <span className="text-[9px] font-mono text-foreground-subtle truncate">{a.model}</span>}
+                  <span className="ml-auto text-[9px] text-foreground-subtle whitespace-nowrap">{a.lastSeen ? formatLastSeen(a.lastSeen) : ''}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>,
+        document.body,
       )}
 
       {openRequest && open && createPortal(

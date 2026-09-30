@@ -251,6 +251,11 @@ export async function initDatabase(): Promise<void> {
   // Phase 17.B+ — host terminal ID for self-write detection
   try { db.run(`ALTER TABLE agent_sessions ADD COLUMN host_terminal_id TEXT DEFAULT NULL`); } catch { /* exists */ }
 
+  // Phase 32 A6.1 — the task a session works on, when it has no folder
+  // (Claude Desktop): the item it last called get_brief on.
+  try { db.run(`ALTER TABLE agent_sessions ADD COLUMN brief_item_uid TEXT DEFAULT NULL`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE agent_sessions ADD COLUMN brief_bound_at INTEGER DEFAULT NULL`); } catch { /* exists */ }
+
   // Deviation file_path — stores the concrete path so accepted can amend the plan
   try { db.run(`ALTER TABLE deviations ADD COLUMN file_path TEXT DEFAULT NULL`); } catch { /* exists */ }
 

@@ -19,8 +19,11 @@ import { markDirty } from './persistence';
 import { listSignals } from './awareness-service';
 import { getActiveSessions } from './session-service';
 import { getEffectiveSensorConfig } from './project-config-service';
+import { sessionWorkstreams } from './task-workstreams';
 
 export const MAX_NOTE = 500;
+
+const RANK = { high: 0, medium: 1, low: 2 } as const;
 
 /** Tools that already show the signals, or are the reply to one: telling there would say it twice. */
 const NO_NOTICE = new Set(['get_awareness', 'acknowledge_signal']);
@@ -124,9 +127,14 @@ export function noticeFor(sessionId: string, toolName: string, projectRoot: stri
   try {
     if (!getEffectiveSensorConfig(projectRoot).awareness.inlineNotices) return null;
     const session = getActiveSessions().find((s) => s.sessionId === sessionId);
-    if (!session?.workstreamRoot) return null; // not placed in any work: nothing is "yours"
+    // Its folder, and the task it works on (A6.1). In neither: nothing is "yours".
+    const mine = sessionWorkstreams(session);
+    if (!session || mine.length === 0) return null;
     const seen = toldTo(sessionId);
-    const fresh = listSignals(projectRoot, { workstream: session.workstreamRoot })
+    const byId = new Map<string, AwarenessSignal>();
+    for (const w of mine) for (const s of listSignals(projectRoot, { workstream: w })) byId.set(s.id, s);
+    const fresh = [...byId.values()]
+      .sort((a, b) => RANK[a.severity] - RANK[b.severity] || b.lastSeen - a.lastSeen)
       .filter((s) => (s.severity === 'high' || s.severity === 'medium') && CONCERNS.has(s.state) && !seen.has(s.id));
     if (fresh.length === 0) return null;
     markTold(projectRoot, fresh.map((s) => s.id), sessionId, session.agentType);

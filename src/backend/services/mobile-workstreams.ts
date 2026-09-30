@@ -12,6 +12,7 @@
 
 import fs from 'node:fs';
 import { listWorkstreams } from './workstream-service';
+import { listTaskWorkstreams, taskLabel } from './task-workstreams';
 import { listSignals } from './awareness-service';
 import { listAgentEvents } from './agent-event-log';
 import { getDb } from './database';
@@ -74,7 +75,7 @@ export async function handleWorkstreamMethod(
 ): Promise<unknown> {
   switch (method) {
     case 'workstreams.list':
-      return { projectRoot: ctx.projectRoot, workstreams: phoneWorkstreams(ctx.projectRoot) };
+      return { projectRoot: ctx.projectRoot, workstreams: phoneWorkstreams(ctx.projectRoot), tasks: phoneTaskWorkstreams(ctx.projectRoot) };
     case 'workstreams.detail': {
       const id = params.id;
       if (typeof id !== 'string' || !id) throw new Error('id is required');
@@ -89,6 +90,36 @@ export async function handleWorkstreamMethod(
 export function phoneWorkstreams(projectRoot: string | null): PhoneWorkstream[] {
   if (!projectRoot) return [];
   return listWorkstreams(projectRoot).map((w) => toPhone(projectRoot, w));
+}
+
+/** A task worked as a workstream (A6.1), as the phone lists it. */
+export interface PhoneTaskWorkstream {
+  id: string;
+  itemUid: string;
+  name: string;
+  planUid: string;
+  planTitle: string;
+  status: string;
+  agents: Array<{ agentType: string; model: string | null; lastSeen: number | null }>;
+  materials: number;
+  outputs: number;
+  signals: number;
+  needsYou: number;
+}
+
+/** Tasks a session is on (A6.1), as the strip shows them. */
+export function phoneTaskWorkstreams(projectRoot: string | null): PhoneTaskWorkstream[] {
+  if (!projectRoot) return [];
+  return listTaskWorkstreams(projectRoot).map((t) => {
+    const signals = listSignals(projectRoot, { workstream: t.id });
+    return {
+      id: t.id, itemUid: t.itemUid, name: taskLabel(t), planUid: t.planUid, planTitle: t.planTitle, status: t.status,
+      agents: t.agents.map((a) => ({ agentType: a.agentType, model: a.model, lastSeen: a.lastSeen })),
+      materials: t.materials, outputs: t.outputs,
+      signals: signals.filter((s) => s.state !== 'intended' && s.state !== 'dismissed').length,
+      needsYou: signals.filter((s) => s.state === 'open' && s.severity !== 'low').length,
+    };
+  });
 }
 
 /** One workstream, with its changed files and recent turns. */

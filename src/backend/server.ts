@@ -85,6 +85,7 @@ import * as taskAttachmentsService from './services/task-attachments-service';
 // Phase 15 §C — unified Object/Action surface backing the V2 frontend.
 import * as planItemService from './services/plan-item-service';
 import { dependencyProblem } from './services/plan-dependencies';
+import { listTaskWorkstreams } from './services/task-workstreams';
 import { specRefProblem, setReliesOn, reliesOn, reliedOnBy, reliedOnWords, type SpecRef } from './services/spec-links-service';
 import { withdrawProposals } from './services/spec-proposal-withdraw';
 import { proposalProblem, proposeSpecChange, listProposals, getProposal, decisionProblem, decideProposal, specChangedFor, type ProposalStatus, type ProposalDecision } from './services/spec-proposals-service';
@@ -858,6 +859,14 @@ app.get('/api/workstreams', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   res.json(listWorkstreams(projectRoot, { includeIdle: req.query.idle === '1' }));
+});
+
+// Tasks worked as workstreams (Phase 32 A6.1): a session bound to a task by
+// get_brief, for work that has no folder. The project must be open.
+app.get('/api/workstreams/tasks', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(listTaskWorkstreams(projectRoot, { includeIdle: req.query.idle === '1' }));
 });
 
 // Each workstream's own commits since `since` (ms, at most a day back), by
