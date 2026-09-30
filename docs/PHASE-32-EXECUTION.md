@@ -158,7 +158,7 @@ so each step is usable by itself, and so the clearest value lands early.
 ```
 0.1 → 0.2 → 0.3 → 0.4 (domains) → 0.5 → 0.6 → 0.7 review → 0.8 release
   → A0 → A1 → A2 → A3 → B1 → B2 → C1 → B4 → C5 → B3 → A8 → A2.7 → review
-  → HD1 → HD2 → B5 → A4 → A5 → B6 → B7 → A6 → C2 → C3 → B8 → B9 → C4 → A7 → B10 → review
+  → HD1 → HD2 → B5 → A4 → A5 → B6 → B7 → A6 → C2.1 → HD3 → C2.2–C2.6 → C3 → B8 → B9 → C4 → A7 → B10 → review
   → phase-end: main merged in, full suite, packaged build, merge to main
 ```
 
@@ -174,6 +174,26 @@ scanned last), and **HD2** moves the browser specs that click graph nodes
 onto the committed sample app (`tests/fixtures/sample-app`), so a PR that
 adds files to this repository no longer moves the graph they click. The
 phone (A4, and a way to render its screens) stays after B5.
+
+Work that is not code gets the same footing from 2026-09-30 (the owner's
+questions after A6, log entry "Business work in the plan"). A6 made a task
+a workstream and its materials a footprint; four places still saw only
+code, and each is fixed where it already lives, on telemetry the app
+already records:
+
+- **HD3**, straight after C2.1: a clash between two plans' tasks over a
+  shared spreadsheet or document is an overlap in the Stack tab, live and
+  at a past moment, as a clash over code already is; and a task at a past
+  moment says which version of each material it had read.
+- **C2.4**: status is read, not written. No STATUS.md: intent stays in
+  the plan's YAML, state is derived (git for a task on a branch, the plan
+  for everything else), and each state says its source.
+- **B9**: play-forward projects the materials tasks say they rely on as
+  well as the code they plan to change.
+- **C3**: the shared plans folder can be carried by git or by a
+  cloud-synced folder (OneDrive, SharePoint, Google Drive, Dropbox), laid
+  out so a sync can never clash: every file has one writer and is only
+  ever added, records are signed, and a real disagreement is a signal.
 
 Steps near the front are specified in detail. Later steps are specified
 at the level of the design docs, and refined into sub-steps when they
@@ -549,7 +569,7 @@ hook or log may only make it earlier or richer, never be the only way.
 | B6 | Stack view: multi-plan aggregate, overlap bands, drawn and cross-plan dependencies (bug 11) |
 | B7 | Conferring: `propose_spec_change`, task → spec links, addressed events, decision as breakpoint |
 | B8 | Grounding: per-test JUnit, tests → code via imports, overlay and task line |
-| B9 | Play-forward: every active plan's projection, future zones |
+| B9 | Play-forward: every active plan's projection, future zones; the materials tasks rely on as well as the code they plan to change (HD3's overlaps, projected) |
 | B10 | The record: hash-chained log, signed packs, retention settings, evidence export |
 
 ### B1: agent event log
@@ -639,6 +659,30 @@ says so and leads there. Selecting a plan shows its footprint on the graph
 and its work in the Timeline; moving the clock back shows what was in
 flight then.
 
+### HD3: Business clashes in the Stack
+
+Added 2026-09-30 (log entry "Business work in the plan"). A6 raises one
+signal when tasks clash over a material, naming each task as a workstream
+`task:<item uid>`. The Stack (B6.3) counts only `collision` and `contract`
+signals, and maps a signal's workstreams to plans through the plans'
+branch folders, so a task workstream never reaches a plan and a clash
+between two plans' tasks over a spreadsheet is never an overlap band. The
+declared side reads only file and symbol specs, not the materials a task's
+brief lists. Replay's `stateAt` rebuilds tasks and signals at a moment but
+not which version of a material each task had read, though
+`material_reads` keeps it with its time.
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| HD3 | `stackOverlaps` maps a `task:` workstream to its task's plan, and counts the material kinds (`contract`, `stale-base`, `version-split`, `collision`) between two plans' tasks; the declared side adds the materials each plan's tasks list in their briefs (`materialInputsOf`). The words say what is shared: "⚠ overlaps Q3 board pack: both use `sales-2026.xlsx`". The same at a past moment (B6.5 reads signal spans) and on the phone's stack summary (B6.6). `stateAt` gains each task's material reads up to the moment, so a task in the past stack says "read `sales-2026.xlsx` (22 Sept version)" | unit (task workstreams mapped to plans; material kinds counted; declared materials; a task alone makes no band); harness: two plans' tasks read a spreadsheet, it is replaced, both plans show the band live and at a moment, the phone's summary equals REST; browser with screenshots: the band in the Stack tab, the past stack with the version |
+
+**Journey.** Dana leads a finance team. The Q3 board pack and the
+forecast refresh are two plans, each with a Claude Desktop task that reads
+`sales-2026.xlsx`. Someone replaces the spreadsheet. Dana opens the Stack
+tab and both plans carry "⚠ overlaps" naming the spreadsheet, as two code
+plans touching one file would. Moving the clock back to Monday, each task
+says which version of the spreadsheet it had read then.
+
 ### B7: Conferring
 
 Refined 2026-09-30 (log entry "B7 refined"). An agent that finds the spec
@@ -682,8 +726,8 @@ verbatim in a notice title.
 | Step | Scope (shared-work doc) |
 |---|---|
 | C1 | Skills: model fields, skills index and picker, brief/claim/next delivery, proof of use, safety flag on pulled skills |
-| C2 | Team status through git: state read from git for any host, a host adapter only when turned on (GitHub, GitLab, Bitbucket), STATUS.md per plan and index, ticket refs exported, signed approvals, Phase 32's own plan moved in |
-| C3 | Linked planning repo |
+| C2 | Team status through git: state read from git for any host, a host adapter only when turned on (GitHub, GitLab, Bitbucket), status read from the plan files and git with no written summary, ticket refs exported, signed approvals, Phase 32's own plan moved in |
+| C3 | A shared plans folder, carried by git or by a cloud-synced folder: one writer per file, only ever added, signed records; a code project links to it; teammates' material reads shared when the team turns it on |
 | C4 | Recurring playbooks |
 | C5 | One plan across worktrees: sections of a plan assigned to workstreams (owner's ask, 2026-09-28) |
 
@@ -710,7 +754,7 @@ adapter the person turns on per project.
 | C2.1 | Each item's state from git, for any host: `building` (its workstream branch exists), `pushed` (on the remote), `merged` (ancestry for a merge or fast-forward; the branch's changes in the base for a squash or rebase, reusing bug 53's check; or the merge commit naming the item's key), each with its source and the commit that proves it. In the plan tree, the item page and the plan's MCP tools; no network | unit (the three merge shapes); harness with real repositories: merge, squash, rebase, a branch that stopped (stays "pushed", never "merged") |
 | C2.2 | The review-host interface and the GitHub adapter: host chosen from the remote URL; off until turned on per project in Settings, which names the host and what it will ask; token in the OS keychain; a public repo read without one. Open PR for a branch, its checks and approvals, merged or closed. Without it the words are git's ("pushed, not merged") | unit on recorded API answers; harness against a local stand-in host: nothing is requested until turned on, then open / merged / closed |
 | C2.3 | GitLab (merge requests, pipelines) and Bitbucket (pull requests, build statuses) on the same interface, each read against its API documentation; Azure DevOps and Gitea recorded as follow-ups on the same shape | unit on recorded answers per host; harness: the same journey on each stand-in |
-| C2.4 | STATUS.md per plan and `.codetrellis/STATUS.md` (C-2 §1) from the same states, each saying its source; lineage "ticket → plan → PR #N (open)" only when a host says so, else "branch pushed" | unit (rendering from fixtures, with and without a host); harness (write-through produces it) |
+| C2.4 | Status read, not written (C-2 §1, the owner's point of 2026-09-30): every item has a state with its source. Intent is the plan's YAML; state is derived: git for a task on a branch (C2.1), a host when one is on (C2.2), and the plan itself (status, evidence, sign-off, who recorded each) for everything else, saying "from the plan". Lineage "ticket → plan → PR #N (open)" only when a host says so, else "branch pushed". One status view in the window, the phone and `get_plan`; no STATUS.md, and no state change writes a file | unit (a task with no branch says "from the plan"; with and without a host); harness: every item in `get_plan` and the plan tree has a state and a source, and a state change writes no file |
 | C2.5 | Ticket refs in the plan files; approvals as signed statements, verified on import (C-2 §2–3) | unit; harness |
 | C2.6 | Teammates' plans after a pull (C-2 §4); and Phase 32's own plan in CodeTrellis, each step an item whose workstream is its branch: `npm run status` reads from the app, or goes. C2 done-when | harness (journey below); browser with screenshots |
 
@@ -723,7 +767,36 @@ Settings says it will read pull requests and checks for
 passing". Priya turns on Bitbucket, and hers say the same from Bitbucket.
 An agent asking either plan for its state gets the same words, with where
 they came from. Nothing was requested from any host before it was turned
-on.
+on. Priya's analyst has a task in the same plan with no branch at all; it
+reads "in progress, from the plan", never less certain than the code
+tasks beside it.
+
+### C3: A shared plans folder
+
+Design settled 2026-09-30 (shared-work doc C-3, log entry "Business work
+in the plan"); refined into parts when next. Business teams share a
+OneDrive or SharePoint folder the way developers share a git repository,
+so the plans folder can be carried by either, with one layout:
+
+- **One writer per file, only ever added.** Each person's app writes only
+  its own records (`.codetrellis/records/<plan>/<task>/<writer>-<counter>.yaml`),
+  and the state everyone sees is read from all of them. Two people acting
+  at once make two files, so neither git nor a sync can clash. The same
+  layout ends merge conflicts in a git planning repo too.
+- **Partial arrival is normal.** A record not yet synced leaves a
+  teammate behind, never wrong; reading one twice changes nothing; a
+  "conflicted copy" a sync client makes is read as one more record.
+- **A real disagreement is a signal**, never a silent pick: two people
+  set one task two ways at once, and both are named.
+- **Signed.** Anyone who can write to the folder can write a file, so
+  each device signs its records with the key it already has for pairing;
+  an unsigned record reads "unverified", as a plain HTTP call does.
+- **Off by default, per folder.** The sync client moves the files; the
+  app makes no request of its own. Files on demand are never downloaded
+  to be read: only files already local, or cited by a task, are hashed.
+- **Teammates' material reads**, shared only when the team turns it on,
+  give A6's clashes across people: "Alex's task used last week's version;
+  Sam replaced it on Tuesday."
 
 ### C5: One plan, several worktrees
 
