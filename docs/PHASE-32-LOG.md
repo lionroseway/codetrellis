@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — C2.2b: GitHub behind the review host |
-| **Status** | C2.2a merged (#263). C2.2b built: for a project whose host the person turned on, each branch's pull request is read from GitHub (open with its checks and reviews, merged, closed), kept two minutes, the token only in that request; tasks say in review, merged by #N or closed without merging, with source github; no pull request or a failed read keeps git's answer with a note; git's proof of a merge stands over the host. The tree, the task line, get_plan (asks first) and get_brief (from what is kept) say it. Unit (1728), harness (review-host-github 7 against a stand-in, and the C2.1/C2.2a/brief specs), browser (review-host-states, 2 shots) green locally |
-| **In flight** | C2.2b building on `feat/phase-32-c2-2b-review-host-github` |
-| **Last merged** | C2.2a (#263, `38c0664`) |
-| **Next action** | Merge C2.2b when CI is green (C2.2 done); then C2.3 on feat/phase-32-c2-3-gitlab-bitbucket (GitLab merge requests and pipelines, Bitbucket pull requests and build statuses, on the same interface) |
+| **Stage / step** | Wave 2 — C2.3: GitLab and Bitbucket behind the review host |
+| **Status** | C2.2 done (#263, #264). C2.3 built: GitLab (merge requests !N with their pipeline and approvals, subgroups, token as PRIVATE-TOKEN with read_api) and Bitbucket Cloud (pull requests with build statuses and approvals, declined or superseded read closed, token as a bearer) on the same switch, cache and overlay; one request helper for all three (GET only, redirects refused); each state says its host; Settings speaks each host's words; the harness points every host at nowhere by default. Unit (1735), harness (review-host-gitlab-bitbucket 4 against stand-ins, the GitHub and switch specs), browser (review-host-settings incl. GitLab) green locally |
+| **In flight** | C2.3 building on `feat/phase-32-c2-3-gitlab-bitbucket` |
+| **Last merged** | C2.2b (#264, `35d4f2d`) |
+| **Next action** | Merge C2.3 when CI is green; then C2.4 on feat/phase-32-c2-4-status-read (status read, not written: every item a state with its source, the plan itself for a task with no branch; no STATUS.md) |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
-> Read from git at `origin/feat/phase-32` `38c0664`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `35d4f2d`, with open PRs from GitHub.
 
 ---
 
@@ -211,10 +211,10 @@
   - [x] C1.4 A skill arriving in a pulled plan file is flagged once (#178)
 - [ ] C2 Team status through git (git first for any host; a host adapter only when turned on), refined in EXECUTION §6 — building
   - [x] C2.1 Each item's state from git, for any host or none (building, pushed, merged, with its source) (#259)
-  - [ ] C2.2 The review-host interface, and GitHub behind it, off until turned on per project — building
+  - [x] C2.2 The review-host interface, and GitHub behind it, off until turned on per project
     - [x] C2.2a Turning a review host on: detected from the remote, a per-device switch, the token in the OS keychain, Settings → Review hosts; no request yet (#263)
-    - [ ] C2.2b GitHub behind it: open, merged and closed pull requests, checks and approvals, read only when turned on; in review and closed, from GitHub — building
-  - [ ] C2.3 GitLab and Bitbucket on the same interface (Azure DevOps, Gitea later)
+    - [x] C2.2b GitHub behind it: open, merged and closed pull requests, checks and approvals, read only when turned on; in review and closed, from GitHub (#264)
+  - [ ] C2.3 GitLab and Bitbucket on the same interface (Azure DevOps, Gitea later) — building
   - [ ] C2.4 Status read, not written: intent in the plan's YAML, state from git, a host or the plan itself, each saying its source; no STATUS.md
   - [ ] C2.5 Ticket refs in the plan files; approvals as signed statements
   - [ ] C2.6 Teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when
@@ -342,6 +342,43 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: C2.3 — GitLab and Bitbucket behind the review host
+
+The same switch (C2.2a), cache and overlay (C2.2b), now for GitLab and
+Bitbucket Cloud, read against each host's REST API documentation:
+
+- **One request helper** (`review-host/http.ts`) for all three: GET only,
+  redirects refused, the token only in that request's header, a timeout,
+  refusals in words (401, rate limit with when, 404 with "a private one
+  needs a token"). GitHub moved onto it unchanged.
+- **GitLab** (`review-host/gitlab.ts`): a branch's merge request by
+  `source_branch`, written `!42`; when open, `head_pipeline.status`
+  (success passes, failed or canceled fails, skipped is none, the rest are
+  running), `approved_by`, and `detailed_merge_status: requested_changes`.
+  Subgroups are part of the URL-encoded project path; a squash commit is
+  the merge commit when there is one; locked reads closed. The token is
+  `PRIVATE-TOKEN` (`read_api`).
+- **Bitbucket** (`review-host/bitbucket.ts`): a branch's pull request by
+  `source.branch.name`; when open, its participants' approvals and changes
+  requested, and the source commit's build statuses (any failed or stopped
+  fails, in progress runs). Declined or superseded read closed, with
+  `updated_on` as when. The token is a bearer.
+- **Each state says its host**: `source` is `gitlab` or `bitbucket`, said
+  "from GitLab", "from Bitbucket"; "GitLab has no merge request for this
+  branch." Settings → Review hosts says each host's words for what is read
+  and which token is enough.
+- **The harness** points GitLab and Bitbucket at nowhere by default, as it
+  did GitHub, so no test can reach a real host.
+
+Any other host stays git's alone; Azure DevOps and Gitea remain follow-ups
+on the same shape. Tests: unit (`gitlab.test.ts`, `bitbucket.test.ts` on
+answers shaped as each API returns them; the overlay's per-host words);
+harness `review-host-gitlab-bitbucket.test.ts` against a stand-in for each
+(nothing asked while off; each state once on; each token only in its
+host's header and in no answer); browser `review-host-settings.spec.ts`
+adds a GitLab project (shot `review-host-settings-gitlab`). The C2.2a
+harness now uses a host with no adapter where it used GitLab.
 
 ### 2026-09-30: C2.2b — GitHub behind the review host
 
