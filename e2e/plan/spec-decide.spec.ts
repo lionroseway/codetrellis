@@ -61,7 +61,9 @@ test.describe('Deciding a spec change', () => {
       // The inbox: counted, and the card says what would change and who said what.
       await gotoWithProject(page);
       await expect(page.getByRole('button', { name: /^Awareness \d+$/ })).toBeVisible({ timeout: 15_000 });
-      await page.getByRole('button', { name: /^Awareness( \d+)?$/ }).click();
+      const tab = page.getByRole('button', { name: /^Awareness( \d+)?$/ });
+      await tab.click();
+      await tab.locator('..').getByRole('button', { name: 'Expand panel' }).click();
       const card = page.getByTestId('proposal-waiting').filter({ hasText: 'Invoice format' });
       await expect(card).toBeVisible({ timeout: 10_000 });
       await expect(card.getByTestId('proposal-headline')).toContainText('proposes a change to § Fields of “Invoice format”');
@@ -82,6 +84,7 @@ test.describe('Deciding a spec change', () => {
       await shot(card, 'spec-decision-amend');
       await card.getByRole('button', { name: 'Accept amended' }).click();
       await expect(card).toHaveCount(0, { timeout: 10_000 });
+      await tab.locator('..').getByRole('button', { name: 'Collapse panel' }).click();
 
       const pageNow = (await (await request.get(`${API}/items/${pageUid}`, { headers: authHeaders() })).json()) as { body: string };
       expect(pageNow.body).toContain('- currency (ISO 4217, required)');

@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | Wave 2 — B7.4: the decision is a person's |
-| **Status** | B6 done. B7 refined (#240); B7.1 merged (#241): tasks say what spec they rely on. B7.2 merged (#242): `propose_spec_change`. B7.3 merged (#243): each agent holding a relying task is told once, never the proposer; `reply_to_spec_proposal` keeps the impact and posts a weigh-in |
-| **Next action** | B7.4: a `proposal` breakpoint kind; Accept / Amend / Reject over REST and the phone only; accept writes the new version and marks relying tasks "spec changed" |
+| **Status** | B6 done. B7 refined (#240); B7.1 merged (#241): tasks say what spec they rely on. B7.2 merged (#242): `propose_spec_change`. B7.3 merged (#243): each agent holding a relying task is told once; `reply_to_spec_proposal` keeps the impact. B7.4 built on `feat/phase-32-b7-4-decide`, waiting on #244: each agent holding a relying task is told once, never the proposer; `reply_to_spec_proposal` keeps the impact and posts a weigh-in |
+| **Next action** | Merge #244 (a claim undone by our own late export) when green, then open B7.4's PR; then B7.5, spec breakpoints cover proposals and plan documents |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-b7-4-decide` |
 | **Last updated** | 2026-09-30 |
@@ -180,7 +180,7 @@
   - [x] B7.1 Tasks say what they rely on (`spec_links`, sections by heading) (#241)
   - [x] B7.2 Propose a spec change, with the tasks it affects (#242)
   - [x] B7.3 Affected agents told once; their replies kept (#243)
-  - [ ] B7.4 The decision is a person's: accept, amend, reject; tasks marked "spec changed"
+  - [ ] B7.4 The decision is a person's: accept, amend, reject; tasks marked "spec changed" — built, PR after #244
   - [ ] B7.5 Spec breakpoints cover proposals and plan documents
   - [ ] B7.6 The phone
   - [ ] B7.7 I1 done-when and docs
@@ -315,6 +315,51 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: B7.4 — the decision on a spec change is a person's
+
+- **A proposal waits in the inbox.** Making one raises a `proposal`
+  breakpoint (a kind nobody sets by hand: `POST /api/breakpoints` refuses
+  it) and a hit waiting on a person, so Awareness counts it, a phone that is
+  away is pushed, and `propose_spec_change` answers with
+  `await_decision("<ref>")`. It cannot be answered like a held call (the
+  answer route refuses it with a sentence, and so does the phone's), nor
+  cleared, which would let it through with nobody deciding.
+- **"Waiting on you" shows it as its own card**: "✎ codex proposes a change
+  to § Fields of “Invoice format”", why, evidence, now and proposed, "1 task
+  in 1 plan relies on this. 1 of 1 replied." with each reply, and Accept,
+  Amend (the text in an editor, then "Accept amended") and Reject, with a
+  note for the proposer.
+- **Decided over REST only**: `POST /api/spec-proposals/:uid/decision`
+  (`personFrom`); no MCP tool decides one (the harness lists the tools and
+  checks a reply leaves it open).
+- **Accept** writes the page's new version as the person, with a change
+  summary naming the proposal; flags every task relying on the page or
+  section (`spec_change_flags`, plus a `spec_changed` plan event, now in the
+  activity drawer); and answers the hit. The task's page says "Spec changed
+  § Fields of Invoice format at 10:54 · its agent is told on its next step",
+  then "its agent has been told". The agent holding it gets "── CodeTrellis:
+  spec changed ──" once, with the person's note and the new text.
+- **The proposer is told the outcome once** ("── CodeTrellis: spec proposal
+  decided ──": accepted, with changes, or not accepted and why), and
+  `await_decision` returns `accepted` / `rejected` with the note.
+- **A proposal whose page or plan is deleted is withdrawn**
+  (`spec-proposal-withdraw.ts`), so nothing waits on a person for a page
+  that is gone.
+- The phone does not list proposals, and its count leaves them out, until
+  B7.6 gives it the card.
+
+Found on the way: an agent's claim undone by our own late export (entry
+above, #244). B7.4's browser spec failed about one run in three until it
+was fixed, and six in six after.
+
+Tests: harness `spec-decide.test.ts` (7: in the inbox and awaitable; not
+answered, cleared or decided by a tool; accept writes the version and flags;
+each relying agent told once and the proposer the outcome; reject; amend;
+withdrawn with its plan); browser `spec-decide.spec.ts` (screenshots
+`spec-decision-card`, `spec-decision-amend`, `spec-changed`);
+`spec-links.spec.ts` still passes. The breakpoint, phone-breakpoint and
+spec harness tests: 50 passed.
 
 ### 2026-09-30: An agent's claim undone by our own export
 

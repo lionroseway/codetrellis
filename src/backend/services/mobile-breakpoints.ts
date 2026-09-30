@@ -78,7 +78,8 @@ export async function handleBreakpointMethod(
 export function phoneWaiting(projectRoot: string | null): PhoneHit[] {
   if (projectRoot) { try { releaseSettled(projectRoot); } catch { /* the list still answers */ } }
   const workstreams = workstreamsOf(projectRoot);
-  return listHits({ state: 'waiting' }).map((h) => toPhoneHit(h, workstreams));
+  // A spec proposal (B7.4) is decided in the window for now; the phone gets it in B7.6.
+  return listHits({ state: 'waiting' }).filter((h) => h.kind !== 'proposal').map((h) => toPhoneHit(h, workstreams));
 }
 
 /** `{ hit }` once answered; `{ hit, alreadyAnswered: true }` with the answer that stood when someone answered first. */
