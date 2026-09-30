@@ -567,7 +567,7 @@ queue already maps plan → branch → workstream → signals, and replay's
 | B6.4b | One selection, the Timeline half: selecting a plan in the stack filters the Timeline to its work (its workstreams and the sessions on its tasks) | browser |
 | B6.5 | One clock: the stack follows the replay cursor and shows what was in flight then (`stateAt` gains each task's assignee, workstream and dependencies, rebuilt from `plan_item_versions`) | harness `stack-at.test.ts` (the state at a moment); browser `stack-replay.spec.ts` (the stack at a past moment) |
 | B6.6 | The stack on the phone, summarised: plans with progress and "⚠ overlaps" in words; `stack.summary` RPC with a `read` row; a screen reached from Plans | harness `stack.test.ts` (the phone's stack equals REST); phone `stack.spec.ts` with screenshots |
-| B6.7 | Done-when and docs: H1 end to end (two agents in two plans, a cross-plan dependency, an overlap) seen the same by the window, an MCP client and the phone; `docs/claude/awareness.md` and the guides | harness end to end |
+| B6.7 | Done-when and docs: H1 end to end (two agents in two plans, a cross-plan dependency, an overlap) seen the same by the window, an MCP client and the phone; `docs/claude/awareness.md` and the guides | harness end to end: `awareness-h1.test.ts` |
 
 **Journey (H1).** The person opens the Stack tab and sees every plan in the
 project at once, by ticket key: who is on what, in which worktree, and

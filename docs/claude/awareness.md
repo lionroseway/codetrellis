@@ -257,6 +257,47 @@ PR body, and the queue puts that branch first, giving that reason.
   - The phone's **Review queue** (A5.6, `review.queue`), from the Plans
     tab. A line opens `plan-review` compared commit to commit.
 
+## The stack: every plan at once (B6, H1)
+
+The review answers for one line of work; the stack answers for all of them.
+The H1 "done when": two agents in two plans on two worktrees, one plan
+called by its ticket key, a task waiting on the other plan's task, and the
+two lines of work colliding. The window, any MCP client and the phone all
+say the same: who is on what and where, "⚠ overlaps JIRA-150" in words with
+the signal behind it, and the wait across plans.
+
+- **One dependency rule** (B6.1, `services/plan-dependencies.ts`). A
+  dependency is met when its task is done or skipped, in any plan. Unmet
+  waits are said in words ("unfinished", "missing", "page"). `get_next_item`,
+  `claim_item` (`waits_on`, a warning, and still claims) and the Next up
+  strip all use it; a write naming nothing, the item itself or a page is
+  refused.
+- **The stack** (B6.2, `services/stack-service.ts`, `shared/types/stack.ts`).
+  Every plan not completed or archived, called by its ticket key when it has
+  one, with its tasks: assignee, session, branch (their own or a section's),
+  files named, dependencies resolved across plans, and the wait in a
+  sentence. `/api/stack`, `get_stack` (read) and the phone's
+  `stack.summary` (read) return the same object.
+- **Overlap bands** (B6.3, `services/stack-overlaps.ts`). Declared: both
+  plans' unfinished tasks name the same files or functions. Actual: an open
+  collision or contract signal between the worktrees their branches are
+  checked out in. One overlap per pair, from each side, with `words` and a
+  `detail` sentence; a high signal makes it high.
+- **The Stack tab** (B6.4, `StackTab.tsx`). One row per plan, tasks nested,
+  waits drawn (a wait in another plan is a link to it), overlaps as chips.
+  **Follow** is one selection across the window (B6.4b): the graph lights the
+  plan's files and the Timeline narrows to its work (`lib/stack-timeline.ts`),
+  with a pinned "Showing … work" bar and one Show all.
+- **One clock** (B6.5). While replaying, the tab shows the stack at the
+  cursor. Nothing new is recorded: each item's last `plan_item_versions`
+  row by the moment gives its fields, `plan_events` its status
+  (`itemsAt` in `replay-state.ts`), and `stackThen` builds the rows with the
+  live stack's own code. `/api/replay/state` and `get_state_at` carry it. A
+  plan finished since counts as under way then if it had a task open then;
+  an item deleted since cannot be shown.
+- **The phone** (B6.6, `mobile/app/stack.tsx`). A card per plan from the
+  Plans header: progress, needs you, overlaps in words, On it and Waiting.
+
 ## Any agent: what every client gets (A8)
 
 CodeTrellis is agent-agnostic. The rule: a feature ships with the path
@@ -336,8 +377,15 @@ run as a plain `codex` client with no hook and no watcher in
     so, and the queue puts it first with that reason, for three different
     agents and the phone. Once the overlap is marked intended both lines
     are ready and the order stands.
+  - `cross-plan-dependencies`, `stack`, `stack-overlaps`, `stack-at`;
+  - `awareness-h1`, the H1 "done when": two agents in two plans on two
+    worktrees whose work collides, one plan by its ticket key and a wait
+    across plans. The window, an MCP client and a paired phone return the
+    same stack; `get_state_at` before the second plan existed has the first
+    alone; and once the awaited task is done the wait is gone for all three.
 - Phone screens: `tests/phone/awareness.spec.ts` (`npm run test:phone`)
   photographs Needs you, the overlap and its reply, and the lines of work;
-  `tests/phone/review-queue.spec.ts`, the queue and the review a line opens.
-- Browser: `e2e/agent/review-tab.spec.ts`, `e2e/agent/awareness-tab.spec.ts`, `e2e/agent/awareness-reply.spec.ts`, `e2e/agent/workstream-strip.spec.ts`,
+  `tests/phone/review-queue.spec.ts`, the queue and the review a line opens;
+  `tests/phone/stack.spec.ts`, the stack.
+- Browser: `e2e/plan/stack-tab.spec.ts`, `stack-follow.spec.ts`, `stack-replay.spec.ts`, `cross-plan-waits.spec.ts`, `e2e/agent/review-tab.spec.ts`, `e2e/agent/awareness-tab.spec.ts`, `e2e/agent/awareness-reply.spec.ts`, `e2e/agent/workstream-strip.spec.ts`,
   `e2e/settings/mcp-server.spec.ts`.
