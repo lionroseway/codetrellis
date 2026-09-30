@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B6.6: the stack on the phone |
-| **Status** | A5 done (M5 met). B6.1–B6.5 merged (#231–#234, #236, #237): dependencies across plans, `/api/stack` and `get_stack`, overlap bands, the Stack tab, Follow, and the stack at a past moment. B6.6 in review: the stack on the phone (`stack.summary`, a Stack screen from Plans) |
-| **Next action** | Merge B6.6 when green; then B6.7, the H1 done-when test and docs, which closes B6 |
+| **Stage / step** | Wave 2 — B6.7: H1 done when; B6 closes |
+| **Status** | A5 done (M5 met). B6.1–B6.6 merged (#231–#234, #236–#238): dependencies across plans, the stack for the window, agents and the phone, overlap bands, the Stack tab, Follow, and the stack at a past moment. B6.7 in review: the H1 done-when test and docs; `get_state_at` gains the stack |
+| **Next action** | Merge B6.7 when green, which closes B6 (Wave 2 step 6 of 15); then B7, conferring: refine it into parts first |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b6-6-phone-stack` |
+| **Branch** | `feat/phase-32-b6-7-done-when` |
 | **Last updated** | 2026-09-30 |
 
 ---
@@ -173,8 +173,8 @@
   - [x] B6.4 The Stack tab (#234; carried #235, pinning a baseline no longer freezes the server)
   - [x] B6.4b The Timeline follows the stack's selection (#236)
   - [x] B6.5 One clock (#237)
-  - [ ] B6.6 The stack on the phone — in review
-  - [ ] B6.7 Done-when and docs — built, PR after B6.6
+  - [x] B6.6 The stack on the phone (#238)
+  - [ ] B6.7 Done-when and docs — in review
 - [ ] B7 Conferring
 - [ ] B8 Grounding
 - [ ] B9 Play-forward
