@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B7: conferring (refined into seven parts) |
-| **Status** | B6 done (#231–#234, #236–#239): the stack for the window, agents and the phone, overlaps in words, cross-plan waits, Follow, the stack at a past moment, and the H1 done-when. B7 refined: §5 "B7: Conferring" in the execution plan |
-| **Next action** | Merge the B7 refinement; then B7.1, tasks say what they rely on (`spec_links`, sections by heading) |
+| **Stage / step** | Wave 2 — B7.1: tasks say what spec they rely on |
+| **Status** | B6 done (#231–#234, #236–#239). B7 refined into seven parts (#240). B7.1 in review: `relies_on`, `spec_links`, sections by heading, who relies on a page across plans |
+| **Next action** | Merge B7.1 when green; then B7.2, propose a spec change with the tasks it affects |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b7-refine` |
+| **Branch** | `feat/phase-32-b7-1-relies-on` |
 | **Last updated** | 2026-09-30 |
 
 ---
@@ -177,7 +177,7 @@
   - [x] B6.6 The stack on the phone (#238)
   - [x] B6.7 Done-when and docs (#239)
 - [ ] B7 Conferring
-  - [ ] B7.1 Tasks say what they rely on (`spec_links`, sections by heading) — built, PR after the refinement
+  - [ ] B7.1 Tasks say what they rely on (`spec_links`, sections by heading) — in review
   - [ ] B7.2 Propose a spec change, with the tasks it affects
   - [ ] B7.3 Affected agents told once; their replies kept
   - [ ] B7.4 The decision is a person's: accept, amend, reject; tasks marked "spec changed"
