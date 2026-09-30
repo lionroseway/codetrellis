@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — HD3: business clashes in the Stack |
-| **Status** | HD3 built: a material clash between two plans' tasks (contract, collision, or a version-split or stale-base about a material) is an overlap in the Stack, and both plans' briefs listing one material is a declared one ("Both rely on sales-2026.xlsx."); each task carries its latest read of each material ("read sales-2026.xlsx on 22 Sept (version 3f9c2e1)"), by the moment in the stack at a moment; the overlap's detail is on the row, not only on hover. Unit (1712), harness (stack-materials and 43 related), browser (stack specs, 2 shots) green locally |
-| **In flight** | HD3 building on `feat/phase-32-hd3-business-clashes-stack` |
-| **Last merged** | C2.1 (#259, `578a36f`) |
-| **Next action** | Merge HD3 when CI is green; then C2.2 on feat/phase-32-c2-2-review-host-github (the review-host interface and GitHub behind it, off until turned on per project) |
+| **Stage / step** | Wave 2 — C2.2a: turning a review host on |
+| **Status** | HD3 merged (#262). C2.2 split in two: C2.2a built, turning a review host on with no request yet: the host read from the origin remote (GitHub supported; GitLab and Bitbucket recognised), a per-device switch per project that a changed remote turns off, turning on and saving a token for the app window only, the token per host in the OS keychain (Electron safeStorage) or memory only and saying so, Settings → Review hosts, Telemetry. Unit (1713), harness (review-host-switch 7 against a stand-in GitHub asked nothing; grant-guard, updates), browser (review-host-settings with a shot, modal-chrome) green locally |
+| **In flight** | C2.2a building on `feat/phase-32-c2-2a-review-host-switch` |
+| **Last merged** | HD3 (#262, `2514cb0`) |
+| **Next action** | Merge C2.2a when CI is green; then C2.2b on feat/phase-32-c2-2b-review-host-github (the GitHub adapter behind activeReviewHost: open, merged and closed pull requests, checks and approvals; in review and closed, from GitHub) |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
-> Read from git at `origin/feat/phase-32` `657854c`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `2514cb0`, with open PRs from GitHub.
 
 ---
 
@@ -187,7 +187,7 @@
   - [x] B6.5 One clock (#237)
   - [x] B6.6 The stack on the phone (#238)
   - [x] B6.7 Done-when and docs (#239)
-- [ ] HD3 Business clashes in the Stack: a material clash between two plans is an overlap, live and at a past moment; a task in the past says which version it read (after C2.1) — building
+- [x] HD3 Business clashes in the Stack: a material clash between two plans is an overlap, live and at a past moment; a task in the past says which version it read (after C2.1) (#262)
 - [ ] B7 Conferring — building
   - [x] B7.1 Tasks say what they rely on (`spec_links`, sections by heading) (#241)
   - [x] B7.2 Propose a spec change, with the tasks it affects (#242)
@@ -211,7 +211,9 @@
   - [x] C1.4 A skill arriving in a pulled plan file is flagged once (#178)
 - [ ] C2 Team status through git (git first for any host; a host adapter only when turned on), refined in EXECUTION §6 — building
   - [x] C2.1 Each item's state from git, for any host or none (building, pushed, merged, with its source) (#259)
-  - [ ] C2.2 The review-host interface, and GitHub behind it, off until turned on per project
+  - [ ] C2.2 The review-host interface, and GitHub behind it, off until turned on per project — building
+    - [ ] C2.2a Turning a review host on: detected from the remote, a per-device switch, the token in the OS keychain, Settings → Review hosts; no request yet — building
+    - [ ] C2.2b GitHub behind it: open, merged and closed pull requests, checks and approvals, read only when turned on; in review and closed, from GitHub
   - [ ] C2.3 GitLab and Bitbucket on the same interface (Azure DevOps, Gitea later)
   - [ ] C2.4 Status read, not written: intent in the plan's YAML, state from git, a host or the plan itself, each saying its source; no STATUS.md
   - [ ] C2.5 Ticket refs in the plan files; approvals as signed statements
@@ -340,6 +342,42 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: C2.2a — turning a review host on
+
+C2.2 is split in two (EXECUTION §6): C2.2a turns a host on and keeps its
+token, with no request; C2.2b reads GitHub behind it. What the research
+found shaped it: nothing in the app kept a secret for the person, the only
+outbound request of its own is the update check, `.codetrellis/config.json`
+is committed with the repository, and the harness backend runs under plain
+Node with no Electron.
+
+- **The host from the remote** (`review-host/detect.ts`): GitHub supported;
+  GitLab and Bitbucket recognised and told their adapter is coming (C2.3);
+  anything else named and left to git. A token pasted into a remote URL is
+  never carried into what is shown.
+- **A per-device switch per project** (`review-host/switch.ts`, table
+  `review_hosts`), never the committed config, so a cloned repository
+  cannot turn a request on. It records the repository it was turned on for;
+  a remote pointed at another switches it off and says so.
+- **Only the person turns it on.** Turning on and saving a token are grants
+  (the app window only, as `grant-guard.ts` rules); turning off and
+  forgetting narrow reach and are anyone's.
+- **The token** (`secret-store.ts`), per host: in the desktop app,
+  encrypted by Electron's `safeStorage` with a key the OS keychain holds,
+  only ciphertext on disk (0600, named by the key's hash); under plain Node,
+  or on Linux with no keyring (Electron's `basic_text`), in memory only
+  until the app quits, and Settings says so. Never plain text on disk, the
+  database or a response.
+- **Settings → Review hosts** names the host and what would be read before
+  anything is, and where a token is kept; Telemetry lists the review host
+  among what can leave the machine.
+
+Tests: unit (`detect`, `secret-store`); harness `review-host-switch.test.ts`
+against a stand-in GitHub that must be asked nothing, including the grant
+refusal from plain HTTP; browser `review-host-settings.spec.ts` with shot
+`review-host-settings`; `modal-chrome` and the UX audit list the new
+section. `activeReviewHost` is the one gate C2.2b asks before a request.
 
 ### 2026-09-30: HD3 — business clashes in the Stack
 

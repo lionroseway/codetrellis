@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — HD3: business clashes in the Stack"
-  status: "HD3 built: a material clash between two plans' tasks (contract, collision, or a version-split or stale-base about a material) is an overlap in the Stack, and both plans' briefs listing one material is a declared one (\"Both rely on sales-2026.xlsx.\"); each task carries its latest read of each material (\"read sales-2026.xlsx on 22 Sept (version 3f9c2e1)\"), by the moment in the stack at a moment; the overlap's detail is on the row, not only on hover. Unit (1712), harness (stack-materials and 43 related), browser (stack specs, 2 shots) green locally"
-  next: "Merge HD3 when CI is green; then C2.2 on feat/phase-32-c2-2-review-host-github (the review-host interface and GitHub behind it, off until turned on per project)"
+  step: "Wave 2 — C2.2a: turning a review host on"
+  status: "HD3 merged (#262). C2.2 split in two: C2.2a built, turning a review host on with no request yet: the host read from the origin remote (GitHub supported; GitLab and Bitbucket recognised), a per-device switch per project that a changed remote turns off, turning on and saving a token for the app window only, the token per host in the OS keychain (Electron safeStorage) or memory only and saying so, Settings → Review hosts, Telemetry. Unit (1713), harness (review-host-switch 7 against a stand-in GitHub asked nothing; grant-guard, updates), browser (review-host-settings with a shot, modal-chrome) green locally"
+  next: "Merge C2.2a when CI is green; then C2.2b on feat/phase-32-c2-2b-review-host-github (the GitHub adapter behind activeReviewHost: open, merged and closed pull requests, checks and approvals; in review and closed, from GitHub)"
   blockers: none
   updated: 2026-09-30
 sections:
@@ -494,6 +494,11 @@ sections:
             title: Each item's state from git, for any host or none (building, pushed, merged, with its source)
           - id: C2.2
             title: The review-host interface, and GitHub behind it, off until turned on per project
+            items:
+              - id: C2.2a
+                title: "Turning a review host on: detected from the remote, a per-device switch, the token in the OS keychain, Settings → Review hosts; no request yet"
+              - id: C2.2b
+                title: "GitHub behind it: open, merged and closed pull requests, checks and approvals, read only when turned on; in review and closed, from GitHub"
           - id: C2.3
             title: GitLab and Bitbucket on the same interface (Azure DevOps, Gitea later)
           - id: C2.4

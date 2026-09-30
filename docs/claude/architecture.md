@@ -59,6 +59,28 @@ The `src/backend/services/` directory holds ~50 services. Grouped by responsibil
 - **Schema self-heal** via `schema-reconciler` — recovers from drift in user-owned data.
 - **Tree-sitter WASM** grammars for AST analysis (TS/TSX/JS/JSX/Python/Rust/PHP/Java). Per-language plugins live under `services/parsers/<lang>.ts`, `services/resolvers/<lang>.ts`, `services/callsites/<lang>.ts` and register in the matching `index.ts`.
 
+## Secrets and review hosts (Phase 32 C2.2)
+
+- **Secrets** (`services/secret-store.ts`). A review host's token is the only
+  secret the app keeps for the person. In the packaged app the backend runs
+  in Electron's main process, whose `safeStorage` encrypts with a key the OS
+  keychain holds; only ciphertext is written, one file per secret under
+  `<dataDir>/secrets/` (mode 0600, named by the key's hash). Under plain
+  Node (dev, the harness), or on Linux where Electron would fall back to
+  `basic_text`, a secret is kept in memory only until the app quits, and
+  Settings says so. Never plain text on disk, in the database or in a
+  response.
+- **Review hosts** (`services/review-host/`). `detect.ts` reads the host from
+  the `origin` remote (GitHub supported; GitLab and Bitbucket recognised for
+  C2.3). `switch.ts` holds the per-project switch in this device's database
+  (`review_hosts`), never in the committed `.codetrellis/config.json`, so a
+  cloned repository cannot turn itself on; it records the repository it was
+  turned on for, and a changed remote switches it off. Turning on and saving
+  a token are grants (app window only, `grant-guard.ts`); turning off and
+  forgetting are anyone's. `activeReviewHost` is the one gate C2.2b's
+  adapter asks before any request. Routes: `GET/PUT /api/review-host`,
+  `PUT/DELETE /api/review-host/token`; UI: Settings → Review hosts.
+
 ## Session persistence & power awareness
 
 CodeTrellis treats long-running agent sessions as first-class — desktops don't sleep while agents are working, and reconnects rehydrate state rather than starting fresh.

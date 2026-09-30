@@ -403,6 +403,10 @@ export function useWebSocket() {
           if (typeof type === 'string' && (type.startsWith('plan-item-') || /^plan-(created|updated|deleted|status-changed)$/.test(type))) {
             window.dispatchEvent(new CustomEvent('stack-changed'));
           }
+          // Phase 32 C2.2a — a review host was turned on or off, or its token saved.
+          if (type === 'review-host-changed') {
+            window.dispatchEvent(new CustomEvent('review-host-changed', { detail: payload }));
+          }
           // Phase 32 B7.2 — a spec change was proposed (and, from B7.4, decided).
           if (typeof type === 'string' && type.startsWith('spec-proposal-')) {
             window.dispatchEvent(new CustomEvent('spec-proposals-changed', { detail: payload }));

@@ -232,6 +232,21 @@ export const SCHEMA_PLANS_CORE = `
   CREATE INDEX IF NOT EXISTS idx_material_reads_item ON material_reads(item_uid, at);
   CREATE INDEX IF NOT EXISTS idx_material_reads_path ON material_reads(path);
 
+  -- Phase 32 C2.2a: a review host turned on for a project, on this device.
+  -- Kept here and not in .codetrellis/config.json, which is committed: a
+  -- cloned repository must never be able to turn on a request to a host.
+  -- slug is the repository it was turned on for; if the remote later names
+  -- another, the switch no longer applies. No token is ever stored here
+  -- (secret-store.ts).
+  CREATE TABLE IF NOT EXISTS review_hosts (
+    project_root TEXT PRIMARY KEY,
+    hostname TEXT NOT NULL,
+    slug TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    changed_at INTEGER NOT NULL,
+    changed_by TEXT NOT NULL
+  );
+
   -- Phase 32 C1.4: a skill that arrived in a plan file (pulled through git,
   -- or edited by hand) is held back from agents until a person accepts it.
   -- One row per arrival: who added it and in which commit, as git says.

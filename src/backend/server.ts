@@ -78,6 +78,7 @@ import { buildStack } from './services/stack-service';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
 import { planGitStates } from './services/item-git-state';
+import { forgetReviewHostToken, getReviewHost, ReviewHostError, saveReviewHostToken, setReviewHost } from './services/review-host/switch';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
 import { buildPlaybackSequence } from './services/playback-service';
 import * as commentService from './services/comment-service';
@@ -2376,6 +2377,62 @@ app.get('/api/plans/:uid/git-state', (req, res) => {
   const states = planGitStates(req.params.uid);
   if (!states) { res.status(404).json({ error: 'Plan not found' }); return; }
   res.json(states);
+});
+
+/**
+ * Phase 32 C2.2a — a review host, per project, on this device. Off until the
+ * person turns it on; turning it on and saving a token are grants (they widen
+ * what the app reaches), so they come from the app window only. Turning it
+ * off and forgetting a token narrow it, and anyone may. No request is made
+ * here, and the token is never in a response.
+ */
+const REVIEW_HOST_WHERE = 'Settings → Review hosts';
+function sendReviewHostError(res: express.Response, err: unknown): void {
+  if (err instanceof ReviewHostError) { res.status(err.status).json({ error: err.message }); return; }
+  throw err;
+}
+function changedBy(req: express.Request): string {
+  const p = personFrom(req);
+  return p.authorType === 'human' ? p.author : `${p.author} (unverified)`;
+}
+
+app.get('/api/review-host', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(getReviewHost(projectRoot));
+});
+
+app.put('/api/review-host', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const enabled = req.body?.enabled;
+  if (typeof enabled !== 'boolean') { res.status(400).json({ error: 'enabled must be true or false' }); return; }
+  if (enabled && !mayGrant(req)) { res.status(403).json({ error: `Only you can turn on a review host — in the CodeTrellis app, ${REVIEW_HOST_WHERE}.` }); return; }
+  try {
+    const status = setReviewHost(projectRoot, enabled, changedBy(req));
+    broadcast('review-host-changed', { project: projectRoot });
+    res.json(status);
+  } catch (err) { sendReviewHostError(res, err); }
+});
+
+app.put('/api/review-host/token', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can save a review host's token — in the CodeTrellis app, ${REVIEW_HOST_WHERE}.` }); return; }
+  try {
+    const token: unknown = req.body?.token;
+    const status = saveReviewHostToken(projectRoot, token);
+    broadcast('review-host-changed', { project: projectRoot });
+    res.json(status);
+  } catch (err) { sendReviewHostError(res, err); }
+});
+
+app.delete('/api/review-host/token', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const status = forgetReviewHostToken(projectRoot);
+  broadcast('review-host-changed', { project: projectRoot });
+  res.json(status);
 });
 
 /** Delete a task attachment. */

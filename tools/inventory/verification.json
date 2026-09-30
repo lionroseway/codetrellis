@@ -1118,6 +1118,10 @@
     "behaviour": "✓ 0.4k: default visibility saves (e2e sections-save, e2e plans)",
     "ux": "✓ 0.5a — stale \"coming\" note and raw markdown link fixed"
   },
+  "settings:review-hosts": {
+    "behaviour": "✓ C2.2a: off until turned on per project; turning on and saving a token only from the app window; token never echoed, kept in the OS keychain or memory only; the switch no longer applies when the remote names another repository; nothing requested (harness review-host-switch)",
+    "ux": "✓ C2.2a: names the host and what it would read before anything is; says where the token is kept (e2e review-host-settings)"
+  },
   "settings:devices": {
     "behaviour": "✓ 0.4k: share-audio saves (e2e sections-save); per-device grants incl. capture (phone-grants, peer-device-access)",
     "ux": "✓ 0.5a — major fixed: \"no ports exposed\" contradicted the port it opens; placeholder no longer a real name"
