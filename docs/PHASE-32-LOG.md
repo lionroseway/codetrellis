@@ -305,6 +305,33 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-30: Pinning a baseline froze the server
+
+B6.4's CI (#234, browser 1/3) failed `websocket-events.spec.ts:106`: a socket
+opened from the page got no answer in fifteen seconds. Not #234's code. The
+log shows both workers stalled together for about seventeen seconds right
+after `baseline-controls.spec.ts` pressed **Pin**; the other worker's
+Auto-track test took 22 s where it takes 5.
+
+Cause: `captureGitCommitSnapshot` (behind Pin, "Pin current HEAD" and
+`set_baseline`) ran one synchronous `git show` per tracked file, images and
+lockfiles included, then parsed them all without yielding. The server
+answers nothing while its event loop is held, so HTTP, WebSocket and MCP all
+waited. A person pressing Pin on a large project froze the window, every
+agent's tool calls and the phone.
+
+Fix: `services/git-blobs.ts` reads every path in one asynchronous
+`git cat-file --batch`; only files a parser reads are asked for (the same
+extension lookup the parser uses, so the snapshot is unchanged); the parse
+loop yields every eight files, as `parseFiles` does. Measured on this
+repository (1,414 tracked files, 1,173 parseable): the read held the event
+loop for 7,338 ms before, 16 ms after, and takes 276 ms instead of 7.3 s.
+
+Tests: `git-blobs.test.ts` (3, real git: contents at the commit not the
+tree, missing paths and directories left out, option-shaped refs refused);
+the 15 harness baseline tests; the baseline and WebSocket browser specs run
+side by side on two workers (21 passed).
+
 ### 2026-09-30: B6.3 — overlap bands: where two plans meet
 Each plan in the stack now carries `overlaps`: every other active plan it
 meets, from its own side, as "⚠ overlaps JIRA-150" (the other plan's label).
