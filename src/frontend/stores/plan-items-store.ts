@@ -142,6 +142,9 @@ interface PlanItemsState {
 }
 
 const HISTORY_CAP = 50;
+
+/** The plan list load in flight, shared by every caller asking for the same plan. */
+let inflightHydrate: { planUid: string; done: Promise<void>; token: object } | null = null;
 const EVENTS_CAP = 500;
 
 export const usePlanItemsStore = create<PlanItemsState>((set, get) => ({
@@ -157,9 +160,16 @@ export const usePlanItemsStore = create<PlanItemsState>((set, get) => ({
   hydrating: false,
   hydratedFor: null,
 
-  hydratePlan: async (planUid) => {
+  hydratePlan: (planUid) => {
     const cur = get().activePlanUid;
-    if (cur === planUid && Object.keys(get().itemsByUid).length > 0) return;
+    if (cur === planUid && Object.keys(get().itemsByUid).length > 0) return Promise.resolve();
+    // One load per plan at a time. Opening a plan calls this twice — the
+    // workspace's effect resets the store, which changes the plan id the
+    // effect depends on, so it runs again while the first load is still out.
+    // The second answer used to land after the person had already opened an
+    // item, and put the summary back over the full item: the body vanished
+    // and the detail fell into an empty editor.
+    if (inflightHydrate?.planUid === planUid) return inflightHydrate.done;
     // Switching plans — reset navigation history so back/forward
     // don't land on items from a different plan.
     const planChanged = cur !== planUid;
@@ -168,19 +178,31 @@ export const usePlanItemsStore = create<PlanItemsState>((set, get) => ({
       activePlanUid: planUid,
       ...(planChanged ? { history: { back: [], forward: [] }, selectedItemUid: null } : {}),
     });
-    try {
-      const [itemsRes, eventsRes] = await Promise.all([
-        fetch(`/api/plans/${planUid}/items`),
-        fetch(`/api/plans/${planUid}/timeline?limit=200`),
-      ]);
-      const items: PlanItem[] = itemsRes.ok ? await itemsRes.json() : [];
-      const events: PlanEvent[] = eventsRes.ok ? await eventsRes.json() : [];
-      const itemsByUid: Record<string, PlanItem> = {};
-      for (const i of items) itemsByUid[i.uid] = i;
-      set({ itemsByUid, events, hydrating: false, hydratedFor: planUid });
-    } catch {
-      set({ hydrating: false, hydratedFor: planUid });
-    }
+    const token = {};
+    const done = (async () => {
+      try {
+        const [itemsRes, eventsRes] = await Promise.all([
+          fetch(`/api/plans/${planUid}/items`),
+          fetch(`/api/plans/${planUid}/timeline?limit=200`),
+        ]);
+        const items: PlanItem[] = itemsRes.ok ? await itemsRes.json() : [];
+        const events: PlanEvent[] = eventsRes.ok ? await eventsRes.json() : [];
+        if (get().activePlanUid !== planUid) return; // another plan was opened meanwhile
+        // The list carries summaries (no body). An item opened while it was
+        // loading already has its full fields; the summary adds to them
+        // rather than replacing them.
+        const before = get().itemsByUid;
+        const itemsByUid: Record<string, PlanItem> = {};
+        for (const i of items) itemsByUid[i.uid] = { ...before[i.uid], ...i };
+        set({ itemsByUid, events, hydrating: false, hydratedFor: planUid });
+      } catch {
+        if (get().activePlanUid === planUid) set({ hydrating: false, hydratedFor: planUid });
+      } finally {
+        if (inflightHydrate?.token === token) inflightHydrate = null;
+      }
+    })();
+    inflightHydrate = { planUid, done, token };
+    return done;
   },
 
   resetForPlan: (planUid) => {

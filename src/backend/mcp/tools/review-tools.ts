@@ -18,6 +18,7 @@ import type { ToolDeps } from '../types';
 import { compareSnapshots, listComparands } from '../../services/snapshot-compare-service';
 import { reviewPlan, renderReviewMarkdown } from '../../services/plan-review-service';
 import { buildPrDraft } from '../../services/pr-draft-service';
+import { reviewQueue } from '../../services/review-queue-service';
 
 const COMPARAND_HELP =
   'One of: "live" (working tree), "baseline" (the pinned baseline), "checkpoint:<id>", or ' +
@@ -131,6 +132,27 @@ export function register(server: McpServer, deps: ToolDeps): void {
         return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }], isError: true };
       }
       return { content: [{ type: 'text' as const, text: JSON.stringify(result.draft, null, 2) }] };
+    },
+  );
+
+  // --- get_review_queue (Phase 32 A5.4) ---
+
+  server.registerTool(
+    'get_review_queue',
+    {
+      description:
+        'The review queue: every line of work (a branch) that has plan items, reviewed against the main checkout\'s ' +
+        'branch, with where its criteria stand, its blast radius, dependencies nobody planned, open overlaps with ' +
+        'other work, whether it is ready, and a suggested merge order with the reason for each place. A line that ' +
+        'changes something another imports goes first, so the other updates to it rather than breaking. The order is ' +
+        'a suggestion, never enforced. Use it to answer "what should merge next, and why".',
+      inputSchema: {
+        project_path: z.string(),
+      },
+    },
+    async ({ project_path }) => {
+      const queue = reviewQueue(project_path);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(queue, null, 2) }] };
     },
   );
 }
