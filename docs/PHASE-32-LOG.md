@@ -11,12 +11,12 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — A5.3: sign-off can wait for an open high overlap |
-| **Status** | A5.1 (#222) and A5.2 (#223) merged: branch reviews find dependencies nobody planned, and reviews and PR bodies carry "Other work in flight". A5.3 in review: the opt-in hold inside the `code` criterion |
-| **Next action** | Merge A5.3 when green; then A5.4, the review queue with a suggested merge order |
+| **Stage / step** | Wave 2 — A5.4: the review queue, with a suggested merge order |
+| **Status** | A5.1–A5.3 merged (#222–#224), and the browser fixes (#225). A5.4 in review: `/api/review-queue` and `get_review_queue`. A5.5–A5.7 are built and pushed, each PR'd after the one before merges |
+| **Next action** | Merge A5.4 when green; then A5.5, the Review tab |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a5-3-high-signal-check` |
-| **Last updated** | 2026-09-29 |
+| **Branch** | `feat/phase-32-a5-4-review-queue` |
+| **Last updated** | 2026-09-30 |
 
 ---
 
@@ -99,8 +99,8 @@
 - [ ] A5 Review (the feature, M5), refined in EXECUTION §4:
   - [x] A5.1 `commit:` sides get their dependency edges; the picker offers each line of work's branch (#222)
   - [x] A5.2 "Other work in flight" in `review_plan` and `get_pr_draft` (#223)
-  - [ ] A5.3 The opt-in "no open high signals" check — in review
-  - [ ] A5.4 The review queue and `get_review_queue` — built, PR after A5.3
+  - [x] A5.3 The opt-in "no open high signals" check (#224)
+  - [ ] A5.4 The review queue and `get_review_queue` — in review
   - [ ] A5.5 The Review tab
   - [ ] A5.6 The queue on the phone
   - [ ] A5.7 M5 done-when, end to end, and docs
@@ -124,6 +124,12 @@
   run it in one, to reclaim ~3 min per PR.
 - [ ] Follow-up: `e2e/golden-chain/onboarding-to-plan.spec.ts` imports `API` and never uses it, a lint error that predates #213. `npm run lint` covers `src/` only, so nothing reports it; either lint `e2e/` too or drop the import the next time the spec is touched.
 - [ ] Follow-up: #219 (A4.4, backend only) failed browser 3/3 on `review-regressions/pr55-ui.spec.ts:431` (the linked-ticket chip again, after #195/#196 were thought to fix it) and `golden-chain/onboarding-to-plan.spec.ts:80` (the canvas task detail never appeared, even with #213's 10 s poll; 3 of 3 locally on its own). Neither touches an A4 file. Both need the page captured before `afterEach` clears it, so the next failure shows what was on screen instead of only the missing element.
+- [x] Follow-up: `graph/node-click.spec.ts:68` failed on #224: `reachableNodes` (`e2e/helpers/setup.ts`) waited on `.react-flow__node` `.first()`, and the first node was `cluster:billingcore`, which stayed hidden on all 34 checks while others were in the DOM. **Fixed:** it waits for a visible node; the polling after it already handles layout and cover.
+- [x] Follow-up: `review-regressions/pr55-ui.spec.ts:431` failed again, on #224. The page snapshot shows the plan list still up after the click on "ct-m8 ticket chip": the plan never opened, or opened and dropped back. That is the same class as the `plan-by-hand` follow-up above (a plan workspace dropping back while another worker changes plans). The server log also showed another project's scan refused while one ran ("serving file tree only"), though the spec's own open helper retries that. Find which broadcast leaves the workspace; do not lengthen the wait. **Fixed in #225, three causes, none a broadcast leaving the workspace:** (1) the spec clicked `getByText('ct-m8 ticket chip')`, which the "New plan created" toast also matches; it now clicks the plan row's own button. (2) Every plan created on the other worker refetches the list, and an older `fetchPlans` answer could land after a newer one and put rows back where they were, moving the row under the pointer; the store now drops an out-of-order answer (`plan-store.test.ts`). (3) A real UX bug the retry exposed: the row of the plan already active did nothing, because the workspace opened only when the active plan *changed*, so a minimised plan could not be reopened from its own row. It opens now (`plan/reopen-active-plan.spec.ts`, which fails without the fix).
+- [x] Follow-up: `graph/graph-own-project.spec.ts:23` failed on #225 (0465ca2): three clusters (`broken`, `evidencepreview`, `paths`) were missing after the other project's scan. They were still in the graph. The canvas mounts only nodes in view (`onlyRenderVisibleElements`), and this repository's graph is fitted at the 0.1 minimum zoom with nodes past the edge: locally 117 nodes, 114 in the DOM. So the DOM ids moved with the viewport. The spec now reads the whole graph from the minimap, which draws every node at its layout position. A new file added mid-test fails it with exactly one new node, and other runs pass unchanged.
+- [x] Follow-up: `project/folder-picker.spec.ts` "Go button browses to typed path" failed on #225 (ff50abc): the path input still said the home folder after `/tmp` was typed and Go pressed. The cause was a real bug: the picker's opening browse could answer after a later one and put its folder back, over a Go or over a path typed while it loaded. Browses are now numbered, only the latest one applies, and a path typed since a browse was sent is kept. Two new specs delay the opening listing and fail without the fix.
+- [ ] Follow-up: `graph/graph-breakpoints.spec.ts:34` failed on #225 (ff50abc). `reachableNodes` found a visible node, then no node that stayed uncovered and still for 15 s, on the sample app at Files depth in Map layout. The page snapshot showed the sample app's graph loaded (status bar 196, 34/73 imports) but no nodes or edges in the canvas. It does not reproduce locally, even with the CPU throttled 6×: 21 nodes, the minimap and DOM agree, and the view settles at once. The helper's error now says what it saw (nodes in the DOM and the minimap, zero-size, what covers them, the viewport, whether they were still moving), so the next failure names the cause. The prime suspect is the shared backend switching projects under the canvas (the AST tables hold one project at a time).
+- [ ] Follow-up: CI's `npm ci` runs `better-sqlite3`'s install script, so node-gyp downloads the Node headers on every job. On #224 (be91267), Harness (1/4) died there before any test ran: node-gyp's bundled undici crashed (`assert(!this.paused)`) reading the Node 26.10.0 headers. The module ships prebuilds, and CLAUDE.md says npm 11.19+ skips install scripts, which is not what CI does. Find out why the scripts run (npm config or the setup action), and whether `npm ci --ignore-scripts` plus the load checks CLAUDE.md gives is safe for `better-sqlite3` and `node-pty`.
 - [ ] Follow-up: browser shards now take about 16–25 minutes each (up from 15–19 at the Wave 1 review). The serial project, which runs the sample-app specs since HD2, is most of the rise; see the serial-project follow-up above.
 
 ### Track B: observability

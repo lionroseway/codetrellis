@@ -17,8 +17,8 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 242 | 240 | 0 | 0 | 217 | 0 |
-| MCP tools | 197 | 197 | 0 | 0 | 185 | 0 |
+| REST routes | 241 | 239 | 0 | 0 | 217 | 0 |
+| MCP tools | 196 | 196 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 84 | 76 | 0 | 0 | 78 | 0 |
 | Frontend components | 111 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 35 | n/a | n/a | n/a | 0 | 0 |
@@ -35,7 +35,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 12 | 7 | 1 | 0 | 0 |
 | 0.4g Agents and MCP | 25 | 32 | 10 | 26 | 0 | 0 |
-| 0.4h Drift, governance, review | 11 | 25 | 8 | 0 | 0 | 0 |
+| 0.4h Drift, governance, review | 10 | 24 | 8 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 35 | 0 |
 | 0.4k Settings, updates, privacy | 11 | 0 | 3 | 6 | 0 | 12 |
@@ -43,12 +43,12 @@ records that — but "✗ none" is proof of a gap.
 
 ## MCP tools: registry vs capability matrix
 
-- Registered by the server: **197**
-- Rows in `TOOL_CAPABILITIES`: **197**
+- Registered by the server: **196**
+- Rows in `TOOL_CAPABILITIES`: **196**
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (242)
+## REST routes (241)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -69,7 +69,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 144 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 143 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -162,9 +162,9 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | 1 | ✓ 0.4c-2: old state back as a new version; unknown 404 (item-surface) |  |  |
 | c | `POST /api/items/:uid/skill-arrivals/accept` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/worktree` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans` |  | 1 | 71 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans` |  | 1 | 70 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 2 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `POST /api/plans/:planUid/items` |  | ✗ none | 38 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:planUid/items` |  | ✗ none | 37 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 2 | ✓ 0.4c: exercised by criteria-loops (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/docs` |  | ✗ none | 6 | ✓ 0.4c: exercised by full-loop, phone-plans, plan-docs, plan-export, +2 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -179,7 +179,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/plans/import-external` |  | ✗ none | 1 | ✓ 0.4c-1: issue checklist becomes Actions; unknown source 400 (plan-rest) |  |  |
 | c | `POST /api/plans/prune-orphans` |  | ✗ none | 1 | ✓ 0.4c-1: removes only the opened project's current orphans; everything else skipped (plan-rest) |  |  |
 | c | `PUT /api/items/:uid` |  | ✗ none | 14 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
-| c | `PUT /api/items/:uid/workstream` |  | ✗ none | 3 |  |  |  |
+| c | `PUT /api/items/:uid/workstream` |  | ✗ none | 2 |  |  |  |
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 3 | ✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `PUT /api/plan-phases/:phaseUid` |  | ✗ none | 2 | ✓ 0.4c: exercised by full-loop, plan-phases (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `PUT /api/plans/:uid` |  | ✗ none | 4 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -208,7 +208,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `DELETE /api/breakpoints/:id` |  | ✗ none | 2 |  |  |  |
 | g | `GET /api/agent-events` |  | ✗ none | 6 |  |  |  |
 | g | `GET /api/agent/status` |  | ✗ none | 3 | ✓ 0.4g: the session watcher's state, nothing more (misc-endpoints) |  |  |
-| g | `GET /api/awareness` |  | ✗ none | 18 |  |  |  |
+| g | `GET /api/awareness` |  | ✗ none | 17 |  |  |  |
 | g | `GET /api/breakpoint-hits` |  | ✗ none | 3 |  |  |  |
 | g | `GET /api/breakpoints` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/mcp/config` |  | ✗ none | 1 | ✓ 0.4g: a copied config carries the token and connects (misc-endpoints) |  |  |
@@ -218,12 +218,12 @@ records that — but "✗ none" is proof of a gap.
 | g | `GET /api/plans/:uid/budget/check` |  | ✗ none | 1 | ✓ 0.4g: agrees with check_budget; unknown plan 404 (agent-ui-tools); bug 27 |  |  |
 | g | `GET /api/sensors/doc-check` |  | ✗ none | 1 | ✓ 0.4g: needs an opened project (400 / 403); nothing stale without docs (agent-ui-tools) — stale docs in 0.4l |  |  |
 | g | `GET /api/sessions` |  | ✗ none | 8 | ✓ 0.4g: a connected agent appears with its type and plan (sessions, agent-ui-tools) |  |  |
-| g | `GET /api/workstreams` |  | ✗ none | 15 |  |  |  |
+| g | `GET /api/workstreams` |  | ✗ none | 14 |  |  |  |
 | g | `GET /api/workstreams/changes` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/workstreams/commits` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/workstreams/folder-requests` |  | ✗ none | 1 |  |  |  |
 | g | `POST /api/awareness/:id/reply` |  | ✗ none | 1 |  |  |  |
-| g | `POST /api/awareness/:id/state` |  | ✗ none | 7 |  |  |  |
+| g | `POST /api/awareness/:id/state` |  | ✗ none | 6 |  |  |  |
 | g | `POST /api/breakpoint-hits/:ref/answer` |  | ✗ none | 7 |  |  |  |
 | g | `POST /api/breakpoints` |  | ✗ none | 9 |  |  |  |
 | g | `POST /api/plans/:uid/budget/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4g: unflags an agent's change and records who saw it; unknown change or wrong plan 404 (agent-ui-tools, mcp-ui-tools.spec) |  |  |
@@ -236,7 +236,6 @@ records that — but "✗ none" is proof of a gap.
 | h | `GET /api/conflicts` |  | ✗ none | 4 | ✓ 0.4h: a real merge conflict with per-field ours/theirs (manifest-conflicts, worktree-project) |  |  |
 | h | `GET /api/freeze` |  | ✗ none | 4 | ✓ 0.4h: reason and until while active; inactive after lifting (review-governance-tools), cdev-phase6 |  |  |
 | h | `GET /api/freeze/changes` |  | ✗ none | 1 | ✓ 0.4k: every change newest first, with who and how it arrived; outside a project 403 (freeze-flags) |  |  |
-| h | `GET /api/review-queue` |  | ✗ none | 1 |  |  |  |
 | h | `POST /api/baseline/capture` |  | ✗ none | 3 | ✓ 0.4h: pins HEAD's contents or a named commit; refs checked before git; 400 for a non-commit (baseline); bug 29 |  |  |
 | h | `POST /api/conflicts/resolve` |  | ✗ none | 2 | ✓ 0.4h: fields and by_side; staged; escaping path refused, outside file untouched (manifest-conflicts, filesystem-sinks) |  |  |
 | h | `POST /api/freeze/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4k: unflags an agent's change and records who saw it; unknown 404, outside a project 403 (freeze-flags, e2e mcp-ui-tools) |  |  |
@@ -295,7 +294,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `POST /api/system-docs/:uid/verify` |  | ✗ none | 1 | ✓ 0.4l: re-stamped at HEAD after a commit, freshness clears, desktop told; unknown 404 (sysdocs-intake) |  |  |
 | l | `PUT /api/system-docs/:uid` |  | ✗ none | 2 | ✓ 0.4l: named fields only, author from how it arrived — the body cannot name one (sysdocs-intake); bug 47 |  |  |
 
-## MCP tools (197)
+## MCP tools (196)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -450,7 +449,6 @@ records that — but "✗ none" is proof of a gap.
 | h | `get_plan_at_commit` | git · read | ✗ none | 1 | ✓ 0.4h: title and items as of each commit (cdev-phase6) |  |  |
 | h | `get_plan_history` | git · read | ✗ none | 2 | ✓ 0.4h: the plan's commits, newest first, with subject and author (review-governance-tools) |  |  |
 | h | `get_pr_draft` | review · read | ✗ none | 2 | ✓ 0.4h: title, review, acceptance criteria table and warnings; git untouched (review-governance-tools), plan-review |  |  |
-| h | `get_review_queue` | review · read | ✗ none | 1 |  |  |  |
 | h | `get_team_activity` | git · read | ✗ none | 2 | ✓ 0.4h: both manifest commits, newest first (review-governance-tools) |  |  |
 | h | `list_comparands` | review · read | ✗ none | 1 | ✓ 0.4h: live first, baseline, the named checkpoint, commits (drift-review-tools) |  |  |
 | h | `list_proposed_changes` | drift · read | ✗ none | 1 | ✓ 0.4h: one row per file spec with operation and kind (drift-review-tools) |  |  |

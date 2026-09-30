@@ -384,7 +384,9 @@ export async function getStoreState(page: Page, storeName: string) {
  * only. A node counts when the element at its centre is inside it.
  */
 export async function reachableNodes(page: Page, timeoutMs = 15_000): Promise<Locator[]> {
-  await page.locator('.react-flow__node').first().waitFor({ timeout: timeoutMs });
+  // A visible node: the first in the DOM can be a cluster node that stays
+  // hidden (node-click on #224 waited on one for all 15 s).
+  await page.locator('.react-flow__node:visible').first().waitFor({ timeout: timeoutMs });
   // Polled: right after load the layout is still settling (nodes placed
   // off-screen, then fitted), and a toast or a broadcast-opened workspace can
   // cover the canvas for a moment. Sampled once, that returned no nodes.
@@ -413,6 +415,33 @@ export async function reachableNodes(page: Page, timeoutMs = 15_000): Promise<Lo
     if (ids.length > 0 || Date.now() > deadline) break;
     await page.waitForTimeout(250);
   }
-  if (ids.length === 0) throw new Error('reachableNodes: every graph node is covered or off-screen');
+  if (ids.length === 0) {
+    // Say which: an empty or culled canvas, nodes under something, or nodes
+    // still moving are three different bugs, and "covered or off-screen"
+    // named none of them (graph-breakpoints on #225).
+    const seen = await page.evaluate(() => {
+      const nodes = Array.from(document.querySelectorAll<HTMLElement>('.react-flow__node'));
+      const covers = new Map<string, number>();
+      let zero = 0;
+      for (const n of nodes) {
+        const r = n.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) { zero++; continue; }
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        if (hit && !n.contains(hit)) {
+          const el = hit as HTMLElement;
+          const what = `${el.tagName.toLowerCase()}${el.getAttribute('data-testid') ? `[data-testid=${el.getAttribute('data-testid')}]` : ''}${el.className && typeof el.className === 'string' ? `.${el.className.split(' ').slice(0, 2).join('.')}` : ''}`;
+          covers.set(what, (covers.get(what) ?? 0) + 1);
+        } else if (!hit) covers.set('off-screen', (covers.get('off-screen') ?? 0) + 1);
+      }
+      return {
+        inDom: nodes.length,
+        zeroSize: zero,
+        inMinimap: document.querySelectorAll('.react-flow__minimap-node').length,
+        viewport: (document.querySelector('.react-flow__viewport') as HTMLElement | null)?.style.transform ?? null,
+        coveredBy: Object.fromEntries(covers),
+      };
+    });
+    throw new Error(`reachableNodes: no graph node was uncovered and still for two samples in ${timeoutMs} ms. Saw ${JSON.stringify(seen)}, and ${previous.size} uncovered in the last sample (moving if more than 0).`);
+  }
   return ids.map((id) => page.locator(`.react-flow__node[data-id="${id.replace(/"/g, '\\"')}"]`));
 }
