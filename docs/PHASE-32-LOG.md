@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B6.4: the Stack tab |
-| **Status** | A5 done (M5 met). B6.1–B6.3 merged (#231–#233): dependencies across plans, `/api/stack` and `get_stack`, overlap bands. B6.4 in review: the Stack tab, and "Show on graph" for a plan's footprint |
-| **Next action** | Merge B6.4 when green; then B6.4b, the Timeline follows the stack's selection |
+| **Stage / step** | Wave 2 — B6.4b: the Timeline follows the stack |
+| **Status** | A5 done (M5 met). B6.1–B6.4 merged (#231–#234): dependencies across plans, `/api/stack` and `get_stack`, overlap bands, the Stack tab. #234 also carried #235: pinning a baseline no longer holds the server. B6.4b in review: Follow a plan and the Timeline narrows to its work |
+| **Next action** | Merge B6.4b when green; then B6.5, one clock (the stack at a past moment) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b6-4-stack-tab` |
+| **Branch** | `feat/phase-32-b6-4b-timeline-follows` |
 | **Last updated** | 2026-09-30 |
 
 ---
@@ -170,8 +170,8 @@
   - [x] B6.1 Dependencies resolve across plans (bug 11) (#231)
   - [x] B6.2 The stack: `/api/stack` and `get_stack` (#232)
   - [x] B6.3 Overlap bands, declared and actual (#233)
-  - [ ] B6.4 The Stack tab — in review
-  - [ ] B6.4b The Timeline follows the stack's selection — built, PR after B6.4
+  - [x] B6.4 The Stack tab (#234; carried #235, pinning a baseline no longer freezes the server)
+  - [ ] B6.4b The Timeline follows the stack's selection — in review
   - [ ] B6.5 One clock
   - [ ] B6.6 The stack on the phone
   - [ ] B6.7 Done-when and docs
@@ -335,6 +335,34 @@ other half of design rule 9 ("one selection").
     Show all brings the other back and lets the stack row go.
     `stack-tab.spec.ts` now expects "Following".
 
+### 2026-09-30: Pinning a baseline froze the server
+
+B6.4's CI (#234, browser 1/3) failed `websocket-events.spec.ts:106`: a socket
+opened from the page got no answer in fifteen seconds. Not #234's code. The
+log shows both workers stalled together for about seventeen seconds right
+after `baseline-controls.spec.ts` pressed **Pin**; the other worker's
+Auto-track test took 22 s where it takes 5.
+
+Cause: `captureGitCommitSnapshot` (behind Pin, "Pin current HEAD" and
+`set_baseline`) ran one synchronous `git show` per tracked file, images and
+lockfiles included, then parsed them all without yielding. The server
+answers nothing while its event loop is held, so HTTP, WebSocket and MCP all
+waited. A person pressing Pin on a large project froze the window, every
+agent's tool calls and the phone.
+
+Fix: `services/git-blobs.ts` reads every path in one asynchronous
+`git cat-file --batch`; only files a parser reads are asked for (the same
+extension lookup the parser uses, so the snapshot is unchanged); the parse
+loop yields every eight files, as `parseFiles` does. Measured on this
+repository (1,414 tracked files, 1,173 parseable): the read held the event
+loop for 7,338 ms before, 16 ms after, and takes 276 ms instead of 7.3 s.
+
+Tests: `git-blobs.test.ts` (3, real git: contents at the commit not the
+tree, missing paths and directories left out, option-shaped refs refused);
+the 15 harness baseline tests; the baseline and WebSocket browser specs run
+side by side on two workers (21 passed).
+
+
 ### 2026-09-30: B6.4 — the Stack tab
 A **Stack** tab beside Plans in `PlanPanel` (`StackTab.tsx`) shows every plan
 under way in the project at once, from `/api/stack`. This is the H1 view.
@@ -373,6 +401,7 @@ under way in the project at once, from `/api/stack`. This is the H1 view.
   overlap from each side and its detail, the cross-plan wait and its link,
   the footprint on the graph and off again, and a met dependency. Unit:
   `stack-service.test.ts` checks a task's `files`.
+
 
 ### 2026-09-30: B6.3 — overlap bands: where two plans meet
 Each plan in the stack now carries `overlaps`: every other active plan it
