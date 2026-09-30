@@ -50,6 +50,15 @@ const QUESTION: Record<AwarenessSignal['kind'], string> = {
   contract: 'keep the old signature, or update the callers?',
   drift: 'is the wider scope meant?',
   'stale-base': 'rebase now, or later?',
+  'version-split': 'which version should both use?',
+};
+
+/** Tasks' materials (A6.3) ask their own question where the code one would not fit. */
+const MATERIAL_QUESTION: Partial<Record<AwarenessSignal['kind'], string>> = {
+  contract: 'check the cited parts again, or keep the old version?',
+  collision: 'which task writes it?',
+  drift: 'is the file meant to be shared?',
+  'stale-base': 'read it again, or keep the old version?',
 };
 
 const listed = (names: string[], max = 2) =>
@@ -64,6 +73,8 @@ function subjectOf(s: AwarenessSignal): string {
 
 function lineText(kind: AwarenessSignal['kind'], group: AwarenessSignal[], label: (root: string) => string): string {
   const first = group[0];
+  // A material signal is one per material, and its summary already names the tasks (A6.3).
+  if (first.subject.material) return first.summary;
   const names = (roots: string[]) => roots.map((r) => `\`${label(r)}\``);
   if (kind === 'contract') {
     const by = first.subject.by ?? first.workstreams[0];
@@ -103,7 +114,9 @@ export function buildDigest(
   // One line per kind and workstreams (and, for a contract, which side changed it).
   const groups = new Map<string, AwarenessSignal[]>();
   for (const s of needs) {
-    const key = `${s.kind}\0${s.kind === 'contract' ? `${s.subject.by ?? ''}\0` : ''}${[...s.workstreams].sort().join('\0')}`;
+    const key = s.subject.material
+      ? `material\0${s.id}`
+      : `${s.kind}\0${s.kind === 'contract' ? `${s.subject.by ?? ''}\0` : ''}${[...s.workstreams].sort().join('\0')}`;
     groups.set(key, [...(groups.get(key) ?? []), s]);
   }
   const ordered = [...groups.values()]
@@ -117,7 +130,7 @@ export function buildDigest(
     signalIds: g.map((s) => s.id),
     text: lineText(g[0].kind, g, label),
     told: g.every((s) => (s.told ?? []).some((t) => t.toldAt !== null)),
-    question: QUESTION[g[0].kind],
+    question: (g[0].subject.material ? MATERIAL_QUESTION[g[0].kind] : undefined) ?? QUESTION[g[0].kind],
   }));
 
   return {

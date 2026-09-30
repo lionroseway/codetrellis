@@ -106,7 +106,29 @@ written by CodeTrellis.
   reopens with `reopened: { from, at }` and the agents are told again
   (A3.2). `dismissed` stays dismissed.
 
-`awareness-service.ts` gathers the inputs, runs `computeSignals`, and
+**Tasks' materials** (A6.3, `material-signals.ts`, also pure) raise the
+same kinds with `subject.material` set, plus `version-split`. Their
+workstreams are tasks (`task:<uid>`), titled in `subject.labels`, which the
+shape leaves out so renaming a task reopens nothing. Every rule needs two
+tasks; one task and its own file is Phase 31's staleness. One signal per
+material, the most serious that holds:
+
+| Kind | When | Severity |
+|---|---|---|
+| `contract` | The material changed since a task cited it, and another task uses it | high when a citation was signed off, else medium |
+| `version-split` | Tasks last read different versions of it | medium |
+| `stale-base` | It changed after two or more tasks read it, and none has read it since | low |
+| `collision` | Two tasks record the same output file | medium |
+| `drift` | A task read another task's material that is not in its brief | low |
+
+Which part of a material changed is not known: nothing is read back out of
+a material, so a contract names the parts cited, not the part changed. The
+inputs (`materialInputsOf`) are the tasks' footprints (A6.2) and each
+material's hash as last re-taken; the artefact watcher re-takes it on a
+change and refreshes the project's signals.
+
+`awareness-service.ts` gathers the inputs, runs `computeSignals` and
+`computeMaterialSignals` in one pass, and
 reconciles into `awareness_signals`. The person's answer and the agents'
 notes are stored separately (`awareness_signal_notes`). It broadcasts
 `awareness-changed`. The server refreshes signals 500 ms after a watcher

@@ -301,6 +301,15 @@ const SIGNAL_WORDS: Record<AwarenessSignal['kind'], string> = {
   collision: 'Two lines of work are changing the same code.',
   drift: 'A line of work is changing files outside its task.',
   'stale-base': 'A line of work is behind main on files it changes.',
+  'version-split': 'Two tasks are working from different versions of the same file.',
+};
+
+/** A material signal's kind in words (A6.3): the same rule of naming nothing. */
+const MATERIAL_WORDS: Partial<Record<AwarenessSignal['kind'], string>> = {
+  contract: 'A file other tasks cite has changed.',
+  collision: 'Two tasks write the same output file.',
+  drift: 'A task is reading a file its brief does not include.',
+  'stale-base': 'A file several tasks read has changed.',
 };
 
 /**
@@ -310,7 +319,7 @@ const SIGNAL_WORDS: Record<AwarenessSignal['kind'], string> = {
  * and nothing more; both sides load over WebRTC when the tap opens the
  * signal. The data carries the signal's id.
  */
-export async function pushForSignal(signal: Pick<AwarenessSignal, 'id' | 'kind' | 'severity'>): Promise<void> {
+export async function pushForSignal(signal: Pick<AwarenessSignal, 'id' | 'kind' | 'severity'> & { subject?: AwarenessSignal['subject'] }): Promise<void> {
   if (!started || signal.severity !== 'high') return;
   const tokens = Array.from(pushTokens.values());
   if (tokens.length === 0) return;
@@ -323,7 +332,7 @@ export async function pushForSignal(signal: Pick<AwarenessSignal, 'id' | 'kind' 
     payloads.push({
       to: token,
       title: 'Needs you',
-      body: SIGNAL_WORDS[signal.kind],
+      body: (signal.subject?.material ? MATERIAL_WORDS[signal.kind] : undefined) ?? SIGNAL_WORDS[signal.kind],
       data: { type: 'signal', id: signal.id },
       sound: 'default',
       channelId: 'codetrellis-events',

@@ -133,7 +133,7 @@ export const workstreamLabel = (w: Pick<FootprintInput, 'root' | 'branch'>) => w
  * (see `collisionShape`), because its subject names the file, not what each
  * side is doing in it.
  */
-function draft(kind: SignalKind, severity: SignalSeverity, subjectKey: string, subject: SignalDraft['subject'], roots: string[], summary: string, shapeOf: unknown = subject): SignalDraft {
+export function draft(kind: SignalKind, severity: SignalSeverity, subjectKey: string, subject: SignalDraft['subject'], roots: string[], summary: string, shapeOf: unknown = subject): SignalDraft {
   const workstreams = [...roots].sort();
   const shape = createHash('sha1').update(JSON.stringify(shapeOf)).digest('hex').slice(0, 16);
   return { id: signalId(kind, subjectKey, workstreams), kind, severity, subject, workstreams, summary, shape };

@@ -12,6 +12,14 @@ import type { AwarenessSignal } from '../types';
 
 /** The kind, as a short heading. */
 export function kindWords(s: Pick<AwarenessSignal, 'kind' | 'subject'>): string {
+  // Tasks' materials (A6.3).
+  if (s.kind === 'version-split') return 'Different versions';
+  if (s.subject.material) {
+    if (s.kind === 'contract') return 'Changed material';
+    if (s.kind === 'stale-base') return 'Material changed';
+    if (s.kind === 'collision') return 'Same output';
+    if (s.kind === 'drift') return 'Outside its brief';
+  }
   if (s.kind === 'stale-base') return 'Behind main';
   if (s.kind === 'drift') return 'Outside its scope';
   if (s.kind === 'contract') return s.subject.change === 'removed' ? 'Removed export' : 'Changed signature';
@@ -25,7 +33,8 @@ export function kindWords(s: Pick<AwarenessSignal, 'kind' | 'subject'>): string 
  * that changed it first, then the side that imports it.
  */
 export function sideRootsOf(s: Pick<AwarenessSignal, 'kind' | 'workstreams' | 'subject'>): string[] {
-  return s.kind === 'contract' && s.subject.by
+  // A material drift has a direction too: the task that read, then those given the file.
+  return (s.kind === 'contract' || (s.kind === 'drift' && s.subject.material)) && s.subject.by
     ? [s.subject.by, ...s.workstreams.filter((r) => r !== s.subject.by)]
     : [...s.workstreams];
 }
@@ -49,7 +58,9 @@ function about(s: Pick<AwarenessSignal, 'subject'>): string {
 export function sideWords(s: Pick<AwarenessSignal, 'kind' | 'workstreams' | 'subject'>, label: (root: string) => string): SideWords[] {
   const roots = sideRootsOf(s);
   return roots.map((root, i): SideWords => {
-    const name = label(root);
+    // A task is named by its title, carried on the signal (A6.3).
+    const name = s.subject.labels?.[root] ?? label(root);
+    if (s.subject.material) return { root, name, words: materialWords(s, root, name) };
     const declared = s.subject.intended?.includes(root);
     if (s.kind === 'contract') {
       if (i === 0) {
@@ -71,4 +82,31 @@ export function sideWords(s: Pick<AwarenessSignal, 'kind' | 'workstreams' | 'sub
     }
     return { root, name, words: `${name} ${declared ? 'has said it will change' : 'changes'} ${about(s)}.` };
   });
+}
+
+/** What one task is doing with a material (A6.3), in one sentence. */
+function materialWords(s: Pick<AwarenessSignal, 'kind' | 'subject'>, root: string, name: string): string {
+  const m = s.subject.material!;
+  switch (s.kind) {
+    case 'contract': {
+      if (!s.subject.citedBy?.includes(root)) return `${name} uses ${m}.`;
+      const parts = s.subject.parts ?? [];
+      const what = parts.length ? `${parts.slice(0, 3).join(', ')}${parts.length > 3 ? ' and more' : ''} of ${m}` : m;
+      const signed = s.subject.signedOff?.includes(root) ? ', and a person already signed that off' : '';
+      return `${name} cites ${what}, as it was before it changed${signed}.`;
+    }
+    case 'version-split':
+      return s.subject.readVersions?.[root] === 'current' ? `${name} read the current version of ${m}.` : `${name} read an earlier version of ${m}.`;
+    case 'stale-base':
+      return `${name} read ${m} before it changed, and has not read it since.`;
+    case 'collision':
+      return `${name} records ${m} as its output.`;
+    case 'drift': {
+      if (root !== s.subject.by) return `${name} was given it.`;
+      const files = s.subject.files ?? [m];
+      return `${name} read ${files.slice(0, 3).join(', ')}${files.length > 3 ? ' and more' : ''}, which its brief does not include.`;
+    }
+    default:
+      return `${name} uses ${m}.`;
+  }
 }

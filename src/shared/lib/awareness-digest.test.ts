@@ -108,3 +108,26 @@ describe('for an agent', () => {
     assert.equal(digestText(buildDigest([], label)), 'Nothing overlaps with other work right now.');
   });
 });
+
+describe('tasks\' materials (A6.3)', () => {
+  test('one line per material, in the signal\'s own words, with a question that fits', () => {
+    const material = (id: string, kind: AwarenessSignal['kind'], file: string, summary: string) => sig({
+      id, kind, severity: 'medium', workstreams: ['task:a', 'task:b'], summary,
+      subject: { material: file, labels: { 'task:a': 'Q3 report', 'task:b': 'Board pack' } },
+    });
+    const d = buildDigest([
+      material('m1', 'contract', 'sales.xlsx', '`sales.xlsx` changed. 2 tasks cite Summary!B2:F9'),
+      material('m2', 'contract', 'costs.xlsx', '`costs.xlsx` changed. “Q3 report” cites A1:C4. “Board pack” uses it too'),
+      material('m3', 'version-split', 'fx.csv', '“Board pack”, “Q3 report” read different versions of `fx.csv`; “Board pack” has the current one'),
+    ], label);
+    // Same kind and same two tasks, different materials: still a line each.
+    assert.equal(d.lines.length, 3);
+    assert.deepEqual(d.lines.map((l) => l.text).sort(), [
+      '`costs.xlsx` changed. “Q3 report” cites A1:C4. “Board pack” uses it too',
+      '`sales.xlsx` changed. 2 tasks cite Summary!B2:F9',
+      '“Board pack”, “Q3 report” read different versions of `fx.csv`; “Board pack” has the current one',
+    ]);
+    assert.equal(d.lines.find((l) => l.signalIds[0] === 'm1')!.question, 'check the cited parts again, or keep the old version?');
+    assert.equal(d.lines.find((l) => l.signalIds[0] === 'm3')!.question, 'which version should both use?');
+  });
+});

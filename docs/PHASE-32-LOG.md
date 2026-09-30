@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — A6.2: material footprints |
-| **Status** | A6.1 merged (#252). A6.2 built: read_material keeps who read which material, the part and the file's hash then (material_reads), counted for the session's brief task; a task's footprint is its reads, outputs and cited parts; get_brief shows read_so_far. Unit and harness green locally |
-| **In flight** | A6.2 building on `feat/phase-32-a6-2-material-footprints` |
-| **Last merged** | A6.1 (#252, `08ac091`) |
-| **Next action** | Merge A6.2 when CI is green; then A6.3 on feat/phase-32-a6-3-material-signals (contract, stale-base, version-split, collision, drift for materials, computed inside refreshSignals) |
+| **Stage / step** | Wave 2 — A6.3: material signals |
+| **Status** | A6.2 merged (#253; #254 carried). A6.3 built: computeMaterialSignals runs in the same refresh as the code signals; one signal per material naming every task (contract, version-split, stale-base), collision on outputs, drift outside a brief; the artefact watcher refreshes signals on a change; the digest gives each material its own line. Unit, harness (101 neighbouring) and browser awareness specs green locally |
+| **In flight** | A6.3 building on `feat/phase-32-a6-3-material-signals` |
+| **Last merged** | A6.2 (#253, `0b0c8cd`) |
+| **Next action** | Merge A6.3 when CI is green; then A6.4 on feat/phase-32-a6-4-other-work-affected ("Other work affected" on the Brief page and in get_brief; the Awareness card and the phone's Needs you, with screenshots) |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
-> Read from git at `origin/feat/phase-32` `08ac091`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `0b0c8cd`, with open PRs from GitHub.
 
 ---
 
@@ -115,8 +115,8 @@
   - [x] A5.7 M5 done-when, end to end, and docs (#230)
 - [x] A6 The Brief (#251)
   - [x] A6.1 Task workstreams (a session binds to the task it asks get_brief about) (#252)
-  - [ ] A6.2 Material footprints (who read what, and its hash then) — building
-  - [ ] A6.3 Material signals in the one refresh (contract, stale-base, version-split, collision, drift)
+  - [x] A6.2 Material footprints (who read what, and its hash then) (#253)
+  - [ ] A6.3 Material signals in the one refresh (contract, stale-base, version-split, collision, drift) — building
   - [ ] A6.4 Other work affected on the Brief, in get_brief, the inbox and the phone
   - [ ] A6.5 Sign-off packs list the signals that touched the task
   - [ ] A6.6 M6 done-when and docs
@@ -336,6 +336,49 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: A6.3 — material signals
+
+A6.2 merged (#253). Its browser run failed once on a test that slept 1.5s
+after picking a file and read the save once; it now polls, carried by #253
+(#254, closed). A6.3 is built:
+
+- **One refresh.** `refreshSignals` runs `computeSignals` and the new
+  `computeMaterialSignals` (`material-signals.ts`, pure) in one pass, from
+  `materialInputsOf(projectRoot)`: every task that read, output or cited a
+  material, with its brief, its latest read of each material (hash seen,
+  the task holding the file), outputs and cited parts (hash at citing,
+  signed off or not), and each material's hash as last re-taken.
+- **Two tasks, always** (a decision): one task and its own file is Phase
+  31's staleness; an overlap needs another task. **One signal per
+  material**, the most serious that holds: `contract` (it changed since a
+  task cited it and another uses it; high when a citation was signed off),
+  then `version-split` (new kind: they last read different versions), then
+  `stale-base` (it changed after two or more read it; low). Separately,
+  `collision` for two tasks recording one output, and `drift` for a task
+  reading another task's material that is not in its brief.
+- **Drift is low for materials** (a decision): reading a file is harmless;
+  the person may only want to know the tasks now share it. Code drift stays
+  medium.
+- **Which part changed is not claimed** (a decision): nothing is read back
+  out of a material, so a contract names the parts the tasks cite ("2 tasks
+  cite Summary!B2:F9; 1 was already signed off"), not the part that moved.
+- **Tasks are named by title**, in `subject.labels`, which the shape leaves
+  out: renaming a task changes the words, never reopens an answer.
+  `signal-words.ts` gives each kind its heading ("Changed material",
+  "Different versions", "Same output", "Outside its brief") and each task
+  its sentence; the digest gives each material its own line with a
+  question that fits; the push words name no file.
+- **The artefact watcher refreshes signals** after a recorded file's hash
+  moves, once per change, beside the criteria going stale as before.
+
+Tests: unit `material-signals.test.ts` (8: each rule, one task alone,
+stable ids and shapes); `material-footprints.test.ts` (the inputs);
+`awareness-digest.test.ts` (a line per material); `push-signal.test.ts`;
+harness `material-signals.test.ts` (4: replacing a file two tasks read
+raises one signal naming both; a version split; a contract told to the
+other task's agent). 101 neighbouring harness tests and the awareness
+browser specs pass.
 
 ### 2026-09-30: A6.2 — material footprints
 

@@ -20,6 +20,8 @@ import { importersOf } from './importers';
 import { intentFiles } from './intent-service';
 import { computeSignals, contractCandidates, importableName, reconcileSignals, newlySerious, type ContractChange, type FootprintInput, type WorkstreamScope } from './awareness-signals';
 import { pushForSignal } from './push-notification-service';
+import { computeMaterialSignals } from './material-signals';
+import { materialInputsOf } from './material-footprints';
 import type { FileSpec } from '../../shared/types';
 
 const SHA = /^[0-9a-f]{40}$/;
@@ -206,7 +208,13 @@ function recordSignalSpans(projectRoot: string, previous: readonly AwarenessSign
  * confined by the caller.
  */
 export function refreshSignals(projectRoot: string, now = Date.now()): boolean {
-  const drafts = computeSignals(footprintsOf(listWorkstreams(projectRoot, { includeIdle: true, fresh: true }), projectRoot));
+  // Tasks' materials in the same pass (A6.3): a refresh reconciles every
+  // signal of the project, so computed apart each would resolve the other's.
+  const materials = materialInputsOf(projectRoot);
+  const drafts = [
+    ...computeSignals(footprintsOf(listWorkstreams(projectRoot, { includeIdle: true, fresh: true }), projectRoot)),
+    ...computeMaterialSignals(materials.tasks, materials.current),
+  ];
   const previous = loadSignals(projectRoot);
   const { upserts, resolved, reopened } = reconcileSignals(previous, drafts, now);
   if (upserts.length === 0 && resolved.length === 0) return false;
