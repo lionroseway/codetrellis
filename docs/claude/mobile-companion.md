@@ -46,6 +46,7 @@ Routes are file-based under `mobile/app/`, with `_layout.tsx` driving a Stack at
 - `approvals`, `approval` — work waiting on the person, and approving or sending back one criterion (Phase 31 §12; see below)
 - `signal-detail` — one overlap between lines of work, and the person's answer to it (Phase 32 A4.5b; see below)
 - `workstreams`, `workstream-detail` — the lines of work, and one line's files and recent turns (Phase 32 A4.5b)
+- `plan-review`, `review-queue` — one plan's review, and which line of work to merge first and why (Phase 29; queue Phase 32 A5.6; see below)
 - `body-editor` *(modal)* — content editor
 - `connection-switcher` *(modal)* — switch between paired desktops
 - `doc-viewer` — document rendering
@@ -188,6 +189,26 @@ harness sees them. Tapping the push opens `/signal-detail?id=` (A4.5b,
 
 The types and calls are in `mobile/lib/awareness.ts`. Each screen is
 photographed by `tests/phone/awareness.spec.ts`.
+
+### The review queue (Phase 32 A5.6)
+
+- **`review.queue`** (read) returns what `/api/review-queue` does, for an
+  opened project only. A nominated `projectPath` goes through
+  `resolveTrustedProjectRoot`, like `review.compare`.
+- **`review-queue`**, from the Plans tab's header, lists each line of work in
+  the suggested merge order. Each line shows its place, branch, plan and
+  status chip (the desktop's labels, `mobile/lib/review-queue.ts`), the reason
+  for its place, its status in a sentence, and its facts. A line opens
+  `plan-review`, compared commit to commit: main's branch against the line's.
+  A line waiting for sign-off also opens `approvals`, and a held one opens
+  `workstreams`, where the overlap is.
+- **`plan-review`** takes `before` and `after` as its starting comparison.
+  It shows **Other work in flight** above the items: each overlap in the
+  desktop's words, the merge line, what became of it, and the agents' notes.
+
+`tests/phone/review-queue.spec.ts` photographs both screens. The harness
+checks the RPC from a paired phone in `review-queue.test.ts` and
+`awareness-m5.test.ts`.
 
 ## Seeing the screens (Phase 32 A4.5a)
 

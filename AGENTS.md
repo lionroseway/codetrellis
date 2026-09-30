@@ -19,7 +19,7 @@ session-JSONL watcher for richer chat-derived signals.
 - **Runtime**: web mode (Express :3001 + Vite :5173). Electron 41
   wrapper exists but is untested due to the macOS 26 SIGKILL bug.
 - **Frontend**: React 19 + TypeScript, Tailwind CSS 4 (dark theme),
-  ReactFlow 11 (custom nodes/edges), Zustand 5, react-markdown +
+  React Flow 12 (`@xyflow/react`; custom nodes/edges), Zustand 5, react-markdown +
   remark-gfm.
 - **AST**: web-tree-sitter (WASM) — runs synchronously in the
   Express process. TS / TSX / JS / JSX / Python / Rust / PHP / Java /

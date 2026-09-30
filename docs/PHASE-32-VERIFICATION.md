@@ -69,7 +69,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 144 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 145 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -162,9 +162,9 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | 1 | ✓ 0.4c-2: old state back as a new version; unknown 404 (item-surface) |  |  |
 | c | `POST /api/items/:uid/skill-arrivals/accept` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/worktree` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans` |  | 1 | 71 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans` |  | 1 | 72 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 2 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `POST /api/plans/:planUid/items` |  | ✗ none | 38 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:planUid/items` |  | ✗ none | 39 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 2 | ✓ 0.4c: exercised by criteria-loops (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/docs` |  | ✗ none | 6 | ✓ 0.4c: exercised by full-loop, phone-plans, plan-docs, plan-export, +2 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -179,7 +179,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/plans/import-external` |  | ✗ none | 1 | ✓ 0.4c-1: issue checklist becomes Actions; unknown source 400 (plan-rest) |  |  |
 | c | `POST /api/plans/prune-orphans` |  | ✗ none | 1 | ✓ 0.4c-1: removes only the opened project's current orphans; everything else skipped (plan-rest) |  |  |
 | c | `PUT /api/items/:uid` |  | ✗ none | 14 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
-| c | `PUT /api/items/:uid/workstream` |  | ✗ none | 3 |  |  |  |
+| c | `PUT /api/items/:uid/workstream` |  | ✗ none | 4 |  |  |  |
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 3 | ✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `PUT /api/plan-phases/:phaseUid` |  | ✗ none | 2 | ✓ 0.4c: exercised by full-loop, plan-phases (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `PUT /api/plans/:uid` |  | ✗ none | 4 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -208,7 +208,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `DELETE /api/breakpoints/:id` |  | ✗ none | 2 |  |  |  |
 | g | `GET /api/agent-events` |  | ✗ none | 6 |  |  |  |
 | g | `GET /api/agent/status` |  | ✗ none | 3 | ✓ 0.4g: the session watcher's state, nothing more (misc-endpoints) |  |  |
-| g | `GET /api/awareness` |  | ✗ none | 18 |  |  |  |
+| g | `GET /api/awareness` |  | ✗ none | 19 |  |  |  |
 | g | `GET /api/breakpoint-hits` |  | ✗ none | 3 |  |  |  |
 | g | `GET /api/breakpoints` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/mcp/config` |  | ✗ none | 1 | ✓ 0.4g: a copied config carries the token and connects (misc-endpoints) |  |  |
@@ -218,12 +218,12 @@ records that — but "✗ none" is proof of a gap.
 | g | `GET /api/plans/:uid/budget/check` |  | ✗ none | 1 | ✓ 0.4g: agrees with check_budget; unknown plan 404 (agent-ui-tools); bug 27 |  |  |
 | g | `GET /api/sensors/doc-check` |  | ✗ none | 1 | ✓ 0.4g: needs an opened project (400 / 403); nothing stale without docs (agent-ui-tools) — stale docs in 0.4l |  |  |
 | g | `GET /api/sessions` |  | ✗ none | 8 | ✓ 0.4g: a connected agent appears with its type and plan (sessions, agent-ui-tools) |  |  |
-| g | `GET /api/workstreams` |  | ✗ none | 15 |  |  |  |
+| g | `GET /api/workstreams` |  | ✗ none | 16 |  |  |  |
 | g | `GET /api/workstreams/changes` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/workstreams/commits` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/workstreams/folder-requests` |  | ✗ none | 1 |  |  |  |
 | g | `POST /api/awareness/:id/reply` |  | ✗ none | 1 |  |  |  |
-| g | `POST /api/awareness/:id/state` |  | ✗ none | 7 |  |  |  |
+| g | `POST /api/awareness/:id/state` |  | ✗ none | 8 |  |  |  |
 | g | `POST /api/breakpoint-hits/:ref/answer` |  | ✗ none | 7 |  |  |  |
 | g | `POST /api/breakpoints` |  | ✗ none | 9 |  |  |  |
 | g | `POST /api/plans/:uid/budget/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4g: unflags an agent's change and records who saw it; unknown change or wrong plan 404 (agent-ui-tools, mcp-ui-tools.spec) |  |  |
@@ -449,14 +449,14 @@ records that — but "✗ none" is proof of a gap.
 | h | `get_freeze_status` | governance · read | ✗ none | 2 | ✓ 0.4h: inactive, active with reason and remaining time, inactive again (cdev-phase6) |  |  |
 | h | `get_plan_at_commit` | git · read | ✗ none | 1 | ✓ 0.4h: title and items as of each commit (cdev-phase6) |  |  |
 | h | `get_plan_history` | git · read | ✗ none | 2 | ✓ 0.4h: the plan's commits, newest first, with subject and author (review-governance-tools) |  |  |
-| h | `get_pr_draft` | review · read | ✗ none | 2 | ✓ 0.4h: title, review, acceptance criteria table and warnings; git untouched (review-governance-tools), plan-review |  |  |
-| h | `get_review_queue` | review · read | ✗ none | 1 |  |  |  |
+| h | `get_pr_draft` | review · read | ✗ none | 3 | ✓ 0.4h: title, review, acceptance criteria table and warnings; git untouched (review-governance-tools), plan-review |  |  |
+| h | `get_review_queue` | review · read | ✗ none | 2 |  |  |  |
 | h | `get_team_activity` | git · read | ✗ none | 2 | ✓ 0.4h: both manifest commits, newest first (review-governance-tools) |  |  |
 | h | `list_comparands` | review · read | ✗ none | 1 | ✓ 0.4h: live first, baseline, the named checkpoint, commits (drift-review-tools) |  |  |
 | h | `list_proposed_changes` | drift · read | ✗ none | 1 | ✓ 0.4h: one row per file spec with operation and kind (drift-review-tools) |  |  |
 | h | `reconcile` | drift · write | ✗ none | 1 | ✓ 0.4h: only this plan's deviations, checked first, in the caller's name; accepted amends the plan as them (drift-review-tools); bug 30 |  |  |
 | h | `resolve_conflict` | git · write | ✗ none | 1 | ✓ 0.4h: by_side takes theirs and stages; missing side and escaping path refused (drift-review-tools) |  |  |
-| h | `review_plan` | review · read | ✗ none | 3 | ✓ 0.4h: landed item, the unclaimed file named, baseline kept after rescan, markdown names its basis (review-governance-tools) |  |  |
+| h | `review_plan` | review · read | ✗ none | 4 | ✓ 0.4h: landed item, the unclaimed file named, baseline kept after rescan, markdown names its basis (review-governance-tools) |  |  |
 | h | `search_plan_history` | git · read | ✗ none | 1 | ✓ 0.4h: every matching commit with its files, newest first (drift-review-tools); bug 32 |  |  |
 | h | `set_freeze` | governance · write | ✗ none | 2 | ✓ 0.4h: activates and lifts, confirmed through status and check (cdev-phase6); recorded in the agent's name and flagged until seen, a lift included (freeze-flags, 0.4k) |  |  |
 | i | `get_audio_context` | audio · capture | ✗ none | 1 | ✓ 0.4i: recent audio with duration; seconds narrows (cdev-phase8) |  |  |
@@ -566,9 +566,9 @@ records that — but "✗ none" is proof of a gap.
 | h | `freeze.get` | read | ✗ none | 1 | ✓ 0.4k: the plan's project freeze and the agent's changes in the desktop's words; unknown plan refused (freeze-flags) |  |  |
 | h | `review.comparands` | read | ✗ none | 1 | ✓ 0.4j: same as the desktop's; unknown plan refused (phone-graph-review) |  |  |
 | h | `review.compare` | read | ✗ none | 1 | ✓ 0.4j: same as the desktop's; unknown checkpoint refused (phone-graph-review) |  |  |
-| h | `review.get` | read | ✗ none | 1 | ✓ 0.4j: same review as the desktop; unknown plan refused (phone-graph-review) |  |  |
+| h | `review.get` | read | ✗ none | 2 | ✓ 0.4j: same review as the desktop; unknown plan refused (phone-graph-review) |  |  |
 | h | `review.prDraft` | read | ✗ none | 1 | ✓ 0.4j: same draft as the desktop (phone-graph-review) |  |  |
-| h | `review.queue` | read | ✗ none | 1 |  |  |  |
+| h | `review.queue` | read | ✗ none | 2 |  |  |  |
 | i | `terminal.create` | terminal | ✗ none | 1 | ✓ 0.4j: shell in the project, shown on the desktop (phone-terminals-sysdocs) |  |  |
 | i | `terminal.history` | terminal | ✗ none | 1 | ✓ 0.4j: scrollback, paged (phone-terminals-sysdocs) |  |  |
 | i | `terminal.kill` | terminal | ✗ none | 1 | ✓ 0.4j: ended for phone and desktop; history kept (phone-terminals-sysdocs) |  |  |

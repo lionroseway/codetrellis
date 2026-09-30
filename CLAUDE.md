@@ -143,7 +143,7 @@ a tagged candidate and on packaged artifacts.
 - **Mobile runtime**: Expo SDK 57 + React Native 0.86.3 companion app
   in `mobile/`. iOS + Android. Talks to desktop over WebRTC, not HTTP.
 - **Frontend**: React 19 + TypeScript, Tailwind CSS 4 (dark theme),
-  ReactFlow 11 (custom nodes/edges), Zustand 5, react-markdown +
+  React Flow 12 (`@xyflow/react`; custom nodes/edges), Zustand 5, react-markdown +
   remark-gfm.
 - **AST**: web-tree-sitter (WASM) — runs synchronously in the
   Express process. 11 language tags: TS / TSX / JS / JSX / Python /

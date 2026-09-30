@@ -196,6 +196,67 @@ event, for the active project.
   against the client's own docs or source (A8.3's rule). Until then, a client
   whose hooks run a command uses `--check-edit` (A8.2).
 
+## Review: what else is in flight (A5, M5)
+
+A review answers "did it do what it said" for one plan. Since A5 it also
+says what the change means for the other lines of work, and which of them
+to merge first. The M5 "done when": reviewing a branch that changes a
+function another open line of work imports says so in the review and in the
+PR body, and the queue puts that branch first, giving that reason.
+
+- **Branches are compared as committed** (A5.1, `services/commit-edges.ts`).
+  Both sides of `commit:<a>` → `commit:<b>` get their import edges:
+  - an unchanged file keeps the live graph's edges wherever its targets
+    exist at that commit;
+  - a changed file is parsed at the commit and resolved by its language's
+    resolver.
+
+  So a branch's new dependencies show up as "dependencies nobody planned".
+  Imports are cached by blob. When more than 400 files differ from the
+  working tree at a commit, that side's edges stay unknown and `edgesNote`
+  says why. Branches with work in them are offered as comparands.
+- **Other work in flight** (A5.2, `src/shared/lib/other-work.ts`). The
+  review picks one line of work: the `after` side's branch, else the
+  items' workstream, else the main checkout. It then lists every signal
+  naming that line, in `signal-words`:
+  - each side in plain words;
+  - what became of the signal: open, acknowledged, intended ("a decision,
+    not an accident", with who made it), dismissed, or one of the five
+    most recent fixed ones;
+  - the agents' notes;
+  - for a contract, the merge line: "Merging this changes
+    validateCreateUser; checkout-fix imports it and will need updating."
+
+  It is in the review's JSON, its markdown and the PR body. The PR draft
+  also warns while a high overlap is open.
+- **Sign-off can wait for it** (A5.3). Turning on
+  `sensors.awareness.holdSignOffOnHighSignals` (off by default; set in the
+  project config or through `update_project_config`) makes the `code`
+  criterion's check fail while a high overlap naming the line is open:
+  "A high overlap with other work is still open (…): … Answer it on the
+  Awareness tab, or fix it, and check again." It never merges or blocks
+  git. It only holds that criterion's sign-off.
+- **The review queue** (A5.4, `services/review-queue-service.ts`). One line
+  for each (plan, branch) with plan items. Each line is reviewed against
+  the main checkout's branch, and has:
+  - a status (`ready`, `held` while a high overlap is open, `waiting` for
+    sign-off, `in-progress`, `unavailable`) and a sentence saying why;
+  - criteria met, files changed and affected, unplanned dependencies, and
+    open overlaps.
+
+  The order comes from `src/shared/lib/merge-order.ts`. Contract
+  dependencies decide it: the line that changes something goes before the
+  lines that import it. Among lines that are free to go, ready ones come
+  first. A cycle is broken at the best-ranked line, and its reason says
+  so. Every place has a reason, and the order is advice: nothing is
+  enforced.
+- **Where it shows.**
+  - `GET /api/review-queue` and `get_review_queue` (read).
+  - The **Review** tab beside Awareness in `PlanPanel` (A5.5). A line opens
+    to its branch's review, with the other work in flight.
+  - The phone's **Review queue** (A5.6, `review.queue`), from the Plans
+    tab. A line opens `plan-review` compared commit to commit.
+
 ## Any agent: what every client gets (A8)
 
 CodeTrellis is agent-agnostic. The rule: a feature ships with the path
@@ -210,6 +271,7 @@ run as a plain `codex` client with no hook and no watcher in
 | Signals | `get_awareness`, and unseen ones appended to its next tool result (A2.6) | — |
 | Footprints and line changes | `check_footprint`, `get_line_changes` (B3.1), from git | — |
 | Declared intent | `declare_intent` | — |
+| Review and merge order | `review_plan` and `get_pr_draft` carry the other work in flight; `get_review_queue` gives the order with reasons (A5) | — |
 | Task and spec breakpoints | enforced at the MCP interception: the call returns "paused" with a ref; `await_decision`. The person answers from the window's inbox or the phone (B4.4), with a push when the phone is away | — |
 | Code and function breakpoints | `check_breakpoint(path, old_text)` before an edit (the guide tells every agent to); an edit made without checking is a breach on its next call. A client whose hooks run a command, or a wrapper script: the connector's `--check-edit <path>` exits 2 when held (A8.2) | Claude Code's `PreToolUse` hook and Gemini CLI's `BeforeTool` hook (A8.3) make the check themselves and hold the edit before it is made, sending the replaced text |
 | Signal breakpoints | claims, finishes and spec edits pause while the signal is open | hooked edits pause too |
@@ -239,7 +301,8 @@ run as a plain `codex` client with no hook and no watcher in
   - `awareness-signals.test.ts` (the rules);
   - `awareness-digest.test.ts`;
   - `awareness-notices.test.ts`, `awareness-replies.test.ts`, `mobile-awareness.test.ts`;
-  - `src/shared/lib/signal-words.test.ts`;
+  - `src/shared/lib/signal-words.test.ts`, `other-work.test.ts`, `merge-order.test.ts`;
+  - `commit-edges.test.ts`, `hold-on-high-signals.test.ts`;
   - `workstream-*.test.ts`;
   - `claude-code-parallel.test.ts`, `gemini-cli-hook.test.ts`;
   - `connector/hook.test.ts`.
@@ -266,7 +329,15 @@ run as a plain `codex` client with no hook and no watcher in
     replies. The reply is the person's, from their phone, and it is posted
     as a steer on the task the other agent holds. That agent reads it once
     on its next call and finds the steer on its task.
+  - `review-commit-edges`, `review-other-work`, `hold-on-high-signals`,
+    `review-queue` (with a paired phone);
+  - `awareness-m5`, the M5 "done when": billing-v2 changes a function
+    checkout-fix imports. Its review (JSON and markdown) and its PR body say
+    so, and the queue puts it first with that reason, for three different
+    agents and the phone. Once the overlap is marked intended both lines
+    are ready and the order stands.
 - Phone screens: `tests/phone/awareness.spec.ts` (`npm run test:phone`)
-  photographs Needs you, the overlap and its reply, and the lines of work.
-- Browser: `e2e/agent/awareness-tab.spec.ts`, `e2e/agent/awareness-reply.spec.ts`, `e2e/agent/workstream-strip.spec.ts`,
+  photographs Needs you, the overlap and its reply, and the lines of work;
+  `tests/phone/review-queue.spec.ts`, the queue and the review a line opens.
+- Browser: `e2e/agent/review-tab.spec.ts`, `e2e/agent/awareness-tab.spec.ts`, `e2e/agent/awareness-reply.spec.ts`, `e2e/agent/workstream-strip.spec.ts`,
   `e2e/settings/mcp-server.spec.ts`.
