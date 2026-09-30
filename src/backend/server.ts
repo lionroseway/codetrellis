@@ -23,11 +23,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
+import { promisify } from 'node:util';
 import { WebSocketServer, WebSocket } from 'ws';
 import { scanDirectory, countFiles, collectFilePaths } from './services/project-scanner';
 import { detectMonorepo } from './services/monorepo-detector';
-import { initParser, parseFiles, parseVirtualFile, computeFileHash, getParserHealth } from './services/ast-parser';
+import { initParser, parseFiles, parseVirtualFile, computeFileHash, getParserHealth, getParseableExtensions } from './services/ast-parser';
+import { readBlobsAtCommit } from './services/git-blobs';
 import { localAuthMiddleware, isUpgradeAuthorised } from './middleware/local-auth';
 import { isSafeGitRef } from './services/git-safety';
 import { readFileWithin, isWithin, isInside, ConfinementError } from './services/confined-fs';
@@ -5765,45 +5767,43 @@ function getRecentGitCommits(projectPath: string, limit = 20): GitCommitSummary[
   }
 }
 
+const execFileAsync = promisify(execFile);
+
 async function captureGitCommitSnapshot(projectPath: string, commitHash: string): Promise<GitCommitSnapshotResult | null> {
   // Never hand git something it would read as an option (git-safety).
   if (!isSafeGitRef(commitHash)) return null;
   try {
-    const commitMeta = execFileSync(
+    // Asynchronous throughout: this reads and parses a whole commit, and the
+    // server answers nothing else while the event loop is held (see git-blobs).
+    const { stdout: commitMeta } = await execFileAsync(
       'git',
       ['-C', projectPath, 'show', '-s', '--format=%H\t%h', commitHash],
       { encoding: 'utf8' },
-    ).trim();
+    );
+    if (!commitMeta.trim()) return null;
 
-    if (!commitMeta) return null;
-
-    const [resolvedCommitHash, shortCommitHash] = commitMeta.split('\t');
-    const fileListOutput = execFileSync(
+    const [resolvedCommitHash, shortCommitHash] = commitMeta.trim().split('\t');
+    const { stdout: fileListOutput } = await execFileAsync(
       'git',
       ['-C', projectPath, 'ls-tree', '-r', '--name-only', resolvedCommitHash],
       { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 },
     );
 
+    // Only what a parser reads: images, lockfiles and the rest were fetched and thrown away.
+    const parseable = new Set(getParseableExtensions());
     const relativePaths = fileListOutput
       .split('\n')
       .map((line) => line.trim())
-      .filter(Boolean);
+      .filter((line) => line && parseable.has(path.extname(line).toLowerCase()));
 
-    const parsedFiles = relativePaths
-      .map((relativePath) => {
-        const absolutePath = path.join(projectPath, relativePath);
-        try {
-          const content = execFileSync(
-            'git',
-            ['-C', projectPath, 'show', `${resolvedCommitHash}:${relativePath}`],
-            { encoding: 'utf8', maxBuffer: 5 * 1024 * 1024 },
-          );
-          return parseVirtualFile(absolutePath, content);
-        } catch {
-          return null;
-        }
-      })
-      .filter((file): file is NonNullable<typeof file> => Boolean(file));
+    const contents = await readBlobsAtCommit(projectPath, resolvedCommitHash, relativePaths);
+    const parsedFiles: NonNullable<ReturnType<typeof parseVirtualFile>>[] = [];
+    let sinceYield = 0;
+    for (const [relativePath, content] of contents) {
+      const parsed = parseVirtualFile(path.join(projectPath, relativePath), content);
+      if (parsed) parsedFiles.push(parsed);
+      if (++sinceYield >= 8) { sinceYield = 0; await new Promise<void>((r) => setImmediate(r)); }
+    }
 
     const parsedByRelativePath = new Map(
       parsedFiles.map((file) => [path.relative(projectPath, file.path), file]),

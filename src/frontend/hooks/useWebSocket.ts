@@ -398,6 +398,11 @@ export function useWebSocket() {
           if (type === 'plan-check-run') {
             window.dispatchEvent(new CustomEvent('plan-check-run', { detail: payload }));
           }
+          // Phase 32 B6.4 — the Stack tab shows every plan at once, so it
+          // re-reads when any plan or task changes, not only the open one.
+          if (typeof type === 'string' && (type.startsWith('plan-item-') || /^plan-(created|updated|deleted|status-changed)$/.test(type))) {
+            window.dispatchEvent(new CustomEvent('stack-changed'));
+          }
           // --- Cross-repo pointers (CDev Phase 3.5) ---
           if (type === 'external-pointers-changed' || type === 'plan-scope-changed') {
             // The stitched view in PlanList re-fetches on these DOM

@@ -30,6 +30,8 @@ export interface StackTask {
   /** The branch this task is worked on, its own or inherited from a section above it. */
   workstream: string | null;
   ticketKey: string | null;
+  /** The files it names (its file specs, and the files its symbol specs live in): its footprint on the graph. */
+  files: string[];
   dependencies: StackDependency[];
   /** `"Deploy" waits on "Migrate" in plan "Billing v2".` — `null` when nothing holds it. */
   waits: string | null;

@@ -23,7 +23,7 @@ const sources: StackSources = {
 
 const items: PlanItem[] = [
   item('section', 'exports', { kind: 'object', title: 'Rollout', status: undefined, workstream: 'exports-v1' }),
-  item('build', 'exports', { parentUid: 'section', title: 'Build exporter', status: 'done', assignee: 'codex', assigneeType: 'codex' }),
+  item('build', 'exports', { parentUid: 'section', title: 'Build exporter', status: 'done', assignee: 'codex', assigneeType: 'codex', fileSpecs: [{ path: 'src/export.ts', action: 'modify' }], symbolSpecs: [{ name: 'run', kind: 'function', action: 'add', filePath: 'src/run.ts' }] }),
   item('deploy', 'exports', { parentUid: 'section', title: 'Deploy exports', dependencies: ['build', 'migrate', 'api'] }),
 ];
 
@@ -45,6 +45,7 @@ test('each task says who is on it, where it is worked, and what it waits on acro
 
   assert.equal(section.status, null, 'a page has no status');
   assert.equal(build.assignee, 'codex');
+  assert.deepEqual(build.files, ['src/export.ts', 'src/run.ts'], 'its footprint: file specs and the files its symbols live in');
   assert.equal(build.workstream, 'exports-v1', 'inherited from the section above it');
   assert.equal(deploy.ticketKey, 'JIRA-151');
 

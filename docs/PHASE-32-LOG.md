@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B6.3: overlap bands, where two plans meet |
-| **Status** | A5 done (M5 met). B6.1 (#231) and B6.2 (#232) merged: dependencies resolve across plans, and `/api/stack` / `get_stack` give every active plan at once. B6.3 in review: each plan's overlaps with the others, declared and actual, in words |
-| **Next action** | Merge B6.3 when green; then B6.4, the Stack tab |
+| **Stage / step** | Wave 2 — B6.4: the Stack tab |
+| **Status** | A5 done (M5 met). B6.1–B6.3 merged (#231–#233): dependencies across plans, `/api/stack` and `get_stack`, overlap bands. B6.4 in review: the Stack tab, and "Show on graph" for a plan's footprint |
+| **Next action** | Merge B6.4 when green; then B6.4b, the Timeline follows the stack's selection |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b6-3-overlap-bands` |
+| **Branch** | `feat/phase-32-b6-4-stack-tab` |
 | **Last updated** | 2026-09-30 |
 
 ---
@@ -134,6 +134,8 @@
 - [x] Follow-up: `graph/edge-visuals.spec.ts:12` timed out on #226 (d4236dc) at 32 s, with the graph's edges in the DOM. The test had the default 30 s budget, but `gotoWithProject` itself waits up to 60 s for another project's scan and 30 s for the canvas, so a project opened while another scan ran ran out of test time inside the helper. 75 specs open a project on the default budget. The helper now raises the test's timeout to cover its own waits (at least 120 s; a longer budget a test set is kept).
 - [x] Follow-up: `golden-chain/onboarding-to-plan.spec.ts:80` failed again on #227 (2d3ced2), after the click was scoped to `plan-item-tree`. The tree item was there and clicked, and the item's detail still did not show within 10 s. It passes locally, 15 of 15, 4 of 4 with the CPU throttled 6×, and with test 188 run first. Test 188 leaves no plan behind. `selectItem` is not a toggle. Candidates, not confirmed: the workspace's hydrate effect runs twice on open and fetches the items twice; an agent's navigation broadcast from the MCP specs that run just before; the workspace closing. The failure now prints what was on screen at that moment (tree, selected row, which texts are there), because the page snapshot is taken after `afterEach` deletes the plan. **Found, and it was the first candidate.** The diagnostic (adb03d9) said the row was selected and neither the body nor the status was on the page. Opening a plan loads its items twice: `resetForPlan` changes the store's plan id, which re-runs the workspace's effect while the first load is out. The list carries summaries without a body. When the second answer landed after the item had been opened, it put the summary back over the full item, so `BodyEditor` saw an empty body and fell into its editor, and a textarea's value is not page text. A person saw the same thing: a task opened quickly after its plan showed an empty editor where its body was. Fixed in `plan-items-store`: one load per plan at a time, the summary adds to an item's full fields rather than replacing them, and a list for a plan no longer open is dropped. `plan-items-store.test.ts` fails without it (two list requests, and the stale list wins).
 - [x] Follow-up: `golden-chain/websocket-events.spec.ts:97` failed on #226 (115d49c, browser 1/3): a socket opened from the page did not report `open` within three seconds, and the check said only `false`. The backend parses synchronously, so an upgrade that arrives during a scan waits for it, and the open project there was this repository. That is likely, not confirmed. Its sibling at :19 had the same three-second timer. Both now share `openSocket`, which gives the upgrade 15 s and says how it ended (`open`, `error`, `closed <code>`, `no answer`), so a repeat names its cause.
+- [ ] Follow-up: `graph/edge-visuals.spec.ts:32` clicks `getByRole('button', { name: 'Files' })`, which is not exact. In a checkout with branches it also matches the TopBar's workstream chips, whose titles say "N files changed", and fails in strict mode. It fails locally (seen on #226 and on B6.4's run) and passes in CI, which has no such branches. The fix is `exact: true`; it belongs to the next change to that spec.
+- [ ] Follow-up: `graph/canvas-rescan-wait.spec.ts:23` timed out once on B6.4's local run, waiting 30 s for `.react-flow` in `gotoWithProject` while the other worker loaded the repository's graph. It passed twice alone, and in CI on every run since #227. Watch it; if it fails in CI, the wait needs the same budget the helper gives other waits.
 - [ ] Follow-up: browser shards now take about 16–25 minutes each (up from 15–19 at the Wave 1 review). The serial project, which runs the sample-app specs since HD2, is most of the rise; see the serial-project follow-up above.
 
 ### Track B: observability
@@ -167,8 +169,9 @@
 - [ ] B6 Stack view, refined in EXECUTION §5:
   - [x] B6.1 Dependencies resolve across plans (bug 11) (#231)
   - [x] B6.2 The stack: `/api/stack` and `get_stack` (#232)
-  - [ ] B6.3 Overlap bands, declared and actual — in review
-  - [ ] B6.4 The Stack tab
+  - [x] B6.3 Overlap bands, declared and actual (#233)
+  - [ ] B6.4 The Stack tab — in review
+  - [ ] B6.4b The Timeline follows the stack's selection
   - [ ] B6.5 One clock
   - [ ] B6.6 The stack on the phone
   - [ ] B6.7 Done-when and docs
@@ -304,6 +307,73 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: Pinning a baseline froze the server
+
+B6.4's CI (#234, browser 1/3) failed `websocket-events.spec.ts:106`: a socket
+opened from the page got no answer in fifteen seconds. Not #234's code. The
+log shows both workers stalled together for about seventeen seconds right
+after `baseline-controls.spec.ts` pressed **Pin**; the other worker's
+Auto-track test took 22 s where it takes 5.
+
+Cause: `captureGitCommitSnapshot` (behind Pin, "Pin current HEAD" and
+`set_baseline`) ran one synchronous `git show` per tracked file, images and
+lockfiles included, then parsed them all without yielding. The server
+answers nothing while its event loop is held, so HTTP, WebSocket and MCP all
+waited. A person pressing Pin on a large project froze the window, every
+agent's tool calls and the phone.
+
+Fix: `services/git-blobs.ts` reads every path in one asynchronous
+`git cat-file --batch`; only files a parser reads are asked for (the same
+extension lookup the parser uses, so the snapshot is unchanged); the parse
+loop yields every eight files, as `parseFiles` does. Measured on this
+repository (1,414 tracked files, 1,173 parseable): the read held the event
+loop for 7,338 ms before, 16 ms after, and takes 276 ms instead of 7.3 s.
+
+Tests: `git-blobs.test.ts` (3, real git: contents at the commit not the
+tree, missing paths and directories left out, option-shaped refs refused);
+the 15 harness baseline tests; the baseline and WebSocket browser specs run
+side by side on two workers (21 passed).
+
+### 2026-09-30: B6.4 — the Stack tab
+A **Stack** tab beside Plans in `PlanPanel` (`StackTab.tsx`) shows every plan
+under way in the project at once, from `/api/stack`. This is the H1 view.
+- **A row per plan.** It is called by its ticket key, with the title beside
+  it, and shows a progress bar with done/total and "N need you" when
+  breakpoint hits wait. Rows collapse. An icon opens the plan.
+- **Where plans meet.** Each overlap is a chip under the row, "⚠ overlaps
+  JIRA-150", amber, or red when a high signal is open between them. Its
+  tooltip is the detail ("Both plan to change … Open now: …").
+- **Tasks nested** by parent, with a status dot, who is on each, and "⎇
+  branch". A task's name opens it.
+- **Dependencies in words.** An unfinished one reads "↑ waits on '…' in plan
+  '…'", and its name is a link that opens that task in its own plan. Met
+  ones read "✓ after '…' in …".
+- **"Show on graph"** draws the plan's footprint (the files its tasks name,
+  now on each stack task as `files`) on the graph, whatever plan is open,
+  and moves the graph there. Pressing it again takes it off. A plan that
+  leaves the stack leaves the graph too. It is held as `stackFocus` in the
+  graph store, and the canvas uses it for the plan highlight.
+- **Found by the screenshot: the graph opens on clusters, and no file node
+  is drawn there.** A plan's footprint lit nothing, and so did the open
+  plan's own overlay. A cluster now lights up when any file under it is in
+  the footprint, as breakpoints already did. Both node kinds carry
+  `data-plan-highlighted`, so a test can see it.
+- **Live.** The tab re-reads on a new `stack-changed` window event, raised
+  for any `plan-item-*` or plan created, updated or deleted broadcast, and
+  on awareness, workstream and breakpoint changes.
+- **Split: B6.4b.** Filtering the Timeline to the selected plan's work is
+  the other half of "one selection". Nothing in the Timeline filters today,
+  so it is its own part rather than growing this one.
+- **Follow-up.** On the repository's own graph the highlight ring on a
+  cluster is quiet among its many edges. The test sees it and a person can
+  find it, but it could be louder.
+- **Tests.** Browser: `e2e/plan/stack-tab.spec.ts` (2), with screenshots
+  `stack-tab`, `stack-on-graph` and `stack-wait-opened`. They cover the
+  overlap from each side and its detail, the cross-plan wait and its link,
+  the footprint on the graph and off again, and a met dependency. Unit:
+  `stack-service.test.ts` checks a task's `files`.
+
 
 ### 2026-09-30: B6.3 — overlap bands: where two plans meet
 Each plan in the stack now carries `overlaps`: every other active plan it

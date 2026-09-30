@@ -35,6 +35,18 @@ export interface StackSources extends DependencyLookup {
   waitingHits(planUid: string): number;
 }
 
+/** The files an item names: its file specs (and where they move to), and the files its symbol specs live in. */
+function filesOf(item: PlanItem): string[] {
+  const files = new Set<string>();
+  for (const f of item.fileSpecs ?? []) {
+    if (f.isDir) continue;
+    if (f.path) files.add(f.path);
+    if (f.moveTo) files.add(f.moveTo);
+  }
+  for (const s of item.symbolSpecs ?? []) if (s.filePath) files.add(s.filePath);
+  return [...files];
+}
+
 /** One plan's row, from its items. Pure: every lookup is passed in. */
 export function stackPlanOf(
   plan: Pick<Plan, 'uid' | 'title' | 'status'>,
@@ -74,6 +86,7 @@ export function stackPlanOf(
       assigneeType: item.assigneeType ?? null,
       workstream: resolveSection(item, within)?.branch ?? null,
       ticketKey: sources.itemTicketKey(item.uid),
+      files: filesOf(item),
       dependencies,
       waits: state.met ? null : waitSentence(item.title, state),
     };
