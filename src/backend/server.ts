@@ -81,6 +81,7 @@ import * as sessionService from './services/session-service';
 import * as taskAttachmentsService from './services/task-attachments-service';
 // Phase 15 §C — unified Object/Action surface backing the V2 frontend.
 import * as planItemService from './services/plan-item-service';
+import { dependencyProblem } from './services/plan-dependencies';
 import * as planEventService from './services/plan-event-service';
 import * as channelEventService from './services/channel-event-service';
 import { exportChannelEvent } from './services/channel-event-file-service';
@@ -2339,6 +2340,15 @@ app.get('/api/plans/:uid/next-task', (req, res) => {
   res.json(task || { none: true });
 });
 
+/**
+ * Phase 32 B6.1 — every pending task in the plan held by its dependencies,
+ * with what each waits on and where, including tasks in other plans.
+ */
+app.get('/api/plans/:uid/waits', (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
+  res.json({ waits: planItemService.planWaits(req.params.uid) });
+});
+
 /** Delete a task attachment. */
 app.delete('/api/attachments/:uid', (req, res) => {
   const ok = taskAttachmentsService.deleteAttachment(req.params.uid);
@@ -2791,6 +2801,12 @@ app.post('/api/plans/:planUid/items', (req, res) => {
     res.status(400).json({ error: `status must be one of: ${TASK_STATUSES.join(', ')}` });
     return;
   }
+  if (dependencies !== undefined) {
+    const problem = Array.isArray(dependencies)
+      ? dependencyProblem(null, dependencies, planItemService.getItem)
+      : 'dependencies must be a list of task uids';
+    if (problem) { res.status(400).json({ error: problem }); return; }
+  }
   try {
     const item = planItemService.createItem({
       planUid: req.params.planUid,
@@ -3050,6 +3066,14 @@ app.put('/api/items/:uid', (req, res) => {
   if (body.status !== undefined && !isTaskStatus(body.status)) {
     res.status(400).json({ error: `status must be one of: ${TASK_STATUSES.join(', ')}` });
     return;
+  }
+  // Phase 32 B6.1 — any plan's task may be a dependency; one that names
+  // nothing, the item itself, or a page would hold it for ever.
+  if (body.dependencies !== undefined) {
+    const problem = Array.isArray(body.dependencies)
+      ? dependencyProblem(req.params.uid, body.dependencies, planItemService.getItem)
+      : 'dependencies must be a list of task uids';
+    if (problem) { res.status(400).json({ error: problem }); return; }
   }
   const item = planItemService.updateItem(req.params.uid, {
     title: body.title,

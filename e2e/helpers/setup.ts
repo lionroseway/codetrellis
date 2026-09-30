@@ -278,6 +278,10 @@ export async function openPlan(page: Page, planTitle: string) {
   // first; the Plans tab underneath it cannot be clicked.
   const openWorkspace = page.getByTestId('copy-ref-plan').first();
   if (await openWorkspace.isVisible().catch(() => false)) {
+    // Escape is ignored while a text field has focus (it may be the user
+    // leaving the field), and a task with an empty body opens with its
+    // editor focused, so let go of it first (B6.1's spec opens one).
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await page.keyboard.press('Escape');
     await openWorkspace.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
   }

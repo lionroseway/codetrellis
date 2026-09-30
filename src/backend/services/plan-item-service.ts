@@ -36,6 +36,7 @@ import { recordBodyEdit } from './agent-event-log';
 import { normaliseSkills } from './skill-model';
 import { appendPlanEvent } from './plan-event-service';
 import { unmetHumanCriteria } from './criteria-service';
+import { dependencyState, waitSentence, type DependencyLookup, type DependencyState, type DependencyWait } from './plan-dependencies';
 import * as _lazy___plan_file_service from './plan-file-service';
 import type {
   PlanItem,
@@ -986,6 +987,11 @@ export interface ClaimItemResult {
   ok: boolean;
   conflicts?: string[];
   reason?: string;
+  /**
+   * Phase 32 B6.1 — the claim still goes through (a person may start early
+   * on purpose), but the claimant is told what the task waits on.
+   */
+  waitsOn?: string[];
 }
 
 /**
@@ -1226,7 +1232,12 @@ function claimItemImpl(
     changeSummary: 'Claimed',
   });
 
-  return { ok: true, conflicts: conflicts.length > 0 ? conflicts : undefined };
+  const waiting = item.kind === 'action' ? dependencyStateOf(item) : null;
+  return {
+    ok: true,
+    conflicts: conflicts.length > 0 ? conflicts : undefined,
+    waitsOn: waiting && !waiting.met ? waiting.waits.map((w) => w.words) : undefined,
+  };
 }
 
 // =============================================================================
@@ -1241,6 +1252,55 @@ export interface NextItemResult {
     itemTitle: string;
     reason: string;
   };
+  /**
+   * Phase 32 B6.1 — nothing is ready, and the first pending task is held
+   * only by its dependencies: which, and where, in words.
+   */
+  waiting?: {
+    itemUid: string;
+    itemTitle: string;
+    reason: string;
+  };
+}
+
+/** Items from any plan, and plan titles, for resolving dependencies across plans. */
+export const dependencyLookup: DependencyLookup = {
+  getItem,
+  planTitle(planUid) {
+    const r = getDb().exec('SELECT title FROM plans WHERE uid = ?', [planUid]);
+    return (r[0]?.values[0]?.[0] as string | undefined) ?? null;
+  },
+};
+
+/** Whether `item`'s dependencies are met, looking in any plan (bug 11). */
+export function dependencyStateOf(item: PlanItem, local?: ReadonlyMap<string, PlanItem>): DependencyState {
+  return dependencyState(item, dependencyLookup, local);
+}
+
+export interface ItemWait {
+  itemUid: string;
+  itemTitle: string;
+  waits: DependencyWait[];
+  /** `"Deploy" waits on "Migrate" in plan "Billing v2".` */
+  sentence: string;
+}
+
+/**
+ * Phase 32 B6.1 — every pending task in a plan held by its dependencies,
+ * with what each waits on. The window's "blocked" count used to work this
+ * out from the one plan it had loaded, so a dependency in another plan
+ * counted as blocked for ever.
+ */
+export function planWaits(planUid: string): ItemWait[] {
+  const all = listAllItems(planUid);
+  const local = new Map(all.map((i) => [i.uid, i]));
+  const out: ItemWait[] = [];
+  for (const item of all) {
+    if (item.kind !== 'action' || item.status !== 'pending') continue;
+    const state = dependencyStateOf(item, local);
+    if (!state.met) out.push({ itemUid: item.uid, itemTitle: item.title, waits: state.waits, sentence: waitSentence(item.title, state) });
+  }
+  return out;
 }
 
 /**
@@ -1261,7 +1321,7 @@ export function getNextItem(
   accept?: (item: PlanItem) => boolean,
 ): NextItemResult {
   const all = listAllItems(planUid);
-  const itemMap = Object.fromEntries(all.map((i) => [i.uid, i]));
+  const local = new Map(all.map((i) => [i.uid, i]));
 
   // Filter to pending Actions
   let candidates = all.filter((i) =>
@@ -1276,21 +1336,23 @@ export function getNextItem(
     candidates = candidates.filter((i) => i.parentUid === parentUid);
   }
 
-  // Filter out those with unmet dependencies
+  // Filter out those with unmet dependencies, wherever the dependency
+  // lives (bug 11: one in another plan used to hold its dependant for ever).
+  const held: Array<{ item: PlanItem; state: DependencyState }> = [];
   candidates = candidates.filter((i) => {
-    const deps = i.dependencies ?? [];
-    if (deps.length === 0) return true;
-    return deps.every((d) => {
-      const dep = itemMap[d];
-      return dep && (dep.status === 'done' || dep.status === 'skipped');
-    });
+    const state = dependencyStateOf(i, local);
+    if (!state.met) held.push({ item: i, state });
+    return state.met;
   });
 
   // Sort by sortOrder (within same parent) — stable ordering
   candidates.sort((a, b) => a.sortOrder - b.sortOrder);
 
   if (candidates.length === 0) {
-    return { item: null };
+    const first = held.sort((a, b) => a.item.sortOrder - b.item.sortOrder)[0];
+    return first
+      ? { item: null, waiting: { itemUid: first.item.uid, itemTitle: first.item.title, reason: waitSentence(first.item.title, first.state) } }
+      : { item: null };
   }
 
   // Check approval gates: if the candidate has a prior sibling with
