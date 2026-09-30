@@ -31,7 +31,7 @@ import { getDb } from './database';
 import { markDirty } from './persistence';
 import { getItem, updateItem } from './plan-item-service';
 import { appendPlanEvent } from './plan-event-service';
-import { answerHit, getHit } from './breakpoint-service';
+import { answerHit, getHit, specBreakpointOn } from './breakpoint-service';
 import { recordBreakpointEvent } from './agent-event-log';
 import { pushForBreakpoint } from './push-notification-service';
 import { getPlan } from './plan-service';
@@ -85,6 +85,12 @@ export interface SpecProposal {
   hitRef: string | null;
   /** The text a person accepted, when they amended it first. */
   decidedText: string | null;
+  /**
+   * A spec breakpoint a person set on the page (B7.5a), with their note. It
+   * does not hold a proposal, which a person decides anyway, but the card
+   * shows why they guarded the page.
+   */
+  pageBreakpoint: { id: string; note: string | null } | null;
 }
 
 export type ImpactKind = 'none' | 'changes';
@@ -179,7 +185,13 @@ function fromRow(r: unknown[]): SpecProposal {
     impacts: impactsOf(r[0] as string),
     hitRef: (r[19] as string | null) ?? null,
     decidedText: (r[20] as string | null) ?? null,
+    pageBreakpoint: guardOf(pageUid),
   };
+}
+
+function guardOf(pageUid: string): { id: string; note: string | null } | null {
+  const bp = specBreakpointOn(pageUid);
+  return bp ? { id: bp.id, note: bp.note } : null;
 }
 
 function impactsOf(proposalUid: string): ProposalImpact[] {

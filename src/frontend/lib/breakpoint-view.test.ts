@@ -35,6 +35,18 @@ test('a pause: who wants to do what, where, and why it waits', () => {
   assert.deepEqual(decisionLabels(hit()), { continue: 'Continue', steer: 'Continue with steer', stop: 'Stop' });
 });
 
+test('a held edit to a page others rely on says so, and that the agent was told to propose (B7.5a)', () => {
+  const edit = hit({ kind: 'spec', action: 'edit', tool: 'update_item', itemTitle: 'Invoice format' });
+  assert.equal(hitWhy(edit), 'You asked to be asked before an agent changes this description.');
+  assert.equal(
+    hitWhy({ ...edit, reliedOn: { tasks: 3, plans: 2 } }),
+    'You asked to be asked before an agent changes this description. 3 tasks in 2 plans rely on this page; the agent was told a proposal would let their agents weigh in.',
+  );
+  assert.match(hitWhy({ ...edit, reliedOn: { tasks: 1, plans: 1 } }), /1 task in 1 plan relies on this page;/);
+  // Nothing relying is said as nothing.
+  assert.equal(hitWhy({ ...edit, reliedOn: { tasks: 0, plans: 0 } }), hitWhy(edit));
+});
+
 test('a breach: what already happened, never a pause', () => {
   const b = hit({ kind: 'code', action: 'breach', breach: true, path: 'payments/refund.ts' });
   assert.equal(hitHeadline(b, 'exports'), 'codex in exports changed payments/refund.ts past a breakpoint');

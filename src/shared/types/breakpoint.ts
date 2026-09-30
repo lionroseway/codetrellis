@@ -60,4 +60,9 @@ export interface BreakpointHit {
   answeredAt: number | null;
   answeredBy: string | null;
   answeredByType: string | null;
+  /**
+   * For a held edit to a page other tasks rely on (B7.5a): how many, in how
+   * many plans. Such an edit is better proposed, so their agents weigh in.
+   */
+  reliedOn?: { tasks: number; plans: number } | null;
 }

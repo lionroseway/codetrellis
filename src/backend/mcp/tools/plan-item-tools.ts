@@ -438,7 +438,10 @@ export function register(server: McpServer, deps: ToolDeps): void {
         next: `${proposal.affected.length
           ? `${proposal.affectedWords}. Their agents are asked for the impact; a person decides.`
           : 'Nothing relies on this page yet. A person decides.'} The page is unchanged until then. ` +
-          `await_decision("${proposal.hitRef}") waits for the decision; you are also told it on a later call.`,
+          `await_decision("${proposal.hitRef}") waits for the decision; you are also told it on a later call.` +
+          (proposal.pageBreakpoint
+            ? ` A person guards this page with a breakpoint${proposal.pageBreakpoint.note ? `, and said: ${proposal.pageBreakpoint.note}` : ''}. The proposal is not held by it; they see it with the proposal.`
+            : ''),
       }, n);
     },
   );

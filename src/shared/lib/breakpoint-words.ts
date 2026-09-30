@@ -37,12 +37,24 @@ export function hitHeadline(hit: BreakpointHit, where?: string | null): string {
   return `${who}${inWs} wants to ${DOING[hit.action]} “${subjectOf(hit)}”`;
 }
 
+/** "3 tasks in 2 plans rely on this page" (B7.5a). */
+export function reliedOnLine(r: { tasks: number; plans: number }): string {
+  const tasks = `${r.tasks} ${r.tasks === 1 ? 'task' : 'tasks'}`;
+  const plans = `${r.plans} ${r.plans === 1 ? 'plan' : 'plans'}`;
+  return `${tasks} in ${plans} ${r.tasks === 1 ? 'relies' : 'rely'} on this page`;
+}
+
 /** Why it is waiting on the person: which breakpoint, in their terms. */
 export function hitWhy(hit: BreakpointHit): string {
   if (hit.breach) return 'It could not be paused: this agent edits with its own editor. It has been told to stop and wait.';
   switch (hit.kind) {
     case 'task': return 'You asked to be asked before an agent claims or finishes this task.';
-    case 'spec': return 'You asked to be asked before an agent changes this description.';
+    case 'spec':
+      // An edit to a page others rely on (B7.5a): the agent was told to propose it instead.
+      if (hit.reliedOn && hit.reliedOn.tasks > 0) {
+        return `You asked to be asked before an agent changes this description. ${reliedOnLine(hit.reliedOn)}; the agent was told a proposal would let their agents weigh in.`;
+      }
+      return 'You asked to be asked before an agent changes this description.';
     case 'code': return 'You asked to be asked before this code changes. The edit was not made.';
     case 'signal': return 'A serious signal names this workstream, and you asked to be asked while one is open.';
     case 'proposal': return 'A spec others rely on would change. Nothing changes until you decide.';
