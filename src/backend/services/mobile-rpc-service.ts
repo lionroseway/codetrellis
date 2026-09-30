@@ -37,6 +37,7 @@ import { getPairedDevice } from './paired-device-service';
 import { readFileWithin, isWithin } from './confined-fs';
 import { listTrustedRoots, resolveTrustedPlanDir, resolveTrustedProjectRoot } from './trusted-roots';
 import { reviewPlan } from './plan-review-service';
+import { reviewQueue } from './review-queue-service';
 import { buildPrDraft } from './pr-draft-service';
 import { listComparands, compareSnapshots } from './snapshot-compare-service';
 import {
@@ -1254,6 +1255,15 @@ async function routeMethod(
       const result = compareSnapshots(before, after, projectPath);
       if (!result.ok) throw new Error(result.error);
       return result.result;
+    }
+
+    // The review queue (Phase 32 A5.6, over A5.4): every line of work with plan
+    // items, where it stands against the main checkout's branch, and the
+    // suggested merge order with its reasons. The same answer as
+    // `/api/review-queue`, for an opened project only.
+    case 'review.queue': {
+      const projectPath = peerProjectRoot(params, { required: true })!;
+      return reviewQueue(projectPath);
     }
 
     // What to work on next. `getNextTask` reads plan_items for a V2 plan

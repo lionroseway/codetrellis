@@ -19,9 +19,9 @@ records that — but "✗ none" is proof of a gap.
 |---|---|---|---|---|---|---|
 | REST routes | 242 | 240 | 0 | 0 | 217 | 0 |
 | MCP tools | 197 | 197 | 0 | 0 | 185 | 0 |
-| Mobile RPC methods | 84 | 76 | 0 | 0 | 78 | 0 |
+| Mobile RPC methods | 85 | 77 | 0 | 0 | 78 | 0 |
 | Frontend components | 112 | n/a | n/a | n/a | 0 | 23 |
-| Mobile screens | 35 | n/a | n/a | n/a | 0 | 0 |
+| Mobile screens | 36 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 12 | n/a | n/a | n/a | 10 | 12 |
 
 ## By domain
@@ -35,9 +35,9 @@ records that — but "✗ none" is proof of a gap.
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 12 | 7 | 1 | 0 | 0 |
 | 0.4g Agents and MCP | 25 | 32 | 10 | 27 | 0 | 0 |
-| 0.4h Drift, governance, review | 11 | 25 | 8 | 0 | 0 | 0 |
+| 0.4h Drift, governance, review | 11 | 25 | 9 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
-| 0.4j Mobile surface | 25 | 14 | 0 | 2 | 35 | 0 |
+| 0.4j Mobile surface | 25 | 14 | 0 | 2 | 36 | 0 |
 | 0.4k Settings, updates, privacy | 11 | 0 | 3 | 6 | 0 | 12 |
 | 0.4l System docs and intake | 7 | 11 | 6 | 1 | 0 | 0 |
 
@@ -497,7 +497,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `verify_system_doc` | system-docs · write | ✗ none | 3 | ✓ 0.4l: stamps HEAD (sysdocs-intake) |  |  |
 | l | `write_system_doc` | system-docs · write | ✗ none | 3 | ✓ 0.4l: creates in the agent's name (was recorded as a person's); update renames the file with the title; unknown uid refused (sysdocs-intake); bug 47 |  |  |
 
-## Mobile RPC methods (84)
+## Mobile RPC methods (85)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -568,6 +568,7 @@ records that — but "✗ none" is proof of a gap.
 | h | `review.compare` | read | ✗ none | 1 | ✓ 0.4j: same as the desktop's; unknown checkpoint refused (phone-graph-review) |  |  |
 | h | `review.get` | read | ✗ none | 1 | ✓ 0.4j: same review as the desktop; unknown plan refused (phone-graph-review) |  |  |
 | h | `review.prDraft` | read | ✗ none | 1 | ✓ 0.4j: same draft as the desktop (phone-graph-review) |  |  |
+| h | `review.queue` | read | ✗ none | 1 |  |  |  |
 | i | `terminal.create` | terminal | ✗ none | 1 | ✓ 0.4j: shell in the project, shown on the desktop (phone-terminals-sysdocs) |  |  |
 | i | `terminal.history` | terminal | ✗ none | 1 | ✓ 0.4j: scrollback, paged (phone-terminals-sysdocs) |  |  |
 | i | `terminal.kill` | terminal | ✗ none | 1 | ✓ 0.4j: ended for phone and desktop; history kept (phone-terminals-sysdocs) |  |  |
@@ -703,7 +704,7 @@ records that — but "✗ none" is proof of a gap.
 | k | `settings/WebcamQrScanner.tsx` |  | n/a | n/a |  |  |  |
 | l | `system-docs/SystemDocsPanel.tsx` |  | n/a | n/a |  | ✓ 0.5a — empty state is content |  |
 
-## Mobile screens (35)
+## Mobile screens (36)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -730,10 +731,11 @@ records that — but "✗ none" is proof of a gap.
 | j | `pair.tsx` |  | n/a | n/a |  |  |  |
 | j | `plan-channel.tsx` |  | n/a | n/a |  |  |  |
 | j | `plan-detail.tsx` |  | n/a | n/a |  |  |  |
-| j | `plan-review.tsx` |  | n/a | n/a |  |  |  |
+| j | `plan-review.tsx` |  | n/a | 1 |  |  |  |
 | j | `plan-templates.tsx` |  | n/a | n/a |  |  |  |
 | j | `project-browser.tsx` |  | n/a | n/a |  |  |  |
 | j | `projects.tsx` |  | n/a | n/a |  |  |  |
+| j | `review-queue.tsx` |  | n/a | 1 |  |  |  |
 | j | `settings.tsx` |  | n/a | n/a |  |  |  |
 | j | `signal-detail.tsx` |  | n/a | 1 |  |  |  |
 | j | `system-doc-detail.tsx` |  | n/a | n/a |  |  |  |

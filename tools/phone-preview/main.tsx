@@ -26,6 +26,8 @@ const SCREENS: Record<string, { title: string; load: () => Promise<{ default: Co
   'signal-detail': { title: 'Overlap', load: () => import('../../mobile/app/signal-detail') },
   workstreams: { title: 'Lines of work', load: () => import('../../mobile/app/workstreams') },
   'workstream-detail': { title: 'Line of work', load: () => import('../../mobile/app/workstream-detail') },
+  'review-queue': { title: 'Review queue', load: () => import('../../mobile/app/review-queue') },
+  'plan-review': { title: 'Review', load: () => import('../../mobile/app/plan-review') },
 };
 
 const phone = (window as unknown as { __PHONE__?: { state?: Partial<WorkspaceSnapshot> } }).__PHONE__ ?? {};

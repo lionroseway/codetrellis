@@ -189,6 +189,13 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="review-queue"
+          options={{
+            title: 'Review queue',
+            headerStyle: { backgroundColor: '#0a0c18' },
+          }}
+        />
+        <Stack.Screen
           name="plan-review"
           options={{
             title: 'Review',

@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — A5.5: the Review tab |
-| **Status** | A5.1–A5.4 merged (#222–#224, #226; #226 carried the browser fixes from #227, closed). A5.5 in review: the Review tab beside Awareness. A5.6 and A5.7 are built and pushed, each PR'd after the one before merges |
-| **Next action** | Merge A5.5 when green; then A5.6, the queue on the phone |
+| **Stage / step** | Wave 2 — A5.6: the queue on the phone |
+| **Status** | A5.1–A5.5 merged (#222–#224, #226, #228). A5.6 in review: `review.queue` over the peer channel and the phone's Review queue screen. A5.7 is built and pushed, PR'd after A5.6 merges |
+| **Next action** | Merge A5.6 when green; then A5.7, M5 done-when end to end, and docs |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a5-5-review-tab` |
+| **Branch** | `feat/phase-32-a5-6-phone-queue` |
 | **Last updated** | 2026-09-30 |
 
 ---
@@ -101,8 +101,8 @@
   - [x] A5.2 "Other work in flight" in `review_plan` and `get_pr_draft` (#223)
   - [x] A5.3 The opt-in "no open high signals" check (#224)
   - [x] A5.4 The review queue and `get_review_queue` (#226)
-  - [ ] A5.5 The Review tab — in review
-  - [ ] A5.6 The queue on the phone
+  - [x] A5.5 The Review tab (#228)
+  - [ ] A5.6 The queue on the phone — in review
   - [ ] A5.7 M5 done-when, end to end, and docs
 - [ ] A6 The Brief
 - [ ] A7 Rules
@@ -297,6 +297,37 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-29: A5.6 — the queue on the phone
+The phone asks "what should merge next, and why" too.
+- **`review.queue` RPC.** It gets a `read` row in `peer-capabilities`. Its
+  answer is the same as `/api/review-queue`, for an opened project only: a
+  nominated `projectPath` goes through `resolveTrustedProjectRoot`, as
+  `review.compare` beside it does.
+- **The Review queue screen** (`mobile/app/review-queue.tsx`). It is reached
+  from the Plans tab's header and lists each line in the suggested order:
+  - its place, branch, plan and status chip, with the desktop's labels and
+    colours (`mobile/lib/review-queue.ts`);
+  - the reason for its place;
+  - its status in a sentence, and its facts.
+
+  The heading says what the lines are reviewed against, and that merging
+  stays with the person.
+- **Where a line leads.** A line opens `plan-review`, compared commit to
+  commit: main's branch against the line's. `plan-review` now takes
+  `before` and `after` as its starting comparison, and shows **Other work
+  in flight** (A5.2) above the items. A line waiting for sign-off also
+  opens the approvals. A held line opens the lines of work, where the
+  overlap is.
+- **The screenshot changed one thing.** The status sentence and the facts
+  ran together as "…overlaps. · 1 file changed". They are two lines now.
+- **Tests.**
+  - Harness: `review-queue.test.ts` gains the paired phone. Its queue equals
+    the REST answer, and a path outside the opened projects is refused.
+  - Phone: `tests/phone/review-queue.spec.ts` (4), with screenshots
+    `review-queue` and `review-queue-line`. It covers the queue in order
+    with reasons, where each line leads, the empty and error states, and
+    the review a line opens (its comparison and the other work in flight).
 
 ### 2026-09-29: A5.5 — the Review tab
 Next to Awareness in `PlanPanel` (`ReviewTab.tsx`). The queue is shown in

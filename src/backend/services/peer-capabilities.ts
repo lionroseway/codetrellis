@@ -109,6 +109,7 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   'review.compare': 'read',
   'review.get': 'read',
   'review.prDraft': 'read',
+  'review.queue': 'read',
   'power.status': 'read',
   'project.active': 'read',
   'project.list': 'read',
