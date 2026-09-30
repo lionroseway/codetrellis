@@ -17,16 +17,28 @@
  * Its agent says what the change would mean for that work (`replyToProposal`:
  * none, or changes with a sentence), which is kept with who and which plan
  * and posted as a weigh-in in the proposer's plan.
+ *
+ * B7.4: the decision is a person's. Making a proposal raises a `proposal`
+ * breakpoint hit, so it waits in the inbox with the other things waiting on
+ * them (count, push, `await_decision`). A person accepts, amends then
+ * accepts, or rejects it over REST (`personFrom`); no MCP tool can. Accepting
+ * writes the page's new version as the person, and flags every task relying
+ * on it "spec changed" until the agent holding it has been told, once. The
+ * proposing session is told the outcome, once.
  */
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import { getDb } from './database';
 import { markDirty } from './persistence';
-import { getItem } from './plan-item-service';
+import { getItem, updateItem } from './plan-item-service';
+import { appendPlanEvent } from './plan-event-service';
+import { answerHit, getHit } from './breakpoint-service';
+import { recordBreakpointEvent } from './agent-event-log';
+import { pushForBreakpoint } from './push-notification-service';
 import { getPlan } from './plan-service';
 import { postChannelEvent } from './channel-event-service';
 import { reliedOnBy, reliedOnWords, type RelianceIn } from './spec-links-service';
 import type { ChannelEvent } from '../../shared/types';
-import { findSection, sectionText } from '../../shared/lib/spec-sections';
+import { findSection, sectionText, withSectionText } from '../../shared/lib/spec-sections';
 
 export type ProposalStatus = 'open' | 'accepted' | 'rejected' | 'withdrawn';
 
@@ -69,6 +81,10 @@ export interface SpecProposal {
   decisionNote: string | null;
   /** What the agents doing the relying work said it would mean for them (B7.3), oldest first. */
   impacts: ProposalImpact[];
+  /** The inbox entry a person decides it from (B7.4); the proposer can await_decision on it. */
+  hitRef: string | null;
+  /** The text a person accepted, when they amended it first. */
+  decidedText: string | null;
 }
 
 export type ImpactKind = 'none' | 'changes';
@@ -161,6 +177,8 @@ function fromRow(r: unknown[]): SpecProposal {
     decidedByType: (r[17] as string | null) ?? null,
     decisionNote: (r[18] as string | null) ?? null,
     impacts: impactsOf(r[0] as string),
+    hitRef: (r[19] as string | null) ?? null,
+    decidedText: (r[20] as string | null) ?? null,
   };
 }
 
@@ -190,7 +208,7 @@ function impactsOf(proposalUid: string): ProposalImpact[] {
 }
 
 const COLUMNS = `uid, page_uid, plan_uid, section, base_version, before_text, proposed_text, why, evidence, affected,
-  author, author_type, session_id, status, created_at, decided_at, decided_by, decided_by_type, decision_note`;
+  author, author_type, session_id, status, created_at, decided_at, decided_by, decided_by_type, decision_note, hit_ref, decided_text`;
 
 /** Make a proposal. Checked by `proposalProblem` first. */
 export function proposeSpecChange(
@@ -209,8 +227,36 @@ export function proposeSpecChange(
     [uid, page.uid, page.planUid, section, pageVersion(page.uid), before, input.text, input.why.trim(),
       JSON.stringify(input.evidence ?? {}), JSON.stringify(affected), by.author, by.authorType, by.sessionId ?? null, Date.now()],
   );
+  raiseHit(uid, page.planUid, page.uid, by);
   markDirty();
   return getProposal(uid)!;
+}
+
+/**
+ * The inbox entry for a new proposal: a `proposal` breakpoint on it, and a
+ * hit waiting for a person, as a held agent call would be. Pushed to a phone
+ * that is away, like any other.
+ */
+function raiseHit(uid: string, planUid: string, pageUid: string, by: { author: string; authorType: string; sessionId?: string | null }, now = Date.now()): void {
+  const bp = `bp_${randomBytes(6).toString('hex')}`;
+  getDb().run(
+    `INSERT INTO breakpoints (id, kind, target, plan_uid, note, created_at, created_by, created_by_type)
+     VALUES (?, 'proposal', ?, ?, NULL, ?, ?, ?)`,
+    [bp, uid, planUid, now, by.author, by.authorType],
+  );
+  const ref = `bp-${randomBytes(5).toString('hex')}`;
+  const workstream = by.sessionId
+    ? (rows('SELECT workstream_root FROM agent_sessions WHERE session_id = ?', [by.sessionId])[0]?.[0] as string | null | undefined) ?? null
+    : null;
+  getDb().run(
+    `INSERT INTO breakpoint_hits (ref, breakpoint_id, tool, action, item_uid, plan_uid, agent, session_id, workstream_root, hit_at)
+     VALUES (?, ?, 'propose_spec_change', 'propose', ?, ?, ?, ?, ?, ?)`,
+    [ref, bp, pageUid, planUid, by.author, by.sessionId ?? null, workstream, now],
+  );
+  getDb().run('UPDATE spec_proposals SET hit_ref = ? WHERE uid = ?', [ref, uid]);
+  const hit = getHit(ref)!;
+  recordBreakpointEvent('breakpoint_hit', { ref, kind: 'proposal', action: 'propose', tool: hit.tool, itemUid: pageUid, itemTitle: hit.itemTitle, planUid, agent: by.author, breakpointId: bp, on: uid }, by.author);
+  void pushForBreakpoint(hit).catch(() => {});
 }
 
 export function getProposal(uid: string): SpecProposal | null {
@@ -288,15 +334,18 @@ function noticeText(p: SpecProposal, mine: RelianceIn[]): string {
 }
 
 /**
- * The open proposals this session has not been told of and holds a task
- * relying on, as one notice, or null. Never the proposer's own session.
- * Marks what it delivers as read, so each reaches each session once. Never
- * throws: a notice must not break the tool call it rides on.
+ * What this session should be told about spec proposals, as one text, or
+ * null: open proposals to pages its tasks rely on (never its own; B7.3),
+ * specs its tasks rely on that changed by an accepted proposal, and how its
+ * own proposals were decided (B7.4). Marks what it delivers as read, so each
+ * reaches each session once. Never throws: a notice must not break the tool
+ * call it rides on.
  */
 export function proposalNoticeFor(sessionId: string, agentType: string | null, now = Date.now()): string | null {
   try {
-    if (rows('SELECT 1 FROM plan_items WHERE assignee_session = ? LIMIT 1', [sessionId]).length === 0) return null;
-    const unread = rows(
+    const later = [specChangedNotice(sessionId, now), outcomeNotice(sessionId, now)].filter((x): x is string => !!x);
+    const holds = rows('SELECT 1 FROM plan_items WHERE assignee_session = ? LIMIT 1', [sessionId]).length > 0;
+    const unread = !holds ? [] : rows(
       `SELECT uid FROM spec_proposals s WHERE s.status = 'open' AND (s.session_id IS NULL OR s.session_id != ?)
          AND NOT EXISTS (SELECT 1 FROM spec_proposal_reads d WHERE d.proposal_uid = s.uid AND d.session_id = ?)
        ORDER BY s.created_at`,
@@ -314,9 +363,10 @@ export function proposalNoticeFor(sessionId: string, agentType: string | null, n
         [uid, sessionId, agentType, now],
       );
     }
-    if (told.length === 0) return null;
+    const notices = [...(told.length ? [[`── CodeTrellis: spec change proposed ──`, told.join('\n\n')].join('\n')] : []), ...later];
+    if (notices.length === 0) return null;
     markDirty();
-    return [`── CodeTrellis: spec change proposed ──`, told.join('\n\n')].join('\n');
+    return notices.join('\n\n');
   } catch (err) {
     console.warn('[Spec] proposal notice failed:', err instanceof Error ? err.message : err);
     return null;
@@ -387,4 +437,145 @@ export function replyToProposal(
     authorType: by.authorType,
   });
   return { impact, event };
+}
+
+// --- B7.4: the decision is a person's ----------------------------------------
+
+export type ProposalDecision = 'accept' | 'amend' | 'reject';
+
+export interface DecideInput {
+  uid: string;
+  decision: ProposalDecision;
+  /** The amended text, for amend: the page, or the section with its heading line. */
+  text?: string;
+  /** Why, in the person's words; the proposer reads it. */
+  note?: string;
+}
+
+/** The page as it would read with this text, or null when the section is no longer on it. */
+function pageWith(p: SpecProposal, text: string): string | null {
+  const page = getItem(p.pageUid);
+  if (!page) return null;
+  return withSectionText(page.body ?? '', p.section || null, text) ?? null;
+}
+
+/** Why a decision cannot be made, in a sentence; null when it can. */
+export function decisionProblem(input: DecideInput): string | null {
+  const p = getProposal(input.uid);
+  if (!p) return `No proposal ${input.uid}.`;
+  if (p.status !== 'open') return `The proposal to change ${where(p)} was already ${p.status}.`;
+  if (!['accept', 'amend', 'reject'].includes(input.decision)) return 'decision is accept, amend or reject.';
+  if (input.decision === 'amend' && !input.text?.trim()) return 'Amend needs the text as it should read.';
+  if (input.decision !== 'reject') {
+    if (!getItem(p.pageUid)) return 'The page no longer exists.';
+    const text = input.decision === 'amend' ? input.text! : p.proposedText;
+    if (pageWith(p, text) === null) return `"${p.pageTitle}" no longer has the heading "${p.section}". Reject this and ask for a new proposal.`;
+  }
+  return null;
+}
+
+export interface Decided {
+  proposal: SpecProposal;
+  /** The tasks flagged "spec changed", on accept. */
+  flagged: RelianceIn[];
+}
+
+/**
+ * Decide a proposal, as a person. Checked by `decisionProblem`. Accept and
+ * amend write the page's new version (author: the person; the change
+ * summary names the proposal), then flag every task relying on the page or
+ * section with a `spec_changed` plan event. Reject leaves the page.
+ * Either answers the inbox entry, so `await_decision` returns.
+ */
+export function decideProposal(input: DecideInput, by: { author: string; authorType: string }, now = Date.now()): Decided {
+  const p = getProposal(input.uid)!;
+  const note = input.note?.trim() || null;
+  const accept = input.decision !== 'reject';
+  const text = input.decision === 'amend' ? input.text! : p.proposedText;
+  let flagged: RelianceIn[] = [];
+  if (accept) {
+    updateItem(p.pageUid, {
+      body: pageWith(p, text)!,
+      changeSummary: `Accepted spec proposal ${p.uid.slice(0, 8)}${input.decision === 'amend' ? ', amended' : ''}: ${p.why}`,
+      author: by.author,
+      authorType: by.authorType,
+    } as never);
+    flagged = reliedOnBy(p.pageUid, p.section || undefined);
+    for (const t of flagged) {
+      getDb().run('INSERT OR IGNORE INTO spec_change_flags (item_uid, proposal_uid, created_at) VALUES (?, ?, ?)', [t.itemUid, p.uid, now]);
+      appendPlanEvent({
+        planUid: t.planUid,
+        itemUid: t.itemUid,
+        eventType: 'spec_changed',
+        afterState: { proposalUid: p.uid, pageUid: p.pageUid, section: p.section },
+        summary: `The spec "${t.title}" relies on changed: ${where(p)}`,
+        author: by.author,
+        authorType: by.authorType,
+        createdAt: now,
+      });
+    }
+  }
+  getDb().run(
+    `UPDATE spec_proposals SET status = ?, decided_at = ?, decided_by = ?, decided_by_type = ?, decision_note = ?, decided_text = ?
+     WHERE uid = ? AND status = 'open'`,
+    [accept ? 'accepted' : 'rejected', now, by.author, by.authorType, note, input.decision === 'amend' ? text : null, p.uid],
+  );
+  if (p.hitRef) {
+    answerHit({ ref: p.hitRef, decision: accept ? 'continue' : 'stop', note: note ?? (input.decision === 'amend' ? 'Accepted with changes.' : null), by: by.author, byType: by.authorType, now });
+    getDb().run(`UPDATE breakpoints SET cleared_at = ?, cleared_by = ?, cleared_by_type = ? WHERE kind = 'proposal' AND target = ? AND cleared_at IS NULL`, [now, by.author, by.authorType, p.uid]);
+  }
+  markDirty();
+  return { proposal: getProposal(p.uid)!, flagged };
+}
+
+/** A task's "spec changed" flags, newest first: which proposal, and whether its agent has been told. */
+export function specChangedFor(itemUid: string): Array<{ proposalUid: string; pageUid: string; pageTitle: string; section: string; sectionTitle: string | null; at: number; toldAt: number | null }> {
+  return rows('SELECT proposal_uid, created_at, read_at FROM spec_change_flags WHERE item_uid = ? ORDER BY created_at DESC', [itemUid])
+    .flatMap((r) => {
+      const p = getProposal(r[0] as string);
+      return p ? [{ proposalUid: p.uid, pageUid: p.pageUid, pageTitle: p.pageTitle, section: p.section, sectionTitle: p.sectionTitle, at: r[1] as number, toldAt: (r[2] as number | null) ?? null }] : [];
+    });
+}
+
+/** "Spec changed" notices for the tasks this session holds, marked told. */
+function specChangedNotice(sessionId: string, now: number): string | null {
+  const flags = rows(
+    `SELECT f.item_uid, f.proposal_uid, i.title FROM spec_change_flags f JOIN plan_items i ON i.uid = f.item_uid
+      WHERE f.read_at IS NULL AND i.assignee_session = ? ORDER BY f.created_at`,
+    [sessionId],
+  );
+  if (flags.length === 0) return null;
+  const parts = flags.map(([itemUid, proposalUid, title]) => {
+    getDb().run('UPDATE spec_change_flags SET read_at = ?, read_by_session = ? WHERE item_uid = ? AND proposal_uid = ?', [now, sessionId, itemUid, proposalUid]);
+    const p = getProposal(proposalUid as string);
+    if (!p) return null;
+    return [
+      `${where(p)} changed: a person accepted ${p.author}'s proposal${p.decidedText ? ', with changes' : ''}. Your task "${title as string}" relies on it.`,
+      ...(p.decisionNote ? [`Their note: ${p.decisionNote}`] : []),
+      'It now reads:',
+      ...quoted(p.decidedText ?? p.proposedText),
+      'Work to the new text; get_spec_links shows the page.',
+    ].join('\n');
+  }).filter((x): x is string => !!x);
+  return parts.length ? ['── CodeTrellis: spec changed ──', parts.join('\n\n')].join('\n') : null;
+}
+
+/** The proposing session told how its proposals were decided, once each. */
+function outcomeNotice(sessionId: string, now: number): string | null {
+  const decided = rows(
+    `SELECT uid FROM spec_proposals s WHERE s.session_id = ? AND s.status IN ('accepted', 'rejected')
+       AND NOT EXISTS (SELECT 1 FROM spec_proposal_outcome_reads o WHERE o.proposal_uid = s.uid AND o.session_id = ?)
+     ORDER BY s.decided_at`,
+    [sessionId, sessionId],
+  ).map((r) => r[0] as string);
+  if (decided.length === 0) return null;
+  const parts = decided.map((uid) => {
+    getDb().run('INSERT OR IGNORE INTO spec_proposal_outcome_reads (proposal_uid, session_id, read_at) VALUES (?, ?, ?)', [uid, sessionId, now]);
+    const p = getProposal(uid)!;
+    const note = p.decisionNote ? ` Their note: ${p.decisionNote}` : '';
+    return p.status === 'rejected'
+      ? `Your proposal to change ${where(p)} was not accepted.${note} The page is as it was; carry on with the spec as it is.`
+      : `Your proposal to change ${where(p)} was accepted${p.decidedText ? ', with changes' : ''}; the page has its new version.${note}`;
+  });
+  return ['── CodeTrellis: spec proposal decided ──', parts.join('\n')].join('\n');
 }

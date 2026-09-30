@@ -86,7 +86,8 @@ import * as taskAttachmentsService from './services/task-attachments-service';
 import * as planItemService from './services/plan-item-service';
 import { dependencyProblem } from './services/plan-dependencies';
 import { specRefProblem, setReliesOn, reliesOn, reliedOnBy, reliedOnWords, type SpecRef } from './services/spec-links-service';
-import { proposalProblem, proposeSpecChange, listProposals, getProposal, type ProposalStatus } from './services/spec-proposals-service';
+import { withdrawProposals } from './services/spec-proposal-withdraw';
+import { proposalProblem, proposeSpecChange, listProposals, getProposal, decisionProblem, decideProposal, specChangedFor, type ProposalStatus, type ProposalDecision } from './services/spec-proposals-service';
 import * as planEventService from './services/plan-event-service';
 import * as channelEventService from './services/channel-event-service';
 import { exportChannelEvent } from './services/channel-event-file-service';
@@ -2257,6 +2258,8 @@ export function deletePlanAsPerson(planUid: string, opts: { removeDisk?: boolean
   const plan = planService.getPlan(planUid);
   if (!plan) throw new PlanRequestError(404, 'Plan not found');
   planService.deletePlan(planUid);
+  // A proposal to a page in a deleted plan cannot be decided (B7.4).
+  if (withdrawProposals({ planUid }, 'The plan was deleted.')) { broadcast('spec-proposal-withdrawn', { planUid }); broadcast('breakpoints-changed', { planUid }); }
 
   // Also remove on-disk .codetrellis/plans/<slug>/ if the plan has a project path
   let diskRemoved = false;
@@ -2420,7 +2423,7 @@ app.get('/api/items/:uid/spec-links', (req, res) => {
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
   const section = typeof req.query.section === 'string' && req.query.section ? req.query.section : undefined;
   const by = item.kind === 'object' ? reliedOnBy(item.uid, section) : [];
-  res.json({ uid: item.uid, kind: item.kind, reliesOn: reliesOn(item.uid), reliedOnBy: by, words: reliedOnWords(by) });
+  res.json({ uid: item.uid, kind: item.kind, reliesOn: reliesOn(item.uid), reliedOnBy: by, words: reliedOnWords(by), specChanged: specChangedFor(item.uid) });
 });
 
 /** Set what a task relies on: `{ reliesOn: [{ page, section? }] }`, replacing the list. The author is how the call arrived. */
@@ -2478,6 +2481,29 @@ app.get('/api/spec-proposals/:uid', (req, res) => {
   const proposal = getProposal(req.params.uid);
   if (!proposal) { res.status(404).json({ error: 'No such proposal' }); return; }
   res.json(proposal);
+});
+
+/**
+ * A person decides a proposal (Phase 32 B7.4): `{ decision: "accept" | "amend" | "reject", text?, note? }`.
+ * Amend needs the text as it should read. The decider is how the call arrived; no MCP tool can do this.
+ */
+app.post('/api/spec-proposals/:uid/decision', (req, res) => {
+  const input = {
+    uid: req.params.uid,
+    decision: req.body?.decision as ProposalDecision,
+    text: typeof req.body?.text === 'string' ? req.body.text : undefined,
+    note: typeof req.body?.note === 'string' ? req.body.note : undefined,
+  };
+  if (!getProposal(input.uid)) { res.status(404).json({ error: 'No such proposal' }); return; }
+  const problem = decisionProblem(input);
+  if (problem) { res.status(problem.includes('already') ? 409 : 400).json({ error: problem }); return; }
+  const who = personFrom(req);
+  const { proposal, flagged } = decideProposal(input, { author: who.author, authorType: who.authorType });
+  broadcast('spec-proposal-decided', { uid: proposal.uid, status: proposal.status, pageUid: proposal.pageUid });
+  if (proposal.hitRef) broadcast('breakpoint-answered', { ref: proposal.hitRef, planUid: proposal.planUid, decision: proposal.status === 'rejected' ? 'stop' : 'continue' });
+  if (proposal.status === 'accepted') broadcast('plan-item-updated', { planUid: proposal.planUid, itemUid: proposal.pageUid, kind: 'object', changes: { body: true } });
+  saveNow(() => exportDatabase());
+  res.json({ proposal, flagged: flagged.map((t) => ({ itemUid: t.itemUid, title: t.title, planTitle: t.planTitle })) });
 });
 
 app.get('/api/items/:uid/workstream', (req, res) => {
@@ -2632,7 +2658,14 @@ app.post('/api/breakpoints', (req, res) => {
 app.delete('/api/breakpoints/:id', (req, res) => {
   const who = personFrom(req);
   const bp = getBreakpoint(req.params.id);
-  const { cleared, released } = clearBreakpoint({ id: req.params.id, by: who.author, byType: who.authorType });
+  let outcome: ReturnType<typeof clearBreakpoint>;
+  try {
+    outcome = clearBreakpoint({ id: req.params.id, by: who.author, byType: who.authorType });
+  } catch (err) {
+    if (err instanceof BreakpointError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+  const { cleared, released } = outcome;
   if (!cleared) { res.status(404).json({ error: 'No such breakpoint is set' }); return; }
   broadcast('breakpoints-changed', { planUid: bp?.planUid ?? null });
   res.json({ cleared: req.params.id, released: released.map((h) => h.ref) });
@@ -2658,6 +2691,7 @@ app.post('/api/breakpoint-hits/:ref/answer', (req, res) => {
   if (decision === 'steer' && !cleanNote(req.body?.note)) { res.status(400).json({ error: 'A steer needs a note for the agent' }); return; }
   const hit = getHit(req.params.ref);
   if (!hit) { res.status(404).json({ error: 'No such breakpoint hit' }); return; }
+  if (hit.kind === 'proposal') { res.status(400).json({ error: 'A spec proposal is decided on the proposal: accept, amend or reject (POST /api/spec-proposals/:uid/decision).' }); return; }
   const who = personFrom(req);
   const answered = hit.answeredAt === null
     ? answerHit({ ref: hit.ref, decision, note: req.body?.note, by: who.author, byType: who.authorType })

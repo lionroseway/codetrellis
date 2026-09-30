@@ -78,7 +78,8 @@ export async function handleBreakpointMethod(
 export function phoneWaiting(projectRoot: string | null): PhoneHit[] {
   if (projectRoot) { try { releaseSettled(projectRoot); } catch { /* the list still answers */ } }
   const workstreams = workstreamsOf(projectRoot);
-  return listHits({ state: 'waiting' }).map((h) => toPhoneHit(h, workstreams));
+  // A spec proposal (B7.4) is decided in the window for now; the phone gets it in B7.6.
+  return listHits({ state: 'waiting' }).filter((h) => h.kind !== 'proposal').map((h) => toPhoneHit(h, workstreams));
 }
 
 /** `{ hit }` once answered; `{ hit, alreadyAnswered: true }` with the answer that stood when someone answered first. */
@@ -94,6 +95,7 @@ function answer(params: Record<string, unknown>, peer: PeerContext, ctx: PhoneBr
   }
   const hit = getHit(ref);
   if (!hit) throw new Error('No such breakpoint hit');
+  if (hit.kind === 'proposal') throw new Error('A spec proposal is decided on the proposal: accept, amend or reject.');
   const workstreams = workstreamsOf(ctx.projectRoot);
   if (hit.answeredAt !== null) return { hit: toPhoneHit(hit, workstreams), alreadyAnswered: true };
   const answered = answerHit({ ref, decision, note: params.note, by: ctx.who.author, byType: ctx.who.authorType });

@@ -30,6 +30,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { withdrawProposals } from './spec-proposal-withdraw';
 import { getDb } from './database';
 import { markDirty } from './persistence';
 import { recordBodyEdit } from './agent-event-log';
@@ -1565,6 +1566,7 @@ export function deleteItem(uid: string, input: DeleteItemInput): string[] {
     // deleted page is relied on by nothing (see spec-links-service).
     const marks = deleted.map(() => '?').join(',');
     getDb().run(`DELETE FROM spec_links WHERE item_uid IN (${marks}) OR page_uid IN (${marks})`, [...deleted, ...deleted]);
+    withdrawProposals({ pageUids: deleted }, 'The page was deleted.');
     writeThrough(planUid);
   }
   return deleted;
