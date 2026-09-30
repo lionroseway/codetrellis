@@ -7,6 +7,7 @@
  */
 
 import { z } from 'zod';
+import { dependencyProblem } from '../../services/plan-dependencies';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { noteItemFocus } from '../../services/budget-service';
@@ -140,7 +141,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         file_specs: z.array(itemFileSpecSchema).optional(),
         new_connections: z.array(planItemEdgeSchema).optional(),
         removed_connections: z.array(planItemEdgeSchema).optional(),
-        dependencies: z.array(z.string()).optional().describe('Other Action uids that must complete first.'),
+        dependencies: z.array(z.string()).optional().describe('Uids of tasks (Actions) that must finish first — in this plan or any other. A page cannot be one.'),
         visibility: z.enum(['shared', 'local']).optional().describe(
           'Per-item sharing. `shared` (default) exports this item via git. `local` keeps it in the DB only.',
         ),
@@ -151,6 +152,10 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
     async (args, extra: any) => {
       const id = authorFromExtra(deps, extra);
+      // Phase 32 B6.1 — any plan's task may be a dependency; a uid that names
+      // nothing, or a page, would hold this item for ever.
+      const depProblem = args.dependencies?.length ? dependencyProblem(null, args.dependencies, deps.planItemService.getItem) : null;
+      if (depProblem) return { isError: true, content: [{ type: 'text' as const, text: depProblem }] };
       const item = deps.planItemService.createItem({
         planUid: args.plan_uid,
         kind: args.kind,
@@ -333,6 +338,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
     async (args, extra: any) => {
       const id = authorFromExtra(deps, extra);
+      const depProblem = args.dependencies?.length ? dependencyProblem(args.uid, args.dependencies, deps.planItemService.getItem) : null;
+      if (depProblem) return { isError: true, content: [{ type: 'text' as const, text: depProblem }] };
       const item = deps.planItemService.updateItem(args.uid, {
         title: args.title,
         body: args.body,
@@ -502,12 +509,16 @@ export function register(server: McpServer, deps: ToolDeps): void {
         }
       }
       deps.saveNow(() => deps.exportDatabase());
-      const message = result.conflicts
-        ? `Item claimed. WARNING: ${result.conflicts.join('; ')}`
+      const warnings = [
+        ...(result.conflicts ?? []),
+        ...(result.waitsOn ?? []).map((w) => `this task ${w}, which is not finished`),
+      ];
+      const message = warnings.length > 0
+        ? `Item claimed. WARNING: ${warnings.join('; ')}`
         : `Item ${args.uid} claimed.`;
       const criteria = item ? criteriaForAgent(deps, item.uid) : [];
       const skills = item ? skillsFor(deps, item) : { skills: [], skills_note: null };
-      return resultWithMeta({ ok: true, message, conflicts: result.conflicts ?? null, item, parent, children, attachments, comments, criteria, ...skills }, n);
+      return resultWithMeta({ ok: true, message, conflicts: result.conflicts ?? null, waits_on: result.waitsOn ?? null, item, parent, children, attachments, comments, criteria, ...skills }, n);
     },
   );
 
@@ -557,10 +568,13 @@ export function register(server: McpServer, deps: ToolDeps): void {
         };
       }
       if (!result.item) {
+        // Phase 32 B6.1 — say what the first held task waits on, and where:
+        // a wait on another plan's task is otherwise invisible from here.
+        const waiting = result.waiting ? ` ${result.waiting.reason}` : '';
         return {
           content: [{
             type: 'text' as const,
-            text: `No items available — all claimed, completed, or blocked by dependencies.${elsewhereNote ? ` ${elsewhereNote}` : ''}`,
+            text: `No items available — all claimed, completed, or blocked by dependencies.${waiting}${elsewhereNote ? ` ${elsewhereNote}` : ''}`,
           }],
         };
       }

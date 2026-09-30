@@ -408,8 +408,8 @@ edges.
 | \`update_item(uid, ...)\` | Update any field; auto-versioned |
 | \`move_item(uid, ...)\` | Re-parent and/or reorder |
 | \`delete_item(uid, cascade?)\` | Soft-delete with subtree snapshot for restore |
-| \`claim_item(uid, ...)\` | Atomically claim an Action; returns full context + file conflicts |
-| \`get_next_item(plan_uid, parent_uid?)\` | Next claimable Action respecting deps + approval gates |
+| \`claim_item(uid, ...)\` | Atomically claim an Action; returns full context, file conflicts, and \`waits_on\` when a dependency is not finished yet (the claim still goes through) |
+| \`get_next_item(plan_uid, parent_uid?)\` | Next claimable Action respecting deps + approval gates. A dependency may be a task in another plan; when nothing is ready it says what the first task waits on, and where |
 | \`assign_workstream(item_uid, workstream)\` | Which worktree a section is worked in (its branch, inherited below). Agents elsewhere are not offered its tasks and cannot claim them; \`get_next_item\` says how many were left out, and \`get_brief\` says where a task is worked |
 | \`get_brief(item_uid)\` | One read: the item, the guide, its materials, each criterion and what it still needs, any note sent back |
 | \`get_skill(name)\` | Load a project skill the task names (\`.claude/skills/<name>/SKILL.md\`) and follow it; reading it here shows the person the skill was used, whatever your client |

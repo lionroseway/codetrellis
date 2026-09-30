@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — A5.7: M5 done-when, and review in the docs |
-| **Status** | A5.1–A5.6 merged (#222–#224, #226, #228, #229). A5.7 in review: the M5 end-to-end test (three agents and a paired phone agree on the review, the PR body and the queue) and the docs |
-| **Next action** | Merge A5.7 when green, which closes A5 and M5; then B6 |
+| **Stage / step** | Wave 2 — B6.1: dependencies resolve across plans (bug 11) |
+| **Status** | A5 done: A5.1–A5.7 merged (#222–#224, #226, #228–#230), M5 met. B6 refined into seven parts (EXECUTION §5, "B6: Stack view"). B6.1 in review: one dependency rule across plans, waits said in words, the Next up strip links to another plan's task |
+| **Next action** | Merge B6.1 when green; then B6.2, the stack aggregate (`/api/stack`, `get_stack`) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-a5-7-m5-done-when` |
+| **Branch** | `feat/phase-32-b6-1-cross-plan-deps` |
 | **Last updated** | 2026-09-30 |
 
 ---
@@ -96,14 +96,14 @@
   - [x] A4.5a A way to see the phone's screens (#218)
   - [x] A4.5b The phone's new screens (Needs you, signal detail, workstreams, the push tap) (#220)
   - [x] A4.6 M4 done-when, end to end, and docs (#221)
-- [ ] A5 Review (the feature, M5), refined in EXECUTION §4:
+- [x] A5 Review (the feature, M5), refined in EXECUTION §4:
   - [x] A5.1 `commit:` sides get their dependency edges; the picker offers each line of work's branch (#222)
   - [x] A5.2 "Other work in flight" in `review_plan` and `get_pr_draft` (#223)
   - [x] A5.3 The opt-in "no open high signals" check (#224)
   - [x] A5.4 The review queue and `get_review_queue` (#226)
   - [x] A5.5 The Review tab (#228)
   - [x] A5.6 The queue on the phone (#229)
-  - [ ] A5.7 M5 done-when, end to end, and docs — in review
+  - [x] A5.7 M5 done-when, end to end, and docs (#230)
 - [ ] A6 The Brief
 - [ ] A7 Rules
 - [ ] Follow-up: `plan-by-hand` failed once in CI when its plan workspace
@@ -164,7 +164,14 @@
   - [x] B5.2 The state at a moment ([#210](https://github.com/lionroseway/codetrellis/pull/210))
   - [x] B5.3 One clock in the window ([#211](https://github.com/lionroseway/codetrellis/pull/211))
   - [x] B5.4 Catch-up, and `get_state_at` ([#213](https://github.com/lionroseway/codetrellis/pull/213))
-- [ ] B6 Stack view
+- [ ] B6 Stack view, refined in EXECUTION §5:
+  - [ ] B6.1 Dependencies resolve across plans (bug 11) — in review
+  - [ ] B6.2 The stack: `/api/stack` and `get_stack`
+  - [ ] B6.3 Overlap bands, declared and actual
+  - [ ] B6.4 The Stack tab
+  - [ ] B6.5 One clock
+  - [ ] B6.6 The stack on the phone
+  - [ ] B6.7 Done-when and docs
 - [ ] B7 Conferring
 - [ ] B8 Grounding
 - [ ] B9 Play-forward
@@ -298,6 +305,80 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-30: B6.1 — dependencies resolve across plans (bug 11)
+A task that depended on another plan's task was never offered, by
+`get_next_item` or by `/next-task`, whatever the other task's status. Both
+rules looked the dependency up in the task's own plan only, did not find it,
+and treated "not found" as "not done". The window's blocked count did the
+same from the one plan it had loaded, so the plan said "1 action waiting on
+something unfinished" for ever. A deleted task and a page held their
+dependants the same way, and nothing said why.
+- **One rule** (`src/backend/services/plan-dependencies.ts`, pure). A
+  dependency is met when its task is done or skipped, in any plan. Otherwise
+  it says why: `waits on "Migrate schema" in plan "Billing v2"`, `waits on an
+  item that no longer exists (…)`, or `depends on the page "…", which has no
+  status to finish`. `getNextItem` (MCP) and `nextPlanItem` (REST, the
+  window, the phone) both use it, so the two answers cannot drift apart.
+- **Said where it matters.**
+  - When nothing is ready, `get_next_item` names what the first held task
+    waits on, and where.
+  - `GET /api/plans/:uid/waits` lists every held task with its waits.
+  - The plan's Next up strip takes its blocked list from that route. When
+    nothing is ready, it lists each wait, and another plan's task is a link
+    that opens it.
+  - A claim on a waiting task still goes through: a person may start early
+    on purpose. `claim_item` returns `waits_on`, and its message warns.
+- **Refused on write.** REST (POST and PUT items) and MCP (`add_item`,
+  `update_item`) refuse a dependency that names nothing, the item itself, or
+  a page, because each could only hold its dependant for ever. Any plan's
+  task is allowed. Bulk creation and plan-file import are not checked,
+  because they may name items they are about to create; the waits say what
+  is wrong there instead.
+- **The guide.** `claim_item` and `get_next_item` rows say so.
+- **Found on the way.** `openPlan` in the browser helpers pressed Escape to
+  close an open workspace, and Escape is ignored while a text field has
+  focus. A task with an empty body opens with its editor focused, so the
+  helper now lets go of focus first.
+- **Tests.**
+  - Unit: `plan-dependencies.test.ts` (4).
+  - Harness: `tests/e2e/cross-plan-dependencies.test.ts` (5). Its "offered
+    once done" test fails on the old backend: `next-task` still answered
+    nothing after the other plan's task was done.
+  - Browser: `e2e/plan/cross-plan-waits.spec.ts`, with screenshots
+    `cross-plan-waits`, `cross-plan-wait-opened` and
+    `cross-plan-wait-cleared`.
+- **Limit.** The strip re-asks when this plan's items change. A dependency
+  finished in another plan shows the next time the plan is opened, or when
+  anything here changes. B6.2's stack is live across plans.
+
+### 2026-09-30: B6 refined
+*What exists.* Plans are a flat list, and items a tree for one plan at a
+time. Dependencies are a JSON list of uids on each item, written unchecked
+by REST, MCP, plan files and templates. They are read only by the blocked
+count and the readiness ring's cycle check, both within one plan, and by the
+two "what is next" rules, which stopped at the plan boundary (bug 11).
+Overlap signals (`computeSignals`) are keyed by workstream root. The review
+queue already maps plan → branch → root → signals, replay's `stateAt`
+already lists every plan's tasks, and "Show on graph" already focuses the
+graph on a path.
+
+*What is missing.* A view of several plans at once, a multi-plan aggregate,
+overlaps between plans, drawn dependencies, selection across the stack and
+the graph, the stack at a past moment, and the phone's summary.
+
+*The parts.* Seven, in EXECUTION §5 "B6: Stack view": cross-plan
+dependencies (B6.1), the aggregate (B6.2), overlap bands (B6.3), the Stack
+tab (B6.4), one clock (B6.5), the phone (B6.6), and done-when with docs
+(B6.7).
+
+*Decided.*
+- Rows are plans, labelled by ticket key when there is one. This is JOURNEYS
+  H1's open question, and the mockup in OBSERVABILITY §5 shows plan rows by
+  key.
+- "Active" means not completed or archived, the review queue's rule.
+- The stack covers the one held project, and refuses another, as B5.1 does.
+- Bug 11 is fixed first (B6.1): every later part draws or counts
+  dependencies, and would otherwise draw a wait that never ends.
 ### 2026-09-29: A5.7 — M5 done-when, and the docs
 **M5 is met.** Review knows what else is in flight.
 

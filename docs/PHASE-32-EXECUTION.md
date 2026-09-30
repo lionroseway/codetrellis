@@ -290,7 +290,7 @@ Each gets its own regression test (from CURRENT-STATE):
 | 8 remote-interaction relay unwired | not a defect: desktop-to-desktop relay, out of scope for Phase 32 |
 | 9 scan baseline lost on restart | 0.6 (fixed) |
 | 10 spec body edits leave no event | B1 (event log) |
-| 11 cross-plan dependencies never resolve | B6 |
+| 11 cross-plan dependencies never resolve | B6.1 (fixed) |
 | 12 CI lint step disabled on a stale premise | 0.3 (fixed) |
 | 13 auto-progress ignored V2 Actions | 0.3b (fixed) |
 | 14 skipped test's coverage claim was false | 0.3b (fixed) |
@@ -546,6 +546,34 @@ reads "2 workstreams: ＋12 −3, ＋4".
 | B5.2 | The state at a moment: `GET /api/replay/state?project&at` answers the graph of the frame at or before `at` (with what differs from now), each item's status, the breakpoint hits waiting and the signals open at `at` (each opening of a signal kept from here as a span, so a reopened signal keeps its earlier ones); the lanes up to it are `/api/agent-events?before=` | harness: states at three moments of one scripted run, each matching what the window showed live |
 | B5.3 | One clock in the window: a replay store holds the cursor; the transport bar drives the Timeline cursor, the graph (frames step, never animate), the plan list's statuses and the inbox. The chrome says "Replaying 10:02 → 12:04" with a way back to live; live events keep arriving underneath | browser, with screenshots: step, play, back to live |
 | B5.4 | Catch-up: the window remembers when the person last looked; the digest (C1) offers "Watch at 4×" from there to now. Any MCP client gets the same moment with `get_state_at` | browser: G1 end to end; harness: the MCP tool |
+
+### B6: Stack view
+
+Refined 2026-09-30 (log entry "B6 refined"). No view shows several plans
+together: plans are a flat list and items a tree for one plan at a time.
+Dependencies are never drawn, and they stop at the plan boundary: both
+"what is next" rules looked a dependency up in the item's own plan, so one
+on another plan's task was never found and its dependant never offered
+(bug 11). Overlap signals are keyed by workstream, not plan. The review
+queue already maps plan → branch → workstream → signals, and replay's
+`stateAt` already lists every plan's tasks.
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| B6.1 | Dependencies resolve across plans (bug 11): one rule (`plan-dependencies.ts`) behind `get_next_item`, `/next-task` (the window and the phone) and the claim; a dependency is met when its task is done or skipped, wherever it is; a held task says what it waits on and where ("waits on 'Migrate schema' in plan 'Billing v2'"), and so does `get_next_item` when nothing is ready; `GET /api/plans/:uid/waits`; the plan's Next up strip lists each wait, with another plan's task as a link to it; a claim on a waiting task goes through and says what it waits on; REST and MCP refuse a dependency that names nothing, the item itself or a page | unit (the rule); harness (waits, then offered by every door once done; the claim warning; refusals); browser, with screenshots: the wait, the link, Next up once done |
+| B6.2 | The stack: `GET /api/stack?project` and a read-only `get_stack` MCP tool (its own `TOOL_CAPABILITIES` row), for the one held project: every plan not completed or archived, labelled with its ticket key when it has one, with progress and what waits on a person; its tasks with status, assignee, workstream and dependencies resolved across plans (B6.1) | unit; harness (two plans, a cross-plan dependency, a ticket key; another held project refused, as B5.1) |
+| B6.3 | Overlap bands: two plans touch the same files or functions, declared (their tasks' file and symbol specs) or actual (open collision and contract signals, mapped from workstream to plan the way the review queue maps them), in words: "⚠ overlaps JIRA-150", the plan title when there is no key | unit (declared and actual, the words); harness (a declared overlap, then an actual one from two worktrees) |
+| B6.4 | The Stack tab beside Plans: one row per plan, tasks nested with who is on each and in which workstream, overlap bands, dependencies drawn with their words, including across plans ("waits ↑", "waits on '…' in …"); selecting a row puts that plan's footprint on the graph and filters the Timeline to its work (one selection) | browser, with screenshots: the stack, a band, a cross-plan dependency, a selected row |
+| B6.5 | One clock: the stack follows the replay cursor and shows what was in flight then (`stateAt` gains each task's assignee, workstream and dependencies) | harness (the state at a moment); browser (the stack at a past moment) |
+| B6.6 | The stack on the phone, summarised: plans with progress and "⚠ overlaps" in words; `stack.summary` RPC with a `read` row; a screen reached from Plans | harness (the phone's stack equals REST); phone spec with screenshots |
+| B6.7 | Done-when and docs: H1 end to end (two agents in two plans, a cross-plan dependency, an overlap) seen the same by the window, an MCP client and the phone; `docs/claude/awareness.md` and the guides | harness end to end |
+
+**Journey (H1).** The person opens the Stack tab and sees every plan in the
+project at once, by ticket key: who is on what, in which worktree, and
+"⚠ overlaps JIRA-150" where two plans meet. A task waiting on another plan
+says so and leads there. Selecting a plan shows its footprint on the graph
+and its work in the Timeline; moving the clock back shows what was in
+flight then.
 
 ## 6. Track C: shared ways of working
 

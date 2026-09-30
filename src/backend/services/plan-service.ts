@@ -720,15 +720,14 @@ export function getNextTask(planUid: string, phaseUid?: string | null): Task | P
  * the new model.
  */
 function nextPlanItem(items: PlanItem[], parentUid?: string | null): PlanItem | null {
-  const done = new Set(
-    items.filter((i) => i.status === 'done' || i.status === 'skipped').map((i) => i.uid),
-  );
-
+  // The same dependency rule as `get_next_item`, so the two answers agree:
+  // a dependency in another plan counts once it is done there (bug 11).
+  const local = new Map(items.map((i) => [i.uid, i]));
   for (const item of items) {
     if (item.kind !== 'action') continue;
     if (item.status !== 'pending') continue;
     if (parentUid !== undefined && item.parentUid !== parentUid) continue;
-    if ((item.dependencies ?? []).every((d) => done.has(d))) return item;
+    if (planItemService.dependencyStateOf(item, local).met) return item;
   }
   return null;
 }
