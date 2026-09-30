@@ -91,6 +91,7 @@ import {
   replyToSignalAsPerson,
 } from '../server';
 import { handleBreakpointMethod } from './mobile-breakpoints';
+import { handleProposalMethod } from './mobile-proposals';
 import { handleAwarenessMethod } from './mobile-awareness';
 import { handleWorkstreamMethod } from './mobile-workstreams';
 import { isTaskStatus, TASK_STATUSES } from '../../shared/lib/plan-vocab';
@@ -451,6 +452,16 @@ async function routeMethod(
     case 'breakpoint.waiting':
     case 'breakpoint.answer':
       return handleBreakpointMethod(method, params, {
+        fingerprint,
+        send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
+        broadcast,
+      }, { who: phonePerson(), projectRoot: getActiveProjectPath() });
+
+    // --- A proposed spec change, decided from the phone (B7.6) --------------
+    case 'proposal.list':
+    case 'proposal.get':
+    case 'proposal.decide':
+      return handleProposalMethod(method, params, {
         fingerprint,
         send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
         broadcast,

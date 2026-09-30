@@ -1,7 +1,7 @@
 /**
  * Phase 32 B7.5a — a guarded page others rely on, in the inbox (JOURNEYS I1).
  *
- * The person guards "Invoice format" with a spec breakpoint and a note. An
+ * The person guards "Receipt format" with a spec breakpoint and a note. An
  * agent tries to edit it directly and is held; "Waiting on you" says two
  * tasks in two plans rely on the page and that the agent was told to propose
  * instead. The agent proposes: the proposal's card shows the person's note on
@@ -14,7 +14,7 @@ import { API, authHeaders, cleanupPlans, gotoWithProject, seedPlan } from '../he
 import { createMcpClient } from '../helpers/mcp-client';
 
 const OUT = path.join('test-results', 'ux-audit');
-const BODY = '# Invoice format\n\nAn invoice is JSON.\n\n## Fields\n\n- amount\n';
+const BODY = '# Receipt format\n\nA receipt is JSON.\n\n## Fields\n\n- amount\n';
 const NOTE = 'Invoices go to the tax office; ask me first.';
 
 async function shot(target: Page | ReturnType<Page['getByTestId']>, name: string) {
@@ -29,7 +29,7 @@ test.describe('A guarded page others rely on', () => {
 
   test('a held direct edit says who relies on the page; the proposal shows the note', async ({ page, request }) => {
     const spec = await seedPlan(request, { title: 'E2E Held edit Invoicing' });
-    const made = await request.post(`${API}/plans/${spec.uid}/items`, { headers: authHeaders(), data: { kind: 'object', title: 'Invoice format', body: BODY } });
+    const made = await request.post(`${API}/plans/${spec.uid}/items`, { headers: authHeaders(), data: { kind: 'object', title: 'Receipt format', body: BODY } });
     const pageUid = ((await made.json()) as { uid: string }).uid;
     const checkout = await seedPlan(request, { title: 'E2E Held edit Checkout', actions: [{ title: 'Show totals' }] });
     const exports = await seedPlan(request, { title: 'E2E Held edit Exports', actions: [{ title: 'Export invoices' }] });
@@ -53,14 +53,14 @@ test.describe('A guarded page others rely on', () => {
       await expect(page.getByRole('button', { name: /^Awareness \d+$/ })).toBeVisible({ timeout: 15_000 });
       await tab.click();
       await tab.locator('..').getByRole('button', { name: 'Expand panel' }).click();
-      const card = page.getByTestId('breakpoint-waiting').filter({ hasText: 'Invoice format' });
+      const card = page.getByTestId('breakpoint-waiting').filter({ hasText: 'Receipt format' });
       await expect(card).toBeVisible({ timeout: 10_000 });
       await expect(card.getByTestId('breakpoint-why')).toContainText('2 tasks in 2 plans rely on this page; the agent was told a proposal would let their agents weigh in.');
       await expect(card).toContainText(NOTE);
       await shot(card, 'spec-held-edit');
 
       await agent.callTool('propose_spec_change', { page_uid: pageUid, section: 'fields', text: '## Fields\n\n- amount\n- currency', why: 'Amounts are ambiguous for EU customers.' });
-      const proposal = page.getByTestId('proposal-waiting').filter({ hasText: 'Invoice format' });
+      const proposal = page.getByTestId('proposal-waiting').filter({ hasText: 'Receipt format' });
       await expect(proposal).toBeVisible({ timeout: 10_000 });
       await expect(proposal.getByTestId('proposal-guard')).toContainText(`You guard this page with a breakpoint: “${NOTE}”`);
       await shot(proposal, 'spec-proposal-guarded');

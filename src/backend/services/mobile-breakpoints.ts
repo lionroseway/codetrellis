@@ -37,6 +37,11 @@ export interface PhoneHit {
   labels: Record<BreakpointDecision, string>;
   /** The person's own note on the breakpoint, when they left one. */
   breakpointNote: string | null;
+  /**
+   * A proposed spec change (B7.6): decided with `proposal.decide`, not
+   * answered like a held call. `proposal.get` has what it would change.
+   */
+  proposalUid: string | null;
   agent: string | null;
   planUid: string | null;
   itemUid: string | null;
@@ -78,8 +83,8 @@ export async function handleBreakpointMethod(
 export function phoneWaiting(projectRoot: string | null): PhoneHit[] {
   if (projectRoot) { try { releaseSettled(projectRoot); } catch { /* the list still answers */ } }
   const workstreams = workstreamsOf(projectRoot);
-  // A spec proposal (B7.4) is decided in the window for now; the phone gets it in B7.6.
-  return listHits({ state: 'waiting' }).filter((h) => h.kind !== 'proposal').map((h) => toPhoneHit(h, workstreams));
+  // A spec proposal (B7.4) is listed too, and decided with proposal.decide (B7.6).
+  return listHits({ state: 'waiting' }).map((h) => toPhoneHit(h, workstreams));
 }
 
 /** `{ hit }` once answered; `{ hit, alreadyAnswered: true }` with the answer that stood when someone answered first. */
@@ -95,7 +100,7 @@ function answer(params: Record<string, unknown>, peer: PeerContext, ctx: PhoneBr
   }
   const hit = getHit(ref);
   if (!hit) throw new Error('No such breakpoint hit');
-  if (hit.kind === 'proposal') throw new Error('A spec proposal is decided on the proposal: accept, amend or reject.');
+  if (hit.kind === 'proposal') throw new Error('A spec proposal is decided on the proposal: accept or reject it (proposal.decide).');
   const workstreams = workstreamsOf(ctx.projectRoot);
   if (hit.answeredAt !== null) return { hit: toPhoneHit(hit, workstreams), alreadyAnswered: true };
   const answered = answerHit({ ref, decision, note: params.note, by: ctx.who.author, byType: ctx.who.authorType });
@@ -121,6 +126,7 @@ export function toPhoneHit(hit: BreakpointHit, workstreams: readonly Workstream[
     why: hitWhy(hit),
     labels: decisionLabels(hit),
     breakpointNote: hit.breakpointNote,
+    proposalUid: hit.kind === 'proposal' ? hit.breakpointTarget : null,
     agent: hit.agent,
     planUid: hit.planUid,
     itemUid: hit.itemUid,

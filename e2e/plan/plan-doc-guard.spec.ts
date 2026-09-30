@@ -2,7 +2,7 @@
  * Phase 32 B7.5b — a guarded plan document changed on disk, in the inbox
  * (JOURNEYS I1).
  *
- * A legacy plan's "Invoice format" document is guarded with a spec
+ * A legacy plan's "Credit note format" document is guarded with a spec
  * breakpoint. Its file is edited on disk: "Waiting on you" says it changed
  * on disk, shows the app's version (kept) beside the file's, and offers
  * "Apply the file" or "Keep the app's version", with no note for an agent
@@ -14,7 +14,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { API, PROJECT_PATH, authHeaders, cleanupPlans, gotoWithProject } from '../helpers/setup';
 
 const OUT = path.join('test-results', 'ux-audit');
-const BODY = '# Invoice format\n\nAn invoice is JSON.\n\n## Fields\n\n- amount\n';
+const BODY = '# Credit note format\n\nA credit note is JSON.\n\n## Fields\n\n- amount\n';
 const NOTE = 'Invoices go to the tax office; ask me first.';
 
 async function shot(target: Page | ReturnType<Page['getByTestId']>, name: string) {
@@ -29,7 +29,7 @@ test.describe('A guarded plan document', () => {
 
   test('changed on disk: held in the inbox with both versions; applying it takes the file\'s', async ({ page, request }) => {
     const plan = (await (await request.post(`${API}/plans`, { headers: authHeaders(), data: { title: 'E2E Disk guard Invoicing', projectPath: PROJECT_PATH } })).json()) as { uid: string };
-    const doc = (await (await request.post(`${API}/plans/${plan.uid}/docs`, { headers: authHeaders(), data: { docType: 'custom', title: 'Invoice format', body: BODY } })).json()) as { uid: string };
+    const doc = (await (await request.post(`${API}/plans/${plan.uid}/docs`, { headers: authHeaders(), data: { docType: 'custom', title: 'Credit note format', body: BODY } })).json()) as { uid: string };
     const exported = (await (await request.post(`${API}/plans/${plan.uid}/export?path=${encodeURIComponent(PROJECT_PATH)}`, { headers: authHeaders() })).json()) as { files: string[] };
     const file = exported.files.find((f) => f.includes(`${path.sep}docs${path.sep}`) && fs.readFileSync(f, 'utf-8').includes(`uid: ${doc.uid}`))!;
     // Linking schedules one more export of the plan; let it land before editing.
@@ -51,9 +51,9 @@ test.describe('A guarded plan document', () => {
       await expect(page.getByRole('button', { name: /^Awareness \d+$/ })).toBeVisible({ timeout: 15_000 });
       await tab.click();
       await tab.locator('..').getByRole('button', { name: 'Expand panel' }).click();
-      const card = page.getByTestId('breakpoint-waiting').filter({ hasText: 'changed on disk' });
+      const card = page.getByTestId('breakpoint-waiting').filter({ hasText: 'Credit note format' });
       await expect(card).toBeVisible({ timeout: 10_000 });
-      await expect(card).toContainText('“Invoice format” changed on disk');
+      await expect(card).toContainText('“Credit note format” changed on disk');
       await expect(card.getByTestId('breakpoint-why')).toContainText('the app kept its own version until you decide');
       await expect(card).toContainText(NOTE);
       const diff = card.getByTestId('disk-change');

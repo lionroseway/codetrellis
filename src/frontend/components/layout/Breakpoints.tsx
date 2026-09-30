@@ -8,6 +8,7 @@ import { useProjectStore } from '../../stores/project-store';
 import { useToastStore } from '../../stores/toast-store';
 import { ago, sideLabel } from '../../lib/awareness-view';
 import { hitHeadline, hitWhy, decisionLabels, breakpointLabel, agentName, changedLines } from '../../lib/breakpoint-view';
+import { proposalWhere, evidenceWords, repliesLine, impactLabel, impactWho } from '@shared/lib/proposal-words';
 import { SIGNAL_BREAK_KINDS, type BreakpointHit, type BreakpointDecision } from '@shared/types';
 
 /**
@@ -234,15 +235,8 @@ function ProposalCard({ hit, now, replayed = false }: { hit: BreakpointHit; now:
     }
   };
 
-  const where = p ? `${p.section ? `§ ${p.sectionTitle ?? p.section} of ` : ''}“${p.pageTitle}”` : `“${hit.itemTitle ?? 'a spec page'}”`;
-  const ev = p ? [
-    p.evidence.tests?.length ? `tests ${p.evidence.tests.join(', ')}` : null,
-    p.evidence.files?.length ? `files ${p.evidence.files.join(', ')}` : null,
-    p.evidence.commits?.length ? `commits ${p.evidence.commits.join(', ')}` : null,
-    p.evidence.note ?? null,
-  ].filter(Boolean).join('; ') : '';
-  const replies = p?.impacts.length ?? 0;
-  const relying = p?.affected.length ?? 0;
+  const where = p ? proposalWhere(p) : `“${hit.itemTitle ?? 'a spec page'}”`;
+  const ev = p ? evidenceWords(p.evidence) : '';
   return (
     <div data-testid="proposal-waiting" data-ref={hit.ref} data-proposal={uid ?? ''}
       className="rounded-md border border-border-subtle border-l-2 border-l-violet-400/70 bg-surface/40 px-2.5 py-2">
@@ -277,14 +271,14 @@ function ProposalCard({ hit, now, replayed = false }: { hit: BreakpointHit; now:
       {p && (
         <div className="mt-1 text-[10px]" data-testid="proposal-impacts">
           <div className="text-foreground-muted">
-            {relying ? `${p.affectedWords}. ${replies} of ${relying} replied.` : 'Nothing relies on this page yet.'}
+            {repliesLine(p)}
           </div>
           {p.impacts.map((i) => (
             <div key={i.id} className="flex flex-wrap gap-x-1.5 pl-2" data-testid="proposal-impact">
               <span className={`shrink-0 whitespace-nowrap ${i.impact === 'changes' ? 'text-amber-300' : 'text-emerald-300'}`}>
-                {i.impact === 'changes' ? `Changes${i.tasks !== null ? ` ${i.tasks} ${i.tasks === 1 ? 'task' : 'tasks'}` : ''}` : 'No impact'}
+                {impactLabel(i)}
               </span>
-              <span className="shrink-0 whitespace-nowrap text-foreground-muted">{i.itemTitle ? `${i.itemTitle}${i.planTitle ? ` (${i.planTitle})` : ''}` : i.author}</span>
+              <span className="shrink-0 whitespace-nowrap text-foreground-muted">{impactWho(i)}</span>
               {i.words && <span className="text-foreground">— {i.words}</span>}
             </div>
           ))}

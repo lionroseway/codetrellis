@@ -22,6 +22,8 @@ export interface PhoneHit {
   labels: Record<BreakpointDecision, string>;
   /** The person's own note on the breakpoint, when they left one. */
   breakpointNote: string | null;
+  /** A proposed spec change (B7.6): decided with `decideProposal`, not answered like a held call. */
+  proposalUid: string | null;
   agent: string | null;
   planUid: string | null;
   itemUid: string | null;

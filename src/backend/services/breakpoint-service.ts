@@ -394,14 +394,11 @@ export function getHit(ref: string): BreakpointHit | null {
 }
 
 /**
- * How many held calls are waiting for a person: the phone's live count (B4.4).
- * Not spec proposals (B7.4), which the phone's list does not show until B7.6.
+ * How many held calls are waiting for a person: the phone's live count (B4.4),
+ * spec proposals included, as its list shows them (B7.6).
  */
 export function countWaitingHits(): number {
-  return Number(rowsOf<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM breakpoint_hits h LEFT JOIN breakpoints b ON b.id = h.breakpoint_id
-      WHERE h.answered_at IS NULL AND (b.kind IS NULL OR b.kind != 'proposal')`,
-  )[0]?.n ?? 0);
+  return Number(rowsOf<{ n: number }>('SELECT COUNT(*) AS n FROM breakpoint_hits h WHERE h.answered_at IS NULL')[0]?.n ?? 0);
 }
 
 /** Hits, oldest first: those still waiting for a person, or every one (newest 200). */

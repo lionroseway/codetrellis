@@ -7,6 +7,10 @@
  * breach says what happened instead: it could not be paused, and the agent
  * was told to stop and wait.
  *
+ * A proposed spec change (B7.6) waits here too: what would change and why,
+ * the text now and proposed, what every relying plan replied, and Accept or
+ * Reject, with a note for the proposer. Amending is done in the window.
+ *
  * Oldest first, as they happened. The list re-reads when the screen comes
  * into view and when the desktop's live count of held calls moves, so an
  * answer given on the desktop drops a card here too.
@@ -27,6 +31,7 @@ import {
 import { useFocusEffect } from 'expo-router';
 import { useWaitingBreakpointCount } from '../lib/store';
 import { answerBreakpoint, heldFor, listWaitingBreakpoints, type BreakpointDecision, type PhoneHit } from '../lib/breakpoints';
+import { decideProposal, getProposal, type PhoneProposal, type ProposalDecision } from '../lib/proposals';
 
 export default function BreakpointsScreen() {
   const count = useWaitingBreakpointCount();
@@ -81,7 +86,9 @@ export default function BreakpointsScreen() {
           </View>
         )
       }
-      renderItem={({ item }) => <HeldCard hit={item} onAnswered={load} />}
+      renderItem={({ item }) => (item.proposalUid
+        ? <ProposalCard hit={item} uid={item.proposalUid} onDecided={load} />
+        : <HeldCard hit={item} onAnswered={load} />)}
     />
   );
 }
@@ -166,6 +173,95 @@ function HeldCard({ hit, onAnswered }: { hit: PhoneHit; onAnswered: () => void }
   );
 }
 
+/** A proposed spec change, decided here as the person: accept or reject. */
+function ProposalCard({ hit, uid, onDecided }: { hit: PhoneHit; uid: string; onDecided: () => void }) {
+  const [p, setP] = useState<PhoneProposal | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState<ProposalDecision | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    getProposal(uid)
+      .then((got) => { if (live) setP(got); })
+      .catch((err: unknown) => { if (live) setLoadError(err instanceof Error ? err.message : String(err)); });
+    return () => { live = false; };
+  }, [uid]);
+
+  const send = async (decision: ProposalDecision) => {
+    setBusy(decision);
+    try {
+      const r = await decideProposal(uid, decision, note.trim() || undefined);
+      if (r.alreadyDecided) {
+        Alert.alert('Already decided', `Someone decided first: ${r.proposal.status}${r.proposal.decisionNote ? ` — “${r.proposal.decisionNote}”` : ''}.`);
+      }
+      onDecided();
+    } catch (err: unknown) {
+      Alert.alert('Not decided', err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const reject = () => {
+    Alert.alert('Reject this change?', 'The page stays as it is; the proposer is told, with your note.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Reject', style: 'destructive', onPress: () => { void send('reject'); } },
+    ]);
+  };
+
+  const colour = '#a78bfa';
+  return (
+    <View style={[styles.card, { borderLeftColor: colour }]} testID="proposal-card">
+      <View style={styles.row}>
+        <Text style={[styles.kind, { color: colour }]}>Spec change</Text>
+        <Text style={styles.age}>{heldFor(hit.hitAt)}</Text>
+      </View>
+      <Text style={styles.headline}>{p?.headline ?? hit.headline}</Text>
+      {p ? (<>
+        <Text style={styles.why}>Why: {p.why}</Text>
+        {!!p.evidence && <Text style={styles.subtle}>Evidence: {p.evidence}</Text>}
+        {p.guarded && <Text style={styles.quote}>{p.guardNote ? `You guard this page: “${p.guardNote}”` : 'You guard this page with a breakpoint.'}</Text>}
+        <Text style={styles.label}>NOW</Text>
+        <Text style={styles.textNow}>{p.before.replace(/\n+$/, '') || '(empty)'}</Text>
+        <Text style={styles.label}>PROPOSED</Text>
+        <Text style={styles.textProposed}>{p.proposed.replace(/\n+$/, '')}</Text>
+        <Text style={styles.replies}>{p.replies}</Text>
+        {p.impacts.map((i, n) => (
+          <Text key={n} style={styles.impact}>
+            <Text style={{ color: i.impact === 'changes' ? '#fcd34d' : '#6ee7b7' }}>{i.label}</Text>
+            <Text style={styles.subtle}>{`  ${i.who}`}</Text>
+            {!!i.words && <Text style={styles.impactWords}>{` — ${i.words}`}</Text>}
+          </Text>
+        ))}
+        {p.pageChangedSince && <Text style={styles.warn}>The page has changed since this was proposed.</Text>}
+        <TextInput
+          style={[styles.noteInput, { marginTop: 12, minHeight: 44 }]}
+          value={note}
+          onChangeText={setNote}
+          placeholder="A note for the proposer (optional)"
+          placeholderTextColor="#52525b"
+          multiline
+          accessibilityLabel="A note for the proposer"
+        />
+        <View style={styles.buttons}>
+          <TouchableOpacity style={[styles.primary, busy && styles.disabled]} disabled={busy !== null} onPress={() => { void send('accept'); }}>
+            <Text style={styles.primaryText}>{busy === 'accept' ? 'Sending…' : 'Accept'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.danger, busy && styles.disabled]} disabled={busy !== null} onPress={reject}>
+            <Text style={styles.dangerText}>{busy === 'reject' ? 'Sending…' : 'Reject'}</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.subtle}>To change the text before accepting, amend it in the window.</Text>
+      </>) : loadError ? (
+        <Text style={styles.error}>{loadError}</Text>
+      ) : (
+        <ActivityIndicator color="#a78bfa" style={{ marginTop: 10 }} />
+      )}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#09090b' },
   content: { padding: 16, paddingBottom: 40, flexGrow: 1 },
@@ -181,6 +277,14 @@ const styles = StyleSheet.create({
   headline: { color: '#fafafa', fontSize: 15, fontWeight: '600', lineHeight: 21, marginTop: 6 },
   why: { color: '#a1a1aa', fontSize: 13, lineHeight: 19, marginTop: 6 },
   quote: { color: '#d4d4d8', fontSize: 13, fontStyle: 'italic', marginTop: 6 },
+  subtle: { color: '#71717a', fontSize: 12, lineHeight: 17, marginTop: 4 },
+  label: { color: '#52525b', fontSize: 10, fontWeight: '700', letterSpacing: 0.8, marginTop: 10 },
+  textNow: { color: '#a1a1aa', fontSize: 12, fontFamily: 'monospace', backgroundColor: '#09090b', borderRadius: 6, padding: 8, marginTop: 4 },
+  textProposed: { color: '#fafafa', fontSize: 12, fontFamily: 'monospace', backgroundColor: '#a78bfa14', borderRadius: 6, padding: 8, marginTop: 4 },
+  replies: { color: '#a1a1aa', fontSize: 12, marginTop: 10 },
+  impact: { fontSize: 12, lineHeight: 18, marginTop: 4 },
+  impactWords: { color: '#e4e4e7' },
+  warn: { color: '#fcd34d', fontSize: 12, marginTop: 6 },
   buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   primary: { backgroundColor: '#3b82f6', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9 },
   primaryText: { color: '#fff', fontSize: 13, fontWeight: '700' },

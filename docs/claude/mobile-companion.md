@@ -98,6 +98,15 @@ An agent held at a breakpoint the person set is answered from the phone as it is
   - `breakpoint.answer` (write) sends continue, steer (with a note the agent reads) or stop. It also needs a pairing confirmed on the desktop, because the answer is recorded as the person's. It is audited against the device, and the desktop is told.
   The first answer stands wherever it was given. A late answer from the phone gets back the answer that stood, marked `alreadyAnswered`.
   The desktop half is `src/backend/services/mobile-breakpoints.ts`.
+- **A proposed spec change (B7.6)** waits in the same list and counts in `waitingBreakpoints`. Its hit carries `proposalUid`, and the screen shows a proposal card instead of the three answers:
+  - who proposes what and why, the evidence, the note on the page's spec breakpoint if the person guards it;
+  - the text now and proposed;
+  - what every relying plan replied ("Changes 1 task — …", "No impact").
+  The words are the desktop's own, from `src/shared/lib/proposal-words.ts`. `mobile/lib/proposals.ts` wraps three RPCs:
+  - `proposal.list` (read): open proposals in the opened project, oldest first;
+  - `proposal.get` (read): one proposal, any status;
+  - `proposal.decide` (write): accept or reject, with a note for the proposer. Like an answer, it needs a pairing confirmed on the desktop, is audited, and is recorded as the person's. Amending needs the text edited, so it is done in the window. A late decision gets back the one that stood, marked `alreadyDecided`.
+  `breakpoint.answer` refuses a proposal: it is decided on the proposal, never answered like a held call. The desktop half is `src/backend/services/mobile-proposals.ts`.
 
 ### What overlaps (Phase 32 A4.2)
 

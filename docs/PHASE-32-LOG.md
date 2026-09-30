@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B7.5b: legacy plan documents guarded like pages |
-| **Status** | B7.5a merged (#247). B7.5b built: a spec breakpoint on a plan document holds a change to its file on disk; the inbox shows what changed, apply the file or keep the app's version. Harness, unit and browser green locally |
-| **In flight** | B7.5b building on `feat/phase-32-b7-5b-plan-docs` |
-| **Last merged** | B7.5a (#247, `e895c61`) |
-| **Next action** | Merge B7.5b when CI is green; then B7.6, the phone (proposals in Needs you; proposal.list, proposal.get, proposal.decide) |
+| **Stage / step** | Wave 2 — B7.6: proposals on the phone |
+| **Status** | B7.5 merged (#247, #248). B7.6 built: a proposal waits in the phone's Waiting on you with every reply, and is accepted or rejected there as the person; proposal.list, proposal.get, proposal.decide. Harness, unit and phone spec green locally |
+| **In flight** | B7.6 building on `feat/phase-32-b7-6-phone` |
+| **Last merged** | B7.5b (#248, `8e739b9`) |
+| **Next action** | Merge B7.6 when CI is green; then B7.7, I1 end to end (two plans told once, both replies, accepted; the window, an MCP client and the phone agree) and the docs |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
-> Read from git at `origin/feat/phase-32` `e895c61`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `8e739b9`, with open PRs from GitHub.
 
 ---
 
@@ -186,11 +186,11 @@
   - [x] B7.2 Propose a spec change, with the tasks it affects (#242)
   - [x] B7.3 Affected agents told once; their replies kept (#243)
   - [x] B7.4 The decision is a person's: accept, amend, reject; tasks marked "spec changed" (#245)
-  - [ ] B7.5 Spec breakpoints cover proposals and plan documents — building
+  - [x] B7.5 Spec breakpoints cover proposals and plan documents
     - [x] B7.5a A spec breakpoint on a relied-on page holds a direct edit and says to propose; proposals carry its note (#247)
-    - [ ] B7.5b Legacy plan documents guarded like pages (an import from disk is held) — building
+    - [x] B7.5b Legacy plan documents guarded like pages (an import from disk is held) (#248)
   - [ ] Follow-up: Linking a plan schedules one more export ~200 ms later; an edit to its files in that window is overwritten, not imported (found building B7.5b)
-  - [ ] B7.6 The phone
+  - [ ] B7.6 The phone — building
   - [ ] B7.7 I1 done-when and docs
 - [ ] B8 Grounding
 - [ ] B9 Play-forward
@@ -330,6 +330,40 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: B7.6 — proposals on the phone
+
+B7.5b merged (#248), so B7.5 is done. B7.6 is built:
+
+- **In Waiting on you.** The phone's list stops leaving proposals out:
+  `breakpoint.waiting` includes a proposal's hit with its `proposalUid`,
+  and `countWaitingHits` counts it, so the live count and the tab badge
+  move for one. Its labels read Accept / Reject.
+- **The card.** Who proposes what and why, the evidence, the note on the
+  page's spec breakpoint when the person guards it (B7.5a), the text now
+  and proposed, and what every relying plan replied. The words are shared
+  with the desktop's inbox card through a new `proposal-words.ts`
+  (`proposalHeadline`, `evidenceWords`, `repliesLine`, `impactLabel`,
+  `impactWho`), which the desktop card now uses too.
+- **Decided as the person.** `proposal.list` and `proposal.get` (read),
+  `proposal.decide` (write) in `mobile-proposals.ts`, with capability rows.
+  Accept or reject with a note; amending needs the text edited, so it stays
+  in the window. Like answering a held call, deciding needs a pairing
+  confirmed on the desktop, is audited against the device, is recorded as
+  `phonePerson()` (never a name from the request), tells the window, and
+  the first decision stands (`alreadyDecided`). `breakpoint.answer` still
+  refuses a proposal.
+- Tests: harness `phone-proposals.test.ts` (4: counted and listed in the
+  desktop's words with the reply; decided on the proposal, not answered;
+  a read-only phone sees and cannot decide; accepted from the phone, a new
+  version as the person, the relying task flagged, the proposer answered
+  with the note); unit `mobile-proposals.test.ts` (3); phone spec
+  `tests/phone/proposals.spec.ts` with screenshot `proposal-waiting`.
+- **Found on the way**: `spec-decide`, `spec-held-edit` and
+  `plan-doc-guard` (browser) all named their page "Invoice format" and pick
+  their inbox card by that text on the one shared backend, so two running
+  at once could match each other's card. Each now has its own title
+  ("Receipt format", "Credit note format"); the three pass together.
 
 ### 2026-09-30: B7.5b — legacy plan documents guarded like pages
 
