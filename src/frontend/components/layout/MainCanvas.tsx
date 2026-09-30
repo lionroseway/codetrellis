@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { getAPI } from '../../bridge';
 import { fetchGraphAnswer } from '../../lib/graph-answer';
+import { preserveNodePositions } from '../../lib/preserve-node-positions';
 import {
   ReactFlow,
   Background,
@@ -1842,14 +1843,6 @@ function buildExplainPrompt(filePath: string, label: string, nodeType?: string):
     'Keep it concise but thorough. Use code references where helpful.',
     '',
   ].join('\n');
-}
-
-function preserveNodePositions(previousNodes: Node[], nextNodes: Node[]): Node[] {
-  const previousPositions = new Map(previousNodes.map((node) => [node.id, node.position]));
-  return nextNodes.map((node) => {
-    const previousPosition = previousPositions.get(node.id);
-    return previousPosition ? { ...node, position: previousPosition } : node;
-  });
 }
 
 /**
