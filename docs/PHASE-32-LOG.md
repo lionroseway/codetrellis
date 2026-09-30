@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — A6.6: the M6 done-when (A6 done) |
-| **Status** | A6.5 merged (#257). A6.6 built: the M6 done-when harness (awareness-m6: a replaced workbook two tasks cite is one signal naming both, told once to each agent, said from each side in its brief, one digest line on desktop and phone); awareness.md gains the Brief; the guide gains 'When other tasks share your files'. That closes A6 |
-| **In flight** | C2.1 in review (#259) on `feat/phase-32-c2-1-item-state-from-git`; #260 in review on `fix/phase-32-body-editor-title-poll` |
-| **Last merged** | A6.6 (#258, `e029f11`) |
-| **Next action** | Merge A6.6 when CI is green; then C2 (team status), refining it into sub-steps first as the plan says |
+| **Stage / step** | Wave 2 — HD3: business clashes in the Stack |
+| **Status** | C2.1 merged (#259): each item's state from git (building, pushed, merged), with its proof commit and source. The plan now takes in business work (log entry "Business work in the plan"): HD3 added after C2.1, C2.4 reads status rather than writing STATUS.md, B9 projects materials, and C3's shared plans folder can be carried by git or a cloud-synced folder |
+| **In flight** | nothing open |
+| **Last merged** | C2.1 (#259, `578a36f`) |
+| **Next action** | HD3 on feat/phase-32-hd3-business-clashes-stack: stackOverlaps maps task: workstreams to their plans and counts material signals; declared materials from briefs; the same at a past moment and on the phone; stateAt gains each task's material reads. Then C2.2 on feat/phase-32-c2-2-review-host-github |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
-> Read from git at `origin/feat/phase-32` `e029f11`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `578a36f`, with open PRs from GitHub.
 
 ---
 
@@ -210,7 +210,7 @@
   - [x] C1.3 Proof of use; the skills line in a copied task prompt (#177)
   - [x] C1.4 A skill arriving in a pulled plan file is flagged once (#178)
 - [ ] C2 Team status through git (git first for any host; a host adapter only when turned on), refined in EXECUTION §6 — building
-  - [ ] C2.1 Each item's state from git, for any host or none (building, pushed, merged, with its source) (#259) — in review
+  - [x] C2.1 Each item's state from git, for any host or none (building, pushed, merged, with its source) (#259)
   - [ ] C2.2 The review-host interface, and GitHub behind it, off until turned on per project
   - [ ] C2.3 GitLab and Bitbucket on the same interface (Azure DevOps, Gitea later)
   - [ ] C2.4 Status read, not written: intent in the plan's YAML, state from git, a host or the plan itself, each saying its source; no STATUS.md
@@ -376,6 +376,40 @@ zones; the awareness spec §10.4. The order is now C2.1 → HD3 → C2.2–C2.6.
 Open questions recorded for C3: which sync providers first, what people
 without the app see, and whether teammates' material reads are shared by
 default.
+### 2026-09-30: C2.1 — each item's state from git
+
+A6.6 merged (#258): A6 is done. C2 was refined earlier (EXECUTION §6), so
+C2.1 starts straight away:
+
+- **What git proves, for any host or none** (`services/item-git-state.ts`).
+  An item worked on a branch (its own `workstream`, or its section's) is
+  `building` when the branch exists, `pushed` when a remote-tracking copy
+  exists (as last fetched: the app never fetches), and `merged` when the work
+  reached the base: a merge commit with the branch head as a parent, a
+  fast-forward past it, every changed file on the base at the branch's
+  version (bug 53's check: a squash or a rebase), or, for a branch that is
+  gone, a commit on the base naming the item's key (its uid's first eight,
+  as a whole word). Each state carries the commit that proves it and its
+  source (`git`).
+- **Never merged by mistake** (decisions): a branch that never moved from
+  where it was made is `building`, not "merged", however far main moves
+  (its reflog says where it was made); a branch only on the remote exactly
+  at the base's head could be new and empty, so it is not called merged; a
+  branch that stopped stays `pushed`, since "closed" is a host's to say
+  (C2.2). A partial squash (the file ended differently) is not merged.
+- **Where it shows**: the plan tree puts a chip beside each section's ⎇
+  branch ("merged", "pushed", "building", words and commit on hover); the
+  item page's "Worked in" says it in words with the commit and "from git";
+  `get_plan.git_state` lists every item's, `get_brief.git_state` the task's;
+  the window reads `GET /api/plans/:uid/git-state`.
+
+Tests: unit `item-git-state.test.ts` (12, on real repositories: none,
+fresh, building, pushed with unpushed commits, stopped, merge commit,
+fast-forward, squash, rebase, a partial squash, a gone branch named by key,
+unsafe names); harness `item-git-state.test.ts` (4, with a bare remote:
+before and after merging three ways, a stopped branch, `get_plan` and
+`get_brief`); browser `e2e/plan/item-git-state.spec.ts` (shots
+`item-git-state-tree`, `item-git-state-worked-in`).
 
 ### 2026-09-30: A6.6 — the M6 done-when; A6 done
 

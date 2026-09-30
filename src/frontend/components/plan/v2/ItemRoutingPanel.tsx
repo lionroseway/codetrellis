@@ -31,6 +31,7 @@ import { useProjectStore } from '../../../stores/project-store';
 import { useTerminalStore, type AgentPreset } from '../../../stores/terminal-store';
 import { suggestSectionBranch, worktreeDirFor } from '@shared/lib/branch-name';
 import { worktreeReadiness } from '../../../lib/section-worktrees';
+import { usePlanGitStates, GIT_STATE_TONE } from '../../../lib/plan-git-state';
 
 // ─── Cascade resolution (client-side mirror of backend logic) ───────────
 
@@ -754,6 +755,24 @@ interface SectionView {
 }
 
 /**
+ * Phase 32 C2.1 — what git proves about the branch this item is worked on,
+ * and the commit that proves it. Only what git can say: in review, checks
+ * and closed need a host, which is not asked.
+ */
+function GitStateLine({ planUid, itemUid, branch }: { planUid: string; itemUid: string; branch: string }) {
+  const s = usePlanGitStates(planUid, branch)[itemUid];
+  if (!s) return null;
+  return (
+    <div data-testid="worked-in-git" data-state={s.state} className="mt-1 flex items-center gap-1.5 text-[10.5px] text-foreground-muted">
+      <span className={`rounded border px-1 text-[10px] ${GIT_STATE_TONE[s.state] ?? 'border-white/10 text-foreground-subtle'}`}>{s.state === 'none' ? 'no branch' : s.state}</span>
+      <span>{s.words}</span>
+      {s.commit && <code className="font-mono text-[10px] text-foreground-subtle" title={s.commit}>{s.commit.slice(0, 7)}</code>}
+      <span className="text-foreground-subtle">· from git</span>
+    </div>
+  );
+}
+
+/**
  * Which worktree this item is worked in (Phase 32 C5.1): its branch, set
  * here or inherited from the section above it. Agents in another worktree
  * are not offered its tasks and cannot claim them, whatever client they are.
@@ -826,6 +845,7 @@ function WorkedIn({ item }: { item: PlanItem }) {
           : 'Any agent, in any worktree, can pick these tasks up. Choose a worktree to keep this section to one.'}
       </div>
       {error && <div role="alert" className="mt-1 text-[10px] text-danger">{error}</div>}
+      {view?.section && <GitStateLine planUid={item.planUid} itemUid={item.uid} branch={view.section.branch} />}
       {view?.section && view.root && <SectionReadiness root={view.root} />}
       {view && !own && <NewWorktree item={item} onMade={load} />}
       {view?.root && view.section && <StartAgentHere root={view.root} branch={view.section.branch} />}
