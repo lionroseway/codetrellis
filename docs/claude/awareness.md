@@ -138,6 +138,14 @@ Awareness card shows each task's sentence and no graph buttons (a material
 is not code); the phone's Needs you names the tasks by title with ↔ between
 them, and its detail lists the file.
 
+**On record** (A6.5): the sign-off pack lists every material signal that
+named one of the plan's tasks, live or resolved, from the task's side, with
+how it ended in the words a PR body's "Other work in flight" uses (fixed,
+acknowledged by whom, marked intended, set aside) and any note an agent
+left (`packSignals` in `signoff-pack.ts`; the page's "Other work that
+touched these tasks"). It reads signals as stored: a pack records what was
+known when it was made.
+
 `awareness-service.ts` gathers the inputs, runs `computeSignals` and
 `computeMaterialSignals` in one pass, and
 reconciles into `awareness_signals`. The person's answer and the agents'

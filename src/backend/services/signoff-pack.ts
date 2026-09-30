@@ -31,6 +31,11 @@ import { listAllItems, resolveSkills } from './plan-item-service';
 import { skillProof, skillUseSources, sourceOf } from './skill-use-service';
 import type { SkillProof, SkillProofSource } from '../../shared/types';
 import { decisionWords, stateWords, type SignoffRow } from '../../shared/lib/signoff';
+import { loadSignals } from './awareness-service';
+import { taskWorkstreamId } from './task-workstreams';
+import { otherWorkInFlight, type OtherWorkOutcome } from '../../shared/lib/other-work';
+import { briefLine } from '../../shared/lib/signal-words';
+import type { AwarenessSignal } from '../../shared/types';
 
 export const PACK_FORMAT = 'codetrellis-signoff-pack';
 export const PACK_VERSION = 1;
@@ -58,6 +63,28 @@ export interface PackSkill {
   proofSource?: SkillProofSource | null;
 }
 
+/**
+ * Phase 32 A6.5 — a signal that touched a task (A6.3: a file it shares with
+ * other tasks changed, they read different versions, the same output), and
+ * how it ended, as a PR body's "Other work in flight" says (A5.2). Optional
+ * in the pack, so a pack made before it still reads.
+ */
+export interface PackSignal {
+  itemUid: string;
+  itemTitle: string;
+  signalId: string;
+  severity: AwarenessSignal['severity'];
+  /** "Changed material", "Different versions". */
+  heading: string;
+  /** What happened, from this task's side. */
+  says: string;
+  outcome: OtherWorkOutcome;
+  /** How it ended, in a sentence. */
+  outcomeWords: string;
+  /** The notes agents left for the person. */
+  notes: string[];
+}
+
 export interface SignoffPack {
   format: typeof PACK_FORMAT;
   version: typeof PACK_VERSION;
@@ -66,6 +93,35 @@ export interface SignoffPack {
   rows: SignoffRow[];
   files: PackFile[];
   skills?: PackSkill[];
+  signals?: PackSignal[];
+}
+
+/**
+ * Every material signal that named one of the plan's tasks, live or
+ * resolved, with its outcome. Signals are read as stored: building a pack
+ * records what was known, it does not recompute it.
+ */
+export function packSignals(planUid: string, projectPath: string | null): PackSignal[] {
+  if (!projectPath) return [];
+  let signals: AwarenessSignal[];
+  try { signals = loadSignals(projectPath).filter((s) => s.subject.material); } catch { return []; }
+  if (signals.length === 0) return [];
+  const out: PackSignal[] = [];
+  for (const item of listAllItems(planUid)) {
+    if (item.kind !== 'action') continue;
+    const root = taskWorkstreamId(item.uid);
+    const touched = signals.filter((s) => s.workstreams.includes(root));
+    if (touched.length === 0) continue;
+    const byId = new Map(touched.map((s) => [s.id, s]));
+    const label = (r: string) => touched.find((s) => s.subject.labels?.[r])?.subject.labels?.[r] ?? r;
+    for (const e of otherWorkInFlight({ root, name: item.title }, touched, label).entries) {
+      out.push({
+        itemUid: item.uid, itemTitle: item.title, signalId: e.signalId, severity: e.severity, heading: e.heading,
+        says: briefLine(byId.get(e.signalId)!, root), outcome: e.outcome, outcomeWords: e.outcomeWords, notes: e.notes,
+      });
+    }
+  }
+  return out;
 }
 
 /** Every task's required and recommended skills, with whether each was used. */
@@ -116,6 +172,7 @@ export function buildSignoffPack(planUid: string, now: Date = new Date()): Signo
     rows,
     files: [...files.values()].sort((a, b) => a.path.localeCompare(b.path)),
     skills: packSkills(planUid),
+    signals: packSignals(planUid, plan.projectPath ?? null),
   };
 }
 
@@ -296,6 +353,7 @@ ${sections || (pack.rows.length ? '' : '<p class="muted">This plan has no accept
 ${unverifiedSection}
 ${self}
 ${skillsSection(pack.skills ?? [])}
+${signalsSection(pack.signals ?? [])}
 <h2>Files and hashes</h2>
 <p class="muted">Every file this pack vouches for, with the sha256 it had when it was judged. "Verify a pack" in CodeTrellis re-hashes each one and says which still match.</p>
 <table><thead><tr><th>File</th><th>sha256</th><th>Taken</th></tr></thead><tbody>${fileRows || '<tr><td colspan="3" class="muted">No files.</td></tr>'}</tbody></table>
@@ -303,6 +361,16 @@ ${skillsSection(pack.skills ?? [])}
 </body>
 </html>
 `;
+}
+
+/** A6.5 — the signals that touched each task, and how each ended. */
+function signalsSection(signals: PackSignal[]): string {
+  if (signals.length === 0) return '';
+  const rows = signals.map((s) => `<tr><td>${esc(s.itemTitle)}</td><td><b>${esc(s.heading)}</b> <span class="muted">${esc(s.severity)}</span><br>${esc(s.says)}${s.notes.map((n) => `<br><span class="muted">${esc(n)}</span>`).join('')}</td><td>${esc(s.outcomeWords)}</td></tr>`).join('');
+  return `
+<h2>Other work that touched these tasks</h2>
+<p class="muted">Files these tasks shared with other tasks that changed, versions they disagreed on, or outputs two tasks wrote, and how each ended.</p>
+<table><thead><tr><th>Task</th><th>What happened</th><th>How it ended</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function skillsSection(skills: PackSkill[]): string {

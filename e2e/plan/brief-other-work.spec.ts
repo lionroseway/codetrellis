@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { gotoWithProject, seedPlan, cleanupPlans, PROJECT_PATH } from '../helpers/setup';
+import { gotoWithProject, seedPlan, cleanupPlans, PROJECT_PATH, API, authHeaders } from '../helpers/setup';
 import { createMcpClient } from '../helpers/mcp-client';
 
 const OUT = path.join('test-results', 'ux-audit');
@@ -98,6 +98,25 @@ test.describe('Other work affected', () => {
       await expect(card.getByTestId('awareness-material')).toContainText('Board pack uses');
       await expect(card.getByTestId('signal-show-on-graph')).toHaveCount(0);
       await shot(card, 'awareness-material-card');
+
+      // The sign-off pack says what touched each task and how it ended (A6.5).
+      await card.getByRole('button', { name: 'Acknowledge' }).click();
+      await expect(card).toHaveAttribute('data-state', 'acknowledged');
+      const res = await request.get(`${API}/plans/${plan.uid}/signoff-pack.html`, { headers: authHeaders() });
+      expect(res.ok()).toBeTruthy();
+      const packPage = await page.context().newPage();
+      await packPage.setContent(await res.text());
+      const section = packPage.locator('h2', { hasText: 'Other work that touched these tasks' });
+      await expect(section).toBeVisible();
+      const table = section.locator('xpath=following-sibling::table[1]');
+      await expect(table).toContainText('Board pack');
+      await expect(table).toContainText('sales.csv changed since “Q3 report” cited line 2. This task uses it too.');
+      // The browser reaches the app over plain HTTP, so the answer is recorded
+      // as unverified, and the pack says so rather than claiming a person.
+      await expect(table).toContainText('Acknowledged by someone through the local API, not verified as the person.');
+      await section.scrollIntoViewIfNeeded();
+      await shot(table, 'signoff-pack-signals');
+      await packPage.close();
     } finally {
       agents.report.close();
       agents.pack.close();

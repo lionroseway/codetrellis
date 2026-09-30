@@ -175,3 +175,41 @@ describe('verifying a pack later', () => {
     assert.throws(() => packs.packFromText('<html>no data</html>'), /No sign-off pack data/);
   });
 });
+
+describe('other work that touched the tasks (A6.5)', () => {
+  test('each material signal naming a task, from its side, with how it ended; none for another plan\'s task', () => {
+    const labels = { [`task:${ITEM}`]: 'Regional totals', 'task:elsewhere': 'Board pack' };
+    const put = (id: string, kind: string, state: string, subject: Record<string, unknown>, workstreams: string[], stateBy?: unknown) => db.getDb().run(
+      `INSERT OR REPLACE INTO awareness_signals (id, project_root, kind, severity, subject, workstreams, summary, first_seen, last_seen, state, state_by)
+       VALUES (?, ?, ?, 'medium', ?, ?, 's', 1, 2, ?, ?)`,
+      [id, project, kind, JSON.stringify({ labels, ...subject }), JSON.stringify(workstreams), state, stateBy ? JSON.stringify(stateBy) : null],
+    );
+    put('m-split', 'version-split', 'acknowledged', { material: 'in/sales.csv', readVersions: { [`task:${ITEM}`]: 'earlier', 'task:elsewhere': 'current' } },
+      [`task:${ITEM}`, 'task:elsewhere'], { actor: 'analyst@example.com', actorType: 'human', channel: 'phone' });
+    put('m-out', 'collision', 'resolved', { material: 'out/totals.csv', file: 'out/totals.csv' }, [`task:${ITEM}`, 'task:elsewhere']);
+    // A code signal, and a material signal naming only other tasks: neither is this plan's.
+    put('code', 'collision', 'open', { file: 'src/a.ts' }, ['/r/a', '/r/b']);
+    put('m-other', 'stale-base', 'open', { material: 'x.csv' }, ['task:elsewhere', 'task:more']);
+    try {
+      const pack = packs.buildSignoffPack(PLAN);
+      assert.deepEqual(pack.signals!.map((x) => [x.itemTitle, x.heading, x.outcome, x.says, x.outcomeWords]), [
+        ['Regional totals', 'Different versions', 'acknowledged',
+          'This task worked from an earlier version of in/sales.csv; “Board pack” has the current one.',
+          'Acknowledged by the person, from their phone.'],
+        ['Regional totals', 'Same output', 'fixed',
+          'This task and “Board pack” both record out/totals.csv as their output.', 'Fixed: what caused it is gone.'],
+      ]);
+      const html = packs.renderPackHtml(pack);
+      assert.match(html, /<h2>Other work that touched these tasks<\/h2>/);
+      assert.match(html, /This task worked from an earlier version of in\/sales\.csv; “Board pack” has the current one\./);
+      // The page's own data carries it, for a pack checked later.
+      assert.equal((packs.packFromText(html) as { signals: unknown[] }).signals.length, 2);
+      // Another plan's pack has none, and no section.
+      assert.deepEqual(packs.buildSignoffPack(OTHER_PLAN).signals, []);
+      assert.doesNotMatch(packs.renderPackHtml(packs.buildSignoffPack(OTHER_PLAN)), /Other work that touched/);
+    } finally {
+      db.getDb().run(`DELETE FROM awareness_signals WHERE id IN ('m-split', 'm-out', 'code', 'm-other')`);
+    }
+  });
+});
+
