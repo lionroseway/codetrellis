@@ -9,6 +9,7 @@
 import { z } from 'zod';
 import { dependencyProblem } from '../../services/plan-dependencies';
 import { specRefProblem, setReliesOn, reliesOn, reliedOnBy, reliedOnWords } from '../../services/spec-links-service';
+import { proposalProblem, proposeSpecChange, listProposals, getProposal, directEditNote } from '../../services/spec-proposals-service';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { noteItemFocus } from '../../services/budget-service';
@@ -391,7 +392,77 @@ export function register(server: McpServer, deps: ToolDeps): void {
       }
       const n = deps.broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: args });
       deps.saveNow(() => deps.exportDatabase());
-      return resultWithMeta(item, n);
+      const result = resultWithMeta(item, n);
+      // Phase 32 B7.2 — a spec page others rely on, edited directly: saved,
+      // and the caller told who relies on it and that proposing exists.
+      const note = args.body !== undefined && item.kind === 'object' ? directEditNote(item.uid) : null;
+      if (note) result.content.push({ type: 'text' as const, text: note });
+      return result;
+    },
+  );
+
+  // --- propose_spec_change / list_spec_proposals (Phase 32 B7.2) ---
+
+  server.registerTool(
+    'propose_spec_change',
+    {
+      description:
+        'You found the spec is wrong: propose the change instead of editing the page. Give the new text of the page, or of ' +
+        'one section (a heading, by its slug, heading line included), why, and the evidence (a failing test, files, commits). ' +
+        'The page is not changed now. The answer lists every task relying on that page or section, in any plan; their ' +
+        'agents are asked for the impact, and a person decides.',
+      inputSchema: {
+        page_uid: z.string().describe('The spec page (an Object).'),
+        section: z.string().optional().describe('A heading on that page, by its slug ("fields" for "## Fields"). Omit to propose the whole page.'),
+        text: z.string().describe('The new text: the whole page, or the section including its heading line.'),
+        why: z.string().describe('What is wrong with the spec as it is, in a sentence or two.'),
+        evidence: z.object({
+          tests: z.array(z.string()).optional().describe('Failing tests, by name or path.'),
+          files: z.array(z.string()).optional(),
+          commits: z.array(z.string()).optional(),
+          note: z.string().optional(),
+        }).optional(),
+      },
+    },
+    async (args, extra: any) => {
+      const input = { page: args.page_uid, section: args.section || undefined, text: args.text, why: args.why, evidence: args.evidence };
+      const problem = proposalProblem(input);
+      if (problem) return { isError: true, content: [{ type: 'text' as const, text: problem }] };
+      const id = authorFromExtra(deps, extra);
+      const proposal = proposeSpecChange(input, { ...id, sessionId: deps.sessionId ?? null });
+      const n = deps.broadcast('spec-proposal-created', { proposal });
+      deps.saveNow(() => deps.exportDatabase());
+      return resultWithMeta({
+        proposal,
+        next: proposal.affected.length
+          ? `${proposal.affectedWords}. Their agents are asked for the impact; a person decides. The page is unchanged until then.`
+          : 'Nothing relies on this page yet. A person decides; the page is unchanged until then.',
+      }, n);
+    },
+  );
+
+  server.registerTool(
+    'list_spec_proposals',
+    {
+      description:
+        'Proposed spec changes: one by uid, a page\'s, or the project\'s, newest first, optionally by status (open, accepted, ' +
+        'rejected, withdrawn). Each says who relied on it when proposed and whether the page has changed since. Read-only.',
+      inputSchema: {
+        uid: z.string().optional(),
+        page_uid: z.string().optional(),
+        status: z.enum(['open', 'accepted', 'rejected', 'withdrawn']).optional(),
+        project_path: z.string().optional().describe('Absolute path of an opened project. Defaults to the active project.'),
+      },
+    },
+    async ({ uid, page_uid, status, project_path }) => {
+      if (uid) {
+        const one = getProposal(uid);
+        if (!one) return { isError: true, content: [{ type: 'text' as const, text: `No proposal ${uid}` }] };
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ proposals: [one] }, null, 2) }] };
+      }
+      const projectPath = page_uid ? undefined : (project_path ?? deps.getActiveProjectPath() ?? undefined);
+      const proposals = listProposals({ pageUid: page_uid, status, projectPath });
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ proposals }, null, 2) }] };
     },
   );
 

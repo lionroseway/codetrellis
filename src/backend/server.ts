@@ -86,6 +86,7 @@ import * as taskAttachmentsService from './services/task-attachments-service';
 import * as planItemService from './services/plan-item-service';
 import { dependencyProblem } from './services/plan-dependencies';
 import { specRefProblem, setReliesOn, reliesOn, reliedOnBy, reliedOnWords, type SpecRef } from './services/spec-links-service';
+import { proposalProblem, proposeSpecChange, listProposals, getProposal, type ProposalStatus } from './services/spec-proposals-service';
 import * as planEventService from './services/plan-event-service';
 import * as channelEventService from './services/channel-event-service';
 import { exportChannelEvent } from './services/channel-event-file-service';
@@ -2438,6 +2439,45 @@ app.put('/api/items/:uid/relies-on', (req, res) => {
   broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { reliesOn: refs } });
   saveNow(() => exportDatabase());
   res.json({ uid: item.uid, reliesOn: reliesOn(item.uid) });
+});
+
+/**
+ * Phase 32 B7.2 — propose a change to a spec page (whole, or one section by
+ * heading slug): `{ section?, text, why, evidence? }`. The page is not
+ * changed; the proposal lists who relies on it. The author is how the call
+ * arrived.
+ */
+app.post('/api/items/:uid/spec-proposals', (req, res) => {
+  const b = req.body ?? {};
+  if (typeof b.text !== 'string' || typeof b.why !== 'string' || (b.section !== undefined && typeof b.section !== 'string')) {
+    res.status(400).json({ error: 'text and why are required; section is a heading slug' });
+    return;
+  }
+  const evidence = b.evidence && typeof b.evidence === 'object' ? b.evidence : undefined;
+  const input = { page: req.params.uid, section: b.section || undefined, text: b.text, why: b.why, evidence };
+  const problem = proposalProblem(input);
+  if (problem) { res.status(400).json({ error: problem }); return; }
+  const proposal = proposeSpecChange(input, { ...personFrom(req), sessionId: null });
+  broadcast('spec-proposal-created', { proposal });
+  saveNow(() => exportDatabase());
+  res.json(proposal);
+});
+
+/** Proposed spec changes, newest first: `?page=<uid>`, or an opened `?project=`; `&status=`. */
+app.get('/api/spec-proposals', (req, res) => {
+  const status = typeof req.query.status === 'string' && ['open', 'accepted', 'rejected', 'withdrawn'].includes(req.query.status)
+    ? req.query.status as ProposalStatus : undefined;
+  const pageUid = typeof req.query.page === 'string' && req.query.page ? req.query.page : undefined;
+  if (pageUid) { res.json({ proposals: listProposals({ pageUid, status }) }); return; }
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  res.json({ proposals: listProposals({ projectPath, status }) });
+});
+
+app.get('/api/spec-proposals/:uid', (req, res) => {
+  const proposal = getProposal(req.params.uid);
+  if (!proposal) { res.status(404).json({ error: 'No such proposal' }); return; }
+  res.json(proposal);
 });
 
 app.get('/api/items/:uid/workstream', (req, res) => {

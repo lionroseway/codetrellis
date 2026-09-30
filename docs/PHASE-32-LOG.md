@@ -178,7 +178,7 @@
   - [x] B6.7 Done-when and docs (#239)
 - [ ] B7 Conferring
   - [ ] B7.1 Tasks say what they rely on (`spec_links`, sections by heading) — in review
-  - [ ] B7.2 Propose a spec change, with the tasks it affects
+  - [ ] B7.2 Propose a spec change, with the tasks it affects — built, PR after B7.1
   - [ ] B7.3 Affected agents told once; their replies kept
   - [ ] B7.4 The decision is a person's: accept, amend, reject; tasks marked "spec changed"
   - [ ] B7.5 Spec breakpoints cover proposals and plan documents
@@ -315,6 +315,42 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: B7.2 — proposing a spec change
+
+An agent that finds the spec is wrong proposes the change instead of
+editing the page: the new text of the page or one section (heading line
+included), why, and the evidence (tests, files, commits, a note).
+
+- **`spec_proposals`** (`services/spec-proposals-service.ts`) keeps it
+  against the page's version then, with the section's text then, and the
+  tasks relying on that section or the whole page at that moment (B7.1).
+  Author and session come from the transport. The page is not touched:
+  B7.4 is where a person decides.
+- **`propose_spec_change`** (`write`) answers with the proposal and who it
+  affects ("2 tasks in 2 plans rely on this"); `list_spec_proposals`
+  (`read`) by uid, page or project and status. REST: `POST
+  /api/items/:uid/spec-proposals` (a person), `GET /api/spec-proposals`,
+  `GET /api/spec-proposals/:uid`.
+- **A proposal says when the page has moved**: `pageChangedSince`, with the
+  version it was made against and the version now.
+- **A direct edit is not refused.** An `update_item` body edit to a page
+  others rely on is saved, and its result names who relies on it and says
+  that proposing lets their agents weigh in and a person decide first.
+- **Refused, with a sentence**: no such page, a task, a heading not on the
+  page, no why, text the same as the page has now.
+- **The page shows an open proposal**: "Spec change proposed to § Fields by
+  codex", why, who it affects, "a person decides; the page is unchanged
+  until then", and a note when the page has changed since. It refreshes on
+  the `spec-proposal-*` broadcasts.
+- `withSectionText` (`shared/lib/spec-sections.ts`) gives the page as it
+  would read with the proposal applied, for B7.4.
+
+Tests: unit `spec-sections.test.ts` (4 now); harness
+`spec-proposals.test.ts` (5): the proposal and who it affects, read back by
+an agent and REST, the direct-edit note, a page changed since, the
+refusals; browser `spec-links.spec.ts` extended: the page shows the open
+proposal and is unchanged (screenshot `spec-proposed`).
 
 ### 2026-09-30: B7.1 — tasks say what spec they rely on
 

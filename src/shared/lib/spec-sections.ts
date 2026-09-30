@@ -66,3 +66,20 @@ export function sectionText(body: string, slug: string): string | undefined {
   if (!s) return undefined;
   return (body ?? '').split('\n').slice(s.line, s.end).join('\n');
 }
+
+/**
+ * Phase 32 B7.2 — the page as it would read with a section's text replaced
+ * (heading included), or the whole body when no section is named. Undefined
+ * when the section is not on the page.
+ */
+export function withSectionText(body: string, slug: string | null | undefined, text: string): string | undefined {
+  if (!slug) return text;
+  const s = findSection(body, slug);
+  if (!s) return undefined;
+  const lines = (body ?? '').split('\n');
+  const replacement = text.replace(/\n+$/, '').split('\n');
+  // Keep one blank line before the next section when the old text had one.
+  const hadGap = s.end < lines.length && lines[s.end - 1] === '';
+  const tail = hadGap && replacement[replacement.length - 1] !== '' ? [''] : [];
+  return [...lines.slice(0, s.line), ...replacement, ...tail, ...lines.slice(s.end)].join('\n');
+}

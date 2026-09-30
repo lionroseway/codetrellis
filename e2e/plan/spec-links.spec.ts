@@ -6,7 +6,8 @@
  * a page in the spec plan; "Export invoices" relies on the whole page. The
  * task's page says "Relies on: Invoice format › Fields", and that opens the
  * page. The page says "Relied on by 2 tasks in 2 plans" and names them; a
- * name opens its task.
+ * name opens its task. When a change to Fields is proposed (B7.2), the page
+ * says so, with why and who it affects, and is not changed.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -58,6 +59,21 @@ test.describe('Spec links', () => {
     await expect(page.getByTestId('spec-relied-on-by')).toContainText('§ Fields');
     await expect(page.getByTestId('spec-relied-on-by')).toContainText('the whole page');
     await shot(page, 'spec-relied-on-by');
+
+    // B7.2: an agent proposes a change to Fields; the page says so while it is open, and is unchanged.
+    const proposed = await request.post(`${API}/items/${pageUid}/spec-proposals`, {
+      headers: authHeaders(),
+      data: { section: 'fields', text: '## Fields\n\n- amount\n- currency (ISO 4217, required)', why: 'Amounts are ambiguous for EU customers.', evidence: { tests: ['invoice_eu.spec'] } },
+    });
+    expect(proposed.ok()).toBeTruthy();
+    const card = page.getByTestId('spec-proposal');
+    await expect(card).toBeVisible({ timeout: 10_000 });
+    await expect(card).toContainText('Spec change proposed');
+    await expect(card).toContainText('to § Fields');
+    await expect(card).toContainText('Why: Amounts are ambiguous for EU customers.');
+    await expect(card).toContainText('2 tasks in 2 plans rely on this. A person decides; the page is unchanged until then.');
+    await expect(page.getByText('- currency (ISO 4217, required)')).toHaveCount(0);
+    await shot(page, 'spec-proposed');
 
     // A name opens its task.
     await tasks.nth(1).click();
