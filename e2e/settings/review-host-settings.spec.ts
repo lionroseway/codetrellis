@@ -92,3 +92,25 @@ test('Review hosts: says what would be read and where a token is kept; turned on
   await section.getByTestId('review-host-token-forget').click();
   await expect(section.getByTestId('review-host-token')).toBeVisible();
 });
+
+test('Review hosts on a GitLab project: its own words for what is read and for the token', async ({ page }) => {
+  const lab = {
+    kind: 'gitlab', hostname: 'gitlab.com', owner: 'team', repo: 'sub/app', slug: 'team/sub/app', webUrl: 'https://gitlab.com/team/sub/app', supported: true,
+    asks: "Reads the merge requests for this project's branches on gitlab.com/team/sub/app: whether each is open, merged or closed, its pipeline and its approvals. It changes nothing on GitLab.",
+  };
+  await page.route('**/api/review-host?*', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ ...state(false, false), detected: lab, says: 'Off. Nothing is sent to GitLab; state comes from git.' }),
+  }));
+  await gotoWithProject(page);
+  await page.locator('button[title*="Settings"]').click();
+  const dialog = page.getByRole('dialog', { name: 'Settings' });
+  await dialog.getByRole('button', { name: 'Review hosts', exact: true }).click();
+  const section = dialog.getByTestId('review-host-section');
+  await expect(section.getByTestId('review-host-remote')).toHaveText('Its remote: gitlab.com/team/sub/app (GitLab)');
+  await expect(section.getByTestId('review-host-asks')).toHaveText(lab.asks);
+  await expect(section.getByTestId('review-host-toggle')).toHaveText('Turn on GitLab');
+  await expect(section.getByTestId('review-host-token-hint')).toContainText('the read_api scope');
+  await expect(section.getByTestId('review-host-token')).toHaveAttribute('placeholder', 'Paste a GitLab token');
+  await dialog.screenshot({ path: path.join(OUT, 'review-host-settings-gitlab.png') });
+});

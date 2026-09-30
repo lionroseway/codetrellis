@@ -13,12 +13,14 @@ export type GitStateName = 'none' | 'building' | 'pushed' | 'in-review' | 'merge
 /** How a merge was recognised: by git, or by the host's pull request. */
 export type GitMergeHow = 'merge' | 'fast-forward' | 'squash-or-rebase' | 'names-key' | 'pull-request';
 
-/** Where a state came from: git, or the host that said it (C2.2b). */
-export type GitStateSource = 'git' | 'github';
+/** Where a state came from: git, or the host that said it (C2.2b GitHub, C2.3 GitLab and Bitbucket). */
+export type GitStateSource = 'git' | 'github' | 'gitlab' | 'bitbucket';
 
 /** A pull request as the host reported it. */
 export interface ItemReview {
   number: number;
+  /** As the host writes it: `#118`, or `!42` for a GitLab merge request. */
+  ref?: string;
   url: string;
   /** Open only: its checks summed up; null when it has none. */
   checks: 'passing' | 'failing' | 'pending' | null;
@@ -57,12 +59,14 @@ const HOW: Record<GitMergeHow, string> = {
   'pull-request': 'pull request',
 };
 
-const SOURCE: Record<GitStateSource, string> = { git: 'git', github: 'GitHub' };
+const SOURCE: Record<GitStateSource, string> = { git: 'git', github: 'GitHub', gitlab: 'GitLab', bitbucket: 'Bitbucket' };
 
-/** "from git", "from GitHub". */
+/** "from git", "from GitHub", "from GitLab", "from Bitbucket". */
 export function sourceWords(s: Pick<ItemGitState, 'source'>): string {
   return `from ${SOURCE[s.source]}`;
 }
+
+const refOf = (r: ItemReview): string => r.ref ?? `#${r.number}`;
 
 function reviewParts(r: ItemReview): string[] {
   const parts: string[] = [];
@@ -83,16 +87,16 @@ export function shortDate(unixSeconds: number): string {
 export function gitStateWords(s: Pick<ItemGitState, 'state' | 'branch' | 'how' | 'at' | 'unpushed' | 'base' | 'review'>): string {
   switch (s.state) {
     case 'merged': {
-      const how = s.how === 'pull-request' && s.review ? `#${s.review.number}` : s.how ? HOW[s.how] : null;
+      const how = s.how === 'pull-request' && s.review ? refOf(s.review) : s.how ? HOW[s.how] : null;
       const parts = [how, s.at ? shortDate(s.at) : null].filter(Boolean);
       return `merged${s.base ? ` into ${s.base}` : ''}${parts.length ? ` (${parts.join(', ')})` : ''}`;
     }
     case 'in-review': {
       const parts = s.review ? reviewParts(s.review) : [];
-      return `in review${s.review ? ` (#${s.review.number})` : ''}${parts.length ? `, ${parts.join(', ')}` : ''}`;
+      return `in review${s.review ? ` (${refOf(s.review)})` : ''}${parts.length ? `, ${parts.join(', ')}` : ''}`;
     }
     case 'closed':
-      return `closed without merging${s.review ? ` (#${s.review.number}${s.at ? `, ${shortDate(s.at)}` : ''})` : ''}`;
+      return `closed without merging${s.review ? ` (${refOf(s.review)}${s.at ? `, ${shortDate(s.at)}` : ''})` : ''}`;
     case 'pushed':
       return `pushed, not merged${s.unpushed ? `; ${s.unpushed} commit${s.unpushed === 1 ? '' : 's'} not pushed yet` : ''}`;
     case 'building':

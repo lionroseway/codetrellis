@@ -19,7 +19,7 @@ test('an open pull request: its checks and reviews, summed up', () => {
     { state: 'pending', total_count: 0 },
     [{ user: { login: 'priya' }, state: 'CHANGES_REQUESTED' }, { user: { login: 'priya' }, state: 'APPROVED' }, { user: { login: 'sam' }, state: 'COMMENTED' }])!;
   assert.deepEqual(r, {
-    number: 118, url: 'https://github.com/acme/app/pull/118', state: 'open', at: null, mergeCommit: null,
+    number: 118, ref: '#118', url: 'https://github.com/acme/app/pull/118', state: 'open', at: null, mergeCommit: null,
     checks: 'passing', approvals: 1, changesRequested: false,
   });
 });

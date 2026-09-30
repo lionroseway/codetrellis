@@ -92,6 +92,19 @@ The `src/backend/services/` directory holds ~50 services. Grouped by responsibil
   `in-review`, merged is `merged` by `pull-request`, closed is `closed`,
   each `source: 'github'`; no pull request or a failed read keeps git's
   state with a `hostNote`; git's proof of a merge stands over the host.
+- **GitLab and Bitbucket** (C2.3, `review-host/gitlab.ts`, `bitbucket.ts`),
+  on the same switch, cache and overlay, through the one reader table in
+  `host-state.ts` and the one request helper `review-host/http.ts` (GET only,
+  redirects refused, refusals in words). GitLab: a branch's merge request
+  (`!42`) by `source_branch`, its `head_pipeline` and approvals, the token as
+  `PRIVATE-TOKEN` (`read_api`), subgroups in the project path. Bitbucket
+  Cloud: a branch's pull request by `source.branch.name`, its participants'
+  approvals and changes requested, the commit's build statuses, declined or
+  superseded read as closed, the token as a bearer. Each state's `source` is
+  the host (`gitlab`, `bitbucket`), said "from GitLab", "from Bitbucket".
+  `CODETRELLIS_GITLAB_API` and `CODETRELLIS_BITBUCKET_API` point tests at
+  stand-ins; the harness points all three at nowhere by default. Azure
+  DevOps and Gitea are follow-ups on the same shape.
 
 ## Session persistence & power awareness
 
