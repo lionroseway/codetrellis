@@ -13,7 +13,7 @@
 |---|---|
 | **Stage / step** | Wave 2 — B6.7: H1 done when; B6 closes |
 | **Status** | A5 done (M5 met). B6.1–B6.6 merged (#231–#234, #236–#238): dependencies across plans, the stack for the window, agents and the phone, overlap bands, the Stack tab, Follow, and the stack at a past moment. B6.7 in review: the H1 done-when test and docs; `get_state_at` gains the stack |
-| **Next action** | Merge B6.7 when green, which closes B6 (Wave 2 step 6 of 15); then B7, conferring: refine it into parts first |
+| **Next action** | Merge B6.7 when green, which closes B6 (Wave 2 step 6 of 15); B7 is refined into seven parts (§5 "B7: Conferring"): then B7.1, tasks say what they rely on |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-b6-7-done-when` |
 | **Last updated** | 2026-09-30 |
@@ -176,6 +176,13 @@
   - [x] B6.6 The stack on the phone (#238)
   - [ ] B6.7 Done-when and docs — in review
 - [ ] B7 Conferring
+  - [ ] B7.1 Tasks say what they rely on (`spec_links`, sections by heading)
+  - [ ] B7.2 Propose a spec change, with the tasks it affects
+  - [ ] B7.3 Affected agents told once; their replies kept
+  - [ ] B7.4 The decision is a person's: accept, amend, reject; tasks marked "spec changed"
+  - [ ] B7.5 Spec breakpoints cover proposals and plan documents
+  - [ ] B7.6 The phone
+  - [ ] B7.7 I1 done-when and docs
 - [ ] B8 Grounding
 - [ ] B9 Play-forward
 - [ ] B10 The record
@@ -307,6 +314,33 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: B7 refined
+
+B7 (conferring, JOURNEYS I1) broken into seven parts, in
+`PHASE-32-EXECUTION.md` §5 "B7: Conferring", from a survey of what exists:
+- **Exists:** versioned spec pages (`plan_items` of kind `object`, with
+  `plan_item_versions`); a `spec_edited` agent event on every body edit
+  (B1.2, kept 14 days, so not a durable record); the channel vocabulary;
+  breakpoints raised by services (signals, breaches) with `await_decision`;
+  once-per-session inline notices in the MCP interception (A2.6, and the
+  signal replies of A4); cross-plan lookups (`dependencyLookup`,
+  `buildStack`).
+- **Missing:** any link from a task to the page or section it relies on;
+  addressable sections (the only heading parsing is ad hoc); a proposal;
+  channel events addressed to an agent (they name a plan, and agents poll);
+  anything marking a task "spec changed".
+
+Decisions:
+- **Sections are markdown headings, addressed by slug**, rather than child
+  pages; a child page still works as a page.
+- **A direct edit is not refused by default.** Its result names who relies
+  on the page and suggests proposing; holding the edit is a `spec`
+  breakpoint's job (B7.5).
+- **Only a person decides**, over REST (`personFrom`) or the phone; no MCP
+  tool decides a proposal. The decision is a new breakpoint kind,
+  `proposal`, so the inbox, the count, push and `await_decision` come with it.
+- **"Proposed" keeps its meaning** (the code-change feed); B7 says "spec change".
 
 ### 2026-09-30: B6.7 — H1 done when; B6 closes
 
