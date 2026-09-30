@@ -403,6 +403,10 @@ export function useWebSocket() {
           if (typeof type === 'string' && (type.startsWith('plan-item-') || /^plan-(created|updated|deleted|status-changed)$/.test(type))) {
             window.dispatchEvent(new CustomEvent('stack-changed'));
           }
+          // Phase 32 B7.2 — a spec change was proposed (and, from B7.4, decided).
+          if (typeof type === 'string' && type.startsWith('spec-proposal-')) {
+            window.dispatchEvent(new CustomEvent('spec-proposals-changed', { detail: payload }));
+          }
           // --- Cross-repo pointers (CDev Phase 3.5) ---
           if (type === 'external-pointers-changed' || type === 'plan-scope-changed') {
             // The stitched view in PlanList re-fetches on these DOM

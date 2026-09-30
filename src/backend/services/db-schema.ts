@@ -373,6 +373,32 @@ export const SCHEMA_PLANS_CORE = `
   );
   CREATE INDEX IF NOT EXISTS idx_spec_links_page ON spec_links(page_uid);
 
+  -- Phase 32 B7.2: a proposed change to a spec page, made against a version
+  -- of it, with why and the evidence. The page is not touched until a person
+  -- accepts (B7.4). \`affected\` is who relied on it when it was made.
+  CREATE TABLE IF NOT EXISTS spec_proposals (
+    uid TEXT PRIMARY KEY,
+    page_uid TEXT NOT NULL,
+    plan_uid TEXT NOT NULL,
+    section TEXT NOT NULL DEFAULT '',
+    base_version INTEGER NOT NULL,
+    before_text TEXT NOT NULL,
+    proposed_text TEXT NOT NULL,
+    why TEXT NOT NULL,
+    evidence TEXT NOT NULL DEFAULT '{}',
+    affected TEXT NOT NULL DEFAULT '[]',
+    author TEXT NOT NULL,
+    author_type TEXT NOT NULL,
+    session_id TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at INTEGER NOT NULL,
+    decided_at INTEGER,
+    decided_by TEXT,
+    decided_by_type TEXT,
+    decision_note TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_spec_proposals_page ON spec_proposals(page_uid, status);
+
   -- Phase 32 A1.7c: folders an agent reported that the person said "not now"
   -- to. Asked once per folder, not once per connection.
   CREATE TABLE IF NOT EXISTS folder_request_dismissals (

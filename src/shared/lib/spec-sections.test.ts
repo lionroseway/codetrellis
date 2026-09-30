@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { headingSlug, specSections, findSection, sectionText } from './spec-sections';
+import { headingSlug, specSections, findSection, sectionText, withSectionText } from './spec-sections';
 
 const PAGE = [
   '# Invoice format',
@@ -40,4 +40,14 @@ test('a section is found by its slug and read with its heading; one that is not 
   assert.equal(sectionText(PAGE, 'fields'), '## Fields\n- amount\n### Currency (ISO 4217)\nThree letters.');
   assert.equal(findSection(PAGE, 'nope'), undefined);
   assert.equal(sectionText('', 'fields'), undefined);
+});
+
+test('a proposed section replaces that section only, heading included; no section replaces the whole page', () => {
+  const body = '# Invoice\n\n## Fields\n\n- amount\n\n## Totals\n\nSum.\n';
+  assert.equal(
+    withSectionText(body, 'fields', '## Fields\n\n- amount\n- currency (ISO 4217)'),
+    '# Invoice\n\n## Fields\n\n- amount\n- currency (ISO 4217)\n\n## Totals\n\nSum.\n',
+  );
+  assert.equal(withSectionText(body, null, 'All new.'), 'All new.');
+  assert.equal(withSectionText(body, 'nope', 'x'), undefined);
 });
