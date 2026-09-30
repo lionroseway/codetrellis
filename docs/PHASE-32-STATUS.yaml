@@ -1,18 +1,22 @@
 # Phase 32 status — the Now block and the checklist, as data.
 #
 # Hand-edited. `npm run status` writes the Now and Checklist sections of
-# docs/PHASE-32-LOG.md from this file; a unit test fails when they disagree.
-# The dated entries stay prose in the LOG. See tools/status/status.ts.
+# docs/PHASE-32-LOG.md from this file and git; a unit test fails when the
+# LOG's items differ from these. The dated entries stay prose in the LOG.
+# See tools/status/status.ts and git-facts.ts.
 #
-# An item: id (when it has one), title, status (todo | building | in_review
-# | done), prs (the pull requests that carried it), followUp (found on the
-# way, not planned), items (its parts).
+# Only intent is written here. Whether a step is building, in review or
+# done, and its PRs, are read from git and GitHub by `npm run status` (a step
+# has a branch, feat/phase-32-<id>-…, and lands as `Phase 32 <id>: … (#N)`).
+#
+# An item: id (when it has one), title, followUp (found on the way, not
+# planned), items (its parts). Only for what git cannot see: status (done)
+# and prs (PRs whose merge commit does not name the id).
 now:
   step: "Wave 2 — the status as data (the owner's ask), then B7.5"
-  status: "B7.1–B7.4 merged (#241–#243, #245): tasks say what spec they rely on; an agent proposes a change; the affected agents are told once and weigh in; a person accepts, amends or rejects it, and relying tasks say \"spec changed\". #244 merged: our own late export no longer undoes an agent's claim. Now: the Now block and checklist move to docs/PHASE-32-STATUS.yaml, and `npm run status` writes them here"
+  status: "B7.1–B7.4 merged: tasks say what spec they rely on; an agent proposes a change; the affected agents are told once and weigh in; a person accepts, amends or rejects it, and relying tasks say \"spec changed\". Now: the checklist's state is read from git and GitHub, and only intent is written (docs/PHASE-32-STATUS.yaml)"
   next: Merge the status-as-data PR when green; then B7.5, spec breakpoints cover proposals and plan documents
   blockers: none
-  branch: feat/phase-32-status-yaml
   updated: 2026-09-30
 sections:
   - title: Setup
@@ -39,243 +43,245 @@ sections:
         title: Test mapping and coverage guards (+ enable CI lint, bug 12)
         status: done
       - id: 0.3b
-        title: "Skipped tests: 16 harness tests to reseed or make deterministic (#115)"
+        title: "Skipped tests: 16 harness tests to reseed or make deterministic"
         status: done
+        prs:
+          - 115
       - id: 0.4a
-        title: Project and scan (#116)
+        title: Project and scan
         status: done
+        prs:
+          - 116
       - id: 0.4b
-        title: Graph (#117)
+        title: Graph
         status: done
+        prs:
+          - 117
       - id: 0.4c-1
-        title: Plans (#118)
+        title: Plans
         status: done
+        prs:
+          - 118
       - id: 0.4c-3
-        title: Plan deletion only by human confirmation (MCP can ask, not delete) (#119)
+        title: Plan deletion only by human confirmation (MCP can ask, not delete)
         status: done
+        prs:
+          - 119
       - id: 0.4c-2
-        title: Items, incl. retiring the V1 task API (#120)
+        title: Items, incl. retiring the V1 task API
         status: done
+        prs:
+          - 120
       - id: 0.4d
-        title: Criteria and sign-off (#121)
+        title: Criteria and sign-off
         status: done
+        prs:
+          - 121
       - id: 0.4e
-        title: Brief and viewer (#122)
+        title: Brief and viewer
         status: done
+        prs:
+          - 122
       - id: 0.4f
-        title: Channels and presence (#123)
+        title: Channels and presence
         status: done
+        prs:
+          - 123
       - id: 0.4g
-        title: Agents and MCP (#124)
+        title: Agents and MCP
         status: done
+        prs:
+          - 124
       - id: 0.4h
-        title: Drift, governance, review (#125)
+        title: Drift, governance, review
         status: done
+        prs:
+          - 125
       - id: 0.4i
-        title: Terminals and audio (#127)
+        title: Terminals and audio
         status: done
+        prs:
+          - 127
       - id: 0.4j
-        title: Mobile surface (#128)
+        title: Mobile surface
         status: done
+        prs:
+          - 128
       - id: 0.4k
-        title: Settings, updates, privacy (#129)
+        title: Settings, updates, privacy
         status: done
+        prs:
+          - 129
       - id: 0.4l
-        title: System docs and intake (#130)
+        title: System docs and intake
         status: done
+        prs:
+          - 130
       - id: "0.5"
         title: "UX audit — desktop (#131, #132, #133); the 31 phone screens after the release (owner's decision)"
         status: done
       - id: "0.6"
-        title: Known bugs 4–9 (#134)
+        title: Known bugs 4–9
         status: done
+        prs:
+          - 134
       - id: "0.7"
-        title: Stage review (#135)
+        title: Stage review
         status: done
+        prs:
+          - 135
       - id: "0.8"
-        title: "Release — v0.1.17, desktop and companion (#136, #137, #138)"
+        title: Release — v0.1.17, desktop and companion
         status: done
+        prs:
+          - 136
+          - 137
+          - 138
   - title: "Track A: awareness"
     items:
-      - title: "Carried 1: the coverage guard credits calls, not names (bug 50) (#141)"
+      - title: "Carried 1: the coverage guard credits calls, not names (bug 50)"
         status: done
-      - title: "Owner's report: update download shows progress and asks where to save (bug 51) (#142)"
+        prs:
+          - 141
+      - title: "Owner's report: update download shows progress and asks where to save (bug 51)"
         status: done
-      - title: "Carried 2: no tool or handler writes a fixed author (structural test; bug 52) (#143)"
+        prs:
+          - 142
+      - title: "Carried 2: no tool or handler writes a fixed author (structural test; bug 52)"
         status: done
-      - title: "Carried 3: harness and browser suites run in CI, sharded (#144)"
+        prs:
+          - 143
+      - title: "Carried 3: harness and browser suites run in CI, sharded"
         status: done
+        prs:
+          - 144
       - id: A0
-        title: Parallel-work bugs 1–3 (#145)
-        status: done
+        title: Parallel-work bugs 1–3
       - id: A1.1
-        title: Session binding (#146)
-        status: done
+        title: Session binding
       - id: A1.2
-        title: Multi-session Claude watcher (#147)
-        status: done
+        title: Multi-session Claude watcher
       - id: A1.3
-        title: Workstream discovery and strip (#148)
-        status: done
+        title: Workstream discovery and strip
       - id: A1.4
-        title: Folder watching (#149)
-        status: done
+        title: Folder watching
       - id: A1.5
-        title: Footprint symbols (#150)
-        status: done
+        title: Footprint symbols
       - id: A1.6
-        title: Signals engine (collision, stale-base) and tools (#151)
-        status: done
+        title: Signals engine (collision, stale-base) and tools
       - id: A1.7
         title: "Branch and clone workstreams (A1.7a branches #152; A1.7b bug 46 #153; A1.7c clones #154)"
         status: done
       - id: A1.8
-        title: Awareness tab (#155)
-        status: done
+        title: Awareness tab
       - title: "Bug 53: a squash-merged branch is not live work (A1.7a, #158)"
         status: done
-      - title: "Carried 2b: unverified is tagged and explained everywhere; local API changes can be turned off (owner's decision) (#159)"
+      - title: "Carried 2b: unverified is tagged and explained everywhere; local API changes can be turned off (owner's decision)"
         status: done
+        prs:
+          - 159
       - id: A2.1
         title: Signatures (TS/JS, Python)
-        status: done
       - id: A2.2
-        title: Import accuracy (#157)
-        status: done
+        title: Import accuracy
       - id: A2.3
-        title: "`contract` signal (#160)"
-        status: done
+        title: "`contract` signal"
       - id: A2.4
-        title: "`declare_intent` (#161)"
-        status: done
+        title: "`declare_intent`"
       - id: A2.5
-        title: "`drift` signal (#162)"
-        status: done
+        title: "`drift` signal"
       - id: A2.6
         title: Inline notices, `acknowledge_signal`, the M2 "done when" (#163) — **M2 done**
-        status: done
       - id: A2
-        title: "Meaning (signatures, contract, drift, notices, intent): M2 done (#163)"
+        title: "Meaning (signatures, contract, drift, notices, intent): M2 done"
         status: done
+        prs:
+          - 163
       - id: A3
-        title: "Distilled (M3), refined in EXECUTION §4: M3 done (#168)"
+        title: "Distilled (M3), refined in EXECUTION §4: M3 done"
         status: done
+        prs:
+          - 168
         items:
           - id: A3.1
-            title: The digest (#164)
-            status: done
+            title: The digest
           - id: A3.2
-            title: Intended and cooldown (#165)
-            status: done
+            title: Intended and cooldown
           - id: A3.3
-            title: "`parallel` guide flavour (#166)"
-            status: done
+            title: "`parallel` guide flavour"
           - id: A3.4
-            title: User skill and optional hook, offered from Settings (#167)
-            status: done
+            title: User skill and optional hook, offered from Settings
           - id: A3.5
-            title: '`docs/claude/awareness.md`; M3 "done when" (#168)'
-            status: done
+            title: '`docs/claude/awareness.md`; M3 "done when"'
       - id: A2.7
-        title: Signatures for Go, Rust, Java, C#, Kotlin, Swift, Ruby, PHP (owner's ask, 2026-09-28) (#204)
-        status: done
+        title: Signatures for Go, Rust, Java, C#, Kotlin, Swift, Ruby, PHP (owner's ask, 2026-09-28)
       - id: A8
         title: "Any agent (owner's ask, 2026-09-28), refined in EXECUTION §4:"
         status: done
         items:
           - id: A8.1
-            title: Parity table; `check_breakpoint` in the guide for every agent; journeys run by a client with no hook (#200)
-            status: done
+            title: Parity table; `check_breakpoint` in the guide for every agent; journeys run by a client with no hook
           - id: A8.2
-            title: Client-neutral pre-edit check in the connector (#201)
-            status: done
+            title: Client-neutral pre-edit check in the connector
           - id: A8.3
-            title: Hook adapters for other clients, each checked against its docs (Gemini CLI, from its own source; others wait on the same check) (#203)
-            status: done
+            title: Hook adapters for other clients, each checked against its docs (Gemini CLI, from its own source; others wait on the same check)
           - id: A8.4
-            title: Proof of use from MCP calls (`get_skill`), labelled by source (#202)
-            status: done
+            title: Proof of use from MCP calls (`get_skill`), labelled by source
       - id: A4
         title: "Mobile, refined in EXECUTION §4: done (#215–#221)"
-        status: done
         items:
           - id: A4.1
             title: "Reply to the agents about a signal (shared by desktop and phone) ([#215](https://github.com/lionroseway/codetrellis/pull/215), which also carried the refinement, #214)"
-            status: done
           - id: A4.2
             title: The phone's signal RPC and live count
-            status: done
-            prs: [216]
           - id: A4.3
             title: Workstreams on the phone
-            status: done
-            prs: [217]
           - id: A4.4
-            title: Push for a high signal (#219)
-            status: done
+            title: Push for a high signal
           - id: A4.5a
-            title: A way to see the phone's screens (#218)
-            status: done
+            title: A way to see the phone's screens
           - id: A4.5b
-            title: The phone's new screens (Needs you, signal detail, workstreams, the push tap) (#220)
-            status: done
+            title: The phone's new screens (Needs you, signal detail, workstreams, the push tap)
           - id: A4.6
-            title: M4 done-when, end to end, and docs (#221)
-            status: done
+            title: M4 done-when, end to end, and docs
       - id: A5
         title: "Review (the feature, M5), refined in EXECUTION §4:"
-        status: done
         items:
           - id: A5.1
-            title: "`commit:` sides get their dependency edges; the picker offers each line of work's branch (#222)"
-            status: done
+            title: "`commit:` sides get their dependency edges; the picker offers each line of work's branch"
           - id: A5.2
-            title: '"Other work in flight" in `review_plan` and `get_pr_draft` (#223)'
-            status: done
+            title: '"Other work in flight" in `review_plan` and `get_pr_draft`'
           - id: A5.3
-            title: The opt-in "no open high signals" check (#224)
-            status: done
+            title: The opt-in "no open high signals" check
           - id: A5.4
-            title: The review queue and `get_review_queue` (#226)
-            status: done
+            title: The review queue and `get_review_queue`
           - id: A5.5
-            title: The Review tab (#228)
-            status: done
+            title: The Review tab
           - id: A5.6
-            title: The queue on the phone (#229)
-            status: done
+            title: The queue on the phone
           - id: A5.7
-            title: M5 done-when, end to end, and docs (#230)
-            status: done
+            title: M5 done-when, end to end, and docs
       - id: A6
         title: The Brief
-        status: todo
       - id: A7
         title: Rules
-        status: todo
       - title: "`plan-by-hand` failed once in CI when its plan workspace dropped back to the plan list while `plan/list.spec.ts` created and deleted plans on the other worker (#147). It doesn't reproduce as a pair (5/5 on base and on the branch). Find which broadcast leaves the workspace, so a person's open plan survives someone else's plan changes."
-        status: todo
         followUp: true
       - title: "two browser tests failed once on #167 and passed on re-run: `realtime/plan-events.spec.ts:18` (a reset connection mid-POST; also 2/3 locally on the base branch) and `external-refs/refs-panel.spec.ts:77` (a fixed 3 s `isVisible`). Both are queued as separate fixes; neither touches A3.4's code."
-        status: todo
         followUp: true
       - title: "two browser tests failed once on the docs-only #184 and passed on re-run: `graph/layout-controls.spec.ts:38` (0 nodes after Tree → Map; the spec already names a rescan on the other worker as the cause of an empty graph, and polls 20 s) and `review-regressions/pr55-ui.spec.ts:431` (the linked-ticket chip never appeared, on the sample-app fixture). Neither touches a Phase 32 file; each needs its root cause found, not a longer wait. **Fixed at the source by #195 and #196:** a scan answers \"scanning\" and every graph answer names its project; a canvas keeps its graph through another project's scan, and an empty one rescans its own."
         status: done
         followUp: true
       - title: "listing workstreams in a clone with many recent remote branches is slow: 133 remote refs made the first `/api/workstreams` take 11.6 s and each later one about 1.2 s, all synchronous in the Express process, while the window polls it. Found locally during B3.2 (it stalled \"Add to plan\"); CI's single-branch checkout never sees it. Cache branch workstreams by ref SHA and move the git work off the request path."
-        status: todo
         followUp: true
       - title: '`graph/context-menu.spec.ts:49` failed on #188 with the canvas still on "Building dependency graph…" after 15 s (the scan had finished; laying out the whole repository beside a second worker was slow). `gotoWithProject` now waits 30 s for the canvas (#188). That covers the slow-layout case only; the blank-graph-on-rescan case below still needs its fix at the source.'
-        status: todo
         followUp: true
       - title: "with another project scanned, about 20 extra nodes appear on a canvas showing its own graph (seen writing graph-own-project.spec, #196). Probably another endpoint answering for whichever project was scanned last (`/api/diff`'s working-tree ghosts): the same one-project-at-a-time class as #195, on a different route. **Fixed by HD1:** it was `/api/diff`: after another project's scan it diffed that project's files against this one and sent them, 45 added and 45 removed on the sample app."
         status: done
         followUp: true
       - title: "`agent/workstream-strip.spec.ts:89` failed once on #205 (653c3e1): the chip read `[expanded]`, but `workstream-popover` never appeared and the test ran out of its 30 s (36.1 s; its siblings took about 9 s). Nothing in #205 touches the strip; it passed on the previous commit, locally 18 of 18 twice, and on the one re-run. Its cause is not found: the failure snapshot CI prints is cut at 20 KB, before the end of `<body>` where the popover is portalled. Next time it fails, keep the whole error context (raise the `head -c` limit in CI for that file). **Failed again on #212** (browser 1/3) beside `graph/edge-visuals.spec.ts:32`, both at 30 s. `edge-visuals` counts edges after a fixed `waitForTimeout(2000)` three times over; that class (a fixed wait, then a count) is what `onboarding-to-plan` had until #213 polled it. Poll both specs on what they wait for."
-        status: todo
         followUp: true
       - title: "on this container, several browser specs fail on the base too and pass in CI: `awareness-tab.spec` (the served signals never render), `context-menu.spec:12` and `plan/create.spec:16` (the first test of a spec on a cold start), and `graph-breakpoints`' clear toast. Worth one look at why this machine differs, so local runs can be trusted again."
-        status: todo
         followUp: true
       - title: "Browser robustness, 2026-09-29 (#195, #197, #198, all on base): guide Escape attached before paint; plan-to-graph right-clicks on reachable nodes; graph-breakpoints right-click on the node itself; awareness-tab told times early in their minute; plan create waits for the workspace and the save; recents never re-add a removed project after a late load; New plan opens before the list refreshes."
         status: done
@@ -283,7 +289,6 @@ sections:
         status: done
         followUp: true
       - title: the browser `serial` project runs in every CI shard; run it in one, to reclaim ~3 min per PR.
-        status: todo
         followUp: true
       - title: "`e2e/golden-chain/onboarding-to-plan.spec.ts` imports `API` and never uses it, a lint error that predates #213. `npm run lint` covers `src/` only, so nothing reports it; either lint `e2e/` too or drop the import the next time the spec is touched. Dropped in #227, which touched the spec."
         status: done
@@ -310,7 +315,6 @@ sections:
         status: done
         followUp: true
       - title: "CI's `npm ci` runs `better-sqlite3`'s install script, so node-gyp downloads the Node headers on every job. On #224 (be91267), Harness (1/4) died there before any test ran: node-gyp's bundled undici crashed (`assert(!this.paused)`) reading the Node 26.10.0 headers. The module ships prebuilds, and CLAUDE.md says npm 11.19+ skips install scripts, which is not what CI does. Find out why the scripts run (npm config or the setup action), and whether `npm ci --ignore-scripts` plus the load checks CLAUDE.md gives is safe for `better-sqlite3` and `node-pty`."
-        status: todo
         followUp: true
       - title: "`graph/edge-visuals.spec.ts:12` timed out on #226 (d4236dc) at 32 s, with the graph's edges in the DOM. The test had the default 30 s budget, but `gotoWithProject` itself waits up to 60 s for another project's scan and 30 s for the canvas, so a project opened while another scan ran ran out of test time inside the helper. 75 specs open a project on the default budget. The helper now raises the test's timeout to cover its own waits (at least 120 s; a longer budget a test set is kept)."
         status: done
@@ -322,190 +326,131 @@ sections:
         status: done
         followUp: true
       - title: a picker on the item page to set what a task relies on (B7.1 shows the links; agents and REST set them).
-        status: todo
         followUp: true
       - title: our own late plan export was re-imported over newer state and undid an agent's claim (found in B7.4); a write is now recognised by its content
         status: done
-        prs: [244]
+        prs:
+          - 244
         followUp: true
       - title: "`graph/edge-visuals.spec.ts:32` clicks `getByRole('button', { name: 'Files' })`, which is not exact. In a checkout with branches it also matches the TopBar's workstream chips, whose titles say \"N files changed\", and fails in strict mode. It fails locally (seen on #226 and on B6.4's run) and passes in CI, which has no such branches. The fix is `exact: true`; it belongs to the next change to that spec."
-        status: todo
         followUp: true
       - title: "`graph/canvas-rescan-wait.spec.ts:23` timed out once on B6.4's local run, waiting 30 s for `.react-flow` in `gotoWithProject` while the other worker loaded the repository's graph. It passed twice alone, and in CI on every run since #227. Watch it; if it fails in CI, the wait needs the same budget the helper gives other waits."
-        status: todo
         followUp: true
       - title: browser shards now take about 16–25 minutes each (up from 15–19 at the Wave 1 review). The serial project, which runs the sample-app specs since HD2, is most of the rise; see the serial-project follow-up above.
-        status: todo
         followUp: true
   - title: "Track B: observability"
     items:
       - id: B1
-        title: "Agent event log, refined in EXECUTION §5: done (#169, #170)"
+        title: "Agent event log, refined in EXECUTION §5: done"
         status: done
+        prs:
+          - 169
+          - 170
         items:
           - id: B1.1
-            title: "`agent_events`, `GET /api/agent-events`, the Timeline survives a reload (#169)"
-            status: done
+            title: "`agent_events`, `GET /api/agent-events`, the Timeline survives a reload"
           - id: B1.2
-            title: Body edits as events; agent time; SDK-refused calls (#170)
-            status: done
+            title: Body edits as events; agent time; SDK-refused calls
       - id: B2
         title: "Timeline lanes, refined in EXECUTION §5:"
         status: done
         items:
           - id: B2.1
             title: "Lanes per workstream: ● turns, ✎ edits, ⚠ signals, hover and click"
-            status: done
-            prs: [171]
           - id: B2.2
             title: ◆ commits and merges, ✓ / ✗ checks
-            status: done
-            prs: [172]
       - id: B3
         title: "Line changes and overlays, refined in EXECUTION §5:"
         status: done
         items:
           - id: B3.1
             title: "Line changes per workstream from git: REST and `get_line_changes`"
-            status: done
-            prs: [191]
           - id: B3.2
             title: "The code view: gutter marks, who changed what, Compare with…"
-            status: done
-            prs: [193]
           - id: B3.3
             title: Overlay list; line counts on file nodes; a signal chip focuses the graph (split in two, EXECUTION §5)
             status: done
             items:
               - id: B3.3a
                 title: Overlays turned on and off; each other workstream's line counts and collision zones on file nodes
-                status: done
               - id: B3.3b
-                title: A signal chip focuses the graph; "Show changes" on a file node (#199)
-                status: done
+                title: A signal chip focuses the graph; "Show changes" on a file node
       - id: B4
         title: "Breakpoints, refined in EXECUTION §5:"
         status: done
         items:
           - id: B4.1
             title: Task and spec breakpoints at the interception; `await_decision`; answers over REST; Timeline events
-            status: done
-            prs: [179]
           - id: B4.2
             title: Code breakpoints; the hook pauses; breach for other clients
-            status: done
-            prs: [180]
           - id: B4.2b
             title: Signal breakpoints
-            status: done
-            prs: [181]
           - id: B4.2c
             title: Function-level breakpoints and breaches
-            status: done
-            prs: [183]
           - id: B4.3a
             title: The waiting list, answering, Ask me first on a task, what is set
-            status: done
-            prs: [182]
           - id: B4.3b
             title: Graph node action, ⏸ on nodes, lane spans
-            status: done
-            prs: [185]
           - id: B4.4
             title: The phone and push
-            status: done
-            prs: [205]
       - id: HD1
         title: The extra graph nodes after another project's scan (Wave 2 hardening)
-        status: done
-        prs: [207]
       - id: HD2
         title: Browser graph specs on the sample app (Wave 2 hardening)
-        status: done
-        prs: [208]
       - id: B5
         title: Replay
         status: done
         items:
           - id: B5.1
             title: "Frames: project, SHA, session; turn end, status change, commit"
-            status: done
-            prs: [209]
           - id: B5.2
             title: The state at a moment
-            status: done
-            prs: [210]
           - id: B5.3
             title: One clock in the window
-            status: done
-            prs: [211]
           - id: B5.4
             title: Catch-up, and `get_state_at`
-            status: done
-            prs: [213]
       - id: B6
         title: "Stack view, refined in EXECUTION §5:"
-        status: done
         items:
           - id: B6.1
-            title: Dependencies resolve across plans (bug 11) (#231)
-            status: done
+            title: Dependencies resolve across plans (bug 11)
           - id: B6.2
-            title: "The stack: `/api/stack` and `get_stack` (#232)"
-            status: done
+            title: "The stack: `/api/stack` and `get_stack`"
           - id: B6.3
-            title: Overlap bands, declared and actual (#233)
-            status: done
+            title: Overlap bands, declared and actual
           - id: B6.4
             title: "The Stack tab (#234; carried #235, pinning a baseline no longer freezes the server)"
-            status: done
           - id: B6.4b
-            title: The Timeline follows the stack's selection (#236)
-            status: done
+            title: The Timeline follows the stack's selection
           - id: B6.5
-            title: One clock (#237)
-            status: done
+            title: One clock
           - id: B6.6
-            title: The stack on the phone (#238)
-            status: done
+            title: The stack on the phone
           - id: B6.7
-            title: Done-when and docs (#239)
-            status: done
+            title: Done-when and docs
       - id: B7
         title: Conferring
-        status: todo
         items:
           - id: B7.1
-            title: Tasks say what they rely on (`spec_links`, sections by heading) (#241)
-            status: done
+            title: Tasks say what they rely on (`spec_links`, sections by heading)
           - id: B7.2
-            title: Propose a spec change, with the tasks it affects (#242)
-            status: done
+            title: Propose a spec change, with the tasks it affects
           - id: B7.3
-            title: Affected agents told once; their replies kept (#243)
-            status: done
+            title: Affected agents told once; their replies kept
           - id: B7.4
             title: "The decision is a person's: accept, amend, reject; tasks marked \"spec changed\""
-            status: done
-            prs: [245]
           - id: B7.5
             title: Spec breakpoints cover proposals and plan documents
-            status: todo
           - id: B7.6
             title: The phone
-            status: todo
           - id: B7.7
             title: I1 done-when and docs
-            status: todo
       - id: B8
         title: Grounding
-        status: todo
       - id: B9
         title: Play-forward
-        status: todo
       - id: B10
         title: The record
-        status: todo
   - title: "Track C: shared ways of working"
     items:
       - id: C1
@@ -514,62 +459,39 @@ sections:
         items:
           - id: C1.1
             title: Fields, index, brief/claim/next delivery, link never to agents
-            status: done
-            prs: [174]
           - id: C1.2
             title: The picker in the routing panel
-            status: done
-            prs: [176]
           - id: C1.3
             title: Proof of use; the skills line in a copied task prompt
-            status: done
-            prs: [177]
           - id: C1.4
             title: A skill arriving in a pulled plan file is flagged once
-            status: done
-            prs: [178]
       - id: C2
         title: Team status through git
-        status: todo
       - id: C3
         title: Linked planning repo
-        status: todo
       - id: C4
         title: Recurring playbooks
-        status: todo
+      - title: the Phase 32 plan itself becomes a CodeTrellis plan, each step an item whose workstream is its branch, so its status is what the app reads from git (the owner's point, 2026-09-30); part of C2
+        followUp: true
       - id: C5
         title: "One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:"
         status: done
         items:
           - id: C5.1
             title: "`workstream` on an item, inherited; `assign_workstream`; next and claim respect it"
-            status: done
-            prs: [186]
           - id: C5.2
             title: Start a worktree for a section; a start command for any agent
-            status: done
-            prs: [187]
           - id: C5.3
             title: "Workstream chips, progress per worktree, sections named in collisions, split in two:"
-            status: todo
             items:
               - id: C5.3a
                 title: ⎇ worktree on each section in the plan tree; progress per worktree; lanes name their sections
-                status: done
-                prs: [188]
               - id: C5.3b
                 title: A collision between two sections of one plan names both; readiness to merge per section
-                status: done
-                prs: [190]
   - title: Phase end
     items:
       - title: "`main` merged in, full suite green on Node 26"
-        status: todo
       - title: Packaged macOS build verified (needs a person on macOS)
-        status: todo
       - title: Mobile build verified (needs a device)
-        status: todo
       - title: Final direction review
-        status: todo
       - title: "`feat/phase-32` → `main`"
-        status: todo

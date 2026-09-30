@@ -32,14 +32,30 @@ lives **in the repo**, never only in a conversation.
   updated. It must always be true.
 - **Checklist:** every step in this plan, with a box.
 
-Now and the checklist are **data**: they live in
-`docs/PHASE-32-STATUS.yaml` (each step's id, status — `todo`,
-`building`, `in_review`, `done` — and PRs), and `npm run status` writes
-them into the log between its status markers. Edit the YAML, never the
-generated block; `tools/status/status.test.ts` fails when the two
-disagree, or when a step is in review with no PR. (The owner's ask,
-2026-09-30: status a program can read, as the inventory already is.)
-The rest of the log stays prose:
+Now and the checklist are **generated**, and only the intent is written.
+`docs/PHASE-32-STATUS.yaml` holds the steps (id, title, order, parts),
+follow-ups, the next action and blockers. A step's state is read, not
+kept: `npm run status` reads git and GitHub (`tools/status/git-facts.ts`)
+and writes both into the log between its status markers.
+
+- **done**: a first-parent squash commit on `feat/phase-32` titled
+  `Phase 32 <id>: … (#N)`. The title is the record, so name every step's
+  merge that way.
+- **in review**: an open PR from the step's branch.
+- **building**: the step's branch `feat/phase-32-<id>-<slug>` exists with
+  no PR yet (offline: only the branch checked out).
+- Only what git cannot see may be written (`status: done`, `prs`): Stage
+  0, whose merges came in through `main`, and follow-ups with no branch.
+
+The block is a snapshot labelled with the commit it was read at.
+`tools/status/status.test.ts` fails when the log's items differ from the
+YAML (it needs no history, so CI's shallow checkout runs it), and
+`npm run status:check` says, with history, whether the snapshot is
+behind. (The owner's ask and then his point, 2026-09-30: status a program
+can read, and the state of a step with a branch is a fact to read, not a
+line to keep. The end state is C2: the plan lives in CodeTrellis, and
+status is what the app itself reads from git.) The rest of the log stays
+prose:
 - **Baseline:** the test and tool numbers the work is measured against.
 - **Decisions:** what was decided, why, and when.
 - **Entries:** a dated, newest-first record of what happened.
@@ -48,16 +64,17 @@ The rest of the log stays prose:
 
 Update the log **before** it's needed, not after:
 
-1. At the **start** of a step: set Now, and mark the step `building`
-   (in the YAML; then `npm run status`).
+1. At the **start** of a step: set Now's step and next action in the
+   YAML, cut the step's branch, and run `npm run status` (it reads the
+   branch as `building`).
 2. After **every decision**, or anything surprising.
 3. **Before** any command that takes more than a few minutes (harness,
    package, big refactor), with what's running and why.
 4. At least every **30 minutes** of work, even if it's only "still on X,
    next is Y".
-5. At the **end** of a step: mark it `in_review` with its PR, then
-   `done` when merged; record test counts in an entry, and set Now to the
-   next step.
+5. At the **end** of a step: open its PR (git and GitHub then say
+   `in review`, and `done` once the squash merge lands), record test
+   counts in an entry, set Now to the next step, and run `npm run status`.
 
 If a session could end right now, the log must be enough for the next
 one to continue without asking.
