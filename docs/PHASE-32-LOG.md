@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B7.7: the I1 done-when and the docs |
-| **Status** | B7.6 merged (#249). B7.7 built: the I1 journey end to end in one harness test (the window, an MCP client and the phone agree), the agent guide's When the spec is wrong section, awareness.md's conferring section. B7 is done when this merges |
-| **In flight** | B7.7 building on `feat/phase-32-b7-7-done-when` |
-| **Last merged** | B7.6 (#249, `af08991`) |
-| **Next action** | Merge B7.7 when CI is green; then step 8 of Wave 2, A6 (the Brief), refined into parts in EXECUTION first |
+| **Stage / step** | Wave 2 — A6: the Brief, refined into six parts |
+| **Status** | B7 is done (#240–#250). A6 is refined (EXECUTION §5, A6.1–A6.6): a task becomes a workstream, its materials a footprint, and material signals come from the same refresh as code signals |
+| **In flight** | A6 building on `feat/phase-32-a6-refine` |
+| **Last merged** | B7.7 (#250, `287c0c4`) |
+| **Next action** | Merge the A6 refine; then build A6.1 on feat/phase-32-a6-1-task-workstreams (get_brief binds the session to its task; tasks listed as workstreams; notices match a session's task) |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
-> Read from git at `origin/feat/phase-32` `af08991`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `287c0c4`, with open PRs from GitHub.
 
 ---
 
@@ -113,7 +113,13 @@
   - [x] A5.5 The Review tab (#228)
   - [x] A5.6 The queue on the phone (#229)
   - [x] A5.7 M5 done-when, end to end, and docs (#230)
-- [ ] A6 The Brief
+- [ ] A6 The Brief — building
+  - [ ] A6.1 Task workstreams (a session binds to the task it asks get_brief about)
+  - [ ] A6.2 Material footprints (who read what, and its hash then)
+  - [ ] A6.3 Material signals in the one refresh (contract, stale-base, version-split, collision, drift)
+  - [ ] A6.4 Other work affected on the Brief, in get_brief, the inbox and the phone
+  - [ ] A6.5 Sign-off packs list the signals that touched the task
+  - [ ] A6.6 M6 done-when and docs
 - [ ] A7 Rules
 - [ ] Follow-up: `plan-by-hand` failed once in CI when its plan workspace dropped back to the plan list while `plan/list.spec.ts` created and deleted plans on the other worker (#147). It doesn't reproduce as a pair (5/5 on base and on the branch). Find which broadcast leaves the workspace, so a person's open plan survives someone else's plan changes.
 - [ ] Follow-up: two browser tests failed once on #167 and passed on re-run: `realtime/plan-events.spec.ts:18` (a reset connection mid-POST; also 2/3 locally on the base branch) and `external-refs/refs-panel.spec.ts:77` (a fixed 3 s `isVisible`). Both are queued as separate fixes; neither touches A3.4's code.
@@ -191,7 +197,7 @@
     - [x] B7.5b Legacy plan documents guarded like pages (an import from disk is held) (#248)
   - [ ] Follow-up: Linking a plan schedules one more export ~200 ms later; an edit to its files in that window is overwritten, not imported (found building B7.5b)
   - [x] B7.6 The phone (#249)
-  - [ ] B7.7 I1 done-when and docs — building
+  - [x] B7.7 I1 done-when and docs (#250)
 - [ ] B8 Grounding
 - [ ] B9 Play-forward
 - [ ] B10 The record
@@ -330,6 +336,29 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: A6 refined — the Brief
+
+B7 merged in full (#250 closed it). Step 8 of Wave 2 is A6, refined into
+six parts in EXECUTION §5 before any building, each with its journey:
+
+- **A6.1 Task workstreams.** A task is a workstream, `task:<item uid>`,
+  beside the folder roots a signal names. Claude Desktop has no folder, so
+  a session binds to the task it calls `get_brief` on, kept apart from its
+  folder. Tasks show in the lines of work, and a session is told about
+  signals naming its task.
+- **A6.2 Material footprints.** `read_material` records the session and the
+  file's hash at the read; a task's footprint is what it read, what it
+  wrote, and what its citations name.
+- **A6.3 Material signals** (`contract`, `stale-base`, the new
+  `version-split`, `collision`, `drift`), one per material naming every
+  task. They run inside `refreshSignals`, which reconciles a project's
+  signals in one pass: run apart, each refresh would resolve the other's.
+- **A6.4 Where it shows**: "Other work affected" on the Brief and in
+  `get_brief`, and the one inbox (notice, digest, tab, phone).
+- **A6.5** Sign-off packs list the signals that touched the task.
+- **A6.6** The M6 done-when: a replaced spreadsheet two tasks cite tells
+  both agents on their next call and shows once in the digest.
 
 ### 2026-09-30: B7.7 — the I1 done-when; B7 complete
 
