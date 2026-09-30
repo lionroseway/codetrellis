@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B7.1: tasks say what spec they rely on |
-| **Status** | B6 done (#231–#234, #236–#239). B7 refined into seven parts (#240). B7.1 in review: `relies_on`, `spec_links`, sections by heading, who relies on a page across plans |
-| **Next action** | Merge B7.1 when green; then B7.2, propose a spec change with the tasks it affects |
+| **Stage / step** | Wave 2 — B7.2: propose a spec change |
+| **Status** | B6 done. B7 refined (#240); B7.1 merged (#241): tasks say what spec they rely on. B7.2 in review: `propose_spec_change`, the tasks it affects, the page untouched until a person decides |
+| **Next action** | Merge B7.2 when green; then B7.3, affected agents told once and their replies kept |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b7-1-relies-on` |
+| **Branch** | `feat/phase-32-b7-2-propose` |
 | **Last updated** | 2026-09-30 |
 
 ---
@@ -177,8 +177,8 @@
   - [x] B6.6 The stack on the phone (#238)
   - [x] B6.7 Done-when and docs (#239)
 - [ ] B7 Conferring
-  - [ ] B7.1 Tasks say what they rely on (`spec_links`, sections by heading) — in review
-  - [ ] B7.2 Propose a spec change, with the tasks it affects — built, PR after B7.1
+  - [x] B7.1 Tasks say what they rely on (`spec_links`, sections by heading) (#241)
+  - [ ] B7.2 Propose a spec change, with the tasks it affects — in review
   - [ ] B7.3 Affected agents told once; their replies kept
   - [ ] B7.4 The decision is a person's: accept, amend, reject; tasks marked "spec changed"
   - [ ] B7.5 Spec breakpoints cover proposals and plan documents
