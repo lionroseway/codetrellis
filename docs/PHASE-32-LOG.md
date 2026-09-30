@@ -12,7 +12,7 @@
 | | |
 |---|---|
 | **Stage / step** | Wave 2 — B7.4: the decision is a person's |
-| **Status** | B6 done. B7 refined (#240); B7.1 merged (#241): tasks say what spec they rely on. B7.2 merged (#242): `propose_spec_change`. B7.3 merged (#243): each agent holding a relying task is told once; `reply_to_spec_proposal` keeps the impact. #244 merged (our own late export no longer undoes a claim). B7.4 in review: each agent holding a relying task is told once, never the proposer; `reply_to_spec_proposal` keeps the impact and posts a weigh-in |
+| **Status** | B6 done. B7 refined (#240); B7.1 merged (#241): tasks say what spec they rely on. B7.2 merged (#242): `propose_spec_change`. B7.3 merged (#243): each agent holding a relying task is told once; `reply_to_spec_proposal` keeps the impact. #244 merged (our own late export no longer undoes a claim). B7.4 in review: a person accepts, amends or rejects a proposal from the inbox; relying tasks are flagged "spec changed" and their agents told once |
 | **Next action** | Merge B7.4 when green; then B7.5, spec breakpoints cover proposals and plan documents |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-b7-4-decide` |
