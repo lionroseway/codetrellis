@@ -29,6 +29,7 @@ import type { PlanItem } from '../../shared/types';
 import { listWorkstreams } from './workstream-service';
 import { resolveSection, branchOfRoot, whereWorked } from './section-workstreams';
 import { readSoFar } from './material-footprints';
+import { affectedByOtherWork } from './other-work';
 import type { ItemCriterion } from '../../shared/types/criteria';
 
 const MAX_BODY_CHARS = 20_000;
@@ -154,7 +155,7 @@ function materialsFor(items: PlanItem[], item: PlanItem): MaterialSummary[] {
  * `workstreamRoot` is the folder the asking agent works in, when known, so a
  * recommended skill missing from its checkout is said to be (Phase 32 C1).
  */
-export async function getBrief(itemUid: string, opts: { workstreamRoot?: string | null } = {}) {
+export async function getBrief(itemUid: string, opts: { workstreamRoot?: string | null; refreshSignals?: boolean } = {}) {
   const item = getItem(itemUid);
   if (!item) return null;
   const plan = getPlan(item.planUid);
@@ -205,6 +206,8 @@ export async function getBrief(itemUid: string, opts: { workstreamRoot?: string 
     sent_back: criteria.filter((c) => c.state === 'sent_back').length,
     // What this task has read through read_material, and the hash each saw (A6.2).
     read_so_far: readSoFar(item.uid),
+    // What other tasks' work did to this one, from this task's side (A6.4).
+    affected_by_other_work: affectedByOtherWork(item.uid, plan?.projectPath ?? null, { refresh: opts.refreshSignals }),
     ...skillsBlock(item, plan?.projectPath ?? null, opts.workstreamRoot ?? null),
     ...worktreeBlock(item, plan?.projectPath ?? null, opts.workstreamRoot ?? null),
     how_to_work: HOW_TO_WORK,

@@ -99,4 +99,19 @@ test.describe.serial('Material signals', () => {
     expect(aw.your_task).toBe(task('Board pack'));
     expect(aw.signals.map((s) => s.id)).toContain(found[0].id);
   });
+
+  test('each task\'s brief says what the other task\'s work did to it, from its own side (A6.4)', async () => {
+    const affected = async (who: 'report' | 'pack', title: string) =>
+      (JSON.parse((await agents[who].callTool('get_brief', { item_uid: items[title] })).answer) as { affected_by_other_work: Array<{ kind: string; severity: string; state: string; says: string; other_tasks: string[] }> }).affected_by_other_work;
+    expect(await affected('pack', 'Board pack')).toEqual([{
+      signal_id: expect.any(String), kind: 'Changed material', severity: 'medium', state: 'open',
+      says: 'data/sales.csv changed since “Q3 report” cited line 2. This task uses it too.', other_tasks: ['Q3 report'],
+    }]);
+    expect((await affected('report', 'Q3 report'))[0].says).toBe('data/sales.csv changed since this task cited line 2. “Board pack” uses it too.');
+
+    // Dismissed by the person, it leaves the brief; the tab still has it.
+    const [s] = await signals();
+    expect((await h.client.raw('POST', `/api/awareness/${s.id}/state?project=${encodeURIComponent(root)}`, { state: 'dismissed' })).ok).toBe(true);
+    expect(await affected('pack', 'Board pack')).toEqual([]);
+  });
 });

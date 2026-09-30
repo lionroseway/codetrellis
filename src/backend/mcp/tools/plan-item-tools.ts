@@ -817,13 +817,15 @@ export function register(server: McpServer, deps: ToolDeps): void {
         'Everything you need to work an item, in one call: its goal and body, the guide (the plan\'s pages, in order), ' +
         'the materials you were given (name, type, size, and what read_material returns for each), every acceptance ' +
         'criterion with its kind, policy, state and what it still needs, any note a person sent back, and what this ' +
-        'task has read so far (read_so_far: each material, the parts, by whom, and the file\'s hash then). Start here, ' +
+        'task has read so far (read_so_far: each material, the parts, by whom, and the file\'s hash then), and what other ' +
+        'tasks\' work did to this one (affected_by_other_work: a shared file changed, different versions read, the same ' +
+        'output written). Start here, ' +
         'and call it again after a person sends something back. Read materials with read_material.',
       inputSchema: { item_uid: z.string() },
     },
     async ({ item_uid }) => {
       const workstreamRoot = deps.sessionService.getActiveSessions().find((s) => s.sessionId === deps.sessionId)?.workstreamRoot ?? null;
-      const brief = await deps.briefService.getBrief(item_uid, { workstreamRoot });
+      const brief = await deps.briefService.getBrief(item_uid, { workstreamRoot, refreshSignals: true });
       if (!brief) return { content: [{ type: 'text' as const, text: `Item ${item_uid} not found` }], isError: true };
       // The task is this session's workstream from now on (A6.1): a Claude
       // Desktop session has no folder, and its brief names what it works on.

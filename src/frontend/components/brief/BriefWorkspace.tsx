@@ -20,6 +20,8 @@ import { usePlanStore } from '../../stores/plan-store';
 import { usePlanItemsStore } from '../../stores/plan-items-store';
 import { useProjectStore } from '../../stores/project-store';
 import { useAgentStore } from '../../stores/agent-store';
+import { useAwarenessStore } from '../../stores/awareness-store';
+import { briefLine, kindWords } from '@shared/lib/signal-words';
 import { BodyRenderer } from '../plan/v2/BodyRenderer';
 import { CriteriaBlock } from '../plan/v2/CriteriaBlock';
 import { AgentTurnList, useAgentTurns } from '../layout/AgentTurns';
@@ -29,6 +31,54 @@ import { SignoffPackControls } from './SignoffPackControls';
 import type { ItemCriterion, PlanItem, TaskAttachment } from '@shared/types';
 import { authorKind } from '../../lib/author-words';
 import { UnverifiedIf } from '../UnverifiedTag';
+
+const OTHER_WORK_EDGE = { high: 'border-l-red-400', medium: 'border-l-amber-400', low: 'border-l-sky-400/50' } as const;
+const OTHER_WORK_STATE: Record<string, string> = { acknowledged: 'Seen', intended: 'Meant' };
+const baseName = (p: string) => p.split(/[\\/]/).pop() || p;
+
+/**
+ * Phase 32 A6.4 — what other tasks' work did to this one: a file they share
+ * changed, they read different versions of it, or they write the same
+ * output. From this task's side, in words; nothing shows when nothing does.
+ * The same signals the Awareness tab holds, so answering one there answers
+ * it here.
+ */
+function OtherWorkAffected({ taskUid }: { taskUid: string }) {
+  const root = useProjectStore((s) => s.root);
+  const signals = useAwarenessStore((s) => s.signals);
+  const refresh = useAwarenessStore((s) => s.refresh);
+  useEffect(() => {
+    const run = () => { void refresh(root); };
+    run();
+    window.addEventListener('awareness-changed', run);
+    return () => window.removeEventListener('awareness-changed', run);
+  }, [root, refresh]);
+  const id = `task:${taskUid}`;
+  const mine = signals.filter((s) => s.subject.material && s.workstreams.includes(id) && s.state !== 'dismissed' && s.state !== 'resolved');
+  if (mine.length === 0) return null;
+  return (
+    <section className="mt-6" data-testid="brief-other-work">
+      <h3 className="text-[11px] uppercase tracking-[0.1em] text-foreground-subtle font-semibold mb-2">Other work affected</h3>
+      <ul className="space-y-2">
+        {mine.map((s) => (
+          <li
+            key={s.id}
+            data-testid="brief-other-work-row"
+            data-severity={s.severity}
+            data-state={s.state}
+            className={`rounded-md border border-white/[0.06] border-l-2 ${OTHER_WORK_EDGE[s.severity]} bg-white/[0.02] px-3 py-2`}
+          >
+            <div className="flex items-center gap-2 text-[10.5px] text-foreground-subtle">
+              <span className="font-medium text-foreground-muted">{kindWords(s)}</span>
+              {OTHER_WORK_STATE[s.state] && <span>· {OTHER_WORK_STATE[s.state]}</span>}
+            </div>
+            <p className="mt-0.5 text-[13px]" title={s.subject.material}>{briefLine(s, id, { file: baseName })}</p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 /** The plan's items depth-first, siblings in order — the order the tree shows. */
 function inTreeOrder(items: PlanItem[]): PlanItem[] {
@@ -265,6 +315,7 @@ export function BriefWorkspace() {
                 <ul className="space-y-1">{guide.map((p) => <GuidePage key={p.uid} page={p} />)}</ul>
               </section>
             )}
+            <OtherWorkAffected taskUid={task.uid} />
             <ArtefactRows title={BRIEF_WORDS.materials} rows={files.filter((a) => a.role === 'material')} itemUid={task.uid} testId="brief-materials" />
             <ArtefactRows title={BRIEF_WORDS.outputs} rows={files.filter((a) => a.role === 'output')} itemUid={task.uid} testId="brief-outputs" />
             <ArtefactRows title={BRIEF_WORDS.evidence} rows={files.filter((a) => a.role === 'evidence')} itemUid={task.uid} testId="brief-evidence" />

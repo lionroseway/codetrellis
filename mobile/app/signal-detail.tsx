@@ -80,7 +80,7 @@ export default function SignalDetailScreen() {
       <Text style={styles.sectionTitle}>BOTH SIDES</Text>
       {signal.sideWords.map((side, i) => (
         <View key={side.root} style={styles.side} testID="signal-side">
-          <Text style={styles.sideName}>{i === 0 ? '' : signal.kind === 'contract' ? '→ ' : '↔ '}{side.name}</Text>
+          <Text style={styles.sideName}>{i === 0 ? '' : signal.kind === 'contract' && !signal.material ? '→ ' : '↔ '}{side.name}</Text>
           <Text style={styles.sideWords}>{side.words}</Text>
         </View>
       ))}

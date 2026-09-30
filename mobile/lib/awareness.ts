@@ -22,6 +22,8 @@ export interface PhoneSignal {
   heading: string;
   summary: string;
   sides: string[];
+  /** A task's material (A6.4): the sides are tasks, with no direction between them. */
+  material?: string;
   firstSeen: number;
   lastSeen: number;
 }

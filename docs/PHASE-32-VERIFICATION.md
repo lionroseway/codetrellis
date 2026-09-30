@@ -232,7 +232,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `GET /api/workstreams/folder-requests` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/workstreams/tasks` |  | ✗ none | 1 |  |  |  |
 | g | `POST /api/awareness/:id/reply` |  | ✗ none | 1 |  |  |  |
-| g | `POST /api/awareness/:id/state` |  | ✗ none | 9 |  |  |  |
+| g | `POST /api/awareness/:id/state` |  | ✗ none | 10 |  |  |  |
 | g | `POST /api/breakpoint-hits/:ref/answer` |  | ✗ none | 9 |  |  |  |
 | g | `POST /api/breakpoints` |  | ✗ none | 12 |  |  |  |
 | g | `POST /api/plans/:uid/budget/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4g: unflags an agent's change and records who saw it; unknown change or wrong plan 404 (agent-ui-tools, mcp-ui-tools.spec) |  |  |

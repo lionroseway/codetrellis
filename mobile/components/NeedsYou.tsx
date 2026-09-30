@@ -89,7 +89,7 @@ export default function NeedsYou() {
             </Text>
             <Text style={styles.age}>{s.state === 'open' ? ago(s.firstSeen) : 'seen'}</Text>
           </View>
-          <Text style={styles.headline}>{s.sides.join(s.kind === 'contract' ? ' → ' : ' ↔ ')}</Text>
+          <Text style={styles.headline}>{s.sides.join(s.kind === 'contract' && !s.material ? ' → ' : ' ↔ ')}</Text>
           <Text style={styles.summary} numberOfLines={3}>{s.summary.replace(/`/g, '')}</Text>
         </TouchableOpacity>
       ))}

@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — A6.3: material signals |
-| **Status** | A6.2 merged (#253; #254 carried). A6.3 built: computeMaterialSignals runs in the same refresh as the code signals; one signal per material naming every task (contract, version-split, stale-base), collision on outputs, drift outside a brief; the artefact watcher refreshes signals on a change; the digest gives each material its own line. Unit, harness (101 neighbouring) and browser awareness specs green locally |
-| **In flight** | A6.3 building on `feat/phase-32-a6-3-material-signals` |
-| **Last merged** | A6.2 (#253, `0b0c8cd`) |
-| **Next action** | Merge A6.3 when CI is green; then A6.4 on feat/phase-32-a6-4-other-work-affected ("Other work affected" on the Brief page and in get_brief; the Awareness card and the phone's Needs you, with screenshots) |
+| **Stage / step** | Wave 2 — A6.4: other work affected |
+| **Status** | A6.3 merged (#255). A6.4 built: the Brief page's Other work affected (a line per material signal from the task's side, briefLine), get_brief's affected_by_other_work, the Awareness card's material detail (each task's sentence, no graph buttons) and the phone (tasks by title with ↔, the file listed). Unit, harness (102 neighbouring), browser and phone specs green locally, with screenshots |
+| **In flight** | A6.4 building on `feat/phase-32-a6-4-other-work-affected` |
+| **Last merged** | A6.3 (#255, `0ffb03e`) |
+| **Next action** | Merge A6.4 when CI is green; then A6.5 on feat/phase-32-a6-5-signoff-pack-signals (sign-off packs list the signals that touched the task and how each was resolved) |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
-> Read from git at `origin/feat/phase-32` `0b0c8cd`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `0ffb03e`, with open PRs from GitHub.
 
 ---
 
@@ -116,8 +116,8 @@
 - [x] A6 The Brief (#251)
   - [x] A6.1 Task workstreams (a session binds to the task it asks get_brief about) (#252)
   - [x] A6.2 Material footprints (who read what, and its hash then) (#253)
-  - [ ] A6.3 Material signals in the one refresh (contract, stale-base, version-split, collision, drift) — building
-  - [ ] A6.4 Other work affected on the Brief, in get_brief, the inbox and the phone
+  - [x] A6.3 Material signals in the one refresh (contract, stale-base, version-split, collision, drift) (#255)
+  - [ ] A6.4 Other work affected on the Brief, in get_brief, the inbox and the phone — building
   - [ ] A6.5 Sign-off packs list the signals that touched the task
   - [ ] A6.6 M6 done-when and docs
 - [ ] A7 Rules
@@ -336,6 +336,40 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: A6.4 — other work affected
+
+A6.3 merged (#255). A6.4 is built:
+
+- **The Brief page** gains "Other work affected" above Materials, shown only
+  when something touches the task: one row per material signal naming it,
+  its heading ("Changed material") and a line from this task's side
+  (`briefLine`, shared): "sales.csv changed since “Q3 report” cited line 2.
+  This task uses it too." The page names the file and keeps its path on
+  hover; the agent's brief keeps the path. It reads the Awareness store, so
+  an answer given in the tab shows here ("Seen", "Meant").
+- **`get_brief` gains `affected_by_other_work`** (snake_case like the rest of
+  the brief, a decision over the plan's camelCase), refreshing the project's
+  signals first. Dismissed signals leave the Brief and the brief: the person
+  said they are not worth attention.
+- **Awareness card**: a material signal shows each task's sentence
+  (`awareness-material`), no "Show on graph" or "Show lines" (a spreadsheet
+  is not code), and ↔ rather than the contract's one-way arrow.
+- **Phone**: `PhoneSignal.material` marks a material signal, so Needs you and
+  the detail put ↔ between the tasks; the detail lists the file.
+- The inline notice and the digest already carried material signals (A6.3).
+
+Tests: unit (`briefLine` for each kind and side; the brief's empty list;
+the phone's material signal); harness `material-signals.test.ts` (each
+task's brief from its side; a dismissed signal leaves it); browser
+`e2e/plan/brief-other-work.spec.ts` with shots `brief-other-work` and
+`awareness-material-card`; phone `awareness.spec.ts` with
+`needs-you-material` and `signal-detail-material`.
+
+Found while testing: a targeted local browser run that names a serial spec
+(`brief-mode`) runs it beside the others, and its `navigate_to` moves
+every page into the Brief; a full run (CI) orders serial last, as the
+config says. Not a product bug; noted so nobody chases it.
 
 ### 2026-09-30: A6.3 — material signals
 

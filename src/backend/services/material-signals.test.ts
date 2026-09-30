@@ -5,7 +5,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { computeMaterialSignals, type MaterialTaskInput } from './material-signals';
-import { kindWords, sideWords } from '../../shared/lib/signal-words';
+import { briefLine, kindWords, sideWords } from '../../shared/lib/signal-words';
 
 const V1 = 'a'.repeat(64);
 const V2 = 'b'.repeat(64);
@@ -133,5 +133,29 @@ describe('material signals', () => {
     // A different material is a different signal.
     const [c] = computeMaterialSignals(mk('Q3 report').map((t) => ({ ...t, brief: ['x.xlsx'], reads: t.reads.map((r) => ({ ...r, path: 'x.xlsx' })) })), { 'x.xlsx': V2 });
     assert.notEqual(a.id, c.id);
+  });
+
+  test('each task\'s own line, as its Brief and its agent read it (A6.4)', () => {
+    const report = task('report', 'Q3 report', { reads: [read(V1)], cited: [{ path: SALES, part: 'Summary!B2:F9', sha256: V1, signedOff: true }] });
+    const pack = task('pack', 'Board pack', { reads: [read(V2)] });
+    const [contract] = computeMaterialSignals([report, pack], { [SALES]: V2 });
+    assert.equal(briefLine(contract, 'task:report'),
+      'data/sales-2026.xlsx changed since this task cited Summary!B2:F9. A person had already signed this task\'s citation off. “Board pack” uses it too.');
+    assert.equal(briefLine(contract, 'task:pack'),
+      'data/sales-2026.xlsx changed since “Q3 report” cited Summary!B2:F9. “Q3 report” had already been signed off. This task uses it too.');
+
+    const [split] = computeMaterialSignals([task('report', 'Q3 report', { reads: [read(V1)] }), pack], { [SALES]: V2 });
+    assert.equal(briefLine(split, 'task:pack'), 'This task read the current data/sales-2026.xlsx; “Q3 report” worked from an earlier version.');
+    assert.equal(briefLine(split, 'task:report'), 'This task worked from an earlier version of data/sales-2026.xlsx; “Board pack” has the current one.');
+
+    const [stale] = computeMaterialSignals([task('report', 'Q3 report', { reads: [read(V1)] }), task('pack', 'Board pack', { reads: [read(V1)] })], { [SALES]: V2 });
+    assert.equal(briefLine(stale, 'task:report'), 'data/sales-2026.xlsx changed after this task and “Board pack” read it.');
+
+    const [collision] = computeMaterialSignals([task('report', 'Q3 report', { outputs: ['out/board.pptx'] }), task('pack', 'Board pack', { outputs: ['out/board.pptx'] })], {});
+    assert.equal(briefLine(collision, 'task:pack'), 'This task and “Q3 report” both record out/board.pptx as their output.');
+
+    const [drift] = computeMaterialSignals([task('pack', 'Board pack', { brief: [], reads: [read(V1)] })], { [SALES]: V1 });
+    assert.equal(briefLine(drift, 'task:pack'), 'This task read data/sales-2026.xlsx, which “Q3 report” was given, not this task.');
+    assert.equal(briefLine(drift, 'task:report'), '“Board pack” read data/sales-2026.xlsx, which this task was given.');
   });
 });
