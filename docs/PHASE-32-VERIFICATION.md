@@ -69,7 +69,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 147 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 148 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -146,7 +146,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `GET /api/plans/reconcile` |  | ✗ none | 1 | ✓ 0.4c-1: the orphan once its plan is archived (plan-rest) |  |  |
 | c | `GET /api/plans/stitched` |  | ✗ none | 2 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/skills` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/stack` |  | ✗ none | 1 |  |  |  |
+| c | `GET /api/stack` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/team-activity` |  | ✗ none | 3 | ✓ 0.4c: exercised by cdev-phase6, review-confinement, surfaced-rest (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/comments` |  | ✗ none | 2 | ✓ 0.4c-2: top-level and reply; missing body 400 (item-surface) |  |  |
 | c | `POST /api/contributions/accept` |  | ✗ none | 2 | ✓ 0.4c: exercised by filesystem-sinks, surfaced-rest (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -164,9 +164,9 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | 1 | ✓ 0.4c-2: old state back as a new version; unknown 404 (item-surface) |  |  |
 | c | `POST /api/items/:uid/skill-arrivals/accept` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/worktree` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans` |  | 1 | 74 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans` |  | 1 | 75 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 2 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `POST /api/plans/:planUid/items` |  | ✗ none | 41 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:planUid/items` |  | ✗ none | 42 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 2 | ✓ 0.4c: exercised by criteria-loops (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/docs` |  | ✗ none | 6 | ✓ 0.4c: exercised by full-loop, phone-plans, plan-docs, plan-export, +2 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -181,7 +181,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/plans/import-external` |  | ✗ none | 1 | ✓ 0.4c-1: issue checklist becomes Actions; unknown source 400 (plan-rest) |  |  |
 | c | `POST /api/plans/prune-orphans` |  | ✗ none | 1 | ✓ 0.4c-1: removes only the opened project's current orphans; everything else skipped (plan-rest) |  |  |
 | c | `PUT /api/items/:uid` |  | ✗ none | 16 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
-| c | `PUT /api/items/:uid/workstream` |  | ✗ none | 5 |  |  |  |
+| c | `PUT /api/items/:uid/workstream` |  | ✗ none | 6 |  |  |  |
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 3 | ✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `PUT /api/plan-phases/:phaseUid` |  | ✗ none | 2 | ✓ 0.4c: exercised by full-loop, plan-phases (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `PUT /api/plans/:uid` |  | ✗ none | 5 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -210,7 +210,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `DELETE /api/breakpoints/:id` |  | ✗ none | 2 |  |  |  |
 | g | `GET /api/agent-events` |  | ✗ none | 6 |  |  |  |
 | g | `GET /api/agent/status` |  | ✗ none | 3 | ✓ 0.4g: the session watcher's state, nothing more (misc-endpoints) |  |  |
-| g | `GET /api/awareness` |  | ✗ none | 19 |  |  |  |
+| g | `GET /api/awareness` |  | ✗ none | 20 |  |  |  |
 | g | `GET /api/breakpoint-hits` |  | ✗ none | 3 |  |  |  |
 | g | `GET /api/breakpoints` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/mcp/config` |  | ✗ none | 1 | ✓ 0.4g: a copied config carries the token and connects (misc-endpoints) |  |  |
@@ -220,12 +220,12 @@ records that — but "✗ none" is proof of a gap.
 | g | `GET /api/plans/:uid/budget/check` |  | ✗ none | 1 | ✓ 0.4g: agrees with check_budget; unknown plan 404 (agent-ui-tools); bug 27 |  |  |
 | g | `GET /api/sensors/doc-check` |  | ✗ none | 1 | ✓ 0.4g: needs an opened project (400 / 403); nothing stale without docs (agent-ui-tools) — stale docs in 0.4l |  |  |
 | g | `GET /api/sessions` |  | ✗ none | 8 | ✓ 0.4g: a connected agent appears with its type and plan (sessions, agent-ui-tools) |  |  |
-| g | `GET /api/workstreams` |  | ✗ none | 16 |  |  |  |
+| g | `GET /api/workstreams` |  | ✗ none | 17 |  |  |  |
 | g | `GET /api/workstreams/changes` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/workstreams/commits` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/workstreams/folder-requests` |  | ✗ none | 1 |  |  |  |
 | g | `POST /api/awareness/:id/reply` |  | ✗ none | 1 |  |  |  |
-| g | `POST /api/awareness/:id/state` |  | ✗ none | 8 |  |  |  |
+| g | `POST /api/awareness/:id/state` |  | ✗ none | 9 |  |  |  |
 | g | `POST /api/breakpoint-hits/:ref/answer` |  | ✗ none | 7 |  |  |  |
 | g | `POST /api/breakpoints` |  | ✗ none | 9 |  |  |  |
 | g | `POST /api/plans/:uid/budget/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4g: unflags an agent's change and records who saw it; unknown change or wrong plan 404 (agent-ui-tools, mcp-ui-tools.spec) |  |  |
@@ -351,7 +351,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `get_plan_summary` | plan-item · read | ✗ none | 1 | ✓ 0.4c-2: counts by kind, byStatus, completion (item-surface) |  |  |
 | c | `get_plan_timeline` | plan-item · read | ✗ none | 1 | ✓ 0.4c: exercised by plan-items (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `get_skill` | plan-item · read | ✗ none | 1 |  |  |  |
-| c | `get_stack` | plan · read | ✗ none | 1 |  |  |  |
+| c | `get_stack` | plan · read | ✗ none | 2 |  |  |  |
 | c | `import_external` | plan · write | ✗ none | 1 | ✓ 0.7: plan and items authored by the caller, in the open project, shared by default; no project refused (item-batch-search-import) |  |  |
 | c | `import_plan_from_files` | plan · files | ✗ none | 1 | ✓ 0.4c: exercised by cdev-phase3-demo (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `list_contributions` | contribution · read | ✗ none | 1 | ✓ 0.4c: exercised by cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -496,7 +496,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `list_system_docs` | system-docs · read | ✗ none | 3 | ✓ 0.4l: the project's docs; search over title and body (sysdocs-intake) |  |  |
 | l | `mark_external_synced` | intake · write | ✗ none | 3 | ✓ 0.4l: advances the watermark; unknown plan refused (sysdocs-intake) |  |  |
 | l | `read_system_doc` | system-docs · read | ✗ none | 1 | ✓ 0.4l: by uid or by slug; unknown refused (sysdocs-intake) |  |  |
-| l | `set_plan_external_ref` | intake · write | ✗ none | 2 | ✓ 0.4l: idempotent on the key; unknown plan refused (sysdocs-intake) |  |  |
+| l | `set_plan_external_ref` | intake · write | ✗ none | 3 | ✓ 0.4l: idempotent on the key; unknown plan refused (sysdocs-intake) |  |  |
 | l | `verify_system_doc` | system-docs · write | ✗ none | 3 | ✓ 0.4l: stamps HEAD (sysdocs-intake) |  |  |
 | l | `write_system_doc` | system-docs · write | ✗ none | 3 | ✓ 0.4l: creates in the agent's name (was recorded as a person's); update renames the file with the title; unknown uid refused (sysdocs-intake); bug 47 |  |  |
 

@@ -47,6 +47,35 @@ export interface StackPlan {
   /** Breakpoint hits in this plan waiting on a person. */
   needsYou: number;
   tasks: StackTask[];
+  /** Other plans this one touches (B6.3), declared or actual. */
+  overlaps: StackOverlap[];
+}
+
+/** An open awareness signal between the two plans' lines of work. */
+export interface StackOverlapSignal {
+  id: string;
+  kind: 'collision' | 'contract';
+  severity: 'high' | 'medium' | 'low';
+  summary: string;
+}
+
+/**
+ * Phase 32 B6.3 — where this plan meets another. Declared: both plans'
+ * unfinished tasks name the same files or functions. Actual: an open
+ * collision or contract signal between the lines of work their tasks are
+ * worked on. Either, or both.
+ */
+export interface StackOverlap {
+  withPlanUid: string;
+  withLabel: string;
+  declared: { files: string[]; symbols: string[] };
+  actual: StackOverlapSignal[];
+  /** A high signal is open between them. */
+  high: boolean;
+  /** `⚠ overlaps JIRA-150` */
+  words: string;
+  /** What they share, in a sentence. */
+  detail: string;
 }
 
 export interface Stack {
