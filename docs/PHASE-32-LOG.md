@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | **Stage / step** | Wave 2 — B7.3: affected agents told once, and weighing in |
-| **Status** | B6 done. B7 refined (#240); B7.1 merged (#241): tasks say what spec they rely on. B7.2 in review (#242): `propose_spec_change`. B7.3 in review, stacked on it: each agent holding a relying task is told once, never the proposer; `reply_to_spec_proposal` keeps the impact and posts a weigh-in |
-| **Next action** | Merge #242 when green, bring it into B7.3 and open its PR; then B7.4, the decision is a person's |
+| **Status** | B6 done. B7 refined (#240); B7.1 merged (#241): tasks say what spec they rely on. B7.2 merged (#242): `propose_spec_change`. B7.3 in review: each agent holding a relying task is told once, never the proposer; `reply_to_spec_proposal` keeps the impact and posts a weigh-in |
+| **Next action** | Merge B7.3 when green; then B7.4, the decision is a person's |
 | **Blockers** | none |
 | **Branch** | `feat/phase-32-b7-3-told-once` |
 | **Last updated** | 2026-09-30 |
@@ -178,7 +178,7 @@
   - [x] B6.7 Done-when and docs (#239)
 - [ ] B7 Conferring
   - [x] B7.1 Tasks say what they rely on (`spec_links`, sections by heading) (#241)
-  - [ ] B7.2 Propose a spec change, with the tasks it affects — in review
+  - [x] B7.2 Propose a spec change, with the tasks it affects (#242)
   - [ ] B7.3 Affected agents told once; their replies kept — in review
   - [ ] B7.4 The decision is a person's: accept, amend, reject; tasks marked "spec changed"
   - [ ] B7.5 Spec breakpoints cover proposals and plan documents
