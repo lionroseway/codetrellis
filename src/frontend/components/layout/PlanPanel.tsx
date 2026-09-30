@@ -154,19 +154,22 @@ export function PlanPanel() {
 
         {activeTab === 'timeline' && (
           <div className="text-[11px]">
+            {/* Pinned while the Timeline scrolls: a filter nobody can see reads as missing work. */}
             {stackFocus && (
-              <div data-testid="timeline-following" className="flex items-center gap-2 mx-2 mt-1.5 mb-1 px-2 py-1 rounded border border-accent/30 bg-accent/[0.05] text-foreground-muted">
-                <span>
-                  Showing <span className="text-foreground font-medium">{stackFocus.label}</span>&rsquo;s work: {turns.length} of {allTurns.length} {allTurns.length === 1 ? 'turn' : 'turns'}
-                </span>
-                <span className="flex-1" />
-                <button
-                  data-testid="timeline-show-all"
-                  className="text-accent hover:underline"
-                  onClick={() => useGraphStore.getState().setStackFocus(null)}
-                >
-                  Show all
-                </button>
+              <div className="sticky -top-2 z-10 bg-surface-solid pt-1.5 pb-1">
+                <div data-testid="timeline-following" className="flex items-center gap-2 mx-2 px-2 py-1 rounded border border-accent/30 bg-accent/[0.05] text-foreground-muted">
+                  <span>
+                    Showing <span className="text-foreground font-medium">{stackFocus.label}</span>&rsquo;s work: {turns.length} of {allTurns.length} {allTurns.length === 1 ? 'turn' : 'turns'}
+                  </span>
+                  <span className="flex-1" />
+                  <button
+                    data-testid="timeline-show-all"
+                    className="text-accent hover:underline"
+                    onClick={() => useGraphStore.getState().setStackFocus(null)}
+                  >
+                    Show all
+                  </button>
+                </div>
               </div>
             )}
             <ReplayStart />

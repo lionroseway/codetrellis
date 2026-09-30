@@ -66,6 +66,13 @@ test.describe('Following a plan from the stack', () => {
     await expect(bar).toContainText(`Showing ${BILLING}’s work:`);
     await expect(billingTurn).toHaveCount(1);
     await expect(exportsTurn).toHaveCount(0);
+
+    // The bar stays in sight however far the Timeline is scrolled.
+    await bar.evaluate((el) => {
+      const scroller = el.closest('.overflow-y-auto');
+      if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    });
+    await expect(bar).toBeInViewport();
     await shot(page, 'stack-follow-timeline');
 
     // Show all lets the selection go, everywhere at once.

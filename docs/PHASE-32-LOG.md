@@ -335,6 +335,10 @@ other half of design rule 9 ("one selection").
     Show all brings the other back and lets the stack row go.
     `stack-tab.spec.ts` now expects "Following".
 
+The bar is pinned to the top of the Timeline: the first screenshot showed
+the Timeline scrolled past it, and a filter nobody can see reads as missing
+work. The spec scrolls to the bottom and checks the bar is still in view.
+
 ### 2026-09-30: Pinning a baseline froze the server
 
 B6.4's CI (#234, browser 1/3) failed `websocket-events.spec.ts:106`: a socket
