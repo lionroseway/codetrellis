@@ -14,6 +14,8 @@
 import { getDb } from './database';
 import { markDirty } from './persistence';
 import type { MaterialLocator } from './material-reader/read';
+import type { MaterialTaskInput } from './material-signals';
+import { taskWorkstreamId } from './task-workstreams';
 
 function rowsOf<T>(sql: string, params: Array<string | number | null> = []): T[] {
   const res = getDb().exec(sql, params);
@@ -90,6 +92,10 @@ export interface FootprintFile {
 export interface FootprintCitation extends FootprintFile {
   locator: MaterialLocator | null;
   criterionUid: string;
+  /** The file's hash when it was last cited there. */
+  sha256AtCite: string | null;
+  /** A person approved the criterion at its latest decision. */
+  signedOff: boolean;
 }
 
 export interface TaskFootprint {
@@ -127,10 +133,11 @@ export function taskFootprint(itemUid: string): TaskFootprint {
     [itemUid],
   ).map((r) => ({ attachmentUid: r.uid, path: r.value, sha256: r.sha256 }));
 
-  const seen = new Set<string>();
-  const cited: FootprintCitation[] = [];
-  for (const r of rowsOf<{ criterion_uid: string; attachment_uid: string; value: string; sha256: string | null; locator: string | null }>(
-    `SELECT e.criterion_uid, e.attachment_uid, a.value, a.sha256, e.locator
+  // Each part once, as it was cited last: a fresh citation is against the file as it is now.
+  const cited = new Map<string, FootprintCitation>();
+  for (const r of rowsOf<{ criterion_uid: string; attachment_uid: string; value: string; sha256: string | null; locator: string | null; at_cite: string | null; decision: string | null }>(
+    `SELECT e.criterion_uid, e.attachment_uid, a.value, a.sha256, e.locator, e.sha256_at_submit AS at_cite,
+            (SELECT s.decision FROM criterion_signoffs s WHERE s.criterion_uid = e.criterion_uid ORDER BY s.created_at DESC, s.rowid DESC LIMIT 1) AS decision
        FROM criterion_evidence e
        JOIN item_criteria c ON c.uid = e.criterion_uid
        JOIN attachments a ON a.uid = e.attachment_uid
@@ -140,12 +147,14 @@ export function taskFootprint(itemUid: string): TaskFootprint {
   )) {
     const locator = parseLocator(r.locator);
     const key = `${r.value}\n${locatorKey(locator) ?? ''}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    cited.push({ attachmentUid: r.attachment_uid, path: r.value, sha256: r.sha256, locator, criterionUid: r.criterion_uid });
+    cited.delete(key);
+    cited.set(key, {
+      attachmentUid: r.attachment_uid, path: r.value, sha256: r.sha256, locator, criterionUid: r.criterion_uid,
+      sha256AtCite: r.at_cite, signedOff: r.decision === 'approved',
+    });
   }
 
-  return { itemUid, read: [...byPath.values()], outputs, cited };
+  return { itemUid, read: [...byPath.values()], outputs, cited: [...cited.values()] };
 }
 
 /** A locator in words, as a person would say it: "Summary!B2:F9", "page 3", "lines 40–80". */
@@ -172,4 +181,59 @@ export function readSoFar(itemUid: string): Array<{ path: string; attachment_uid
     sha256: m.lastSha256,
     last_read_at: new Date(m.reads[m.reads.length - 1].at).toISOString(),
   }));
+}
+
+/**
+ * What the material signals (A6.3) are computed from, for one project: every
+ * task that has read, recorded an output or cited a material, and each
+ * material's hash now. The project is matched as plans store it, with or
+ * without a trailing separator.
+ */
+export function materialInputsOf(projectRoot: string): { tasks: MaterialTaskInput[]; current: Record<string, string | null> } {
+  const trimmed = projectRoot.replace(/[\\/]+$/, '');
+  const inProject = `SELECT i.uid FROM plan_items i JOIN plans p ON p.uid = i.plan_uid WHERE p.project_path = ? OR p.project_path = ?`;
+  const uids = rowsOf<{ uid: string }>(
+    `SELECT DISTINCT uid FROM (
+       SELECT item_uid AS uid FROM material_reads
+       UNION SELECT target_uid FROM attachments WHERE role = 'output'
+       UNION SELECT c.item_uid FROM criterion_evidence e JOIN item_criteria c ON c.uid = e.criterion_uid WHERE e.attachment_uid IS NOT NULL
+     ) WHERE uid IN (${inProject}) ORDER BY uid`,
+    [projectRoot, trimmed],
+  ).map((r) => r.uid);
+
+  const titleOf = (uid: string) => rowsOf<{ title: string }>('SELECT title FROM plan_items WHERE uid = ?', [uid])[0]?.title ?? uid;
+  const ownerOf = (attachmentUid: string) => rowsOf<{ target_uid: string }>('SELECT target_uid FROM attachments WHERE uid = ?', [attachmentUid])[0]?.target_uid ?? null;
+
+  const tasks: MaterialTaskInput[] = uids.map((uid) => {
+    const f = taskFootprint(uid);
+    const brief = rowsOf<{ value: string }>(
+      `SELECT a.value FROM attachments a WHERE a.target_uid = ? AND a.role IS NOT NULL
+       UNION SELECT a.value FROM attachments a JOIN plan_items pg ON pg.uid = a.target_uid
+        WHERE a.role = 'material' AND pg.kind = 'object' AND pg.plan_uid = (SELECT plan_uid FROM plan_items WHERE uid = ?)`,
+      [uid, uid],
+    ).map((r) => r.value);
+    return {
+      id: taskWorkstreamId(uid),
+      title: titleOf(uid),
+      brief,
+      reads: f.read.map((m) => {
+        const owner = ownerOf(m.attachmentUid) ?? uid;
+        return { path: m.path, sha256: m.lastSha256, owner: taskWorkstreamId(owner), ownerTitle: titleOf(owner) };
+      }),
+      outputs: f.outputs.map((o) => o.path),
+      cited: f.cited.map((c) => ({ path: c.path, part: partWords(c.locator), sha256: c.sha256AtCite, signedOff: c.signedOff })),
+    };
+  });
+
+  // Each material's hash now: of the attachment of it whose file was seen most recently.
+  const current: Record<string, string | null> = {};
+  const paths = new Set(tasks.flatMap((t) => [...t.reads.map((r) => r.path), ...t.cited.map((c) => c.path)]));
+  for (const p of paths) {
+    current[p] = rowsOf<{ sha256: string | null }>(
+      `SELECT a.sha256 FROM attachments a WHERE a.value = ? AND a.role IS NOT NULL AND a.target_uid IN (${inProject})
+        ORDER BY COALESCE(a.mtime, 0) DESC, a.created_at DESC LIMIT 1`,
+      [p, projectRoot, trimmed],
+    )[0]?.sha256 ?? null;
+  }
+  return { tasks, current };
 }

@@ -262,9 +262,11 @@ export interface WorkstreamLineChanges {
 /**
  * The kinds built so far. `collision`, `contract` (A2.3), `drift` (A2.5) and
  * `stale-base` come from the footprints; `rule`, `duplicate` and `decision`
- * follow (awareness spec §4.3).
+ * follow (awareness spec §4.3). Tasks' materials (A6.3) raise the same kinds
+ * with `subject.material` set, and one of their own: `version-split`, two
+ * tasks that read different versions of one file.
  */
-export type SignalKind = 'collision' | 'contract' | 'drift' | 'stale-base';
+export type SignalKind = 'collision' | 'contract' | 'drift' | 'stale-base' | 'version-split';
 export type SignalSeverity = 'high' | 'medium' | 'low';
 /**
  * Where a signal stands (A1.6, set by a person from A1.8):
@@ -338,6 +340,21 @@ export interface AwarenessSignal {
     intended?: string[];
     /** Drift: the claimed items whose scope the files fall outside (A2.5). */
     items?: string[];
+    /**
+     * A material signal (A6.3): the file several tasks use, project-relative.
+     * Its workstreams are tasks (`task:<uid>`), named in `labels`.
+     */
+    material?: string;
+    /** Each task workstream's title, by id, so every surface names it the same. */
+    labels?: Record<string, string>;
+    /** Contract: the parts of the material the tasks cite, in words ("Summary!B2:F9"). */
+    parts?: string[];
+    /** Contract: the tasks that cite it. */
+    citedBy?: string[];
+    /** Contract: the tasks whose citation of it was already signed off. */
+    signedOff?: string[];
+    /** Version split: which version each task read last. */
+    readVersions?: Record<string, 'current' | 'earlier'>;
   };
   /** The workstreams it names, by folder, sorted. */
   workstreams: string[];

@@ -143,4 +143,26 @@ describe('material footprints', () => {
     assert.deepEqual(fp.readSoFar(PACK)[0].parts, ['the whole file']);
     assert.deepEqual(fp.readSoFar('no-such-task'), []);
   });
+
+  test('the signals\' inputs: each task with its brief, latest reads and owners, outputs, cited parts; each material\'s hash now', () => {
+    const { tasks, current } = fp.materialInputsOf(project);
+    const report = tasks.find((t) => t.id === `task:${REPORT}`)!;
+    const pack = tasks.find((t) => t.id === `task:${PACK}`)!;
+    assert.deepEqual(tasks.map((t) => t.title).sort(), ['Board pack', 'Q3 report']);
+    assert.deepEqual(report.brief.sort(), ['in/sales.csv', 'out/report.md']);
+    assert.deepEqual(pack.brief, []);
+    // The pack read the report's material: its latest read, and who holds the file.
+    assert.deepEqual(pack.reads.map((r) => [r.path, r.owner, r.ownerTitle]), [['in/sales.csv', `task:${REPORT}`, 'Q3 report']]);
+    assert.equal(report.reads[0].sha256, fp.taskFootprint(REPORT).read[0].lastSha256);
+    assert.deepEqual(report.outputs, ['out/report.md']);
+    // Cited twice at one part: once, as last cited, and not signed off.
+    assert.equal(report.cited.length, 1);
+    assert.deepEqual({ ...report.cited[0], sha256: undefined }, { path: 'in/sales.csv', part: 'line 2', sha256: undefined, signedOff: false });
+    assert.ok(report.cited[0].sha256);
+    const sales = artefacts.listArtefacts(REPORT).find((a) => a.path === 'in/sales.csv')!;
+    assert.deepEqual(current, { 'in/sales.csv': sales.sha256 });
+    // With a trailing separator, the same project.
+    assert.equal(fp.materialInputsOf(`${project}${path.sep}`).tasks.length, 2);
+    assert.deepEqual(fp.materialInputsOf(path.join(tmp, 'elsewhere')).tasks, []);
+  });
 });

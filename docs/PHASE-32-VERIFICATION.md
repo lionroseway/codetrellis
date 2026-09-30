@@ -69,7 +69,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 160 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 161 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -168,9 +168,9 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/items/:uid/skill-arrivals/accept` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/spec-proposals` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/worktree` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans` |  | 1 | 87 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans` |  | 1 | 88 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 2 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `POST /api/plans/:planUid/items` |  | ✗ none | 53 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:planUid/items` |  | ✗ none | 54 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 2 | ✓ 0.4c: exercised by criteria-loops (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/docs` |  | ✗ none | 7 | ✓ 0.4c: exercised by full-loop, phone-plans, plan-docs, plan-export, +2 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -206,7 +206,7 @@ records that — but "✗ none" is proof of a gap.
 | e | `GET /api/artefacts/:uid/content` |  | ✗ none | 1 | ✓ 0.4e: bytes with nosniff/no-store/sandbox CSP; 206 range; 416; image type; 404 (brief-surface, artefact-viewer) |  |  |
 | e | `GET /api/artefacts/:uid/rendition` |  | ✗ none | 1 | ✓ 0.4e: 415 for a type it does not convert; 503 with a sentence and fallback without an engine; 404 (brief-surface) |  |  |
 | e | `GET /api/items/:uid/artefacts` |  | ✗ none | 1 | ✓ 0.4e: the item's files, re-hashed after an edit; 404 (brief-surface) |  |  |
-| e | `POST /api/items/:uid/artefacts` |  | ✗ none | 1 | ✓ 0.4e: hashed, stored relative, re-record in place; bad role, type, missing, outside, link, unknown item refused (brief-surface) |  |  |
+| e | `POST /api/items/:uid/artefacts` |  | ✗ none | 2 | ✓ 0.4e: hashed, stored relative, re-record in place; bad role, type, missing, outside, link, unknown item refused (brief-surface) |  |  |
 | f | `GET /api/channels/:eventUid/thread` |  | ✗ none | 1 | ✓ 0.4f: root then replies in order, human and agent posts; unknown root → [] (presence-channels, cdev-channels) |  |  |
 | f | `GET /api/presence/cards` |  | ✗ none | 2 | ✓ 0.4f: posted card listed with its agent; empty after dismiss (presence-channels) |  |  |
 | f | `POST /api/channels/:eventUid/status` |  | ✗ none | 1 | ✓ 0.4f: resolve, reopen; broadcast; missing/unknown status 400; unknown event 404 (presence-channels) |  |  |
@@ -216,7 +216,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `DELETE /api/breakpoints/:id` |  | ✗ none | 3 |  |  |  |
 | g | `GET /api/agent-events` |  | ✗ none | 6 |  |  |  |
 | g | `GET /api/agent/status` |  | ✗ none | 3 | ✓ 0.4g: the session watcher's state, nothing more (misc-endpoints) |  |  |
-| g | `GET /api/awareness` |  | ✗ none | 21 |  |  |  |
+| g | `GET /api/awareness` |  | ✗ none | 22 |  |  |  |
 | g | `GET /api/breakpoint-hits` |  | ✗ none | 3 |  |  |  |
 | g | `GET /api/breakpoints` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/mcp/config` |  | ✗ none | 1 | ✓ 0.4g: a copied config carries the token and connects (misc-endpoints) |  |  |
@@ -393,16 +393,16 @@ records that — but "✗ none" is proof of a gap.
 | c | `update_item` | plan-item · write | ✗ none | 18 | ✓ 0.4c: exercised by agent-loop, cdev-phase3-demo, cdev-phase5, criteria-signoff, +6 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `update_item_progress` | plan-item · write | ✗ none | 2 | ✓ 0.4c: exercised by plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `update_plan` | plan · write | ✗ none | 2 | ✓ 0.4c-1: title/status/description, version recorded; write-through continues after a rename (plan-tools; bug 22) |  |  |
-| d | `add_criterion` | plan-item · write | ✗ none | 1 | ✓ 0.4d: kept at propose, tagged with the agent's name in the app (criteria-signoff, criteria.spec) |  |  |
+| d | `add_criterion` | plan-item · write | ✗ none | 2 | ✓ 0.4d: kept at propose, tagged with the agent's name in the app (criteria-signoff, criteria.spec) |  |  |
 | d | `approve_gate` | plan-item · read | ✗ none | 1 | ✓ 0.4d: retired — refuses and points at submit_criterion (criteria-signoff) |  |  |
 | d | `check_criterion` | plan-item · read | ✗ none | 2 | ✓ 0.4d: refuses a cell outside the file, passes once fixed (criteria-loops) |  |  |
 | d | `get_worklist` | plan-item · read | ✗ none | 1 | ✓ 0.4d: hands back the send-back note and where it points (criteria-loops) |  |  |
 | d | `list_criteria` | plan-item · read | ✗ none | 3 | ✓ 0.4d: migrated line verbatim plus the gate, with decided_by (criteria-signoff) |  |  |
 | d | `run_checks` | plan-item · read | ✗ none | 1 | ✓ 0.4d: names the stale criterion and the changed file; approves nothing (criteria-loops) |  |  |
-| d | `submit_criterion` | plan-item · write | ✗ none | 5 | ✓ 0.4d: submitting is not approving; agent policy self-approves in the agent's name (criteria-signoff) |  |  |
-| e | `get_brief` | plan-item · read | ✗ none | 6 | ✓ 0.4e: item, guide from pages, own files + pages' materials only, still_needs; unknown refused (brief-surface) |  |  |
+| d | `submit_criterion` | plan-item · write | ✗ none | 6 | ✓ 0.4d: submitting is not approving; agent policy self-approves in the agent's name (criteria-signoff) |  |  |
+| e | `get_brief` | plan-item · read | ✗ none | 7 | ✓ 0.4e: item, guide from pages, own files + pages' materials only, still_needs; unknown refused (brief-surface) |  |  |
 | e | `list_materials` | plan-item · read | ✗ none | 1 | ✓ 0.4e: every file item by item in tree order, outputs included; unknown refused (brief-surface) |  |  |
-| e | `read_material` | plan-item · files | ✗ none | 2 | ✓ 0.4e: CSV by {range} (bug 24), text by {lines}, image as itself; read logged on the item (brief-surface, read unit) |  |  |
+| e | `read_material` | plan-item · files | ✗ none | 3 | ✓ 0.4e: CSV by {range} (bug 24), text by {lines}, image as itself; read logged on the item (brief-surface, read unit) |  |  |
 | e | `record_artefact` | plan-item · write | ✗ none | 4 | ✓ 0.4e: agent records an output (brief-surface, criteria-loops) |  |  |
 | f | `await_ack` | presence · write | ✗ none | 1 | ✓ 0.4f: released by ack; instant when already acked; unknown card an error at once; dismissed → via dismissed (presence-channels; bug 25) |  |  |
 | f | `await_decision` | presence · read | ✗ none | 8 |  |  |  |
@@ -423,7 +423,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `clipboard_write` | ui · write | ✗ none | 1 | ✓ 0.4g: sends the text to the window (agent-ui-tools) |  |  |
 | g | `declare_intent` | awareness · write | ✗ none | 2 |  |  |  |
 | g | `get_app_guide` | ui · read | ✗ none | 3 | ✓ 0.4g: every flavour distinct; summary names this project's plans; unknown flavour refused (agent-ui-tools) |  |  |
-| g | `get_awareness` | awareness · read | ✗ none | 8 |  |  |  |
+| g | `get_awareness` | awareness · read | ✗ none | 9 |  |  |  |
 | g | `get_budget` | budget · read | ✗ none | 1 | ✓ 0.4g: ceiling, spent, forecast, notes; unknown plan refused (agent-ui-tools) |  |  |
 | g | `get_log_path` | ui · read | ✗ none | 1 | ✓ 0.4g: today's file in the data dir; naming it creates nothing (agent-ui-tools), logger-path unit; bug 28 |  |  |
 | g | `get_logs` | ui · read | ✗ none | 1 | ✓ 0.4g: says when there is no log file; tail and filter of the desktop log (agent-ui-tools); bug 28 |  |  |

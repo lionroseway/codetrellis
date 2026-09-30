@@ -56,6 +56,15 @@ describe('the push', () => {
     assert.equal(sent.length, 2);
     assert.equal((sent[1].body as Array<{ body: string }>)[0].body, 'Two lines of work are changing the same code.');
   });
+
+  test('a material signal (A6.3) says what kind of overlap in its own words, naming no file', async () => {
+    const before = sent.length;
+    await pushForSignal({ id: 'm1', kind: 'drift', severity: 'high', subject: { material: 'data/sales.xlsx' } });
+    assert.equal(sent.length, before + 1);
+    const body = (sent[before].body as Array<{ body: string }>)[0].body;
+    assert.equal(body, 'A task is reading a file its brief does not include.');
+    assert.doesNotMatch(body, /sales/);
+  });
 });
 
 describe('where pushes go', () => {
