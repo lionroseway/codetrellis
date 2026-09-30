@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — C2.2a: turning a review host on |
-| **Status** | HD3 merged (#262). C2.2 split in two: C2.2a built, turning a review host on with no request yet: the host read from the origin remote (GitHub supported; GitLab and Bitbucket recognised), a per-device switch per project that a changed remote turns off, turning on and saving a token for the app window only, the token per host in the OS keychain (Electron safeStorage) or memory only and saying so, Settings → Review hosts, Telemetry. Unit (1713), harness (review-host-switch 7 against a stand-in GitHub asked nothing; grant-guard, updates), browser (review-host-settings with a shot, modal-chrome) green locally |
-| **In flight** | C2.2a building on `feat/phase-32-c2-2a-review-host-switch` |
-| **Last merged** | HD3 (#262, `2514cb0`) |
-| **Next action** | Merge C2.2a when CI is green; then C2.2b on feat/phase-32-c2-2b-review-host-github (the GitHub adapter behind activeReviewHost: open, merged and closed pull requests, checks and approvals; in review and closed, from GitHub) |
+| **Stage / step** | Wave 2 — C2.2b: GitHub behind the review host |
+| **Status** | C2.2a merged (#263). C2.2b built: for a project whose host the person turned on, each branch's pull request is read from GitHub (open with its checks and reviews, merged, closed), kept two minutes, the token only in that request; tasks say in review, merged by #N or closed without merging, with source github; no pull request or a failed read keeps git's answer with a note; git's proof of a merge stands over the host. The tree, the task line, get_plan (asks first) and get_brief (from what is kept) say it. Unit (1728), harness (review-host-github 7 against a stand-in, and the C2.1/C2.2a/brief specs), browser (review-host-states, 2 shots) green locally |
+| **In flight** | C2.2b building on `feat/phase-32-c2-2b-review-host-github` |
+| **Last merged** | C2.2a (#263, `38c0664`) |
+| **Next action** | Merge C2.2b when CI is green (C2.2 done); then C2.3 on feat/phase-32-c2-3-gitlab-bitbucket (GitLab merge requests and pipelines, Bitbucket pull requests and build statuses, on the same interface) |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
-> Read from git at `origin/feat/phase-32` `2514cb0`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `38c0664`, with open PRs from GitHub.
 
 ---
 
@@ -212,8 +212,8 @@
 - [ ] C2 Team status through git (git first for any host; a host adapter only when turned on), refined in EXECUTION §6 — building
   - [x] C2.1 Each item's state from git, for any host or none (building, pushed, merged, with its source) (#259)
   - [ ] C2.2 The review-host interface, and GitHub behind it, off until turned on per project — building
-    - [ ] C2.2a Turning a review host on: detected from the remote, a per-device switch, the token in the OS keychain, Settings → Review hosts; no request yet — building
-    - [ ] C2.2b GitHub behind it: open, merged and closed pull requests, checks and approvals, read only when turned on; in review and closed, from GitHub
+    - [x] C2.2a Turning a review host on: detected from the remote, a per-device switch, the token in the OS keychain, Settings → Review hosts; no request yet (#263)
+    - [ ] C2.2b GitHub behind it: open, merged and closed pull requests, checks and approvals, read only when turned on; in review and closed, from GitHub — building
   - [ ] C2.3 GitLab and Bitbucket on the same interface (Azure DevOps, Gitea later)
   - [ ] C2.4 Status read, not written: intent in the plan's YAML, state from git, a host or the plan itself, each saying its source; no STATUS.md
   - [ ] C2.5 Ticket refs in the plan files; approvals as signed statements
@@ -342,6 +342,45 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: C2.2b — GitHub behind the review host
+
+C2.2 done. For a project whose review host the person turned on (C2.2a),
+what GitHub knows and git cannot is now said, with its source:
+
+- **The adapter** (`review-host/github.ts`): for a branch, its pull request
+  by head branch; when open, its check runs, combined status and reviews.
+  GET only, against a fixed base (`CODETRELLIS_GITHUB_API` points tests at
+  a stand-in), redirects refused so the token never reaches another host,
+  the token in that request's header only. `summarisePull`,
+  `summariseChecks` and `summariseReviews` are pure: any failed check
+  fails, anything unfinished is running; each reviewer's latest word counts
+  once, comments do not.
+- **Kept two minutes** (`review-host/host-state.ts`), shared while in
+  flight, forgotten when the host is turned on or off or its token changes:
+  one read per branch per two minutes, inside the 60 an hour a public
+  repository allows without a token. At most 25 branches a refresh.
+- **The overlay** (`overlayHost`, pure): open is `in-review` ("in review
+  (#118), checks passing, 1 approval"), merged is `merged` by
+  `pull-request` ("merged into main (#119, 22 Sept)"), closed is `closed`
+  ("closed without merging (#120, 23 Sept)"), each `source: 'github'`. No
+  pull request, or a read that failed, keeps git's state with a
+  `hostNote` saying why. Where git proves a merge the host disagrees with,
+  git's proof stands and the host is said.
+- **Where it shows**: the tree's chip (in review is violet, closed grey)
+  with the source on hover; the task's Worked in line with the pull request
+  as a link and "from GitHub"; `get_plan` asks the host first and says
+  which states came from it; `get_brief` answers from what is kept and
+  never waits, starting a refresh for the next ask.
+
+Tests: unit (`github.test.ts` on GitHub-shaped answers, `host-state.test.ts`
+for the overlay and the words); harness `review-host-github.test.ts` against
+a stand-in GitHub (nothing asked while off; each state once on; answers
+kept; the token only in GitHub's requests and in no answer; an agent's
+get_plan and get_brief; a refused token leaves git's answer with why; off
+again, nothing asked); browser `review-host-states.spec.ts` with shots
+`review-host-tree` and `review-host-worked-in`. The C2.1 harness now
+expects get_plan's note to name Settings → Review hosts.
 
 ### 2026-09-30: C2.2a — turning a review host on
 
