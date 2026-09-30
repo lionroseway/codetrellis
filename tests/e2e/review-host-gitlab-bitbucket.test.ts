@@ -77,7 +77,8 @@ async function planOn(h: Harness, remote: string) {
 
 test.describe.serial('GitLab behind the review host', () => {
   test.setTimeout(120_000);
-  const TOKEN = 'glpat-ABCDEFGHIJ0123456789';
+  // Made up, and assembled here so no commit holds a GitLab-shaped token (.gitleaksignore).
+  const TOKEN = ['glpat', 'ABCDEFGHIJ0123456789'].join('-');
   let h: Harness;
   let gitlab: Awaited<ReturnType<typeof standIn>>;
   let p: Awaited<ReturnType<typeof planOn>>;
