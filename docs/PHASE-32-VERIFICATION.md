@@ -17,12 +17,12 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 252 | 250 | 0 | 0 | 217 | 0 |
+| REST routes | 256 | 254 | 0 | 0 | 217 | 0 |
 | MCP tools | 202 | 202 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 89 | 78 | 0 | 0 | 78 | 0 |
-| Frontend components | 114 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 115 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 37 | n/a | n/a | n/a | 0 | 0 |
-| Settings sections | 12 | n/a | n/a | n/a | 10 | 12 |
+| Settings sections | 13 | n/a | n/a | n/a | 11 | 13 |
 
 ## By domain
 
@@ -38,7 +38,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4h Drift, governance, review | 11 | 25 | 9 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 37 | 0 |
-| 0.4k Settings, updates, privacy | 11 | 0 | 3 | 6 | 0 | 12 |
+| 0.4k Settings, updates, privacy | 15 | 0 | 3 | 7 | 0 | 13 |
 | 0.4l System docs and intake | 7 | 11 | 6 | 1 | 0 | 0 |
 
 ## MCP tools: registry vs capability matrix
@@ -48,7 +48,7 @@ records that — but "✗ none" is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (252)
+## REST routes (256)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -69,7 +69,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 163 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 164 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -286,9 +286,11 @@ records that — but "✗ none" is proof of a gap.
 | j | `POST /api/peers/remote-terminals/:fingerprint/:terminalId/write` |  | ✗ none | 1 | ✓ 0.4j: input reaches the peer; unknown terminal 404, no data 400 (phone-sync-and-tools) |  |  |
 | j | `POST /api/sync/export` |  | ✗ none | 1 | ✓ 0.4j: export then import round trip (cdev-phase5) |  |  |
 | j | `POST /api/sync/import` |  | ✗ none | 1 | ✓ 0.4j: export then import round trip (cdev-phase5) |  |  |
+| k | `DELETE /api/review-host/token` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/logs/path` |  | ✗ none | 2 | ✓ 0.4k: today's file under the data dir's logs (settings-surface) |  |  |
 | k | `GET /api/logs/tail` |  | ✗ none | 2 | ✓ 0.4k: answers without a file logger; maxBytes must be a whole number (settings-surface) |  |  |
 | k | `GET /api/power/status` |  | ✗ none | 2 | ✓ 0.4j: same as the phone's power.status (phone-channels-projects) |  |  |
+| k | `GET /api/review-host` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/settings` |  | ✗ none | 11 | ✓ 0.4k: every section; what was saved comes back after a restart (settings-surface) |  |  |
 | k | `GET /api/settings/first-run-check` |  | ✗ none | 3 | ✓ 0.4k: incomplete, then complete once saved, with the identity (settings-surface) |  |  |
 | k | `GET /api/updates/download/status` |  | ✗ none | 1 | ✓ 0.4k: idle and complete before anything is downloaded (update-download) |  |  |
@@ -296,6 +298,8 @@ records that — but "✗ none" is proof of a gap.
 | k | `POST /api/updates/check` |  | ✗ none | 1 | ✓ 0.4k: a person's check goes out even with the automatic one off; no asset for this platform is not offered; website down falls back to GitHub; both down an error with the last good answer kept (updates) |  |  |
 | k | `POST /api/updates/download` |  | ✗ none | 2 | ✓ 0.4k: refused with nothing fetched unless https on the releases repo; a refusal no longer blocks later downloads (updates; bug 44), update-download |  |  |
 | k | `POST /api/updates/download/cancel` |  | ✗ none | 1 | ✓ 0.4k: answers cleanly with nothing running (update-download) |  |  |
+| k | `PUT /api/review-host` |  | ✗ none | 1 |  |  |  |
+| k | `PUT /api/review-host/token` |  | ✗ none | 1 |  |  |  |
 | k | `PUT /api/settings` |  | 1 | 24 | ✓ 0.4k: partial saves keep siblings (nested too), hosts normalised, windows told; every field checked, a bad value 400 with the reason and nothing stored (settings-surface); phone-safe subset from the phone (phone-channels-projects) |  |  |
 | l | `DELETE /api/system-docs/:uid` |  | ✗ none | 2 | ✓ 0.4j: removed, desktop told; unknown 404 not ok:false (phone-terminals-sysdocs) |  |  |
 | l | `GET /api/system-docs` |  | ✗ none | 4 | ✓ 0.4l: same as list_system_docs; outside a project refused (sysdocs-intake, phone-terminals-sysdocs) |  |  |
@@ -606,7 +610,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (114)
+## Frontend components (115)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -720,6 +724,7 @@ records that — but "✗ none" is proof of a gap.
 | k | `settings/AddToClaudeCode.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/AddToClaudeDesktop.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/AddToGeminiCli.tsx` |  | n/a | n/a |  |  |  |
+| k | `settings/ReviewHostSection.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/SettingsModal.tsx` |  | n/a | n/a |  | ✓ 0.5 — one height for every section (0.5b) |  |
 | k | `settings/VerifiedUpdateDownload.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/WebcamQrScanner.tsx` |  | n/a | n/a |  |  |  |
@@ -767,7 +772,7 @@ records that — but "✗ none" is proof of a gap.
 | j | `workstream-detail.tsx` |  | n/a | 1 |  |  |  |
 | j | `workstreams.tsx` |  | n/a | 1 |  |  |  |
 
-## Settings sections (12)
+## Settings sections (13)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -780,6 +785,7 @@ records that — but "✗ none" is proof of a gap.
 | k | `mcp` |  | n/a | n/a | ✓ 0.4k: a refused port says why and nothing changes (e2e sections-save); port, autodetect, config snippet (e2e mcp-server); agent grants (agent-ui-tools) | ✓ 0.5 — a refused value is named as a person reads it (0.5b) |  |
 | k | `plans` |  | n/a | n/a | ✓ 0.4k: default visibility saves (e2e sections-save, e2e plans) | ✓ 0.5a — stale "coming" note and raw markdown link fixed |  |
 | k | `power` |  | n/a | n/a | ✓ 0.4k: a keep-awake trigger saves, siblings kept (e2e sections-save, settings-surface) | ✓ 0.5 — plain words, status says what is happening (0.5b) |  |
+| k | `review-hosts` |  | n/a | n/a | ✓ C2.2a: off until turned on per project; turning on and saving a token only from the app window; token never echoed, kept in the OS keychain or memory only; the switch no longer applies when the remote names another repository; nothing requested (harness review-host-switch) | ✓ C2.2a: names the host and what it would read before anything is; says where the token is kept (e2e review-host-settings) |  |
 | k | `sync` |  | n/a | n/a |  | ✓ 0.5a |  |
 | k | `telemetry` |  | n/a | n/a | ✓ 0.4k: says what leaves the machine: update checks only; dictionaries ship with the app (e2e updates; spellcheck-check in CI) | ✓ 0.5 — no hard-coded database path (0.5b) |  |
 | k | `updates` |  | n/a | n/a | ✓ 0.4k: automatic checks off is saved (e2e updates); off means no request, a person's check still works (updates) | ✓ 0.5 — error says why with retry; footer describes the verified download (0.5b) |  |

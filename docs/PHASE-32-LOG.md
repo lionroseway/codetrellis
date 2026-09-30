@@ -19,13 +19,13 @@
 |---|---|
 | **Stage / step** | Wave 2 — HD3: business clashes in the Stack |
 | **Status** | C2.1 merged (#259): each item's state from git (building, pushed, merged), with its proof commit and source. The plan now takes in business work (log entry "Business work in the plan"): HD3 added after C2.1, C2.4 reads status rather than writing STATUS.md, B9 projects materials, and C3's shared plans folder can be carried by git or a cloud-synced folder |
-| **In flight** | nothing open |
+| **In flight** | HD3 in review (#262) on `feat/phase-32-hd3-business-clashes-stack`; C2.2a building on `feat/phase-32-c2-2a-review-host-switch` |
 | **Last merged** | C2.1 (#259, `578a36f`) |
 | **Next action** | HD3 on feat/phase-32-hd3-business-clashes-stack: stackOverlaps maps task: workstreams to their plans and counts material signals; declared materials from briefs; the same at a past moment and on the phone; stateAt gains each task's material reads. Then C2.2 on feat/phase-32-c2-2-review-host-github |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
-> Read from git at `origin/feat/phase-32` `578a36f`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `657854c`, with open PRs from GitHub.
 
 ---
 
@@ -187,7 +187,7 @@
   - [x] B6.5 One clock (#237)
   - [x] B6.6 The stack on the phone (#238)
   - [x] B6.7 Done-when and docs (#239)
-- [ ] HD3 Business clashes in the Stack: a material clash between two plans is an overlap, live and at a past moment; a task in the past says which version it read (after C2.1)
+- [ ] HD3 Business clashes in the Stack: a material clash between two plans is an overlap, live and at a past moment; a task in the past says which version it read (after C2.1) (#262) — in review
 - [ ] B7 Conferring — building
   - [x] B7.1 Tasks say what they rely on (`spec_links`, sections by heading) (#241)
   - [x] B7.2 Propose a spec change, with the tasks it affects (#242)
@@ -211,7 +211,9 @@
   - [x] C1.4 A skill arriving in a pulled plan file is flagged once (#178)
 - [ ] C2 Team status through git (git first for any host; a host adapter only when turned on), refined in EXECUTION §6 — building
   - [x] C2.1 Each item's state from git, for any host or none (building, pushed, merged, with its source) (#259)
-  - [ ] C2.2 The review-host interface, and GitHub behind it, off until turned on per project
+  - [ ] C2.2 The review-host interface, and GitHub behind it, off until turned on per project — building
+    - [ ] C2.2a Turning a review host on: detected from the remote, a per-device switch, the token in the OS keychain, Settings → Review hosts; no request yet — building
+    - [ ] C2.2b GitHub behind it: open, merged and closed pull requests, checks and approvals, read only when turned on; in review and closed, from GitHub
   - [ ] C2.3 GitLab and Bitbucket on the same interface (Azure DevOps, Gitea later)
   - [ ] C2.4 Status read, not written: intent in the plan's YAML, state from git, a host or the plan itself, each saying its source; no STATUS.md
   - [ ] C2.5 Ticket refs in the plan files; approvals as signed statements

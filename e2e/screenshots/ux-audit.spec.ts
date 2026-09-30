@@ -118,7 +118,7 @@ test.describe.serial('UX audit capture', () => {
     const dialog = settingsDialog(page);
     await expect(dialog).toBeVisible();
     const sections = [
-      'Identity', 'Appearance', 'MCP Server', 'Plans', 'Data', 'Devices',
+      'Identity', 'Appearance', 'MCP Server', 'Plans', 'Review hosts', 'Data', 'Devices',
       'Power', 'Sync', 'Logs', 'Telemetry', 'Updates', 'About',
     ];
     for (const [i, section] of sections.entries()) {

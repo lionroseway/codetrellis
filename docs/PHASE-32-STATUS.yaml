@@ -494,6 +494,11 @@ sections:
             title: Each item's state from git, for any host or none (building, pushed, merged, with its source)
           - id: C2.2
             title: The review-host interface, and GitHub behind it, off until turned on per project
+            items:
+              - id: C2.2a
+                title: "Turning a review host on: detected from the remote, a per-device switch, the token in the OS keychain, Settings → Review hosts; no request yet"
+              - id: C2.2b
+                title: "GitHub behind it: open, merged and closed pull requests, checks and approvals, read only when turned on; in review and closed, from GitHub"
           - id: C2.3
             title: GitLab and Bitbucket on the same interface (Azure DevOps, Gitea later)
           - id: C2.4

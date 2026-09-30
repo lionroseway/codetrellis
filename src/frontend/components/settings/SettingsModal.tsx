@@ -20,6 +20,7 @@ import {
   QrCode,
   Loader2,
   Zap,
+  GitPullRequest,
 } from 'lucide-react';
 import { generateQrSvg } from '../../lib/qr-svg';
 import { VerifiedUpdateDownload } from './VerifiedUpdateDownload';
@@ -28,6 +29,7 @@ import { useUiStore, type GraphStyle } from '../../stores/ui-store';
 import { configText, copyText, fetchMcpSetup, maskToken, recommendedConfigText, tokenOf, type McpSetup } from '../../lib/mcp-setup';
 import type { AppSettings, PowerStatus, PowerTriggers, PeerCapabilityName } from '@shared/types';
 import { AddToClaudeDesktop } from './AddToClaudeDesktop';
+import { ReviewHostSection } from './ReviewHostSection';
 import { AddToClaudeCode } from './AddToClaudeCode';
 import { AddToGeminiCli } from './AddToGeminiCli';
 
@@ -156,13 +158,14 @@ const MCP_CAPABILITIES: Array<{
  * `settings-changed` so other open instances stay in sync.
  */
 
-type Section = 'identity' | 'appearance' | 'mcp' | 'plans' | 'data' | 'devices' | 'power' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'about';
+type Section = 'identity' | 'appearance' | 'mcp' | 'plans' | 'review-hosts' | 'data' | 'devices' | 'power' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'about';
 
 const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'identity', label: 'Identity', Icon: User },
   { key: 'appearance', label: 'Appearance', Icon: Palette },
   { key: 'mcp', label: 'MCP Server', Icon: Plug },
   { key: 'plans', label: 'Plans', Icon: ClipboardList },
+  { key: 'review-hosts', label: 'Review hosts', Icon: GitPullRequest },
   { key: 'data', label: 'Data', Icon: HardDrive },
   { key: 'devices', label: 'Devices', Icon: Smartphone },
   { key: 'power', label: 'Power', Icon: Zap },
@@ -283,6 +286,7 @@ export function SettingsModal({
             {section === 'plans' && (
               <PlansSection settings={settings} onChange={update} />
             )}
+            {section === 'review-hosts' && <ReviewHostSection />}
             {section === 'logs' && <LogsSection />}
             {section === 'sync' && (
               <SyncSection settings={settings} onChange={update} />
@@ -1830,6 +1834,9 @@ function TelemetrySection() {
           </li>
           <li>
             <span className="text-foreground">Channel webhooks</span> — only to hosts you have approved in Settings.
+          </li>
+          <li>
+            <span className="text-foreground">Review host</span> — only for a project where you turned one on in Settings → Review hosts: its pull requests, checks and reviews are read from that host.
           </li>
         </ul>
         <p className="mt-1">
