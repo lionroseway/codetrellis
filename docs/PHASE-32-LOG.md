@@ -168,7 +168,8 @@
   - [x] B6.1 Dependencies resolve across plans (bug 11) (#231)
   - [x] B6.2 The stack: `/api/stack` and `get_stack` (#232)
   - [ ] B6.3 Overlap bands, declared and actual — in review
-  - [ ] B6.4 The Stack tab
+  - [ ] B6.4 The Stack tab — built, PR after B6.3
+  - [ ] B6.4b The Timeline follows the stack's selection
   - [ ] B6.5 One clock
   - [ ] B6.6 The stack on the phone
   - [ ] B6.7 Done-when and docs
@@ -304,6 +305,45 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: B6.4 — the Stack tab
+A **Stack** tab beside Plans in `PlanPanel` (`StackTab.tsx`) shows every plan
+under way in the project at once, from `/api/stack`. This is the H1 view.
+- **A row per plan.** It is called by its ticket key, with the title beside
+  it, and shows a progress bar with done/total and "N need you" when
+  breakpoint hits wait. Rows collapse. An icon opens the plan.
+- **Where plans meet.** Each overlap is a chip under the row, "⚠ overlaps
+  JIRA-150", amber, or red when a high signal is open between them. Its
+  tooltip is the detail ("Both plan to change … Open now: …").
+- **Tasks nested** by parent, with a status dot, who is on each, and "⎇
+  branch". A task's name opens it.
+- **Dependencies in words.** An unfinished one reads "↑ waits on '…' in plan
+  '…'", and its name is a link that opens that task in its own plan. Met
+  ones read "✓ after '…' in …".
+- **"Show on graph"** draws the plan's footprint (the files its tasks name,
+  now on each stack task as `files`) on the graph, whatever plan is open,
+  and moves the graph there. Pressing it again takes it off. A plan that
+  leaves the stack leaves the graph too. It is held as `stackFocus` in the
+  graph store, and the canvas uses it for the plan highlight.
+- **Found by the screenshot: the graph opens on clusters, and no file node
+  is drawn there.** A plan's footprint lit nothing, and so did the open
+  plan's own overlay. A cluster now lights up when any file under it is in
+  the footprint, as breakpoints already did. Both node kinds carry
+  `data-plan-highlighted`, so a test can see it.
+- **Live.** The tab re-reads on a new `stack-changed` window event, raised
+  for any `plan-item-*` or plan created, updated or deleted broadcast, and
+  on awareness, workstream and breakpoint changes.
+- **Split: B6.4b.** Filtering the Timeline to the selected plan's work is
+  the other half of "one selection". Nothing in the Timeline filters today,
+  so it is its own part rather than growing this one.
+- **Follow-up.** On the repository's own graph the highlight ring on a
+  cluster is quiet among its many edges. The test sees it and a person can
+  find it, but it could be louder.
+- **Tests.** Browser: `e2e/plan/stack-tab.spec.ts` (2), with screenshots
+  `stack-tab`, `stack-on-graph` and `stack-wait-opened`. They cover the
+  overlap from each side and its detail, the cross-plan wait and its link,
+  the footprint on the graph and off again, and a met dependency. Unit:
+  `stack-service.test.ts` checks a task's `files`.
 
 ### 2026-09-30: B6.3 — overlap bands: where two plans meet
 Each plan in the stack now carries `overlaps`: every other active plan it

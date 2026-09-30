@@ -73,6 +73,7 @@ function FileNodeComponent({ data }: NodeProps) {
         mode === 'diff' ? 'border-fuchsia-200/18 bg-[linear-gradient(180deg,rgba(168,85,247,0.12),rgba(16,8,24,0.5))]' : '',
         !perf && isPlanHighlighted && !d.changeStatus ? 'ring-1 ring-accent/40 shadow-[0_0_16px_rgba(59,130,246,0.3)]' : '',
       ].join(' ')}
+      data-plan-highlighted={isPlanHighlighted || undefined}
       style={perf
         ? (far ? farStatusStyle : statusOutline)({
             glow,

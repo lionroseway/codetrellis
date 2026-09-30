@@ -827,7 +827,10 @@ export function MainCanvas() {
 
   // Phase 16.E — collect all file paths referenced by the active plan's items
   const planItemsByUid = usePlanItemsStore((s) => s.itemsByUid);
+  // Phase 32 B6.4 — a plan chosen in the Stack tab takes the highlight.
+  const stackFocus = useGraphStore((s) => s.stackFocus);
   const planHighlightPaths = useMemo(() => {
+    if (stackFocus) return new Set(stackFocus.paths);
     const paths = new Set<string>();
     for (const item of Object.values(planItemsByUid)) {
       if (item.fileSpecs) {
@@ -837,7 +840,7 @@ export function MainCanvas() {
       }
     }
     return paths;
-  }, [planItemsByUid]);
+  }, [planItemsByUid, stackFocus]);
 
   const breakpoints = useBreakpointsStore((s) => s.breakpoints);
 
@@ -860,7 +863,7 @@ export function MainCanvas() {
   );
 
   const displayGraphData = useMemo(() => {
-    const hasPlanHighlights = planOverlay && planHighlightPaths.size > 0;
+    const hasPlanHighlights = (planOverlay || !!stackFocus) && planHighlightPaths.size > 0;
     const codeBreakpoints = graphOverlays.includes('breakpoints') ? breakpoints.filter((b) => b.kind === 'code') : [];
     // Deduplicate nodes by id — the graph builder should produce
     // unique ids, but projection / ghost / cross-system passes can
@@ -906,7 +909,11 @@ export function MainCanvas() {
             relatedToSelection: selectedNodeId
               ? node.id === selectedNodeId || safeEdges.some((edge) => (edge.source === selectedNodeId && edge.target === node.id) || (edge.target === selectedNodeId && edge.source === node.id))
               : false,
-            planHighlighted: hasPlanHighlights && planHighlightPaths.has(nodePath),
+            // A cluster lights up when any file under it is in the plan's
+            // footprint: the graph opens on clusters, where no file node is
+            // drawn to light (B6.4).
+            planHighlighted: hasPlanHighlights && (planHighlightPaths.has(nodePath)
+              || (data.nodeType === 'package' && Array.isArray(data.files) && (data.files as unknown[]).some((f) => typeof f === 'string' && planHighlightPaths.has(f)))),
             breakpointTitle: breakpointTitle(node, data, nodePath),
             // B3.3 — each other workstream's lines in this file, and whether it is in an open overlap.
             workCount: isFile(data) && workCounts.has(nodePath) ? workCountLabel(workCounts.get(nodePath)!) : undefined,
@@ -923,7 +930,7 @@ export function MainCanvas() {
         },
       })),
     };
-  }, [graphData, selectedNodeId, planHighlightPaths, planOverlay, breakpoints, graphOverlays, workCounts, collisions]);
+  }, [graphData, selectedNodeId, planHighlightPaths, planOverlay, stackFocus, breakpoints, graphOverlays, workCounts, collisions]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(displayGraphData?.nodes ?? []);
   const [edges, setEdges, onEdgesChange] = useEdgesState(displayGraphData?.edges ?? []);

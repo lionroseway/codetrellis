@@ -9,6 +9,7 @@ import { ProposedChanges } from '../plan/ProposedChanges';
 import { AgentTurnList, useAgentTurns } from './AgentTurns';
 import { AwarenessTab, useAwarenessFeed } from './AwarenessTab';
 import { ReviewTab } from './ReviewTab';
+import { StackTab } from './StackTab';
 import { useBreakpointsFeed } from './Breakpoints';
 import { TimelineLanes } from './TimelineLanes';
 import { ReplayBar, ReplayStart } from './ReplayBar';
@@ -66,6 +67,8 @@ export function PlanPanel() {
 
   const tabs: { key: Tab; label: string; count?: number; disabled?: boolean }[] = [
     { key: 'plans', label: 'Plans' },
+    // Every plan under way at once (B6.4).
+    { key: 'stack', label: 'Stack' },
     // Counts turns, not events — the number on the tab has to be the
     // number of rows in the body.
     { key: 'timeline', label: 'Timeline', count: turns.length || undefined },
@@ -153,6 +156,8 @@ export function PlanPanel() {
         )}
 
         {activeTab === 'awareness' && <AwarenessTab />}
+
+        {activeTab === 'stack' && <StackTab />}
 
         {activeTab === 'review' && <ReviewTab />}
 
