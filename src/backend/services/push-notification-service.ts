@@ -267,7 +267,7 @@ export async function pushForBudgetChange(planUid: string, planTitle: string, ag
  * on the phone once it wakes and loads over WebRTC, never in a payload a
  * push service sees. The data carries the hit's ref and plan id.
  */
-export async function pushForBreakpoint(hit: Pick<BreakpointHit, 'ref' | 'breach' | 'agent' | 'planUid'>): Promise<void> {
+export async function pushForBreakpoint(hit: Pick<BreakpointHit, 'ref' | 'breach' | 'agent' | 'planUid'> & { action?: BreakpointHit['action'] }): Promise<void> {
   if (!started) return;
   const tokens = Array.from(pushTokens.values());
   if (tokens.length === 0) return;
@@ -283,7 +283,10 @@ export async function pushForBreakpoint(hit: Pick<BreakpointHit, 'ref' | 'breach
       title: hit.breach ? 'Edited past a breakpoint' : 'Waiting on you',
       body: hit.breach
         ? `${who} changed code past one of your breakpoints and was told to stop.`
-        : `${who} is held at one of your breakpoints until you answer.`,
+        : hit.action === 'disk'
+          // A plan document's file edited on disk (B7.5b): nothing is held, and who did it is not known.
+          ? 'A document you guard changed on disk. The app kept its version until you answer.'
+          : `${who} is held at one of your breakpoints until you answer.`,
       data: { type: 'breakpoint', ref: hit.ref, ...(hit.planUid ? { planUid: hit.planUid } : {}) },
       sound: 'default',
       channelId: 'codetrellis-events',

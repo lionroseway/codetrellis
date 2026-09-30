@@ -141,8 +141,9 @@ function toBreakpoint(r: BreakpointRow): Breakpoint {
   };
 }
 
-export const ACTIVE_SELECT = `SELECT b.id, b.kind, b.target, b.plan_uid, b.project_root, b.note, b.created_at, b.created_by, b.created_by_type, i.title
-  FROM breakpoints b LEFT JOIN plan_items i ON i.uid = b.target WHERE b.cleared_at IS NULL`;
+export const ACTIVE_SELECT = `SELECT b.id, b.kind, b.target, b.plan_uid, b.project_root, b.note, b.created_at, b.created_by, b.created_by_type,
+  COALESCE(i.title, d.title) AS title
+  FROM breakpoints b LEFT JOIN plan_items i ON i.uid = b.target LEFT JOIN plan_documents d ON d.uid = b.target WHERE b.cleared_at IS NULL`;
 
 export function toBreakpointRow(r: unknown): Breakpoint { return toBreakpoint(r as BreakpointRow); }
 
@@ -169,6 +170,8 @@ export class BreakpointError extends Error {
  */
 export function setBreakpoint(input: {
   kind: unknown; itemUid?: unknown; path?: unknown; symbol?: unknown; signal?: unknown; note?: unknown;
+  /** A legacy plan document, for a spec breakpoint (B7.5b). */
+  docUid?: unknown;
   /** The opened project, for a code breakpoint: from the app, never the request. */
   projectRoot?: string | null;
   by: string; byType: string; now?: number;
@@ -177,6 +180,7 @@ export function setBreakpoint(input: {
   if (input.kind === 'proposal') throw new BreakpointError('A proposal breakpoint is raised by a spec change being proposed, not set', 400);
   if (input.kind === 'code') return setCodeBreakpoint(input);
   if (input.kind === 'signal') return setSignalBreakpoint(input);
+  if (input.docUid !== undefined) return setDocBreakpoint(input);
   const item = typeof input.itemUid === 'string' ? itemRow(input.itemUid) : null;
   if (!item) throw new BreakpointError('Item not found', 404);
   const kind = input.kind as BreakpointKind;
@@ -188,6 +192,34 @@ export function setBreakpoint(input: {
     [id, kind, item.uid, item.plan_uid, cleanNote(input.note), input.now ?? Date.now(), input.by, input.byType],
   );
   return { breakpoint: getBreakpoint(id)!, created: true };
+}
+
+/**
+ * A spec breakpoint on a legacy plan document (B7.5b). An agent changes one
+ * only by editing the plan's files, which nothing can pause, so it is the
+ * import from disk that is held (`plan-doc-guard.ts`). The plan comes from
+ * the document, never the request.
+ */
+function setDocBreakpoint(input: { kind: unknown; docUid?: unknown; note?: unknown; by: string; byType: string; now?: number }): { breakpoint: Breakpoint; created: boolean } {
+  if (input.kind !== 'spec') throw new BreakpointError('A plan document takes a spec breakpoint', 400);
+  const doc = typeof input.docUid === 'string'
+    ? rowsOf<{ uid: string; plan_uid: string }>('SELECT uid, plan_uid FROM plan_documents WHERE uid = ?', [input.docUid])[0]
+    : undefined;
+  if (!doc) throw new BreakpointError('Document not found', 404);
+  const existing = rowsOf<BreakpointRow>(`${ACTIVE_SELECT} AND b.kind = 'spec' AND b.target = ?`, [doc.uid])[0];
+  if (existing) return { breakpoint: toBreakpoint(existing), created: false };
+  const id = `bp_${randomBytes(6).toString('hex')}`;
+  getDb().run(
+    'INSERT INTO breakpoints (id, kind, target, plan_uid, note, created_at, created_by, created_by_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [id, 'spec', doc.uid, doc.plan_uid, cleanNote(input.note), input.now ?? Date.now(), input.by, input.byType],
+  );
+  return { breakpoint: getBreakpoint(id)!, created: true };
+}
+
+/** The spec breakpoint on a plan document, if one is set (B7.5b). */
+export function docBreakpoint(docUid: string): Breakpoint | null {
+  const r = rowsOf<BreakpointRow>(`${ACTIVE_SELECT} AND b.kind = 'spec' AND b.target = ?`, [docUid])[0];
+  return r ? toBreakpoint(r) : null;
 }
 
 const SYMBOL_RE = /^[A-Za-z_$][\w$.#()]{0,99}$/;
@@ -318,8 +350,9 @@ interface HitRow {
   answered_by_type: string | null; kind: string | null; bp_note: string | null; bp_target: string | null; title: string | null;
 }
 
-export const HIT_SELECT = `SELECT h.*, b.kind, b.note AS bp_note, b.target AS bp_target, i.title
-  FROM breakpoint_hits h LEFT JOIN breakpoints b ON b.id = h.breakpoint_id LEFT JOIN plan_items i ON i.uid = h.item_uid`;
+export const HIT_SELECT = `SELECT h.*, b.kind, b.note AS bp_note, b.target AS bp_target, COALESCE(i.title, d.title) AS title
+  FROM breakpoint_hits h LEFT JOIN breakpoints b ON b.id = h.breakpoint_id LEFT JOIN plan_items i ON i.uid = h.item_uid
+  LEFT JOIN plan_documents d ON d.uid = h.item_uid`;
 
 export function toHitRow(r: unknown): BreakpointHit { return toHit(r as HitRow); }
 
@@ -331,8 +364,18 @@ function relianceOf(r: HitRow): { tasks: number; plans: number } | null {
   return { tasks: new Set(rel.map((x) => x.itemUid)).size, plans: new Set(rel.map((x) => x.planUid)).size };
 }
 
+/** For a plan document changed on disk (B7.5b): the app's version and the file's. */
+function diskChangeOf(r: HitRow): BreakpointHit['diskChange'] {
+  if (r.action !== 'disk') return null;
+  const held = rowsOf<{ title: string; body: string }>('SELECT title, body FROM plan_doc_disk_holds WHERE ref = ?', [r.ref])[0];
+  const doc = rowsOf<{ title: string; body: string }>('SELECT title, body FROM plan_documents WHERE uid = ?', [r.item_uid])[0];
+  if (!held || !doc) return null;
+  return { beforeTitle: doc.title, afterTitle: held.title, before: doc.body, after: held.body };
+}
+
 function toHit(r: HitRow): BreakpointHit {
   const reliedOn = relianceOf(r);
+  const diskChange = diskChangeOf(r);
   return {
     ref: r.ref, breakpointId: r.breakpoint_id, kind: (r.kind as BreakpointKind) ?? null, breakpointNote: r.bp_note ?? null, breakpointTarget: r.bp_target ?? null,
     tool: r.tool, action: r.action as BreakpointAction, itemUid: r.item_uid, itemTitle: r.title ?? null,
@@ -341,6 +384,7 @@ function toHit(r: HitRow): BreakpointHit {
     decision: (r.decision as Decision) ?? null, note: r.note, answeredAt: r.answered_at === null ? null : Number(r.answered_at),
     answeredBy: r.answered_by, answeredByType: r.answered_by_type,
     ...(reliedOn ? { reliedOn } : {}),
+    ...(diskChange ? { diskChange } : {}),
   };
 }
 
@@ -379,6 +423,18 @@ export function hitPayload(hit: BreakpointHit): Record<string, unknown> {
   };
 }
 
+type AnsweredListener = (hit: BreakpointHit) => void;
+const answeredListeners: AnsweredListener[] = [];
+
+/**
+ * Run `fn` whenever a hit is answered, from any surface (the window, the
+ * phone, a breakpoint cleared). A plan document held on disk (B7.5b) is
+ * settled this way: nothing is waiting to retry a call.
+ */
+export function onHitAnswered(fn: AnsweredListener): void {
+  answeredListeners.push(fn);
+}
+
 /**
  * A person answers a waiting hit. Null when there is no such hit, or it has
  * been answered already (the first answer stands).
@@ -396,6 +452,9 @@ export function answerHit(input: { ref: string; decision: Decision; note?: unkno
     ...hitPayload(answered), decision: answered.decision, note: answered.note, waitedMs: (answered.answeredAt ?? 0) - answered.hitAt,
     by: input.by, byType: input.byType,
   }, input.byType);
+  for (const fn of answeredListeners) {
+    try { fn(answered); } catch (err) { console.warn('[Breakpoints] answer listener failed:', err); }
+  }
   return answered;
 }
 
@@ -481,7 +540,7 @@ export function enforce(tool: string, args: unknown, caller: Caller, now = Date.
 
 const DOING: Record<BreakpointAction, string> = {
   claim: 'claiming', done: 'marking done', edit: 'changing the description of', delete: 'deleting',
-  edit_code: 'changing', breach: 'changing', propose: 'changing the spec',
+  edit_code: 'changing', breach: 'changing', propose: 'changing the spec', disk: 'changing',
 };
 
 /** What the hit is about, in words: the file, or the item's title. */

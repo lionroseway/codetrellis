@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Breakpoint, BreakpointHit } from '@shared/types';
-import { agentName, hitHeadline, hitWhy, decisionLabels, breakpointLabel, nodeBreakpoints, nodeBreakpointTitle, symbolNodeTarget } from './breakpoint-view';
+import { agentName, hitHeadline, hitWhy, decisionLabels, breakpointLabel, nodeBreakpoints, nodeBreakpointTitle, symbolNodeTarget, changedLines } from './breakpoint-view';
 
 const hit = (over: Partial<BreakpointHit> = {}): BreakpointHit => ({
   ref: 'bp-1', breakpointId: 'bp_1', kind: 'task', breakpointNote: null, breakpointTarget: 'i1', tool: 'claim_item', action: 'claim',
@@ -45,6 +45,21 @@ test('a held edit to a page others rely on says so, and that the agent was told 
   assert.match(hitWhy({ ...edit, reliedOn: { tasks: 1, plans: 1 } }), /1 task in 1 plan relies on this page;/);
   // Nothing relying is said as nothing.
   assert.equal(hitWhy({ ...edit, reliedOn: { tasks: 0, plans: 0 } }), hitWhy(edit));
+});
+
+test('a plan document changed on disk: no agent named, and the answers say what they do (B7.5b)', () => {
+  const disk = hit({ kind: 'spec', action: 'disk', tool: 'plan-file', agent: null, itemTitle: 'Invoice format' });
+  assert.equal(hitHeadline(disk), '“Invoice format” changed on disk');
+  assert.match(hitWhy(disk), /Its file changed on disk, and the app kept its own version until you decide/);
+  assert.match(hitWhy(disk), /apply the file to take its version, or keep the app's and it is written back/);
+  assert.deepEqual(decisionLabels(disk), { continue: 'Apply the file', steer: 'Apply the file, with a note', stop: 'Keep the app\'s version' });
+});
+
+test('only the lines that changed, with a line either side', () => {
+  const before = '# Invoice format\n\nAn invoice is JSON.\n\n## Fields\n\n- amount\n';
+  assert.deepEqual(changedLines(before, `${before}- currency\n`), { before: '- amount', after: '- amount\n- currency', from: 7 });
+  assert.deepEqual(changedLines('a\nb\nc\nd', 'a\nB\nc\nd'), { before: 'a\nb\nc', after: 'a\nB\nc', from: 1 });
+  assert.deepEqual(changedLines('a\nb', 'a\nb\n'), { before: '', after: '', from: 1 });
 });
 
 test('a breach: what already happened, never a pause', () => {

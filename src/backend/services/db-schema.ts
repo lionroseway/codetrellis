@@ -536,6 +536,20 @@ export const SCHEMA_PLANS_CORE = `
 
   CREATE INDEX IF NOT EXISTS idx_plan_doc_versions ON plan_document_versions(doc_uid);
 
+  -- A guarded plan document's file changed on disk (Phase 32 B7.5b): the
+  -- file's version, kept beside the breakpoint hit until a person decides.
+  -- The app's own version stays in plan_documents meanwhile.
+  CREATE TABLE IF NOT EXISTS plan_doc_disk_holds (
+    ref TEXT PRIMARY KEY,
+    doc_uid TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_plan_doc_disk_holds_doc ON plan_doc_disk_holds(doc_uid);
+
   CREATE TABLE IF NOT EXISTS recent_projects (
     path TEXT PRIMARY KEY,
     display_name TEXT NOT NULL,

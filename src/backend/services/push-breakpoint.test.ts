@@ -59,3 +59,13 @@ test('a breach says what happened, never that the agent was paused; a hit with n
     channelId: 'codetrellis-events',
   }]);
 });
+
+test('a plan document changed on disk says so, naming no agent (it is not known) and no document (B7.5b)', async () => {
+  registerPushToken('CC:phone', 'ExponentPushToken[ghi]');
+  const before = sent.length;
+  await pushForBreakpoint({ ref: 'bp-4', breach: false, agent: null, planUid: 'plan-2', action: 'disk' });
+  assert.equal(sent.length, before + 1);
+  const [payload] = sent[before].body as Array<{ title: string; body: string }>;
+  assert.equal(payload.title, 'Waiting on you');
+  assert.equal(payload.body, 'A document you guard changed on disk. The app kept its version until you answer.');
+});

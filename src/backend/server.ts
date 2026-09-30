@@ -107,7 +107,7 @@ import { discoverSystems, buildAliasMap } from './services/system-discovery';
 // imports get bundled cleanly. The original lazy-require pattern
 // existed to dodge import cycles that no longer apply.
 import { recomputeCrossSystemEdges, listCrossSystemEdges, getCrossSystemStats } from './services/cross-system-service';
-import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs, exportIfSharedByDefault, exportOnFirstTitle } from './services/plan-file-service';
+import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs, exportIfSharedByDefault, exportOnFirstTitle, registerDiskHoldSettling } from './services/plan-file-service';
 import { getAllGraphEdges, getDb } from './services/database';
 import { getSettings, updateSettings, getAuthorKey, readGitIdentity, SettingsError } from './services/settings-service';
 import { grantChange, grantRefusal, httpGrantsAllowed } from './services/grant-guard';
@@ -2644,6 +2644,7 @@ app.post('/api/breakpoints', (req, res) => {
   try {
     const { breakpoint, created } = setBreakpoint({
       kind: req.body?.kind, itemUid: req.body?.itemUid, path: req.body?.path, symbol: req.body?.symbol, signal: req.body?.signal, note: req.body?.note,
+      docUid: req.body?.docUid,
       projectRoot: getActiveProjectPath(), by: who.author, byType: who.authorType,
     });
     if (created) broadcast('breakpoints-changed', { planUid: breakpoint.planUid });
@@ -5597,6 +5598,8 @@ export async function initializeBackend(): Promise<void> {
   console.log(`[Auth] Capability token ready — ${getTokenFilePath()}`);
 
   await initDatabase();
+  // A guarded plan document changed on disk is settled when its hold is answered (B7.5b).
+  registerDiskHoldSettling();
   await initParser();
 
   // Phase 32 B1: keep every agent event that is broadcast, from here on.

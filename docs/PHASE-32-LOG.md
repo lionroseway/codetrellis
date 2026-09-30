@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B7.5a: a spec breakpoint on a relied-on page holds a direct edit and says to propose |
-| **Status** | B7.5a built: the held edit and the inbox name who relies on the page; a proposal carries the breakpoint's note. Harness, unit and browser green locally |
-| **In flight** | B7.5a building on `feat/phase-32-b7-5a-held-edits` |
-| **Last merged** | B7.4 (#245, `e0a0a49`) |
-| **Next action** | Merge B7.5a when CI is green; then B7.5b on feat/phase-32-b7-5b-plan-docs, legacy plan documents guarded like pages (a held import from disk) |
+| **Stage / step** | Wave 2 — B7.5b: legacy plan documents guarded like pages |
+| **Status** | B7.5a merged (#247). B7.5b built: a spec breakpoint on a plan document holds a change to its file on disk; the inbox shows what changed, apply the file or keep the app's version. Harness, unit and browser green locally |
+| **In flight** | B7.5b building on `feat/phase-32-b7-5b-plan-docs` |
+| **Last merged** | B7.5a (#247, `e895c61`) |
+| **Next action** | Merge B7.5b when CI is green; then B7.6, the phone (proposals in Needs you; proposal.list, proposal.get, proposal.decide) |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
-> Read from git at `origin/feat/phase-32` `d0c0643`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `e895c61`, with open PRs from GitHub.
 
 ---
 
@@ -187,8 +187,9 @@
   - [x] B7.3 Affected agents told once; their replies kept (#243)
   - [x] B7.4 The decision is a person's: accept, amend, reject; tasks marked "spec changed" (#245)
   - [ ] B7.5 Spec breakpoints cover proposals and plan documents — building
-    - [ ] B7.5a A spec breakpoint on a relied-on page holds a direct edit and says to propose; proposals carry its note — building
-    - [ ] B7.5b Legacy plan documents guarded like pages (an import from disk is held)
+    - [x] B7.5a A spec breakpoint on a relied-on page holds a direct edit and says to propose; proposals carry its note (#247)
+    - [ ] B7.5b Legacy plan documents guarded like pages (an import from disk is held) — building
+  - [ ] Follow-up: Linking a plan schedules one more export ~200 ms later; an edit to its files in that window is overwritten, not imported (found building B7.5b)
   - [ ] B7.6 The phone
   - [ ] B7.7 I1 done-when and docs
 - [ ] B8 Grounding
@@ -329,6 +330,44 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: B7.5b — legacy plan documents guarded like pages
+
+B7.5a merged (#247). B7.5b is built:
+
+- **A spec breakpoint on a plan document.** `POST /api/breakpoints` takes
+  `{kind: 'spec', docUid}`; the plan comes from the document, never the
+  request; any other kind is a 400, an unknown document a 404. Legacy
+  documents have no desktop surface (Objects replaced them), so REST and
+  the phone are where they live.
+- **The import is what is held.** An agent changes a plan document only by
+  editing `.codetrellis/plans/<slug>/docs/*.md`, which nothing can pause.
+  `plan-doc-guard.ts` sits where the file comes back in (`upsertDoc`):
+  when the file would change a guarded document, the app keeps its version,
+  the file's is kept in `plan_doc_disk_holds`, and a hit is raised with
+  action `disk` and no agent, because who edited the file cannot be told.
+  A second edit while one waits updates the kept version (one entry, the
+  file as it is now).
+- **The inbox shows what changed.** "“Invoice format” changed on disk",
+  a Held chip, the person's note, and only the lines that differ with a
+  line either side (`changedLines`, shared). The answers say what they do,
+  "Apply the file" and "Keep the app's version", with no note box, since
+  no agent is waiting to read one.
+- **Settled from any surface.** `breakpoint-service` gains `onHitAnswered`;
+  the server registers the settling once at start, so the window, the phone
+  and a cleared breakpoint all settle it the same way. Apply writes the
+  file's version as the person (a new version, its summary saying it came
+  from disk); keep writes the app's version back over the file.
+- **Found on the way**: linking a plan (its first export) schedules one
+  more export about 200 ms later, and an edit to its files inside that
+  window is overwritten rather than imported. The test waits for the files
+  to settle; the race is a follow-up, not this step.
+- Tests: harness `plan-doc-guard.test.ts` (5: set over REST; held with both
+  versions and a second edit updating it; apply as the person; keep writes
+  the file back and is not held again; an unguarded document imported as
+  before), repeated 3× clean; unit `breakpoint-view.test.ts` (the words,
+  `changedLines`); browser `plan-doc-guard.spec.ts` with screenshot
+  `plan-doc-changed-on-disk`.
 
 ### 2026-09-30: B7.5a — a guarded page others rely on says to propose
 

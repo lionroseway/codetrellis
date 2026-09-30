@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — B7.5a: a spec breakpoint on a relied-on page holds a direct edit and says to propose"
-  status: "B7.5a built: the held edit and the inbox name who relies on the page; a proposal carries the breakpoint's note. Harness, unit and browser green locally"
-  next: Merge B7.5a when CI is green; then B7.5b on feat/phase-32-b7-5b-plan-docs, legacy plan documents guarded like pages (a held import from disk)
+  step: "Wave 2 — B7.5b: legacy plan documents guarded like pages"
+  status: "B7.5a merged (#247). B7.5b built: a spec breakpoint on a plan document holds a change to its file on disk; the inbox shows what changed, apply the file or keep the app's version. Harness, unit and browser green locally"
+  next: Merge B7.5b when CI is green; then B7.6, the phone (proposals in Needs you; proposal.list, proposal.get, proposal.decide)
   blockers: none
   updated: 2026-09-30
 sections:
@@ -446,6 +446,8 @@ sections:
                 title: A spec breakpoint on a relied-on page holds a direct edit and says to propose; proposals carry its note
               - id: B7.5b
                 title: Legacy plan documents guarded like pages (an import from disk is held)
+          - title: "Linking a plan schedules one more export ~200 ms later; an edit to its files in that window is overwritten, not imported (found building B7.5b)"
+            followUp: true
           - id: B7.6
             title: The phone
           - id: B7.7
