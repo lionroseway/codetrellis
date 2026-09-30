@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Wave 2 — HD3: business clashes in the Stack |
-| **Status** | C2.1 merged (#259): each item's state from git (building, pushed, merged), with its proof commit and source. The plan now takes in business work (log entry "Business work in the plan"): HD3 added after C2.1, C2.4 reads status rather than writing STATUS.md, B9 projects materials, and C3's shared plans folder can be carried by git or a cloud-synced folder |
-| **In flight** | nothing open |
+| **Status** | HD3 built: a material clash between two plans' tasks (contract, collision, or a version-split or stale-base about a material) is an overlap in the Stack, and both plans' briefs listing one material is a declared one ("Both rely on sales-2026.xlsx."); each task carries its latest read of each material ("read sales-2026.xlsx on 22 Sept (version 3f9c2e1)"), by the moment in the stack at a moment; the overlap's detail is on the row, not only on hover. Unit (1712), harness (stack-materials and 43 related), browser (stack specs, 2 shots) green locally |
+| **In flight** | HD3 building on `feat/phase-32-hd3-business-clashes-stack` |
 | **Last merged** | C2.1 (#259, `578a36f`) |
-| **Next action** | HD3 on feat/phase-32-hd3-business-clashes-stack: stackOverlaps maps task: workstreams to their plans and counts material signals; declared materials from briefs; the same at a past moment and on the phone; stateAt gains each task's material reads. Then C2.2 on feat/phase-32-c2-2-review-host-github |
+| **Next action** | Merge HD3 when CI is green; then C2.2 on feat/phase-32-c2-2-review-host-github (the review-host interface and GitHub behind it, off until turned on per project) |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
-> Read from git at `origin/feat/phase-32` `578a36f`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `657854c`, with open PRs from GitHub.
 
 ---
 
@@ -187,7 +187,7 @@
   - [x] B6.5 One clock (#237)
   - [x] B6.6 The stack on the phone (#238)
   - [x] B6.7 Done-when and docs (#239)
-- [ ] HD3 Business clashes in the Stack: a material clash between two plans is an overlap, live and at a past moment; a task in the past says which version it read (after C2.1)
+- [ ] HD3 Business clashes in the Stack: a material clash between two plans is an overlap, live and at a past moment; a task in the past says which version it read (after C2.1) — building
 - [ ] B7 Conferring — building
   - [x] B7.1 Tasks say what they rely on (`spec_links`, sections by heading) (#241)
   - [x] B7.2 Propose a spec change, with the tasks it affects (#242)
@@ -340,6 +340,40 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: HD3 — business clashes in the Stack
+
+The first of the business-work fixes (log entry "Business work in the
+plan"), on what the app already records:
+
+- **Tasks are roots.** A plan's roots in the stack are its branch folders
+  and now its tasks (`task:<uid>`), which is how A6's material signals name
+  them. A material `contract` or `collision`, or a `version-split` or
+  `stale-base` whose subject is a material, between two plans' tasks is an
+  actual overlap. A code stale-base or drift never pairs two plans, even if
+  it names two lines of work, and two tasks of one plan are not an overlap
+  between plans.
+- **Declared materials.** Both plans' unfinished tasks' briefs listing one
+  material (role `material` on the task or on a page of its plan) is a
+  declared overlap: "Both rely on sales-2026.xlsx." At a past moment, only
+  what was attached by then counts.
+- **Which copy.** Each task carries `reads`: its latest read of each
+  material from `material_reads`, by the moment for the stack at a moment,
+  in words ("read sales-2026.xlsx on 22 Sept (version 3f9c2e1)").
+- **Said, not hovered.** Each overlap's detail is now on the row under its
+  chip, for code overlaps too: what the plans share is the part a person
+  acts on, and a business user should not have to discover a hover.
+- **The phone** needed nothing: its stack card already shows each
+  overlap's words and detail, and `stack.summary` is the same object.
+
+Tests: `stack-overlaps.test.ts` (task roots, the four material kinds, a
+code stale-base that must not pair, one plan's two tasks, declared
+materials), `stack-service.test.ts` (the read words, a page reads nothing);
+harness `stack-materials.test.ts` on a real workbook (declared at once;
+each task's version; replaced and re-read, the actual band; looking back
+before the replacement; the phone equals REST); browser
+`stack-materials.spec.ts` with shots `stack-materials` and
+`stack-materials-then`.
 
 ### 2026-09-30: Business work in the plan
 
