@@ -42,6 +42,8 @@ export interface PhoneSignal {
   summary: string;
   /** The sides by name, in order. */
   sides: string[];
+  /** A task's material the signal is about (A6.4): its sides are tasks, and it has no direction. */
+  material?: string;
   firstSeen: number;
   lastSeen: number;
 }
@@ -152,6 +154,7 @@ function toPhoneSignal(s: AwarenessSignal, label: (root: string) => string): Pho
     heading: kindWords(s),
     summary: s.summary,
     sides: sideWords(s, label).map((x) => x.name),
+    ...(s.subject.material ? { material: s.subject.material } : {}),
     firstSeen: s.firstSeen,
     lastSeen: s.lastSeen,
   };
@@ -159,6 +162,7 @@ function toPhoneSignal(s: AwarenessSignal, label: (root: string) => string): Pho
 
 function filesOf(s: AwarenessSignal): string[] {
   const files = new Set<string>();
+  if (s.subject.material) files.add(s.subject.material); // a task's material (A6.4)
   if (s.subject.file) files.add(s.subject.file);
   for (const f of s.subject.files ?? []) files.add(f);
   for (const f of s.subject.importers ?? []) files.add(f);

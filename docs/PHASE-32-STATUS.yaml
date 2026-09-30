@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — A6.3: material signals"
-  status: "A6.2 merged (#253; #254 carried). A6.3 built: computeMaterialSignals runs in the same refresh as the code signals; one signal per material naming every task (contract, version-split, stale-base), collision on outputs, drift outside a brief; the artefact watcher refreshes signals on a change; the digest gives each material its own line. Unit, harness (101 neighbouring) and browser awareness specs green locally"
-  next: Merge A6.3 when CI is green; then A6.4 on feat/phase-32-a6-4-other-work-affected ("Other work affected" on the Brief page and in get_brief; the Awareness card and the phone's Needs you, with screenshots)
+  step: "Wave 2 — A6.4: other work affected"
+  status: "A6.3 merged (#255). A6.4 built: the Brief page's Other work affected (a line per material signal from the task's side, briefLine), get_brief's affected_by_other_work, the Awareness card's material detail (each task's sentence, no graph buttons) and the phone (tasks by title with ↔, the file listed). Unit, harness (102 neighbouring), browser and phone specs green locally, with screenshots"
+  next: Merge A6.4 when CI is green; then A6.5 on feat/phase-32-a6-5-signoff-pack-signals (sign-off packs list the signals that touched the task and how each was resolved)
   blockers: none
   updated: 2026-09-30
 sections:

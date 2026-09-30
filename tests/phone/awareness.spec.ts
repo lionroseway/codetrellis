@@ -72,6 +72,48 @@ test.describe('Needs you, on Activity', () => {
     ]);
   });
 
+  test('a file two tasks share (A6.4): the tasks by title, side by side, and what each is doing with it', async ({ page }) => {
+    const MATERIAL = {
+      id: 'm1', kind: 'contract', severity: 'medium', state: 'open', heading: 'Changed material',
+      summary: '`data/sales.csv` changed. “Q3 report” cites line 2. “Board pack” uses it too',
+      sides: ['Q3 report', 'Board pack'], material: 'data/sales.csv', firstSeen: now - 4 * MIN, lastSeen: now - MIN,
+    };
+    await openScreen(page, 'activity', {
+      rpc: {
+        'awareness.needsYou': {
+          projectRoot: '/work/acme',
+          digest: { needsYou: 1, low: 0, moreLines: 0, lines: [{ text: MATERIAL.summary, question: 'check the cited parts again, or keep the old version?', told: true, signalIds: ['m1'] }] },
+          signals: [MATERIAL],
+        },
+      },
+    });
+    const row = page.getByTestId('needs-you-signal');
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText('Changed material');
+    // Two tasks share a file: no direction between them.
+    await expect(row).toContainText('Q3 report ↔ Board pack');
+    await expect(page.getByText('check the cited parts again, or keep the old version?')).toBeVisible();
+    await shot(page, 'needs-you-material');
+
+    await openScreen(page, 'signal-detail', {
+      rpc: {
+        'awareness.signal': {
+          signal: {
+            ...MATERIAL,
+            sideWords: [
+              { root: 'task:a', name: 'Q3 report', words: 'Q3 report cites line 2 of data/sales.csv, as it was before it changed.' },
+              { root: 'task:b', name: 'Board pack', words: 'Board pack uses data/sales.csv.' },
+            ],
+            files: ['data/sales.csv'], told: [], replies: [],
+          },
+        },
+      },
+    }, { id: 'm1' });
+    await expect(page.getByTestId('signal-side').nth(1)).toContainText('↔ Board pack');
+    await expect(page.getByTestId('signal-side').first()).toContainText('as it was before it changed');
+    await shot(page, 'signal-detail-material');
+  });
+
   test('nothing waiting says so in a line', async ({ page }) => {
     await openScreen(page, 'activity', {
       rpc: { 'awareness.needsYou': { projectRoot: '/work/acme', digest: { needsYou: 0, low: 0, moreLines: 0, lines: [] }, signals: [] } },

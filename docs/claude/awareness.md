@@ -127,6 +127,17 @@ inputs (`materialInputsOf`) are the tasks' footprints (A6.2) and each
 material's hash as last re-taken; the artefact watcher re-takes it on a
 change and refreshes the project's signals.
 
+**Where they show** (A6.4): each task's Brief page has "Other work
+affected", a line per material signal naming the task, from its side
+(`briefLine` in `signal-words.ts`: "sales.csv changed since “Q3 report”
+cited line 2. This task uses it too."), with the file named and its path on
+hover. `get_brief` returns the same as `affected_by_other_work`, refreshing
+the project's signals first, because a Claude Desktop agent reads its brief
+before anything else. A signal the person dismissed leaves both. The
+Awareness card shows each task's sentence and no graph buttons (a material
+is not code); the phone's Needs you names the tasks by title with ↔ between
+them, and its detail lists the file.
+
 `awareness-service.ts` gathers the inputs, runs `computeSignals` and
 `computeMaterialSignals` in one pass, and
 reconciles into `awareness_signals`. The person's answer and the agents'

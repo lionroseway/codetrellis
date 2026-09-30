@@ -163,3 +163,29 @@ describe('replying to the agents from the phone', () => {
     assert.ok(audit.listPeerAudit({ fingerprint: CONFIRMED }).some((e) => e.method === 'awareness.reply' && e.detail === 'reply on signal k1'));
   });
 });
+
+describe('a task\'s material on the phone (A6.4)', () => {
+  test('the tasks by title, no direction between them, and the file it is about', async () => {
+    db.getDb().run(
+      `INSERT OR REPLACE INTO awareness_signals (id, project_root, kind, severity, subject, workstreams, summary, first_seen, last_seen, state)
+       VALUES ('m1', ?, 'contract', 'medium', ?, ?, ?, 1, 50, 'open')`,
+      [PROJECT, JSON.stringify({ material: 'data/sales.csv', parts: ['line 2'], citedBy: ['task:a'], labels: { 'task:a': 'Q3 report', 'task:b': 'Board pack' } }),
+        JSON.stringify(['task:a', 'task:b']), '`data/sales.csv` changed. “Q3 report” cites line 2. “Board pack” uses it too'],
+    );
+    try {
+      const got = await call('awareness.needsYou', {}) as import('./mobile-awareness').PhoneNeedsYou;
+      const listed = got.signals.find((s) => s.id === 'm1')!;
+      assert.deepEqual([listed.heading, listed.sides, listed.material], ['Changed material', ['Q3 report', 'Board pack'], 'data/sales.csv']);
+      assert.ok(got.digest.lines.some((l) => l.text === '`data/sales.csv` changed. “Q3 report” cites line 2. “Board pack” uses it too'
+        && l.question === 'check the cited parts again, or keep the old version?'));
+      const { signal: detail } = await call('awareness.signal', { id: 'm1' }) as { signal: import('./mobile-awareness').PhoneSignalDetail };
+      assert.deepEqual(detail.files, ['data/sales.csv']);
+      assert.deepEqual(detail.sideWords.map((x) => x.words), [
+        'Q3 report cites line 2 of data/sales.csv, as it was before it changed.',
+        'Board pack uses data/sales.csv.',
+      ]);
+    } finally {
+      db.getDb().run(`DELETE FROM awareness_signals WHERE id = 'm1'`);
+    }
+  });
+});

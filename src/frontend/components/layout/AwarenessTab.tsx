@@ -17,6 +17,7 @@ import {
   replyReadWords, replyFromWords,
 } from '../../lib/awareness-view';
 import { buildDigest } from '@shared/lib/awareness-digest';
+import { sideWords } from '@shared/lib/signal-words';
 import type { AwarenessSignal, SettableSignalState, Workstream } from '@shared/types';
 import { UnverifiedIf } from '../UnverifiedTag';
 import { BreakpointsWaiting, BreakpointsSet } from './Breakpoints';
@@ -255,6 +256,19 @@ function ContractDetail({ subject }: { subject: AwarenessSignal['subject'] }) {
   );
 }
 
+/**
+ * A material signal (A6.4): what each task is doing with the file, in the
+ * words the phone and the digest use. The tasks are named by title.
+ */
+function MaterialDetail({ signal: s, workstreams }: { signal: AwarenessSignal; workstreams: Workstream[] }) {
+  const lines = sideWords(s, (root) => sideLabel(root, workstreams));
+  return (
+    <ul data-testid="awareness-material" className="mt-1.5 space-y-0.5 text-[10.5px] text-foreground-muted">
+      {lines.map((l) => <li key={l.root}>{l.words}</li>)}
+    </ul>
+  );
+}
+
 /** The files a drift signal found outside the workstream's scope (A2.5), and where the scope came from. */
 function DriftDetail({ subject }: { subject: AwarenessSignal['subject'] }) {
   const items = subject.items?.length ?? 0;
@@ -391,7 +405,8 @@ function AgentsTold({ signal: s, now }: { signal: AwarenessSignal; now: number }
 function SignalFileChips({ signal: s, workstreams }: { signal: AwarenessSignal; workstreams: Workstream[] }) {
   const root = useProjectStore((st) => st.root);
   const file = s.subject.file ?? s.subject.files?.[0];
-  if (!file) return null;
+  // A task's material is not code: it has no node on the graph and no lines to mark (A6.4).
+  if (!file || s.subject.material) return null;
   const prefix = projectPrefix(root, workstreams);
   const here = prefix === null ? file : toProjectPath(file, prefix);
   if (here === null) return null; // outside the open project: nothing here to show
@@ -469,16 +484,16 @@ function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; 
         {sides.map((name, i) => (
           <span key={`${name}-${i}`} className="flex items-center gap-1">
             {/* A contract runs one way: the change, then who imports it (A2.3). */}
-            {i > 0 && (s.kind === 'contract'
+            {i > 0 && (s.kind === 'contract' && !s.subject.material
               ? <ArrowRight size={9} className="text-foreground-subtle" aria-label="imported by" />
               : <ArrowLeftRight size={9} className="text-foreground-subtle" />)}
             <span className="text-[10px] font-mono px-1.5 py-px rounded border border-border-subtle text-foreground">{name}</span>
             {sideSections[i]?.length ? <span className="text-[10px] text-sky-300/90">({sideSections[i].join(', ')})</span> : null}
           </span>
         ))}
-        {s.subject.file && (
-          <span className="ml-1 text-[10px] font-mono text-foreground-subtle truncate" title={s.subject.file}>
-            {s.subject.file}{s.subject.symbol ? ` · ${s.subject.symbol}` : ''}
+        {(s.subject.file ?? s.subject.material) && (
+          <span className="ml-1 text-[10px] font-mono text-foreground-subtle truncate" title={s.subject.file ?? s.subject.material}>
+            {s.subject.file ?? s.subject.material}{s.subject.symbol ? ` · ${s.subject.symbol}` : ''}
           </span>
         )}
       </div>
@@ -489,8 +504,14 @@ function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; 
         </div>
       )}
 
-      {s.kind === 'contract' && <ContractDetail subject={s.subject} />}
-      {s.kind === 'drift' && <DriftDetail subject={s.subject} />}
+      {s.subject.material
+        ? <MaterialDetail signal={s} workstreams={workstreams} />
+        : (
+          <>
+            {s.kind === 'contract' && <ContractDetail subject={s.subject} />}
+            {s.kind === 'drift' && <DriftDetail subject={s.subject} />}
+          </>
+        )}
 
       {reopenedWords(s, now) && (
         <div data-testid="awareness-reopened" className="mt-1 text-[10px] text-warning">{reopenedWords(s, now)}</div>

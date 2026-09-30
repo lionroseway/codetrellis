@@ -110,3 +110,66 @@ function materialWords(s: Pick<AwarenessSignal, 'kind' | 'subject'>, root: strin
       return `${name} uses ${m}.`;
   }
 }
+
+const namesOf = (s: Pick<AwarenessSignal, 'subject'>, ids: readonly string[]) => {
+  const names = ids.map((id) => `“${s.subject.labels?.[id] ?? id}”`);
+  return names.length <= 2 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+};
+
+/**
+ * A material signal from one task's side (A6.4), as its Brief and its agent's
+ * brief say it: "sales.csv changed since this task cited line 2. “Board pack”
+ * uses it too." Plain text; `root` is the task's workstream (`task:<uid>`).
+ */
+export function briefLine(
+  s: Pick<AwarenessSignal, 'kind' | 'workstreams' | 'subject'>,
+  root: string,
+  opts: { file?: (path: string) => string } = {},
+): string {
+  // A person's Brief names the file; an agent's brief keeps its path.
+  const name = opts.file ?? ((p: string) => p);
+  const m = name(s.subject.material ?? s.subject.file ?? 'a file');
+  const others = s.workstreams.filter((w) => w !== root);
+  const verb = (ids: readonly string[], one: string, many: string) => (ids.length === 1 ? one : many);
+  switch (s.kind) {
+    case 'contract': {
+      const citers = s.subject.citedBy ?? [];
+      const parts = (s.subject.parts ?? []).join(', ') || 'it';
+      const signed = s.subject.signedOff ?? [];
+      const mine = citers.includes(root);
+      const otherCiters = citers.filter((c) => c !== root);
+      const head = mine
+        ? `${m} changed since this task cited ${parts}.`
+        : `${m} changed since ${namesOf(s, otherCiters)} cited ${parts}.`;
+      const signedWords = signed.length === 0 ? ''
+        : signed.includes(root) ? ' A person had already signed this task\'s citation off.'
+        : ` ${namesOf(s, signed)} had already been signed off.`;
+      const also = mine
+        ? (others.length ? ` ${namesOf(s, others)} ${verb(others, 'uses', 'use')} it too.` : '')
+        : ' This task uses it too.';
+      return `${head}${signedWords}${also}`;
+    }
+    case 'version-split': {
+      const versions = s.subject.readVersions ?? {};
+      const current = others.filter((o) => versions[o] === 'current');
+      const earlier = others.filter((o) => versions[o] !== 'current');
+      if (versions[root] === 'current') {
+        return `This task read the current ${m}; ${namesOf(s, earlier)} worked from an earlier version.`;
+      }
+      return current.length
+        ? `This task worked from an earlier version of ${m}; ${namesOf(s, current)} ${verb(current, 'has', 'have')} the current one.`
+        : `This task and ${namesOf(s, others)} worked from different earlier versions of ${m}; it has changed since.`;
+    }
+    case 'stale-base':
+      return `${m} changed after this task and ${namesOf(s, others)} read it.`;
+    case 'collision':
+      return `This task and ${namesOf(s, others)} both record ${m} as their output.`;
+    case 'drift': {
+      const files = (s.subject.files ?? [s.subject.material ?? m]).map(name).join(', ');
+      if (s.subject.by === root) return `This task read ${files}, which ${namesOf(s, others)} ${verb(others, 'was', 'were')} given, not this task.`;
+      return `${namesOf(s, s.subject.by ? [s.subject.by] : others)} read ${m}, which this task was given.`;
+    }
+    default:
+      return `${m} is used by this task and ${namesOf(s, others)}.`;
+  }
+}
