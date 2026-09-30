@@ -27,6 +27,7 @@ const SCREENS: Record<string, { title: string; load: () => Promise<{ default: Co
   workstreams: { title: 'Lines of work', load: () => import('../../mobile/app/workstreams') },
   'workstream-detail': { title: 'Line of work', load: () => import('../../mobile/app/workstream-detail') },
   'review-queue': { title: 'Review queue', load: () => import('../../mobile/app/review-queue') },
+  stack: { title: 'Stack', load: () => import('../../mobile/app/stack') },
   'plan-review': { title: 'Review', load: () => import('../../mobile/app/plan-review') },
 };
 

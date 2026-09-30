@@ -38,6 +38,7 @@ import { readFileWithin, isWithin } from './confined-fs';
 import { listTrustedRoots, resolveTrustedPlanDir, resolveTrustedProjectRoot } from './trusted-roots';
 import { reviewPlan } from './plan-review-service';
 import { reviewQueue } from './review-queue-service';
+import { buildStack } from './stack-service';
 import { buildPrDraft } from './pr-draft-service';
 import { listComparands, compareSnapshots } from './snapshot-compare-service';
 import {
@@ -1264,6 +1265,14 @@ async function routeMethod(
     case 'review.queue': {
       const projectPath = peerProjectRoot(params, { required: true })!;
       return reviewQueue(projectPath);
+    }
+
+    // The stack (Phase 32 B6.6, over B6.2): every plan under way, with who is
+    // on what, what waits on what across plans, and where plans meet. The same
+    // answer as `/api/stack`, for an opened project only; the phone summarises.
+    case 'stack.summary': {
+      const projectPath = peerProjectRoot(params, { required: true })!;
+      return buildStack(projectPath);
     }
 
     // What to work on next. `getNextTask` reads plan_items for a V2 plan

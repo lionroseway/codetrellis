@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B6.5: one clock, the stack at a past moment |
-| **Status** | A5 done (M5 met). B6.1–B6.4b merged (#231–#234, #236): dependencies across plans, `/api/stack` and `get_stack`, overlap bands, the Stack tab, and Follow narrowing the Timeline. B6.5 in review: while replaying, the Stack tab shows the stack as it was at the cursor |
-| **Next action** | Merge B6.5 when green; then B6.6, the stack on the phone |
+| **Stage / step** | Wave 2 — B6.6: the stack on the phone |
+| **Status** | A5 done (M5 met). B6.1–B6.5 merged (#231–#234, #236, #237): dependencies across plans, `/api/stack` and `get_stack`, overlap bands, the Stack tab, Follow, and the stack at a past moment. B6.6 in review: the stack on the phone (`stack.summary`, a Stack screen from Plans) |
+| **Next action** | Merge B6.6 when green; then B6.7, the H1 done-when test and docs, which closes B6 |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b6-5-one-clock` |
+| **Branch** | `feat/phase-32-b6-6-phone-stack` |
 | **Last updated** | 2026-09-30 |
 
 ---
@@ -172,8 +172,8 @@
   - [x] B6.3 Overlap bands, declared and actual (#233)
   - [x] B6.4 The Stack tab (#234; carried #235, pinning a baseline no longer freezes the server)
   - [x] B6.4b The Timeline follows the stack's selection (#236)
-  - [ ] B6.5 One clock — in review
-  - [ ] B6.6 The stack on the phone
+  - [x] B6.5 One clock (#237)
+  - [ ] B6.6 The stack on the phone — in review
   - [ ] B6.7 Done-when and docs
 - [ ] B7 Conferring
 - [ ] B8 Grounding
@@ -307,6 +307,26 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: B6.6 — the stack on the phone
+
+A **Stack** button in the Plans tab's header opens every plan under way, away
+from the desk. One card per plan: its label (ticket key when it has one) and
+title, progress, "needs you", each overlap in words with its detail, **On
+it** (each unfinished task someone has, with its branch) and **Waiting**
+(each task's wait, in the desktop's own sentence). A card opens the plan.
+
+`stack.summary` (read row in `peer-capabilities.ts`) returns what
+`/api/stack` returns, for an opened project only, through
+`peerProjectRoot`; the phone summarises it in `mobile/lib/stack.ts`
+(`whoIsOn`, `waitsIn`). Sending the whole stack keeps one answer for the
+window, agents and the phone; the summary is a view.
+
+Tests: harness `stack.test.ts` gains "a paired phone gets the same stack,
+for an opened project only" (equal to REST; `/etc` refused). Phone
+`tests/phone/stack.spec.ts` (3): the full stack with a screenshot, empty,
+and an error; `tabs.spec.ts` checks the Plans header's Stack and Review
+queue buttons lead there. Inventory: `stack` RPCs map to domain c.
 
 ### 2026-09-30: B6.5 — one clock: the stack at a past moment
 

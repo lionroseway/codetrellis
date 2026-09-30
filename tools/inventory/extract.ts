@@ -160,7 +160,7 @@ export function domainForTool(name: string, section: string | undefined): Domain
 const RPC_DOMAINS: Record<string, DomainKey> = {
   project: 'a', fs: 'a', diagnostics: 'a',
   graph: 'b', changes: 'b',
-  plan: 'c', item: 'c', comment: 'c',
+  plan: 'c', item: 'c', comment: 'c', stack: 'c',
   criteria: 'd', criterion: 'd',
   artefact: 'e',
   channel: 'f', input: 'f',
