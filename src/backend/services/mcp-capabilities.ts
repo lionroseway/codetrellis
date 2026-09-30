@@ -206,6 +206,7 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   get_stack: 'read',
   get_spec_links: 'read',
   list_spec_proposals: 'read',
+  reply_to_spec_proposal: 'write',
   propose_spec_change: 'write',
   // Asks the person; deletes nothing (plan deletion left MCP in Phase 32 §0.4c-3).
   request_plan_deletion: 'write',

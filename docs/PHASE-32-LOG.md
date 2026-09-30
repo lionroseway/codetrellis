@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B7.2: propose a spec change |
-| **Status** | B6 done. B7 refined (#240); B7.1 merged (#241): tasks say what spec they rely on. B7.2 in review: `propose_spec_change`, the tasks it affects, the page untouched until a person decides |
-| **Next action** | Merge B7.2 when green; then B7.3, affected agents told once and their replies kept |
+| **Stage / step** | Wave 2 — B7.3: affected agents told once, and weighing in |
+| **Status** | B6 done. B7 refined (#240); B7.1 merged (#241): tasks say what spec they rely on. B7.2 merged (#242): `propose_spec_change`. B7.3 in review: each agent holding a relying task is told once, never the proposer; `reply_to_spec_proposal` keeps the impact and posts a weigh-in |
+| **Next action** | Merge B7.3 when green; then B7.4, the decision is a person's |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b7-2-propose` |
+| **Branch** | `feat/phase-32-b7-3-told-once` |
 | **Last updated** | 2026-09-30 |
 
 ---
@@ -178,8 +178,8 @@
   - [x] B6.7 Done-when and docs (#239)
 - [ ] B7 Conferring
   - [x] B7.1 Tasks say what they rely on (`spec_links`, sections by heading) (#241)
-  - [ ] B7.2 Propose a spec change, with the tasks it affects — in review
-  - [ ] B7.3 Affected agents told once; their replies kept
+  - [x] B7.2 Propose a spec change, with the tasks it affects (#242)
+  - [ ] B7.3 Affected agents told once; their replies kept — in review
   - [ ] B7.4 The decision is a person's: accept, amend, reject; tasks marked "spec changed"
   - [ ] B7.5 Spec breakpoints cover proposals and plan documents
   - [ ] B7.6 The phone
@@ -315,6 +315,43 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: B7.3 — the affected agents are told once, and weigh in
+
+A proposal (B7.2) listed who relied on the page; nobody told them.
+
+- **Told, once** (`proposalNoticeFor`, wired in `mcp/server.ts` after the
+  awareness notices): a session holding a task that relies on the page or
+  the proposed section *at the moment of its call* gets "── CodeTrellis:
+  spec change proposed ──" on its next result, with who, which section,
+  which of its tasks, why, the evidence, the text now and proposed (20 lines
+  each, then a pointer to `list_spec_proposals`), and how to reply. Once per
+  session per proposal (`spec_proposal_reads`), only while open, and never
+  the proposing session, even when its own task relies on the page. Holding
+  is `plan_items.assignee_session`, read then rather than from the list kept
+  at proposal time, so a task that stops relying is not told and one that
+  starts is. A claim's own result can carry it, because the claim is what
+  makes the session a holder.
+- **`reply_to_spec_proposal(uid, impact, words?, tasks?)`** (`write`):
+  `none`, or `changes` with a sentence and optionally how many tasks. Kept in
+  `spec_proposal_impacts` with who (`authorFromExtra`), the session, and the
+  replying session's relying task and plan. Posted as a `weigh-in` in the
+  proposer's plan, on the proposer's task (the page's plan when a person
+  proposed): "On the proposed change to § Fields of "Invoice format": "Show
+  totals" (Checkout) would change (2 tasks): …". It decides nothing.
+- **The proposal carries `impacts`**, and the page's proposal card lists
+  them: "Changes 2 tasks · Add currency (Billing) · codex — …", "No impact ·
+  Export invoices (Exports)".
+- Refused, with a sentence: no proposal, one already decided, `changes`
+  without words, a count that is not a whole number.
+
+Tests: unit `spec-proposals.test.ts` (4, who is told: once; not another
+section; never the proposer; a person's proposal reaches all; not after
+reliance is dropped or the proposal decided); harness `spec-impacts.test.ts`
+(4: two agents told once each, a third on another section and the proposer
+not; replies kept with who and which plan; weigh-ins in the proposer's plan;
+refusals); browser `spec-links.spec.ts` extended: two real agents claim,
+are told, reply, and the card lists both (screenshot `spec-impacts`).
 
 ### 2026-09-30: B7.2 — proposing a spec change
 

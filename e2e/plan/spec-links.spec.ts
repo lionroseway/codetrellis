@@ -7,12 +7,15 @@
  * task's page says "Relies on: Invoice format › Fields", and that opens the
  * page. The page says "Relied on by 2 tasks in 2 plans" and names them; a
  * name opens its task. When a change to Fields is proposed (B7.2), the page
- * says so, with why and who it affects, and is not changed.
+ * says so, with why and who it affects, and is not changed. The agents on
+ * the two tasks are told once and say what it means for them (B7.3); the
+ * card lists what they said.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { API, authHeaders, cleanupPlans, gotoWithProject, openPlan, seedPlan } from '../helpers/setup';
+import { createMcpClient } from '../helpers/mcp-client';
 
 const OUT = path.join('test-results', 'ux-audit');
 const SPEC = 'E2E Spec links Invoicing';
@@ -74,6 +77,34 @@ test.describe('Spec links', () => {
     await expect(card).toContainText('2 tasks in 2 plans rely on this. A person decides; the page is unchanged until then.');
     await expect(page.getByText('- currency (ISO 4217, required)')).toHaveCount(0);
     await shot(page, 'spec-proposed');
+
+    // B7.3: the agents on the relying tasks are told on their next call, and weigh in.
+    const agents = [await createMcpClient(), await createMcpClient()];
+    try {
+      const proposalUid = ((await proposed.json()) as { uid: string }).uid;
+      const said: Array<[number, string, Record<string, unknown>]> = [
+        [0, billing.actionUids[0], { impact: 'changes', words: 'The currency code has to reach the tax lines.', tasks: 2 }],
+        [1, exportsPlan.actionUids[0], { impact: 'none' }],
+      ];
+      for (const [i, task, reply] of said) {
+        // Claiming makes the session a holder, so the claim's own result tells it; the next call does not again.
+        const text = async (name: string) => (await agents[i].callTool(name, { uid: task })).content.map((c: { text: string }) => c.text).join('\n');
+        expect(await text('claim_item')).toContain('── CodeTrellis: spec change proposed ──');
+        expect(await text('get_spec_links')).not.toContain('── CodeTrellis: spec change proposed ──');
+        const r = await agents[i].callTool('reply_to_spec_proposal', { uid: proposalUid, ...reply });
+        expect(r.isError).toBeFalsy();
+      }
+    } finally {
+      for (const a of agents) a.close();
+    }
+    const impacts = card.getByTestId('spec-proposal-impact');
+    await expect(impacts).toHaveCount(2, { timeout: 10_000 });
+    await expect(impacts.nth(0)).toContainText('Changes 2 tasks');
+    await expect(impacts.nth(0)).toContainText('Add currency (E2E Spec links Billing)');
+    await expect(impacts.nth(0)).toContainText('The currency code has to reach the tax lines.');
+    await expect(impacts.nth(1)).toContainText('No impact');
+    await expect(impacts.nth(1)).toContainText('Export invoices (E2E Spec links Exports)');
+    await shot(page, 'spec-impacts');
 
     // A name opens its task.
     await tasks.nth(1).click();
