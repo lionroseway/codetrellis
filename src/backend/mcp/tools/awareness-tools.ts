@@ -138,9 +138,11 @@ export function register(server: McpServer, deps: ToolDeps): void {
       description:
         'The project as it was at a past moment: the replay frame at or before it (why it was taken: a turn ended, a ' +
         'task changed status, a commit landed; and at which commit), how the code graph now differs from that frame, ' +
-        'each task\'s status then (with its status now when that differs), the calls that were waiting on the person ' +
-        'then, and the signals open then. Use it to answer "what was going on when…" or to see what changed while ' +
-        'you were away. `at` is an ISO 8601 time or milliseconds since the epoch. Read-only.',
+        'each task\'s status then (with its status now when that differs) and who was on it, the calls that were ' +
+        'waiting on the person then, the signals open then, and the stack then: every plan under way, with who was on ' +
+        'each task, its branch, what it waited on across plans and where plans met. Use it to answer "what was going ' +
+        'on when…" or to see what changed while you were away. `at` is an ISO 8601 time or milliseconds since the ' +
+        'epoch. Read-only.',
       inputSchema: {
         at: z.union([z.string().min(1), z.number()]).describe('The moment: an ISO 8601 time, or milliseconds since the epoch.'),
         project_path: z.string().optional().describe('Absolute path of an opened project. Defaults to the active project.'),
@@ -173,6 +175,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
             tasks: state.tasks.map((t) => ({
               uid: t.uid, title: t.title, plan: t.planTitle, status: t.status,
               ...(t.statusNow !== undefined ? { status_now: t.statusNow } : {}),
+              assignee: t.assignee, workstream: t.workstream, dependencies: t.dependencies,
             })),
             waiting: state.waiting.map((h) => ({
               ref: h.ref, agent: h.agent, action: h.action, item: h.itemTitle, path: h.path, breach: h.breach,
@@ -182,6 +185,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
               id: s.id, kind: s.kind, severity: s.severity, summary: s.summary, workstreams: s.workstreams,
               opened_at: iso(s.openedAt), closed_at: iso(s.closedAt),
             })),
+            // The stack then (B6.5, B6.7), in the shape `get_stack` answers now.
+            stack: state.stack,
           }, null, 2),
         }],
       };

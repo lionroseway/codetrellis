@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B6.6: the stack on the phone |
-| **Status** | A5 done (M5 met). B6.1–B6.5 merged (#231–#234, #236, #237): dependencies across plans, `/api/stack` and `get_stack`, overlap bands, the Stack tab, Follow, and the stack at a past moment. B6.6 in review: the stack on the phone (`stack.summary`, a Stack screen from Plans) |
-| **Next action** | Merge B6.6 when green; then B6.7, the H1 done-when test and docs, which closes B6 |
+| **Stage / step** | Wave 2 — B6.7: H1 done when; B6 closes |
+| **Status** | A5 done (M5 met). B6.1–B6.6 merged (#231–#234, #236–#238): dependencies across plans, the stack for the window, agents and the phone, overlap bands, the Stack tab, Follow, and the stack at a past moment. B6.7 in review: the H1 done-when test and docs; `get_state_at` gains the stack |
+| **Next action** | Merge B6.7 when green, which closes B6 (Wave 2 step 6 of 15); then B7, conferring: refine it into parts first |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b6-6-phone-stack` |
+| **Branch** | `feat/phase-32-b6-7-done-when` |
 | **Last updated** | 2026-09-30 |
 
 ---
@@ -173,8 +173,8 @@
   - [x] B6.4 The Stack tab (#234; carried #235, pinning a baseline no longer freezes the server)
   - [x] B6.4b The Timeline follows the stack's selection (#236)
   - [x] B6.5 One clock (#237)
-  - [ ] B6.6 The stack on the phone — in review
-  - [ ] B6.7 Done-when and docs
+  - [x] B6.6 The stack on the phone (#238)
+  - [ ] B6.7 Done-when and docs — in review
 - [ ] B7 Conferring
 - [ ] B8 Grounding
 - [ ] B9 Play-forward
@@ -308,6 +308,34 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-09-30: B6.7 — H1 done when; B6 closes
+
+`tests/e2e/awareness-h1.test.ts`, the H1 "done when", on two real worktrees
+of the sample app. billing-v2 changes `validateCreateUser`'s signature and
+exports imports it, so a contract signal opens between them. Billing v2
+comes first; Exports arrives later, called by its ticket key JIRA-150, its
+task waiting on Billing's. Codex claims from the billing-v2 worktree and
+Claude Code from exports (a task worked in another worktree cannot be
+claimed from the main checkout, C5.1); claiming the waiting task says what
+it waits on and still claims it.
+- The window's `/api/stack`: plans by label, who is on what and where,
+  "⚠ overlaps JIRA-150" with the contract behind it ("Open now: …"), and the
+  wait across plans in its sentence.
+- An MCP client's `get_stack` and a paired phone's `stack.summary` equal it.
+- `get_state_at` before Exports existed has Billing alone, nobody on its task.
+- Once Billing's task is done, the wait is gone for all three.
+
+Found while writing it: `get_state_at` did not carry the stack, although
+the B6.5 PR and entry said it did. The tool builds its own answer from
+`stateAt`, and B6.5 only changed `stateAt` and `/api/replay/state`. It now
+carries `stack` (the same shape as `get_stack`), and each task gains
+`assignee`, `workstream` and `dependencies`. The B6.5 entry is corrected.
+
+Docs: a stack section in `docs/claude/awareness.md` (the dependency rule,
+the stack, overlap bands, the tab and Follow, one clock, the phone) and its
+tests; `mcp-tools.md` rows for `get_stack` and `get_state_at`; the skill
+guide's rows; JOURNEYS H1 marked done.
+
 ### 2026-09-30: B6.6 — the stack on the phone
 
 A **Stack** button in the Plans tab's header opens every plan under way, away
@@ -342,9 +370,10 @@ workstream, file and symbol specs, parent), so `itemsAt` in
 status from the status changes in `plan_events` as B5.2 did. `stackThen`
 in `stack-service.ts` builds the rows with the same `stackPlanOf` and
 overlap code as the live stack (one `assemble`), fed the items as they were,
-the signals open then and what was waiting then. `/api/replay/state` and
-`get_state_at` now carry `stack`, and each task in `tasks` gains `assignee`,
-`workstream` and `dependencies`.
+the signals open then and what was waiting then. `/api/replay/state` now carries `stack`, and each task in `tasks` gains
+`assignee`, `workstream` and `dependencies`. (This entry first said
+`get_state_at` carried them too; it did not, because the tool shapes its own
+answer. B6.7 added them.)
 
 Decisions:
 - **A plan finished since, with a task still open then, was under way then.**

@@ -290,9 +290,12 @@ on what, "⚠ overlaps JIRA-150" in words, and dependencies drawn, including
 one task waiting on another plan.
 
 - ✓ Tickets linked to plans and items (Phase 24).
-- ＋ The multi-plan view, overlap bands, drawn and cross-plan
-  dependencies. None of these exist today.
-- ? Rows by ticket, by plan, or by workstream?
+- ✓ The multi-plan view, overlap bands, drawn and cross-plan
+  dependencies (Phase 32 B6, #231–#234, #236–#238): the Stack tab, Follow,
+  the stack at a past moment, and the phone. Done when: the window, an MCP
+  client and the phone see the same stack (`tests/e2e/awareness-h1.test.ts`).
+- ✓ Rows by plan, called by ticket key when there is one; tasks show their
+  branch. Rows by workstream stay the Awareness tab's.
 
 ---
 

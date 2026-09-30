@@ -410,7 +410,7 @@ edges.
 | \`delete_item(uid, cascade?)\` | Soft-delete with subtree snapshot for restore |
 | \`claim_item(uid, ...)\` | Atomically claim an Action; returns full context, file conflicts, and \`waits_on\` when a dependency is not finished yet (the claim still goes through) |
 | \`get_next_item(plan_uid, parent_uid?)\` | Next claimable Action respecting deps + approval gates. A dependency may be a task in another plan; when nothing is ready it says what the first task waits on, and where |
-| \`get_stack(project_path?)\` | Every active plan and its tasks at once: ticket keys, progress, who is on each task, its branch, and its dependencies across plans with what it waits on |
+| \`get_stack(project_path?)\` | Every active plan and its tasks at once: ticket keys, progress, who is on each task, its branch, its dependencies across plans with what it waits on, and where plans meet ("⚠ overlaps JIRA-150") |
 | \`assign_workstream(item_uid, workstream)\` | Which worktree a section is worked in (its branch, inherited below). Agents elsewhere are not offered its tasks and cannot claim them; \`get_next_item\` says how many were left out, and \`get_brief\` says where a task is worked |
 | \`get_brief(item_uid)\` | One read: the item, the guide, its materials, each criterion and what it still needs, any note sent back |
 | \`get_skill(name)\` | Load a project skill the task names (\`.claude/skills/<name>/SKILL.md\`) and follow it; reading it here shows the person the skill was used, whatever your client |
@@ -551,7 +551,7 @@ All sensor-emitted events have \`authorType: 'sensor'\` and a \`payload.source\`
 | \`list_workstreams(project_path?, include_idle?)\` | Every worktree of the repo, and recent branches with no checkout here, with the agents in it and the files it has changed; \`yours\` marks your own, \`shared\` means two or more agents in one folder |
 | \`get_awareness(project_path?)\` | Open signals affecting your workstream: \`collision\` (same file: medium, same function: high), \`contract\` (an exported signature changed or removed that code you change imports: high), \`drift\` (you change files outside your claimed items and declared intent: medium) and \`stale-base\` (main changed files you change: low) |
 | \`acknowledge_signal(id, note?)\` | Say you have seen a signal and what you will do. Shown to the person beside their answer; stops it being repeated to you |
-| \`get_state_at(at)\` | The project as it was at a past moment (ISO 8601 or milliseconds): tasks' statuses then, what was waiting on the person, the signals open, and how the graph has changed since. For "what was going on when…" or what changed while you were away |
+| \`get_state_at(at)\` | The project as it was at a past moment (ISO 8601 or milliseconds): tasks' statuses and who was on them then, what was waiting on the person, the signals open, the stack then, and how the graph has changed since. For "what was going on when…" or what changed while you were away |
 | \`declare_intent(summary, paths?, symbols?, clear?)\` | After planning: what you are about to change. Joins your workstream's footprint so overlaps show before any edit; lasts until you declare again, clear it, or disconnect |
 | \`check_footprint(paths, project_path?)\` | Before editing: which other workstreams changed these files (and which functions), and what imports them |
 | \`get_line_changes(path, workstream?, diff?)\` | Which lines of a file other workstreams changed, from git: added / changed / removed runs, the functions they fall in, committed or not; the diff text when asked |
@@ -1353,7 +1353,7 @@ agents is flagged as "shared".
 | \`check_footprint(paths, symbols?)\` | Before editing: who else changed these files, and what imports them |
 | \`get_line_changes(path, workstream?, diff?)\` | Which of their lines, from git, with the functions they fall in |
 | \`acknowledge_signal(id, note?)\` | Say you have seen a signal and what you will do |
-| \`get_state_at(at)\` | The project as it was at a past moment: statuses, waiting calls, open signals |
+| \`get_state_at(at)\` | The project as it was at a past moment: statuses, waiting calls, open signals, the stack then |
 | \`list_workstreams(project_path?, include_idle?)\` | Every worktree and recent branch, with agents and changed files |
 | \`post_channel_event(event_type: 'need-decision', message, options?)\` | Ask the person for a choice you should not make alone |
 `;
