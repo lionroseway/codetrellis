@@ -1,6 +1,14 @@
 import { create } from 'zustand';
 import type { Plan, Task, Comment, AgentSessionInfo, Deviation } from '@shared/types';
 
+/**
+ * Which `fetchPlans` is the latest. Every plan created, imported or updated
+ * anywhere refetches the list, and the answers can arrive out of order: an
+ * older one landing last put back a list without a plan just created, and
+ * dropped a row from under a click (the plan list moving mid-click, #224).
+ */
+let plansRequest = 0;
+
 // The V1 task / phase / doc actions this store carried (task context,
 // comments, attachments, progress, subtasks, phases, spec docs) had no
 // caller; they were removed with the V1 task API in Phase 32 §0.4c-2.
@@ -82,8 +90,11 @@ export const usePlanStore = create<PlanState>((set, get) => ({
     // happens in the component via planScope. The _projectPath
     // parameter is kept for backward compat but ignored.
     try {
+      const seq = ++plansRequest;
       const res = await fetch('/api/plans');
       const data = await res.json();
+      // A newer request was sent while this one was out: its answer wins.
+      if (seq !== plansRequest) return;
       // Guard: only set if we got an array (backend may return {error:…})
       if (Array.isArray(data)) {
         set({ plans: data });

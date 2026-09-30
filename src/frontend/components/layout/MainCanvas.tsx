@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { getAPI } from '../../bridge';
 import { fetchGraphAnswer } from '../../lib/graph-answer';
+import { preserveNodePositions } from '../../lib/preserve-node-positions';
 import {
   ReactFlow,
   Background,
@@ -407,9 +408,18 @@ export function MainCanvas() {
           // does this, so two windows never take the scanner from each other
           // over and over. A scan of the other project still running refuses
           // ours: wait a second and try again.
+          // The refusal is an answer, not an error: the scan route says 200
+          // with `astError` "already in progress". Asked again at once, a
+          // fresh canvas spent all its tries in a few seconds while the other
+          // scan ran, and stayed empty (#226, multi-select and
+          // graph-breakpoints). So a refusal waits too.
           if (tries++ < 120) {
             void getAPI().scanProject(forRoot)
-              .then(() => { if (!cancelled) attempt(); })
+              .then((scan) => {
+                if (cancelled) return;
+                if (/already in progress/i.test(scan?.astError ?? '')) retry = setTimeout(attempt, 1000);
+                else attempt();
+              })
               .catch(() => { if (!cancelled) retry = setTimeout(attempt, 1000); });
             return;
           }
@@ -1833,14 +1843,6 @@ function buildExplainPrompt(filePath: string, label: string, nodeType?: string):
     'Keep it concise but thorough. Use code references where helpful.',
     '',
   ].join('\n');
-}
-
-function preserveNodePositions(previousNodes: Node[], nextNodes: Node[]): Node[] {
-  const previousPositions = new Map(previousNodes.map((node) => [node.id, node.position]));
-  return nextNodes.map((node) => {
-    const previousPosition = previousPositions.get(node.id);
-    return previousPosition ? { ...node, position: previousPosition } : node;
-  });
 }
 
 /**
