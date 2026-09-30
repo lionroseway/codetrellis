@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — A6.5: sign-off packs list the signals |
-| **Status** | A6.4 merged (#256). A6.5 built: the sign-off pack lists each material signal that named a task, from its side, with how it ended (fixed, acknowledged by whom, intended, set aside) and agents' notes, in the data and the page. Unit, harness and browser (with a shot of the pack's section) green locally |
-| **In flight** | A6.5 building on `feat/phase-32-a6-5-signoff-pack-signals` |
-| **Last merged** | A6.4 (#256, `acf2392`) |
-| **Next action** | Merge A6.5 when CI is green; then A6.6 on feat/phase-32-a6-6-m6-done-when (replacing a spreadsheet two tasks cite tells both agents on their next call and shows once in the digest; awareness.md and the guide gain the Brief) |
+| **Stage / step** | Wave 2 — A6.6: the M6 done-when (A6 done) |
+| **Status** | A6.5 merged (#257). A6.6 built: the M6 done-when harness (awareness-m6: a replaced workbook two tasks cite is one signal naming both, told once to each agent, said from each side in its brief, one digest line on desktop and phone); awareness.md gains the Brief; the guide gains 'When other tasks share your files'. That closes A6 |
+| **In flight** | A6.6 building on `feat/phase-32-a6-6-m6-done-when` |
+| **Last merged** | A6.5 (#257, `4d1c177`) |
+| **Next action** | Merge A6.6 when CI is green; then C2 (team status), refining it into sub-steps first as the plan says |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
-> Read from git at `origin/feat/phase-32` `acf2392`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `4d1c177`, with open PRs from GitHub.
 
 ---
 
@@ -118,8 +118,8 @@
   - [x] A6.2 Material footprints (who read what, and its hash then) (#253)
   - [x] A6.3 Material signals in the one refresh (contract, stale-base, version-split, collision, drift) (#255)
   - [x] A6.4 Other work affected on the Brief, in get_brief, the inbox and the phone (#256)
-  - [ ] A6.5 Sign-off packs list the signals that touched the task — building
-  - [ ] A6.6 M6 done-when and docs
+  - [x] A6.5 Sign-off packs list the signals that touched the task (#257)
+  - [ ] A6.6 M6 done-when and docs — building
 - [ ] A7 Rules
 - [ ] Follow-up: `plan-by-hand` failed once in CI when its plan workspace dropped back to the plan list while `plan/list.spec.ts` created and deleted plans on the other worker (#147). It doesn't reproduce as a pair (5/5 on base and on the branch). Find which broadcast leaves the workspace, so a person's open plan survives someone else's plan changes.
 - [ ] Follow-up: two browser tests failed once on #167 and passed on re-run: `realtime/plan-events.spec.ts:18` (a reset connection mid-POST; also 2/3 locally on the base branch) and `external-refs/refs-panel.spec.ts:77` (a fixed 3 s `isVisible`). Both are queued as separate fixes; neither touches A3.4's code.
@@ -336,6 +336,27 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: A6.6 — the M6 done-when; A6 done
+
+A6.5 merged (#257). A6.6 closes A6:
+
+- **The M6 done-when** (`tests/e2e/awareness-m6.test.ts`, 5 tests, on a real
+  xlsx): two Claude Desktop sessions open their tasks, read the finance
+  workbook's Summary sheet and cite it. Finance replaces the workbook. One
+  signal names both tasks ("2 tasks cite Summary!A1:B3"); each agent's next
+  ordinary call carries the notice, and the one after does not; each brief
+  says it from its own side; `get_awareness`'s digest and the phone's Needs
+  you each carry it once, with the phone's card naming both tasks by title.
+- **The guide** gains "When other tasks share your files": what
+  `read_so_far` and `affected_by_other_work` are, the four headings, and what
+  to do (re-read, re-check the cited parts, resubmit), as information, not
+  instruction.
+- **`docs/claude/awareness.md`** gains "The Brief: work that is not code",
+  a parity row, and the A6 tests.
+
+A6 is done: #251 (refined), #252, #253 (with #254), #255, #256, #257 and
+this one.
 
 ### 2026-09-30: A6.5 — sign-off packs list the signals
 
