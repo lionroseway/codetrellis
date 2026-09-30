@@ -8,8 +8,8 @@
 
 import type { Breakpoint } from '@shared/types';
 
-import { agentName, subjectOf, hitHeadline, hitWhy, decisionLabels } from '../../shared/lib/breakpoint-words';
-export { agentName, subjectOf, hitHeadline, hitWhy, decisionLabels };
+import { agentName, subjectOf, hitHeadline, hitWhy, decisionLabels, changedLines } from '../../shared/lib/breakpoint-words';
+export { agentName, subjectOf, hitHeadline, hitWhy, decisionLabels, changedLines };
 
 /** A set breakpoint, as the list of breakpoints shows it. */
 export function breakpointLabel(b: Breakpoint): { what: string; when: string } {

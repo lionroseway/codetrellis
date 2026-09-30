@@ -67,6 +67,8 @@ import { stampSelfWrite, wasJustWrittenByUs } from './self-write-tracker';
 import { getEffectiveDefaultVisibility } from './project-config-service';
 import { heldByAnotherCheckout } from './checkout-identity';
 import { cleanBranch } from './section-workstreams';
+import { guardDiskEdit, settleDiskHold } from './plan-doc-guard';
+import { onHitAnswered } from './breakpoint-service';
 
 // --- Public surface ---
 
@@ -1799,6 +1801,9 @@ function upsertDoc(planUid: string, meta: any, body: string): void {
   const docUid = String(meta.uid);
   const existing = planDocsService.getPlanDocument(docUid);
   if (existing) {
+    // A document a person guards keeps the app's version until they decide (B7.5b).
+    const title = typeof meta.title === 'string' ? meta.title : undefined;
+    if (guardDiskEdit(docUid, { title, body }) === 'held') return;
     planDocsService.updatePlanDocument(docUid, {
       title: typeof meta.title === 'string' ? meta.title : undefined,
       body,
@@ -1828,6 +1833,24 @@ function upsertDoc(planUid: string, meta: any, body: string): void {
       toEpoch(meta.updatedAt) ?? now,
     ],
   );
+}
+
+/**
+ * Settle a guarded plan document once a person answers its hold (B7.5b):
+ * continue has applied the file's version (and the write-through that
+ * follows any document change); stop kept the app's, so write it back over
+ * the file. Registered once, by the server, so every surface that answers a
+ * hit (the window, the phone, a breakpoint cleared) settles it the same way.
+ */
+let settling = false;
+export function registerDiskHoldSettling(): void {
+  if (settling) return;
+  settling = true;
+  onHitAnswered((hit) => {
+    if (hit.action !== 'disk') return;
+    const outcome = settleDiskHold(hit);
+    if (outcome === 'restore' && hit.planUid) scheduleWriteThrough(hit.planUid);
+  });
 }
 
 // --- Helpers ---

@@ -14,8 +14,8 @@ export type BreakpointKind = typeof BREAKPOINT_KINDS[number];
 export const SIGNAL_BREAK_KINDS = ['collision', 'contract', 'drift'] as const;
 export const BREAKPOINT_DECISIONS = ['continue', 'steer', 'stop'] as const;
 export type BreakpointDecision = typeof BREAKPOINT_DECISIONS[number];
-/** What the held call would have done. */
-export type BreakpointAction = 'claim' | 'done' | 'edit' | 'delete' | 'edit_code' | 'breach' | 'propose';
+/** What the held call would have done; `disk`, that a guarded plan document's file changed on disk (B7.5b). */
+export type BreakpointAction = 'claim' | 'done' | 'edit' | 'delete' | 'edit_code' | 'breach' | 'propose' | 'disk';
 
 export interface Breakpoint {
   id: string;
@@ -65,4 +65,9 @@ export interface BreakpointHit {
    * many plans. Such an edit is better proposed, so their agents weigh in.
    */
   reliedOn?: { tasks: number; plans: number } | null;
+  /**
+   * For a plan document's file changed on disk (B7.5b): the app's version and
+   * the file's. Continue applies the file's; stop writes the app's back.
+   */
+  diskChange?: { beforeTitle: string; afterTitle: string; before: string; after: string } | null;
 }

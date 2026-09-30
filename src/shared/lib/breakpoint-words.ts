@@ -19,7 +19,7 @@ export function agentName(agent: string | null): string {
 
 const DOING: Record<BreakpointHit['action'], string> = {
   claim: 'claim', done: 'mark done', edit: 'change the description of', delete: 'delete', edit_code: 'change', breach: 'change',
-  propose: 'change the spec',
+  propose: 'change the spec', disk: 'change',
 };
 
 /** What the held call is about, in words: a function in its file (B4.2c), a file, or the item. */
@@ -34,6 +34,8 @@ export function hitHeadline(hit: BreakpointHit, where?: string | null): string {
   const who = agentName(hit.agent);
   const inWs = where ? ` in ${where}` : '';
   if (hit.breach) return `${who}${inWs} changed ${subjectOf(hit)} past a breakpoint`;
+  // A plan document's file, edited on disk (B7.5b): who did it cannot be told.
+  if (hit.action === 'disk') return `“${subjectOf(hit)}” changed on disk`;
   return `${who}${inWs} wants to ${DOING[hit.action]} “${subjectOf(hit)}”`;
 }
 
@@ -50,6 +52,9 @@ export function hitWhy(hit: BreakpointHit): string {
   switch (hit.kind) {
     case 'task': return 'You asked to be asked before an agent claims or finishes this task.';
     case 'spec':
+      if (hit.action === 'disk') {
+        return 'You guard this document. Its file changed on disk, and the app kept its own version until you decide: apply the file to take its version, or keep the app\'s and it is written back to the file.';
+      }
       // An edit to a page others rely on (B7.5a): the agent was told to propose it instead.
       if (hit.reliedOn && hit.reliedOn.tasks > 0) {
         return `You asked to be asked before an agent changes this description. ${reliedOnLine(hit.reliedOn)}; the agent was told a proposal would let their agents weigh in.`;
@@ -63,8 +68,32 @@ export function hitWhy(hit: BreakpointHit): string {
 }
 
 /** The three answers, worded for a pause or a breach. */
-export function decisionLabels(hit: Pick<BreakpointHit, 'breach'>): Record<BreakpointDecision, string> {
+export function decisionLabels(hit: Pick<BreakpointHit, 'breach'> & { action?: BreakpointHit['action'] }): Record<BreakpointDecision, string> {
+  if (hit.action === 'disk') return { continue: 'Apply the file', steer: 'Apply the file, with a note', stop: 'Keep the app\'s version' };
   return hit.breach
     ? { continue: 'Carry on', steer: 'Carry on with this note', stop: 'Stop' }
     : { continue: 'Continue', steer: 'Continue with steer', stop: 'Stop' };
+}
+
+/**
+ * The lines that differ between two versions of a document, with a line of
+ * context either side (B7.5b): what a person needs to see to decide, rather
+ * than two whole documents to compare by eye.
+ */
+export function changedLines(before: string, after: string, context = 1): { before: string; after: string; from: number } {
+  // Only the title changed: no lines to show.
+  if (before.replace(/\n+$/, '') === after.replace(/\n+$/, '')) return { before: '', after: '', from: 1 };
+  const a = before.replace(/\n+$/, '').split('\n');
+  const b = after.replace(/\n+$/, '').split('\n');
+  let start = 0;
+  while (start < a.length && start < b.length && a[start] === b[start]) start++;
+  let endA = a.length;
+  let endB = b.length;
+  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) { endA--; endB--; }
+  const from = Math.max(0, start - context);
+  return {
+    before: a.slice(from, Math.min(a.length, endA + context)).join('\n'),
+    after: b.slice(from, Math.min(b.length, endB + context)).join('\n'),
+    from: from + 1,
+  };
 }

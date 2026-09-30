@@ -7,7 +7,7 @@ import { useAwarenessStore } from '../../stores/awareness-store';
 import { useProjectStore } from '../../stores/project-store';
 import { useToastStore } from '../../stores/toast-store';
 import { ago, sideLabel } from '../../lib/awareness-view';
-import { hitHeadline, hitWhy, decisionLabels, breakpointLabel, agentName } from '../../lib/breakpoint-view';
+import { hitHeadline, hitWhy, decisionLabels, breakpointLabel, agentName, changedLines } from '../../lib/breakpoint-view';
 import { SIGNAL_BREAK_KINDS, type BreakpointHit, type BreakpointDecision } from '@shared/types';
 
 /**
@@ -85,6 +85,8 @@ function WaitingCard({ hit, now, replayed = false }: { hit: BreakpointHit; now: 
   const [error, setError] = useState<string | null>(null);
   const labels = decisionLabels(hit);
   const where = hit.workstreamRoot ? sideLabel(hit.workstreamRoot, workstreams) : null;
+  // A plan document changed on disk (B7.5b): no agent is waiting to read a note.
+  const disk = hit.action === 'disk';
 
   const act = async (decision: BreakpointDecision) => {
     setBusy(true);
@@ -101,7 +103,7 @@ function WaitingCard({ hit, now, replayed = false }: { hit: BreakpointHit; now: 
       <div className="flex items-center gap-1.5">
         {hit.breach
           ? <span className="flex items-center gap-1 text-[8px] uppercase font-semibold px-1 rounded bg-danger/15 text-danger"><OctagonAlert size={9} /> Breach</span>
-          : <span className="flex items-center gap-1 text-[8px] uppercase font-semibold px-1 rounded bg-warning-muted/40 text-warning"><Pause size={9} /> Paused</span>}
+          : <span className="flex items-center gap-1 text-[8px] uppercase font-semibold px-1 rounded bg-warning-muted/40 text-warning"><Pause size={9} /> {disk ? 'Held' : 'Paused'}</span>}
         <span className="ml-auto text-[9px] text-foreground-subtle" title={new Date(hit.hitAt).toLocaleString()}>
           {hit.breach ? 'seen' : 'waiting since'} {ago(hit.hitAt, now)}
         </span>
@@ -113,6 +115,7 @@ function WaitingCard({ hit, now, replayed = false }: { hit: BreakpointHit; now: 
           Your note on the breakpoint: <span className="italic text-foreground-muted">&ldquo;{hit.breakpointNote}&rdquo;</span>
         </div>
       )}
+      {hit.diskChange && <DiskChange change={hit.diskChange} />}
       {replayed ? (
         <div data-testid="breakpoint-replayed" className="mt-1.5 text-[10px] text-foreground-subtle">
           {hit.answeredAt
@@ -120,16 +123,16 @@ function WaitingCard({ hit, now, replayed = false }: { hit: BreakpointHit; now: 
             : 'Not answered yet. Go back to live to answer it.'}
         </div>
       ) : (<>
-      <input
+      {!disk && <input
         value={note}
         onChange={(e) => setNote(e.target.value)}
         maxLength={1000}
         aria-label="A note the agent will read"
         placeholder={hit.breach ? 'A note for the agent (optional)' : 'Steer (optional): a note the agent will read'}
         className="mt-1.5 w-full text-[10px] px-2 py-1 rounded border border-border-subtle bg-background/40 text-foreground placeholder:text-foreground-subtle focus:outline-none focus:border-accent/60"
-      />
+      />}
       <div className="mt-1.5 flex flex-wrap items-center gap-1">
-        {(['continue', 'steer', 'stop'] as const).map((d) => (
+        {(disk ? ['continue', 'stop'] as const : ['continue', 'steer', 'stop'] as const).map((d) => (
           <button
             key={d}
             onClick={() => act(d)}
@@ -145,6 +148,30 @@ function WaitingCard({ hit, now, replayed = false }: { hit: BreakpointHit; now: 
         {error && <span role="alert" className="text-[10px] text-danger">{error}</span>}
       </div>
       </>)}
+    </div>
+  );
+}
+
+/** The app's version of a plan document beside the file's (B7.5b). */
+function DiskChange({ change }: { change: NonNullable<BreakpointHit['diskChange']> }) {
+  const retitled = change.beforeTitle !== change.afterTitle;
+  const lines = changedLines(change.before, change.after);
+  const at = lines.from > 1 ? ` · from line ${lines.from}` : '';
+  return (
+    <div className="mt-1 grid grid-cols-1 gap-1" data-testid="disk-change">
+      {retitled && (
+        <div className="text-[10px] text-foreground-muted">Title: “{change.beforeTitle}” → “{change.afterTitle}”</div>
+      )}
+      {(lines.before || lines.after) && <>
+      <div>
+        <div className="text-[9px] uppercase tracking-wider text-foreground-subtle">In the app (kept){at}</div>
+        <pre className="max-h-24 overflow-auto whitespace-pre-wrap text-[10px] px-1.5 py-1 rounded bg-background/40 text-foreground-muted">{lines.before || '(empty)'}</pre>
+      </div>
+      <div>
+        <div className="text-[9px] uppercase tracking-wider text-foreground-subtle">On disk{at}</div>
+        <pre className="max-h-24 overflow-auto whitespace-pre-wrap text-[10px] px-1.5 py-1 rounded bg-warning-muted/20 text-foreground">{lines.after || '(empty)'}</pre>
+      </div>
+      </>}
     </div>
   );
 }
