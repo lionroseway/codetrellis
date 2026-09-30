@@ -30,6 +30,7 @@ import { listWorkstreams } from './workstream-service';
 import { resolveSection, branchOfRoot, whereWorked } from './section-workstreams';
 import { readSoFar } from './material-footprints';
 import { affectedByOtherWork } from './other-work';
+import { planGitStates } from './item-git-state';
 import type { ItemCriterion } from '../../shared/types/criteria';
 
 const MAX_BODY_CHARS = 20_000;
@@ -206,6 +207,8 @@ export async function getBrief(itemUid: string, opts: { workstreamRoot?: string 
     sent_back: criteria.filter((c) => c.state === 'sent_back').length,
     // What this task has read through read_material, and the hash each saw (A6.2).
     read_so_far: readSoFar(item.uid),
+    // What git proves about the task's branch (C2.1), when it is worked on one.
+    git_state: taskGitState(item.planUid, item.uid),
     // What other tasks' work did to this one, from this task's side (A6.4).
     affected_by_other_work: affectedByOtherWork(item.uid, plan?.projectPath ?? null, { refresh: opts.refreshSignals }),
     ...skillsBlock(item, plan?.projectPath ?? null, opts.workstreamRoot ?? null),
@@ -272,4 +275,10 @@ export async function listMaterials(planUid: string): Promise<MaterialSummary[] 
     for (const a of listArtefacts(item.uid)) out.push(summarise(a, item));
   }
   return out;
+}
+
+/** A task's git state, for its brief: the branch, the words and the proof; null when it is worked on no branch. */
+function taskGitState(planUid: string, itemUid: string) {
+  const s = planGitStates(planUid)?.items.find((x) => x.itemUid === itemUid);
+  return s ? { branch: s.branch, state: s.state, says: s.words, commit: s.commit, source: s.source } : null;
 }
