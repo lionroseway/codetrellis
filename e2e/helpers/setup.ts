@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { type Page, type Locator, type APIRequestContext, expect } from '@playwright/test';
+import { type Page, type Locator, type APIRequestContext, expect, test } from '@playwright/test';
 
 export const API = 'http://localhost:3001/api';
 export const PROJECT_PATH = process.cwd();
@@ -100,6 +100,13 @@ export async function gotoWithProject(
 ) {
   const projectPath = opts.projectPath ?? PROJECT_PATH;
   const skipOnboarding = opts.skipOnboarding ?? true;
+
+  // The waits below (another project's scan, up to 60 s; the canvas, up to
+  // 30 s) outlast the default 30 s test budget, so a test that opened a
+  // project while another scan ran timed out inside this helper with the
+  // graph arriving (edge-visuals on #226, at 32 s). Give the test room for
+  // the waits it asked for; a test that set a longer budget keeps it.
+  try { test.info().setTimeout(Math.max(test.info().timeout, 120_000)); } catch { /* not inside a test */ }
 
   if (skipOnboarding) {
     await page.addInitScript((pp: string) => {
