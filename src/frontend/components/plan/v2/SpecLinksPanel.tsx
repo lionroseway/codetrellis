@@ -7,7 +7,8 @@
  * page changes, those are the tasks affected (B7.2). A heading renamed
  * since the link was made says so rather than disappearing. A page with an
  * open proposal says so: which section, by whom, why, and who it affects;
- * a person decides it from the inbox (B7.4).
+ * a person decides it from the inbox (B7.4). Beneath it, what each agent
+ * doing relying work said it would mean for them (B7.3).
  */
 
 import { useEffect, useState } from 'react';
@@ -18,7 +19,8 @@ import type { PlanItem } from '@shared/types';
 interface Out { pageUid: string; pageTitle: string; planUid: string; planTitle: string; section: string; sectionTitle: string | null; sectionMissing: boolean }
 interface In { itemUid: string; title: string; status: string | null; assignee: string | null; planUid: string; planTitle: string; section: string; sectionTitle: string | null }
 interface Links { reliesOn: Out[]; reliedOnBy: In[]; words: string | null }
-interface Proposal { uid: string; section: string; sectionTitle: string | null; why: string; author: string; affectedWords: string | null; pageChangedSince: boolean }
+interface Impact { id: number; impact: 'none' | 'changes'; words: string; tasks: number | null; itemTitle: string | null; planTitle: string | null; author: string }
+interface Proposal { uid: string; section: string; sectionTitle: string | null; why: string; author: string; affectedWords: string | null; pageChangedSince: boolean; impacts: Impact[] }
 
 export function SpecLinksPanel({ item }: { item: PlanItem }) {
   const [links, setLinks] = useState<Links | null>(null);
@@ -63,6 +65,22 @@ export function SpecLinksPanel({ item }: { item: PlanItem }) {
             {p.affectedWords ?? 'Nothing relies on this page yet'}. A person decides; the page is unchanged until then.
             {p.pageChangedSince && <span className="text-amber-300"> The page has changed since this was proposed.</span>}
           </div>
+          {p.impacts.length > 0 && (
+            <ul className="pt-0.5 space-y-0.5" data-testid="spec-proposal-impacts">
+              {p.impacts.map((i) => (
+                <li key={i.id} className="flex flex-wrap gap-x-1.5" data-testid="spec-proposal-impact">
+                  <span className={`shrink-0 whitespace-nowrap ${i.impact === 'changes' ? 'text-amber-300' : 'text-emerald-300'}`}>
+                    {i.impact === 'changes' ? `Changes${i.tasks !== null ? ` ${i.tasks} ${i.tasks === 1 ? 'task' : 'tasks'}` : ''}` : 'No impact'}
+                  </span>
+                  <span className="shrink-0 whitespace-nowrap text-foreground-muted">
+                    {i.itemTitle ? `${i.itemTitle}${i.planTitle ? ` (${i.planTitle})` : ''}` : i.author}
+                    {i.itemTitle ? ` · ${i.author}` : ''}
+                  </span>
+                  {i.words && <span className="text-foreground">— {i.words}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       ))}
       {reliesOn.length > 0 && (

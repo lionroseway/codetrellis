@@ -9,7 +9,8 @@
 import { z } from 'zod';
 import { dependencyProblem } from '../../services/plan-dependencies';
 import { specRefProblem, setReliesOn, reliesOn, reliedOnBy, reliedOnWords } from '../../services/spec-links-service';
-import { proposalProblem, proposeSpecChange, listProposals, getProposal, directEditNote } from '../../services/spec-proposals-service';
+import { proposalProblem, proposeSpecChange, listProposals, getProposal, directEditNote, impactProblem, replyToProposal } from '../../services/spec-proposals-service';
+import { dispatchChannelEvent } from '../../services/channel-dispatcher-service';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { noteItemFocus } from '../../services/budget-service';
@@ -437,6 +438,40 @@ export function register(server: McpServer, deps: ToolDeps): void {
         next: proposal.affected.length
           ? `${proposal.affectedWords}. Their agents are asked for the impact; a person decides. The page is unchanged until then.`
           : 'Nothing relies on this page yet. A person decides; the page is unchanged until then.',
+      }, n);
+    },
+  );
+
+  // --- reply_to_spec_proposal (Phase 32 B7.3) ---
+
+  server.registerTool(
+    'reply_to_spec_proposal',
+    {
+      description:
+        'You were told a spec change is proposed to a page your task relies on: say what it would mean for your work. ' +
+        'impact "none", or "changes" with a sentence (and how many of your tasks it would change). It is kept with the ' +
+        'proposal for the person deciding, and posted as a weigh-in in the proposer\'s plan. It decides nothing.',
+      inputSchema: {
+        uid: z.string().describe('The proposal (from the notice, or list_spec_proposals).'),
+        impact: z.enum(['none', 'changes']),
+        words: z.string().optional().describe('What it would change for your work, in a sentence. Needed for "changes".'),
+        tasks: z.number().int().optional().describe('How many of your tasks it would change.'),
+      },
+    },
+    async (args, extra: any) => {
+      const input = { uid: args.uid, impact: args.impact, words: args.words, tasks: args.tasks };
+      const problem = impactProblem(input);
+      if (problem) return { isError: true, content: [{ type: 'text' as const, text: problem }] };
+      const { impact, event } = replyToProposal(input, { ...authorFromExtra(deps, extra), sessionId: deps.sessionId ?? null });
+      deps.broadcast('channel-event-posted', {
+        uid: event.uid, planUid: event.planUid, itemUid: event.itemUid, eventType: event.eventType, respondsTo: event.respondsTo,
+      });
+      dispatchChannelEvent(event).catch((err) => console.warn('[Channels] dispatch failed:', err));
+      const n = deps.broadcast('spec-proposal-replied', { uid: args.uid, impact });
+      deps.saveNow(() => deps.exportDatabase());
+      return resultWithMeta({
+        impact,
+        next: 'Kept with the proposal for the person deciding, and posted to the proposer\'s plan. Carry on; you are told if it is accepted.',
       }, n);
     },
   );

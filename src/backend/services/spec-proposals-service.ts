@@ -11,12 +11,21 @@
  *
  * Asked about later, a proposal says whether the page has changed since it
  * was made, so nobody accepts a change against text that has moved.
+ *
+ * B7.3: each session holding a task that relies on the page (or section) is
+ * told of an open proposal once, on its next call, and never the proposer.
+ * Its agent says what the change would mean for that work (`replyToProposal`:
+ * none, or changes with a sentence), which is kept with who and which plan
+ * and posted as a weigh-in in the proposer's plan.
  */
 import { randomUUID } from 'node:crypto';
 import { getDb } from './database';
 import { markDirty } from './persistence';
 import { getItem } from './plan-item-service';
+import { getPlan } from './plan-service';
+import { postChannelEvent } from './channel-event-service';
 import { reliedOnBy, reliedOnWords, type RelianceIn } from './spec-links-service';
+import type { ChannelEvent } from '../../shared/types';
 import { findSection, sectionText } from '../../shared/lib/spec-sections';
 
 export type ProposalStatus = 'open' | 'accepted' | 'rejected' | 'withdrawn';
@@ -58,6 +67,27 @@ export interface SpecProposal {
   decidedBy: string | null;
   decidedByType: string | null;
   decisionNote: string | null;
+  /** What the agents doing the relying work said it would mean for them (B7.3), oldest first. */
+  impacts: ProposalImpact[];
+}
+
+export type ImpactKind = 'none' | 'changes';
+
+export interface ProposalImpact {
+  id: number;
+  impact: ImpactKind;
+  words: string;
+  /** How many tasks it would change, when the agent said. */
+  tasks: number | null;
+  /** The replying session's task that relies on the page, and its plan. */
+  itemUid: string | null;
+  itemTitle: string | null;
+  planUid: string | null;
+  planTitle: string | null;
+  author: string;
+  authorType: string;
+  sessionId: string | null;
+  createdAt: number;
 }
 
 export interface ProposeInput {
@@ -130,7 +160,33 @@ function fromRow(r: unknown[]): SpecProposal {
     decidedBy: (r[16] as string | null) ?? null,
     decidedByType: (r[17] as string | null) ?? null,
     decisionNote: (r[18] as string | null) ?? null,
+    impacts: impactsOf(r[0] as string),
   };
+}
+
+function impactsOf(proposalUid: string): ProposalImpact[] {
+  return rows(
+    `SELECT id, impact, words, tasks, item_uid, plan_uid, author, author_type, session_id, created_at
+       FROM spec_proposal_impacts WHERE proposal_uid = ? ORDER BY created_at, id`,
+    [proposalUid],
+  ).map((r) => {
+    const itemUid = (r[4] as string | null) ?? null;
+    const planUid = (r[5] as string | null) ?? null;
+    return {
+      id: r[0] as number,
+      impact: r[1] as ImpactKind,
+      words: r[2] as string,
+      tasks: (r[3] as number | null) ?? null,
+      itemUid,
+      itemTitle: itemUid ? getItem(itemUid)?.title ?? null : null,
+      planUid,
+      planTitle: planUid ? getPlan(planUid)?.title ?? null : null,
+      author: r[6] as string,
+      authorType: r[7] as string,
+      sessionId: (r[8] as string | null) ?? null,
+      createdAt: r[9] as number,
+    };
+  });
 }
 
 const COLUMNS = `uid, page_uid, plan_uid, section, base_version, before_text, proposed_text, why, evidence, affected,
@@ -186,4 +242,149 @@ export function directEditNote(pageUid: string): string | null {
   const names = affected.slice(0, 4).map((a) => `"${a.title}" (${a.planTitle})`).join(', ');
   const more = affected.length > 4 ? ` and ${affected.length - 4} more` : '';
   return `${reliedOnWords(affected)}: ${names}${more}. The edit is saved; to change a spec others rely on, propose_spec_change lets their agents weigh in and a person decide first.`;
+}
+
+// --- B7.3: addressed, once -------------------------------------------------
+
+const where = (p: SpecProposal): string =>
+  `${p.section ? `§ ${p.sectionTitle ?? p.section} of ` : ''}"${p.pageTitle}"`;
+
+/** This session's tasks that rely on the proposal's page or section now. */
+function heldBy(sessionId: string, p: SpecProposal): RelianceIn[] {
+  const relying = reliedOnBy(p.pageUid, p.section || undefined);
+  if (relying.length === 0) return [];
+  const mine = new Set(rows(
+    `SELECT uid FROM plan_items WHERE assignee_session = ? AND uid IN (${relying.map(() => '?').join(',')})`,
+    [sessionId, ...relying.map((r) => r.itemUid)],
+  ).map((r) => r[0] as string));
+  return relying.filter((r) => mine.has(r.itemUid));
+}
+
+const quoted = (text: string, max = 20): string[] => {
+  const lines = text.replace(/\n+$/, '').split('\n');
+  const shown = lines.slice(0, max).map((l) => `> ${l}`);
+  if (lines.length > max) shown.push(`> … ${lines.length - max} more lines (list_spec_proposals has it all)`);
+  return shown;
+};
+
+function noticeText(p: SpecProposal, mine: RelianceIn[]): string {
+  const tasks = mine.map((t) => `"${t.title}" (${t.planTitle})`).join(', ');
+  const ev = [
+    p.evidence.tests?.length ? `tests ${p.evidence.tests.join(', ')}` : null,
+    p.evidence.files?.length ? `files ${p.evidence.files.join(', ')}` : null,
+    p.evidence.commits?.length ? `commits ${p.evidence.commits.join(', ')}` : null,
+    p.evidence.note ? p.evidence.note : null,
+  ].filter(Boolean).join('; ');
+  return [
+    `${p.author} proposes a change to ${where(p)}. Your ${mine.length === 1 ? 'task' : 'tasks'} ${tasks} ${mine.length === 1 ? 'relies' : 'rely'} on it.`,
+    `Why: ${p.why}`,
+    ...(ev ? [`Evidence: ${ev}`] : []),
+    'Now:',
+    ...quoted(p.beforeText || '(empty)'),
+    'Proposed:',
+    ...quoted(p.proposedText),
+    `Nothing changes until a person decides. Say what it would mean for your work: reply_to_spec_proposal("${p.uid}", impact: "none" | "changes", words).`,
+  ].join('\n');
+}
+
+/**
+ * The open proposals this session has not been told of and holds a task
+ * relying on, as one notice, or null. Never the proposer's own session.
+ * Marks what it delivers as read, so each reaches each session once. Never
+ * throws: a notice must not break the tool call it rides on.
+ */
+export function proposalNoticeFor(sessionId: string, agentType: string | null, now = Date.now()): string | null {
+  try {
+    if (rows('SELECT 1 FROM plan_items WHERE assignee_session = ? LIMIT 1', [sessionId]).length === 0) return null;
+    const unread = rows(
+      `SELECT uid FROM spec_proposals s WHERE s.status = 'open' AND (s.session_id IS NULL OR s.session_id != ?)
+         AND NOT EXISTS (SELECT 1 FROM spec_proposal_reads d WHERE d.proposal_uid = s.uid AND d.session_id = ?)
+       ORDER BY s.created_at`,
+      [sessionId, sessionId],
+    ).map((r) => r[0] as string);
+    const told: string[] = [];
+    for (const uid of unread) {
+      const p = getProposal(uid);
+      if (!p) continue;
+      const mine = heldBy(sessionId, p);
+      if (mine.length === 0) continue;
+      told.push(noticeText(p, mine));
+      getDb().run(
+        'INSERT OR IGNORE INTO spec_proposal_reads (proposal_uid, session_id, agent_type, read_at) VALUES (?, ?, ?, ?)',
+        [uid, sessionId, agentType, now],
+      );
+    }
+    if (told.length === 0) return null;
+    markDirty();
+    return [`── CodeTrellis: spec change proposed ──`, told.join('\n\n')].join('\n');
+  } catch (err) {
+    console.warn('[Spec] proposal notice failed:', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+/** Sessions told of a proposal, oldest first. */
+export function proposalReads(uid: string): Array<{ sessionId: string; agentType: string | null; readAt: number }> {
+  return rows('SELECT session_id, agent_type, read_at FROM spec_proposal_reads WHERE proposal_uid = ? ORDER BY read_at', [uid])
+    .map((r) => ({ sessionId: r[0] as string, agentType: (r[1] as string | null) ?? null, readAt: r[2] as number }));
+}
+
+export interface ImpactInput {
+  uid: string;
+  impact: ImpactKind;
+  words?: string;
+  tasks?: number;
+}
+
+/** Why an impact cannot be recorded, in a sentence; null when it can. */
+export function impactProblem(input: ImpactInput): string | null {
+  const p = getProposal(input.uid);
+  if (!p) return `No proposal ${input.uid}.`;
+  if (p.status !== 'open') return `The proposal to change ${where(p)} was ${p.status}; there is nothing left to weigh in on.`;
+  if (input.impact === 'changes' && !input.words?.trim()) return 'Say in a sentence what it would change for your work.';
+  if (input.tasks !== undefined && (!Number.isInteger(input.tasks) || input.tasks < 0)) return 'tasks is how many of your tasks it would change: a whole number.';
+  return null;
+}
+
+/**
+ * Record what a proposal would mean for the replying agent's work, and post
+ * it as a weigh-in in the proposer's plan (the plan of the task the
+ * proposing session holds, else the page's own). Checked by `impactProblem`.
+ */
+export function replyToProposal(
+  input: ImpactInput,
+  by: { author: string; authorType: string; sessionId?: string | null },
+  now = Date.now(),
+): { impact: ProposalImpact; event: ChannelEvent } {
+  const p = getProposal(input.uid)!;
+  const task = by.sessionId ? heldBy(by.sessionId, p)[0] ?? null : null;
+  const words = input.words?.trim() ?? '';
+  getDb().run(
+    `INSERT INTO spec_proposal_impacts (proposal_uid, impact, words, tasks, item_uid, plan_uid, author, author_type, session_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [p.uid, input.impact, words, input.tasks ?? null, task?.itemUid ?? null, task?.planUid ?? null,
+      by.author, by.authorType, by.sessionId ?? null, now],
+  );
+  markDirty();
+  const impact = impactsOf(p.uid).at(-1)!;
+
+  const proposerTask = p.sessionId
+    ? rows('SELECT uid, plan_uid FROM plan_items WHERE assignee_session = ? ORDER BY updated_at DESC LIMIT 1', [p.sessionId])[0]
+    : undefined;
+  const from = task ? `"${task.title}" (${task.planTitle})` : by.author;
+  const said = input.impact === 'none'
+    ? `no impact on ${from}.`
+    : `${from} would change${input.tasks !== undefined ? ` (${input.tasks} ${input.tasks === 1 ? 'task' : 'tasks'})` : ''}: ${words}`;
+  const event = postChannelEvent({
+    planUid: (proposerTask?.[1] as string | undefined) ?? p.planUid,
+    itemUid: (proposerTask?.[0] as string | undefined) ?? null,
+    eventType: 'weigh-in',
+    payload: {
+      message: `On the proposed change to ${where(p)}: ${said}`,
+      references: { items: [p.pageUid, ...(task ? [task.itemUid] : [])] },
+    },
+    author: by.author,
+    authorType: by.authorType,
+  });
+  return { impact, event };
 }

@@ -34,6 +34,7 @@ import { readBindingHeaders } from './binding-headers';
 import { recordFolderRequest } from '../services/folder-requests';
 import { noticeFor } from '../services/awareness-notices';
 import { replyNoticeFor } from '../services/awareness-replies';
+import { proposalNoticeFor } from '../services/spec-proposals-service';
 import { candidateWorkstreamRoots, firstWorkstreamRoot, matchWorkstreamRoot } from '../services/workstream-binding';
 import { fileURLToPath } from 'node:url';
 import * as budgetService from '../services/budget-service';
@@ -563,6 +564,9 @@ function setupMcpServerInstance(sessionId: string): McpServer {
         // workstream changed with its own editor, which nothing could pause.
         const breach = breachNoticeFor(sessionId, getActiveProjectPath());
         if (breach) result.content.push({ type: 'text', text: breach });
+        // A spec change proposed to a page this session's task relies on (B7.3), once.
+        const proposal = proposalNoticeFor(sessionId, agentInfo.type ?? null);
+        if (proposal) result.content.push({ type: 'text', text: proposal });
       }
       const summary = result?._meta?.summary;
       broadcastToolEvent({

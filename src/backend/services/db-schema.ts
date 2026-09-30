@@ -399,6 +399,33 @@ export const SCHEMA_PLANS_CORE = `
   );
   CREATE INDEX IF NOT EXISTS idx_spec_proposals_page ON spec_proposals(page_uid, status);
 
+  -- Phase 32 B7.3: each session holding an affected task is told of an open
+  -- proposal once; this is who has been.
+  CREATE TABLE IF NOT EXISTS spec_proposal_reads (
+    proposal_uid TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    agent_type TEXT,
+    read_at INTEGER NOT NULL,
+    PRIMARY KEY (proposal_uid, session_id)
+  );
+
+  -- Phase 32 B7.3: what a proposal would mean for the work relying on it,
+  -- from the agent doing that work: none, or changes with a sentence.
+  CREATE TABLE IF NOT EXISTS spec_proposal_impacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    proposal_uid TEXT NOT NULL,
+    impact TEXT NOT NULL,
+    words TEXT NOT NULL DEFAULT '',
+    tasks INTEGER,
+    item_uid TEXT,
+    plan_uid TEXT,
+    author TEXT NOT NULL,
+    author_type TEXT NOT NULL,
+    session_id TEXT,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_spec_proposal_impacts ON spec_proposal_impacts(proposal_uid);
+
   -- Phase 32 A1.7c: folders an agent reported that the person said "not now"
   -- to. Asked once per folder, not once per connection.
   CREATE TABLE IF NOT EXISTS folder_request_dismissals (
