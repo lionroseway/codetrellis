@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B7: conferring (refined into seven parts) |
-| **Status** | B6 done (#231–#234, #236–#239): the stack for the window, agents and the phone, overlaps in words, cross-plan waits, Follow, the stack at a past moment, and the H1 done-when. B7 refined: §5 "B7: Conferring" in the execution plan |
-| **Next action** | Merge the B7 refinement; then B7.1, tasks say what they rely on (`spec_links`, sections by heading) |
+| **Stage / step** | Wave 2 — B7.1: tasks say what spec they rely on |
+| **Status** | B6 done (#231–#234, #236–#239). B7 refined into seven parts (#240). B7.1 in review: `relies_on`, `spec_links`, sections by heading, who relies on a page across plans |
+| **Next action** | Merge B7.1 when green; then B7.2, propose a spec change with the tasks it affects |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b7-refine` |
+| **Branch** | `feat/phase-32-b7-1-relies-on` |
 | **Last updated** | 2026-09-30 |
 
 ---
@@ -134,6 +134,7 @@
 - [x] Follow-up: `graph/edge-visuals.spec.ts:12` timed out on #226 (d4236dc) at 32 s, with the graph's edges in the DOM. The test had the default 30 s budget, but `gotoWithProject` itself waits up to 60 s for another project's scan and 30 s for the canvas, so a project opened while another scan ran ran out of test time inside the helper. 75 specs open a project on the default budget. The helper now raises the test's timeout to cover its own waits (at least 120 s; a longer budget a test set is kept).
 - [x] Follow-up: `golden-chain/onboarding-to-plan.spec.ts:80` failed again on #227 (2d3ced2), after the click was scoped to `plan-item-tree`. The tree item was there and clicked, and the item's detail still did not show within 10 s. It passes locally, 15 of 15, 4 of 4 with the CPU throttled 6×, and with test 188 run first. Test 188 leaves no plan behind. `selectItem` is not a toggle. Candidates, not confirmed: the workspace's hydrate effect runs twice on open and fetches the items twice; an agent's navigation broadcast from the MCP specs that run just before; the workspace closing. The failure now prints what was on screen at that moment (tree, selected row, which texts are there), because the page snapshot is taken after `afterEach` deletes the plan. **Found, and it was the first candidate.** The diagnostic (adb03d9) said the row was selected and neither the body nor the status was on the page. Opening a plan loads its items twice: `resetForPlan` changes the store's plan id, which re-runs the workspace's effect while the first load is out. The list carries summaries without a body. When the second answer landed after the item had been opened, it put the summary back over the full item, so `BodyEditor` saw an empty body and fell into its editor, and a textarea's value is not page text. A person saw the same thing: a task opened quickly after its plan showed an empty editor where its body was. Fixed in `plan-items-store`: one load per plan at a time, the summary adds to an item's full fields rather than replacing them, and a list for a plan no longer open is dropped. `plan-items-store.test.ts` fails without it (two list requests, and the stale list wins).
 - [x] Follow-up: `golden-chain/websocket-events.spec.ts:97` failed on #226 (115d49c, browser 1/3): a socket opened from the page did not report `open` within three seconds, and the check said only `false`. The backend parses synchronously, so an upgrade that arrives during a scan waits for it, and the open project there was this repository. That is likely, not confirmed. Its sibling at :19 had the same three-second timer. Both now share `openSocket`, which gives the upgrade 15 s and says how it ended (`open`, `error`, `closed <code>`, `no answer`), so a repeat names its cause.
+- [ ] Follow-up: a picker on the item page to set what a task relies on (B7.1 shows the links; agents and REST set them).
 - [ ] Follow-up: `graph/edge-visuals.spec.ts:32` clicks `getByRole('button', { name: 'Files' })`, which is not exact. In a checkout with branches it also matches the TopBar's workstream chips, whose titles say "N files changed", and fails in strict mode. It fails locally (seen on #226 and on B6.4's run) and passes in CI, which has no such branches. The fix is `exact: true`; it belongs to the next change to that spec.
 - [ ] Follow-up: `graph/canvas-rescan-wait.spec.ts:23` timed out once on B6.4's local run, waiting 30 s for `.react-flow` in `gotoWithProject` while the other worker loaded the repository's graph. It passed twice alone, and in CI on every run since #227. Watch it; if it fails in CI, the wait needs the same budget the helper gives other waits.
 - [ ] Follow-up: browser shards now take about 16–25 minutes each (up from 15–19 at the Wave 1 review). The serial project, which runs the sample-app specs since HD2, is most of the rise; see the serial-project follow-up above.
@@ -176,7 +177,7 @@
   - [x] B6.6 The stack on the phone (#238)
   - [x] B6.7 Done-when and docs (#239)
 - [ ] B7 Conferring
-  - [ ] B7.1 Tasks say what they rely on (`spec_links`, sections by heading)
+  - [ ] B7.1 Tasks say what they rely on (`spec_links`, sections by heading) — in review
   - [ ] B7.2 Propose a spec change, with the tasks it affects
   - [ ] B7.3 Affected agents told once; their replies kept
   - [ ] B7.4 The decision is a person's: accept, amend, reject; tasks marked "spec changed"
@@ -314,6 +315,39 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: B7.1 — tasks say what spec they rely on
+
+A task names the spec pages it relies on, each whole or one section; a page
+names every task relying on it, in any plan of its project. That list is who
+a change to the page affects (B7.2).
+
+- **Sections are headings** (`src/shared/lib/spec-sections.ts`): a heading
+  and everything under it to the next heading at its level or above,
+  addressed by its slug ("fields" for "## Fields"; a repeated heading gets
+  `-2`, as GitHub does; headings in fenced code are not headings).
+- **`spec_links`** (item, page, section; `''` for the whole page; author
+  from the transport) via `services/spec-links-service.ts`. `relies_on` on
+  `add_item` / `update_item` replaces the list; `PUT /api/items/:uid/relies-on`
+  for a person. Refused, with a sentence: a page that does not exist, a task
+  (dependencies are for tasks), a heading not on the page, the item itself.
+- **Who relies on it**: `get_spec_links(uid, section?)` (read) and
+  `GET /api/items/:uid/spec-links`. A task relying on the whole page counts
+  for every section. "Relied on by 3 tasks in 2 plans".
+- **Nothing is dropped silently**: a heading renamed after the link was made
+  keeps the link and says "heading no longer on the page"; deleting a task or
+  a page removes its links.
+- **The item page** shows "Relies on: Invoice format › Fields" (a link to the
+  page) on a task, and on a page "Relied on by 2 tasks in 2 plans" with each
+  task, its plan and its section, each a link (`SpecLinksPanel`).
+
+Not yet: setting a link from the window. Agents set them (`relies_on`) and a
+person can over REST; a picker in the item page is a follow-up.
+
+Tests: unit `spec-sections.test.ts` (3); harness `spec-links.test.ts` (4):
+links across three plans, a section narrowing the answer, the refusals, a
+renamed heading and a deleted task; browser `e2e/plan/spec-links.spec.ts`
+with screenshots `spec-relies-on` and `spec-relied-on-by`.
 
 ### 2026-09-30: B7 refined
 

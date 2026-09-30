@@ -1560,7 +1560,13 @@ export function moveItem(uid: string, input: MoveItemInput): PlanItem | null {
 export function deleteItem(uid: string, input: DeleteItemInput): string[] {
   const planUid = getItem(uid)?.planUid;
   const deleted = deleteItemImpl(uid, input);
-  if (deleted.length) writeThrough(planUid);
+  if (deleted.length) {
+    // Phase 32 B7.1 — a deleted task no longer relies on anything, and a
+    // deleted page is relied on by nothing (see spec-links-service).
+    const marks = deleted.map(() => '?').join(',');
+    getDb().run(`DELETE FROM spec_links WHERE item_uid IN (${marks}) OR page_uid IN (${marks})`, [...deleted, ...deleted]);
+    writeThrough(planUid);
+  }
   return deleted;
 }
 

@@ -8,6 +8,7 @@
 
 import { z } from 'zod';
 import { dependencyProblem } from '../../services/plan-dependencies';
+import { specRefProblem, setReliesOn, reliesOn, reliedOnBy, reliedOnWords } from '../../services/spec-links-service';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { noteItemFocus } from '../../services/budget-service';
@@ -118,6 +119,14 @@ export function register(server: McpServer, deps: ToolDeps): void {
 
   // --- add_item ---
 
+  // Phase 32 B7.1 — the spec pages (or one heading of a page) a task relies on.
+  const reliesOnSchema = z.array(z.object({
+    page: z.string().describe('The uid of a page (an Object) in any plan of this project.'),
+    section: z.string().optional().describe('A heading on that page, by its slug ("fields" for "## Fields"). Omit for the whole page.'),
+  })).optional().describe(
+    'The spec pages this task relies on, whole or one section each. Replaces the list. When a page changes, the tasks relying on it are the ones told.',
+  );
+
   server.registerTool(
     'add_item',
     {
@@ -142,6 +151,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         new_connections: z.array(planItemEdgeSchema).optional(),
         removed_connections: z.array(planItemEdgeSchema).optional(),
         dependencies: z.array(z.string()).optional().describe('Uids of tasks (Actions) that must finish first — in this plan or any other. A page cannot be one.'),
+        relies_on: reliesOnSchema,
         visibility: z.enum(['shared', 'local']).optional().describe(
           'Per-item sharing. `shared` (default) exports this item via git. `local` keeps it in the DB only.',
         ),
@@ -156,6 +166,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       // nothing, or a page, would hold this item for ever.
       const depProblem = args.dependencies?.length ? dependencyProblem(null, args.dependencies, deps.planItemService.getItem) : null;
       if (depProblem) return { isError: true, content: [{ type: 'text' as const, text: depProblem }] };
+      const refProblem = args.relies_on?.length ? specRefProblem(null, args.relies_on) : null;
+      if (refProblem) return { isError: true, content: [{ type: 'text' as const, text: refProblem }] };
       const item = deps.planItemService.createItem({
         planUid: args.plan_uid,
         kind: args.kind,
@@ -175,6 +187,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         author: id.author,
         authorType: id.authorType,
       });
+      if (args.relies_on) setReliesOn(item.uid, args.relies_on, id);
       const n = deps.broadcast('plan-item-created', { planUid: item.planUid, item });
       deps.saveNow(() => deps.exportDatabase());
       return resultWithMeta(item, n);
@@ -322,6 +335,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         new_connections: z.array(planItemEdgeSchema).optional(),
         removed_connections: z.array(planItemEdgeSchema).optional(),
         dependencies: z.array(z.string()).optional(),
+        relies_on: reliesOnSchema,
         parent_uid: z.string().optional().describe('Re-parent. Empty string detaches to top-level.'),
         sort_order: z.number().int().optional(),
         change_summary: z.string().optional(),
@@ -340,6 +354,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const id = authorFromExtra(deps, extra);
       const depProblem = args.dependencies?.length ? dependencyProblem(args.uid, args.dependencies, deps.planItemService.getItem) : null;
       if (depProblem) return { isError: true, content: [{ type: 'text' as const, text: depProblem }] };
+      const refProblem = args.relies_on?.length ? specRefProblem(args.uid, args.relies_on) : null;
+      if (refProblem) return { isError: true, content: [{ type: 'text' as const, text: refProblem }] };
       const item = deps.planItemService.updateItem(args.uid, {
         title: args.title,
         body: args.body,
@@ -363,6 +379,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         authorType: id.authorType,
       });
       if (!item) return { content: [{ type: 'text' as const, text: `Item ${args.uid} not found` }] };
+      if (args.relies_on) setReliesOn(item.uid, args.relies_on, id);
       // Phase 23 — moving an item to in_progress is the other way an
       // agent tells us what it is working on. Agents that set status
       // directly never call claim_item, and their time would otherwise
@@ -375,6 +392,38 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const n = deps.broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: args });
       deps.saveNow(() => deps.exportDatabase());
       return resultWithMeta(item, n);
+    },
+  );
+
+  // --- get_spec_links (Phase 32 B7.1) ---
+
+  server.registerTool(
+    'get_spec_links',
+    {
+      description:
+        'Spec links for an item. For a task: the pages (and sections) it relies on. For a page: every task relying on it, ' +
+        'in any plan of the project, optionally narrowed to one section (a heading slug; a task relying on the whole page ' +
+        'counts for every section). Those are the tasks a change to the page affects. Read-only.',
+      inputSchema: {
+        uid: z.string().describe('A task or a page.'),
+        section: z.string().optional().describe('For a page: one heading, by its slug.'),
+      },
+    },
+    async ({ uid, section }) => {
+      const item = deps.planItemService.getItem(uid);
+      if (!item) return { isError: true, content: [{ type: 'text' as const, text: `Item ${uid} not found` }] };
+      const by = item.kind === 'object' ? reliedOnBy(uid, section) : [];
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            uid, kind: item.kind, title: item.title,
+            relies_on: reliesOn(uid),
+            relied_on_by: by,
+            words: reliedOnWords(by),
+          }, null, 2),
+        }],
+      };
     },
   );
 

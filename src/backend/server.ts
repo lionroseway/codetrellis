@@ -85,6 +85,7 @@ import * as taskAttachmentsService from './services/task-attachments-service';
 // Phase 15 §C — unified Object/Action surface backing the V2 frontend.
 import * as planItemService from './services/plan-item-service';
 import { dependencyProblem } from './services/plan-dependencies';
+import { specRefProblem, setReliesOn, reliesOn, reliedOnBy, reliedOnWords, type SpecRef } from './services/spec-links-service';
 import * as planEventService from './services/plan-event-service';
 import * as channelEventService from './services/channel-event-service';
 import { exportChannelEvent } from './services/channel-event-file-service';
@@ -2408,6 +2409,37 @@ app.get('/api/items/:uid/skills', (req, res) => {
  * Which worktree an item is worked in (Phase 32 C5.1): its own branch, and
  * the section's in effect (its own or inherited), with where that is.
  */
+/**
+ * Phase 32 B7.1 — spec links. For a task, the pages (or sections) it relies
+ * on; for a page, every task relying on it in any plan of its project,
+ * optionally one section (`?section=<slug>`).
+ */
+app.get('/api/items/:uid/spec-links', (req, res) => {
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  const section = typeof req.query.section === 'string' && req.query.section ? req.query.section : undefined;
+  const by = item.kind === 'object' ? reliedOnBy(item.uid, section) : [];
+  res.json({ uid: item.uid, kind: item.kind, reliesOn: reliesOn(item.uid), reliedOnBy: by, words: reliedOnWords(by) });
+});
+
+/** Set what a task relies on: `{ reliesOn: [{ page, section? }] }`, replacing the list. The author is how the call arrived. */
+app.put('/api/items/:uid/relies-on', (req, res) => {
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  const raw = req.body?.reliesOn;
+  if (!Array.isArray(raw) || raw.some((r) => !r || typeof r.page !== 'string' || (r.section !== undefined && typeof r.section !== 'string'))) {
+    res.status(400).json({ error: 'reliesOn must be a list of { page, section? }' });
+    return;
+  }
+  const refs = raw.map((r: SpecRef) => ({ page: r.page, section: r.section || undefined }));
+  const problem = specRefProblem(item.uid, refs);
+  if (problem) { res.status(400).json({ error: problem }); return; }
+  setReliesOn(item.uid, refs, personFrom(req));
+  broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { reliesOn: refs } });
+  saveNow(() => exportDatabase());
+  res.json({ uid: item.uid, reliesOn: reliesOn(item.uid) });
+});
+
 app.get('/api/items/:uid/workstream', (req, res) => {
   const item = planItemService.getItem(req.params.uid);
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
