@@ -8,6 +8,7 @@ import type { ToolDeps } from '../types';
 import { resultWithMeta, authorFromExtra } from '../helpers';
 import { buildPlanPrompt, buildItemPrompt } from '../prompt-builders';
 import { getActiveProjectRoot, isTrustedProjectRoot } from '../../services/trusted-roots';
+import { buildStack } from '../../services/stack-service';
 
 export function register(server: McpServer, deps: ToolDeps): void {
   // --- Plan CRUD ---
@@ -124,6 +125,27 @@ export function register(server: McpServer, deps: ToolDeps): void {
       return { content: [{ type: 'text' as const, text: JSON.stringify({
         total: all.length, offset: start, limit: limit ?? 20, plans: summaries,
       }, null, 2) }] };
+    },
+  );
+
+  // --- get_stack (Phase 32 B6.2) ---
+
+  server.registerTool(
+    'get_stack',
+    {
+      description:
+        'The stack: every active plan in the project (not completed or archived) and its tasks, in one answer. ' +
+        'Each plan is called by its ticket key when it has one, with its progress and how many breakpoint hits wait ' +
+        'on a person. Each task says who is on it, the branch it is worked on, and its dependencies, including ones ' +
+        'in other plans, with what it waits on in words. Use it to see how plans fit together before picking up work.',
+      inputSchema: {
+        project_path: z.string().optional().describe('An opened project. Omit for the one open in the app.'),
+      },
+    },
+    async ({ project_path }) => {
+      const root = project_path ?? getActiveProjectRoot();
+      if (!root) return { isError: true, content: [{ type: 'text' as const, text: 'No project is open.' }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(buildStack(root), null, 2) }] };
     },
   );
 

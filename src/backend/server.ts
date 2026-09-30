@@ -72,6 +72,7 @@ import * as budgetService from './services/budget-service';
 import { compareSnapshots, listComparands, readFileAt } from './services/snapshot-compare-service';
 import { reviewPlan, renderReviewMarkdown } from './services/plan-review-service';
 import { reviewQueue } from './services/review-queue-service';
+import { buildStack } from './services/stack-service';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
@@ -3754,6 +3755,16 @@ app.get('/api/review-queue', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   res.json(reviewQueue(projectRoot));
+});
+
+/**
+ * Phase 32 B6.2 — the stack: every active plan in the project and its tasks,
+ * with who is on each, where it is worked, and its dependencies across plans.
+ */
+app.get('/api/stack', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(buildStack(projectRoot));
 });
 
 app.get('/api/plans/:uid/review', (req, res) => {

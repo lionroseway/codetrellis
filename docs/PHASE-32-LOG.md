@@ -166,7 +166,7 @@
   - [x] B5.4 Catch-up, and `get_state_at` ([#213](https://github.com/lionroseway/codetrellis/pull/213))
 - [ ] B6 Stack view, refined in EXECUTION §5:
   - [ ] B6.1 Dependencies resolve across plans (bug 11) — in review
-  - [ ] B6.2 The stack: `/api/stack` and `get_stack`
+  - [ ] B6.2 The stack: `/api/stack` and `get_stack` — built, PR after B6.1
   - [ ] B6.3 Overlap bands, declared and actual
   - [ ] B6.4 The Stack tab
   - [ ] B6.5 One clock
@@ -304,6 +304,35 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: B6.2 — the stack: every active plan at once
+`GET /api/stack?project` and a read-only `get_stack` MCP tool (a `read` row
+in `TOOL_CAPABILITIES`; a row in the agent guide) answer with every plan in
+the project that is not completed or archived, and its tasks
+(`src/backend/services/stack-service.ts`; the shape in
+`src/shared/types/stack.ts`, so the Stack tab and the phone read the same).
+- **A plan** is called by its ticket key when it has one (`label`), and
+  carries its progress (done of all tasks) and how many breakpoint hits wait
+  on a person.
+- **A task** carries its status (none for a page), who is on it, the branch
+  it is worked on (its own or its section's, C5), its ticket key, and every
+  dependency, met or not. An unmet one comes from B6.1's rule, with its words.
+  A met one in another plan still names that plan, so B6.4 can draw it.
+- **Decided: no held-project refusal.** The refinement said the stack would
+  refuse another held project, as B5.1's frames do. That rule exists because
+  frames read the one graph the server holds. Plans are rows per project, so
+  any opened project's stack can be read. The route's `requireProjectRoot` and
+  the MCP project scope keep it to opened projects. The EXECUTION row now says
+  so. B6.3's actual overlaps come from workstream signals, which are per
+  project too.
+- **Tests.**
+  - Unit: `stack-service.test.ts` (2): the label, progress and waiting hits;
+    the assignee, the inherited workstream, a cross-plan wait, and a met
+    dependency that still names its plan.
+  - Harness: `tests/e2e/stack.test.ts` (5). It uses two active plans and a
+    completed one, a ticket key set by an agent, and a cross-plan wait that
+    goes once the other task is done. `get_stack` equals REST, and a project
+    never opened is refused.
 
 ### 2026-09-30: B6.1 — dependencies resolve across plans (bug 11)
 A task that depended on another plan's task was never offered, by
