@@ -107,6 +107,18 @@ test.describe('Onboarding → Plan journey', () => {
     // failure here looks like the plan vanished; it had not.
     await tree.getByText('First task').click();
     const bodyText = () => page.evaluate(() => document.body.textContent || '');
+    // What was on screen when the detail did not come, taken here: the page
+    // snapshot Playwright keeps is taken after afterEach deletes the plan.
+    const onScreen = () => page.evaluate(() => {
+      const body = document.body.textContent || '';
+      const selected = document.querySelector('[data-testid="plan-item-tree"] .ring-accent\\/30');
+      return JSON.stringify({
+        tree: !!document.querySelector('[data-testid="plan-item-tree"]'),
+        selectedRow: selected?.textContent?.trim().slice(0, 60) ?? null,
+        has: ['First task', 'Do the first thing', 'pending', 'Status', 'E2E Onboarding Journey Plan'].filter((w) => body.includes(w)),
+        start: body.replace(/\s+/g, ' ').slice(0, 400),
+      });
+    });
     await expect.poll(async () => {
       const text = await bodyText();
       return text.includes('First task') && (
@@ -114,7 +126,9 @@ test.describe('Onboarding → Plan journey', () => {
         text.includes('pending') ||
         text.includes('Status')
       );
-    }, { timeout: 10_000, message: 'the first task\'s detail shows on the canvas' }).toBe(true);
+    }, { timeout: 10_000, message: 'the first task\'s detail shows on the canvas' }).toBe(true).catch(async (e: Error) => {
+      throw new Error(`${e.message}\nOn screen then: ${await onScreen()}`);
+    });
 
     // --- Step 3: Switch between items ---
     await tree.getByText('Second task').click();
