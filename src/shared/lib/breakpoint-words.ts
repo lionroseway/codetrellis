@@ -70,6 +70,8 @@ export function hitWhy(hit: BreakpointHit): string {
 /** The three answers, worded for a pause or a breach. */
 export function decisionLabels(hit: Pick<BreakpointHit, 'breach'> & { action?: BreakpointHit['action'] }): Record<BreakpointDecision, string> {
   if (hit.action === 'disk') return { continue: 'Apply the file', steer: 'Apply the file, with a note', stop: 'Keep the app\'s version' };
+  // A spec proposal (B7.4): accepted or rejected, the note for the proposer.
+  if (hit.action === 'propose') return { continue: 'Accept', steer: 'Accept, with a note', stop: 'Reject' };
   return hit.breach
     ? { continue: 'Carry on', steer: 'Carry on with this note', stop: 'Stop' }
     : { continue: 'Continue', steer: 'Continue with steer', stop: 'Stop' };

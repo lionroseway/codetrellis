@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — B7.5b: legacy plan documents guarded like pages"
-  status: "B7.5a merged (#247). B7.5b built: a spec breakpoint on a plan document holds a change to its file on disk; the inbox shows what changed, apply the file or keep the app's version. Harness, unit and browser green locally"
-  next: Merge B7.5b when CI is green; then B7.6, the phone (proposals in Needs you; proposal.list, proposal.get, proposal.decide)
+  step: "Wave 2 — B7.6: proposals on the phone"
+  status: "B7.5 merged (#247, #248). B7.6 built: a proposal waits in the phone's Waiting on you with every reply, and is accepted or rejected there as the person; proposal.list, proposal.get, proposal.decide. Harness, unit and phone spec green locally"
+  next: Merge B7.6 when CI is green; then B7.7, I1 end to end (two plans told once, both replies, accepted; the window, an MCP client and the phone agree) and the docs
   blockers: none
   updated: 2026-09-30
 sections:
