@@ -117,13 +117,16 @@ test.describe('planning by hand', () => {
     await expect(firstRow, 'the picker should find a file that exists in the fixture')
       .toBeVisible({ timeout: 8000 });
     await firstRow.click();
-    await page.waitForTimeout(1500);
 
     // The list endpoint returns summaries, which carry no fileSpecs —
-    // the anchor has to be read from the item itself.
-    const anchored = await getItem(page, action.uid);
-    const specs = anchored?.fileSpecs ?? [];
-    expect(specs.length, 'picking a file should anchor the item to it').toBeGreaterThanOrEqual(1);
+    // the anchor has to be read from the item itself. Polled, not slept: a
+    // fixed 1.5s read the item before the anchor's save landed on a loaded
+    // CI runner (PR #253's Browser suite 2/3).
+    let specs: NonNullable<Item['fileSpecs']> = [];
+    await expect.poll(async () => {
+      specs = (await getItem(page, action.uid))?.fileSpecs ?? [];
+      return specs.length;
+    }, { message: 'picking a file should anchor the item to it', timeout: 10_000 }).toBeGreaterThanOrEqual(1);
     const stored = specs[0].path;
     expect(stored, `stored path was "${stored}"`).toContain(TARGET_FILE);
     expect(
