@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — A6.1: task workstreams |
-| **Status** | A6 refined (#251). A6.1 built: get_brief binds a session to its task; tasks are lines of work over MCP, REST, the strip and the phone; notices and get_awareness match a session's task. Harness, unit, browser and phone green locally |
-| **In flight** | A6.1 building on `feat/phase-32-a6-1-task-workstreams` |
-| **Last merged** | A6 (#251, `540f901`) |
-| **Next action** | Merge A6.1 when CI is green; then A6.2 on feat/phase-32-a6-2-material-footprints (read_material records the session and the file's hash; a task's footprint) |
+| **Stage / step** | Wave 2 — A6.2: material footprints |
+| **Status** | A6.1 merged (#252). A6.2 built: read_material keeps who read which material, the part and the file's hash then (material_reads), counted for the session's brief task; a task's footprint is its reads, outputs and cited parts; get_brief shows read_so_far. Unit and harness green locally |
+| **In flight** | A6.2 building on `feat/phase-32-a6-2-material-footprints` |
+| **Last merged** | A6.1 (#252, `08ac091`) |
+| **Next action** | Merge A6.2 when CI is green; then A6.3 on feat/phase-32-a6-3-material-signals (contract, stale-base, version-split, collision, drift for materials, computed inside refreshSignals) |
 | **Blockers** | none |
 | **Last updated** | 2026-09-30 |
 
-> Read from git at `origin/feat/phase-32` `540f901`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `08ac091`, with open PRs from GitHub.
 
 ---
 
@@ -114,8 +114,8 @@
   - [x] A5.6 The queue on the phone (#229)
   - [x] A5.7 M5 done-when, end to end, and docs (#230)
 - [x] A6 The Brief (#251)
-  - [ ] A6.1 Task workstreams (a session binds to the task it asks get_brief about) — building
-  - [ ] A6.2 Material footprints (who read what, and its hash then)
+  - [x] A6.1 Task workstreams (a session binds to the task it asks get_brief about) (#252)
+  - [ ] A6.2 Material footprints (who read what, and its hash then) — building
   - [ ] A6.3 Material signals in the one refresh (contract, stale-base, version-split, collision, drift)
   - [ ] A6.4 Other work affected on the Brief, in get_brief, the inbox and the phone
   - [ ] A6.5 Sign-off packs list the signals that touched the task
@@ -336,6 +336,39 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: A6.2 — material footprints
+
+A6.1 merged (#252). A6.2 is built:
+
+- **Kept by the one read handler.** `read_material` writes a
+  `material_reads` row after a read succeeds: the session, the attachment,
+  the part (its locator, keys in one order), and the attachment's hash as
+  the read left it (resolving a material re-takes a moved file's hash, so
+  this is the version read). A failed read keeps nothing. The phone's
+  reads (a person's) are not a task's footprint and are not kept.
+- **Counted for the reader's task** (a decision): the row's task is the
+  session's brief task (A6.1), or the material's own task when the session
+  has none. Materials are shared across tasks (the plan's pages' materials
+  show in every brief), so the task that owns the attachment is often not
+  the one reading it.
+- **The material is its attachment's value**, project-relative for a
+  recorded file, so two tasks' attachments of one file name one material.
+  An uploaded file stays per task (`userdata://attachments/<task>/…`).
+- **A task's footprint** (`services/material-footprints.ts`,
+  `taskFootprint`): its reads grouped by material with every read (who,
+  hash, part, when), the outputs recorded on it, and the parts its
+  citations name, each once. A6.3's rules compare these across tasks.
+- **Where it shows now:** `get_brief` returns `read_so_far`, a line per
+  material: the parts in words ("lines 1–2", "Summary!B2:F9"), who read it,
+  and the hash last seen. The Brief page and the phone gain it in A6.4.
+
+Tests: unit `material-footprints.test.ts` (5: the brief task and the
+fallback, hashes across a change, outputs and cited parts, the brief's
+lines); `brief-service.test.ts` (nothing read yet); harness
+`material-footprints.test.ts` (4: two sessions read one material across a
+change and each task keeps who and which hash; reading again; a failed read
+is not kept).
 
 ### 2026-09-30: A6.1 — tasks as workstreams
 

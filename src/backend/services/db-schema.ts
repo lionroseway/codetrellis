@@ -214,6 +214,24 @@ export const SCHEMA_PLANS_CORE = `
   );
   CREATE INDEX IF NOT EXISTS idx_skill_uses_item ON skill_uses(item_uid, skill);
 
+  -- Phase 32 A6.2: which session read which material through read_material,
+  -- and the file's hash when it did. item_uid is the task the read counts
+  -- for: the session's brief task, or the material's own task when the
+  -- session has none. path is the attachment's value (project-relative for
+  -- a recorded file), so two tasks' attachments of one file name the same
+  -- material.
+  CREATE TABLE IF NOT EXISTS material_reads (
+    item_uid TEXT NOT NULL,
+    session_id TEXT,
+    attachment_uid TEXT NOT NULL,
+    path TEXT NOT NULL,
+    sha256 TEXT,
+    locator TEXT,
+    at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_material_reads_item ON material_reads(item_uid, at);
+  CREATE INDEX IF NOT EXISTS idx_material_reads_path ON material_reads(path);
+
   -- Phase 32 C1.4: a skill that arrived in a plan file (pulled through git,
   -- or edited by hand) is held back from agents until a person accepts it.
   -- One row per arrival: who added it and in which commit, as git says.
