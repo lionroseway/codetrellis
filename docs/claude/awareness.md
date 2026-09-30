@@ -379,6 +379,37 @@ and the phone agree throughout.
   Waiting on you with every reply, in the words the window uses
   (`shared/lib/proposal-words.ts`), accepted or rejected as the person.
 
+## The Brief: work that is not code (A6, M6)
+
+One analyst runs several Claude Desktop sessions on several tasks, and the
+tasks share material: a sales workbook, a board deck. The M6 "done when":
+finance replaces a workbook that two tasks cite; both tasks' agents are told
+on their next call, once; each agent's brief says it from its task's side;
+the person sees it once in the digest, on the desktop and the phone, as one
+signal naming both tasks.
+
+- **A task is a workstream** (A6.1, `services/task-workstreams.ts`).
+  `get_brief(item_uid)` binds the calling session to that task (the latest
+  wins); the task is `task:<uid>` wherever a signal names workstreams. The
+  strip and the phone list tasks beside the branches; `noticeFor` and
+  `get_awareness` match a session's task as well as its folder.
+- **Its footprint is what it read** (A6.2, `services/material-footprints.ts`).
+  `read_material` keeps each read in `material_reads` (session, part, the
+  file's hash then), counted for the session's task; with the outputs
+  recorded and the parts cited, that is the task's footprint.
+  `get_brief.read_so_far` shows it.
+- **Material signals** (A6.3): the table under Signals above, computed in the
+  same refresh as the code signals; the artefact watcher refreshes on a
+  change.
+- **Where they show** (A6.4): the Brief page's "Other work affected",
+  `get_brief.affected_by_other_work`, the Awareness card, the digest, the
+  inline notice and the phone.
+- **On record** (A6.5): the sign-off pack lists each signal that touched a
+  task and how it ended.
+- **The guide** tells every agent what "Other work affected" means and to
+  re-read, re-check its citations and resubmit when a shared file changes
+  (`skill-guide.ts`, "When other tasks share your files").
+
 ## Any agent: what every client gets (A8)
 
 CodeTrellis is agent-agnostic. The rule: a feature ships with the path
@@ -398,6 +429,7 @@ run as a plain `codex` client with no hook and no watcher in
 | Code and function breakpoints | `check_breakpoint(path, old_text)` before an edit (the guide tells every agent to); an edit made without checking is a breach on its next call. A client whose hooks run a command, or a wrapper script: the connector's `--check-edit <path>` exits 2 when held (A8.2) | Claude Code's `PreToolUse` hook and Gemini CLI's `BeforeTool` hook (A8.3) make the check themselves and hold the edit before it is made, sending the replaced text |
 | Signal breakpoints | claims, finishes and spec edits pause while the signal is open | hooked edits pause too |
 | Skills | the task's skills, where to find them, in `get_brief`, `claim_item` and `get_next_item` (C1.1); `get_skill(name)` loads one and is the proof of use, labelled "read through CodeTrellis" (A8.4) | Claude Code's session log also proves a skill it loaded itself (C1.3), labelled "session log" |
+| Tasks and their materials (A6) | `get_brief` binds the session to its task; `read_material` is the footprint; `affected_by_other_work` in the brief and the notice on the next call; the person answers in the window or on the phone | — |
 | Spec proposals (B7) | `propose_spec_change`, `reply_to_spec_proposal`, `get_spec_links`, `list_spec_proposals`; the notices ride on the agent's next call; `await_decision` on the proposal. The person decides in the window or on the phone | — |
 | Setup | the MCP connector config (Settings → MCP Server: a JSON entry for Claude Desktop, Cursor and most clients) | Claude Code's skill and hook installer (A3.4); Gemini CLI's hook installer (A8.3) |
 
@@ -454,6 +486,11 @@ run as a plain `codex` client with no hook and no watcher in
     on its next call and finds the steer on its task.
   - `review-commit-edges`, `review-other-work`, `hold-on-high-signals`,
     `review-queue` (with a paired phone);
+  - `task-workstreams`, `material-footprints`, `material-signals` (A6);
+  - `awareness-m6`, the M6 "done when": a replaced workbook two tasks cite
+    is one signal naming both, told once to each agent on its next call,
+    said from each task's side in its brief, and one line in the digest on
+    the desktop and the phone;
   - `awareness-m5`, the M5 "done when": billing-v2 changes a function
     checkout-fix imports. Its review (JSON and markdown) and its PR body say
     so, and the queue puts it first with that reason, for three different

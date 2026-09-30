@@ -139,6 +139,17 @@ describe('the guide tells an agent what to offer, and what it may be refused', (
     assert.match(g, /no tool decides one/);
   });
 
+  test('a Claude Desktop agent is told what "Other work affected" means and what to do about it (A6.6)', () => {
+    const g = summary();
+    assert.match(g, /When other tasks share your files/);
+    for (const t of ['get_brief', 'read_so_far', 'affected_by_other_work', 'read_material', 'acknowledge_signal']) {
+      assert.match(g, new RegExp(`\\b${t}\\b`), t);
+    }
+    for (const heading of ['Changed material', 'Different versions', 'Same output', 'Outside its brief']) assert.ok(g.includes(heading), heading);
+    assert.match(g, /Other work\s+affected/);
+    assert.match(g, /not\s+an instruction/);
+  });
+
   test('every flavour builds without throwing', () => {
     for (const f of FLAVOURS) {
       assert.ok(buildSkillGuide(f).length > 200, f);

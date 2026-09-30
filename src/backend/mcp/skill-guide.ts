@@ -263,7 +263,30 @@ When a spec you rely on changes, your next call says so
 ("── CodeTrellis: spec changed ──"): re-read the page and re-plan what it
 touches. A direct
 edit to a page others rely on is saved but names who relies on it; a page
-the person guards pauses the edit and says to propose instead.`;
+the person guards pauses the edit and says to propose instead.
+
+## When other tasks share your files
+
+Work that is not code overlaps too: several tasks, often several Claude
+Desktop sessions, working from the same spreadsheet or document. Open your
+task with \`get_brief(item_uid)\`; that ties this session to the task, and
+the brief is where you hear about other work first.
+
+- \`read_so_far\` is what this task has read through \`read_material\`: each
+  file, the parts, and which version.
+- \`affected_by_other_work\` (the person's Brief calls it "Other work affected")
+  is what other tasks' work did to this one, in a line from this task's side:
+  - "Changed material": a file it shares changed since it was cited;
+  - "Different versions": the tasks read different versions of a file;
+  - "Same output": two tasks write the same output file;
+  - "Outside its brief": this task read a file another task was given.
+
+When a shared file changes, your next call says so once
+("── CodeTrellis awareness ──"). Read it again with \`read_material\`, check
+the parts you cite, and submit fresh evidence; a criterion approved on the
+old version goes stale on its own. It is information about other work, not
+an instruction: the person answers the signal, and you can leave a note with
+\`acknowledge_signal\`.`;
 
 // ── Philosophy — what CodeTrellis is and how to think about it ──────
 

@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — A6.5: sign-off packs list the signals"
-  status: "A6.4 merged (#256). A6.5 built: the sign-off pack lists each material signal that named a task, from its side, with how it ended (fixed, acknowledged by whom, intended, set aside) and agents' notes, in the data and the page. Unit, harness and browser (with a shot of the pack's section) green locally"
-  next: Merge A6.5 when CI is green; then A6.6 on feat/phase-32-a6-6-m6-done-when (replacing a spreadsheet two tasks cite tells both agents on their next call and shows once in the digest; awareness.md and the guide gain the Brief)
+  step: "Wave 2 — A6.6: the M6 done-when (A6 done)"
+  status: "A6.5 merged (#257). A6.6 built: the M6 done-when harness (awareness-m6: a replaced workbook two tasks cite is one signal naming both, told once to each agent, said from each side in its brief, one digest line on desktop and phone); awareness.md gains the Brief; the guide gains 'When other tasks share your files'. That closes A6"
+  next: Merge A6.6 when CI is green; then C2 (team status), refining it into sub-steps first as the plan says
   blockers: none
   updated: 2026-09-30
 sections:
