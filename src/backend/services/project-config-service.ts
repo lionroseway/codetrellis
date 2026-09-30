@@ -241,10 +241,16 @@ function mergeSensorConfig(
   if (current.stuck || patch.stuck) {
     merged.stuck = { ...(current.stuck ?? {}), ...(patch.stuck ?? {}) };
   }
+  // Phase 32 A5.3: awareness was left out here, so any sensor update to a
+  // project that already had awareness settings dropped them.
+  if (current.awareness || patch.awareness) {
+    merged.awareness = { ...(current.awareness ?? {}), ...(patch.awareness ?? {}) };
+  }
   // Strip empty sub-groups
   if (merged.drift && Object.keys(merged.drift).length === 0) delete merged.drift;
   if (merged.docs && Object.keys(merged.docs).length === 0) delete merged.docs;
   if (merged.stuck && Object.keys(merged.stuck).length === 0) delete merged.stuck;
+  if (merged.awareness && Object.keys(merged.awareness).length === 0) delete merged.awareness;
   return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
@@ -288,6 +294,8 @@ export function getEffectiveSensorConfig(projectRoot: string): EffectiveSensorCo
       branchWindowDays: validDays(cfg?.awareness?.branchWindowDays) ?? SENSOR_DEFAULTS.awareness.branchWindowDays,
       // Only an explicit false turns them off: a hand-edited value that is not a boolean keeps the default.
       inlineNotices: cfg?.awareness?.inlineNotices === false ? false : SENSOR_DEFAULTS.awareness.inlineNotices,
+      // Opt-in: only an explicit true holds sign-off.
+      holdSignOffOnHighSignals: cfg?.awareness?.holdSignOffOnHighSignals === true,
     },
   };
 }
@@ -573,6 +581,7 @@ function parseSensorConfig(raw: Record<string, unknown>): SensorConfig | undefin
       awareness.branchWindowDays = a.branchWindowDays;
     }
     if (typeof a.inlineNotices === 'boolean') awareness.inlineNotices = a.inlineNotices;
+    if (typeof a.holdSignOffOnHighSignals === 'boolean') awareness.holdSignOffOnHighSignals = a.holdSignOffOnHighSignals;
     if (Object.keys(awareness).length > 0) result.awareness = awareness;
   }
 

@@ -35,6 +35,7 @@ import {
 import { runChecks, type CheckContext, type EvidenceFact } from './criterion-checks';
 import { getItem, listAllItems } from './plan-item-service';
 import { reviewPlan } from './plan-review-service';
+import { getEffectiveSensorConfig } from './project-config-service';
 import { resolveWithin } from './confined-fs';
 import { formatReference } from '../../shared/lib/references';
 import { postCriterionNotice } from './sensor-bridge-service';
@@ -109,8 +110,12 @@ function lastTargetChangeAt(item: PlanItem, root: string | null): number | null 
   return newest;
 }
 
-/** One review per plan per run: a `code` criterion reads its item's verdict. */
-type CodeVerdicts = Map<string, NonNullable<CheckContext['code']>>;
+/**
+ * One review per plan per run: a `code` criterion reads its item's verdict,
+ * and, where the project holds sign-off on them (A5.3), the open high
+ * overlaps the review lists under "Other work in flight".
+ */
+type CodeVerdicts = Map<string, NonNullable<CheckContext['code']>> & { openHighSignals?: CheckContext['openHighSignals'] };
 
 function codeVerdicts(planUid: string): CodeVerdicts | { unavailable: string } {
   const projectPath = rows(`SELECT project_path FROM plans WHERE uid = ?`, [planUid])[0]?.[0];
@@ -118,7 +123,13 @@ function codeVerdicts(planUid: string): CodeVerdicts | { unavailable: string } {
   try {
     const r = reviewPlan({ planUid, projectPath });
     if (!r.ok) return { unavailable: r.error };
-    return new Map(r.review.items.map((i) => [i.uid, { verdict: i.verdict, missing: i.missing }]));
+    const verdicts: CodeVerdicts = new Map(r.review.items.map((i) => [i.uid, { verdict: i.verdict, missing: i.missing }]));
+    if (getEffectiveSensorConfig(projectPath).awareness.holdSignOffOnHighSignals) {
+      verdicts.openHighSignals = (r.review.otherWork?.entries ?? [])
+        .filter((e) => e.outcome === 'open' && e.severity === 'high')
+        .map((e) => ({ heading: e.heading, words: [...e.sides.map((s) => s.words), e.merge].filter(Boolean).join(' ') }));
+    }
+    return verdicts;
   } catch (err) {
     return { unavailable: (err as Error).message };
   }
@@ -147,11 +158,13 @@ function check(
 ): CriterionCheck {
   const root = rootOf(item.uid);
   let code: CheckContext['code'];
+  let openHighSignals: CheckContext['openHighSignals'];
   if (criterion.kind === 'code') {
     const v = verdicts();
     code = 'unavailable' in v && typeof v.unavailable === 'string'
       ? { unavailable: v.unavailable }
       : (v as CodeVerdicts).get(item.uid) ?? { unavailable: 'the item is not in the plan review' };
+    if (v instanceof Map) openHighSignals = v.openHighSignals;
   }
   const startedAt = itemStartedAt(item);
   return runChecks({
@@ -163,6 +176,7 @@ function check(
     itemArtefacts: listArtefacts(item.uid),
     materialsRead: criterion.kind === 'citation' ? materialsReadSince(item.uid, startedAt) : undefined,
     code,
+    openHighSignals,
   });
 }
 
