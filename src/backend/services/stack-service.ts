@@ -84,6 +84,7 @@ export function stackPlanOf(
       status: item.kind === 'action' ? (item.status ?? 'pending') : null,
       assignee: item.assignee ?? null,
       assigneeType: item.assigneeType ?? null,
+      assigneeSession: item.assigneeSession ?? null,
       workstream: resolveSection(item, within)?.branch ?? null,
       ticketKey: sources.itemTicketKey(item.uid),
       files: filesOf(item),

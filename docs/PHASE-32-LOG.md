@@ -171,7 +171,7 @@
   - [x] B6.2 The stack: `/api/stack` and `get_stack` (#232)
   - [x] B6.3 Overlap bands, declared and actual (#233)
   - [ ] B6.4 The Stack tab — in review
-  - [ ] B6.4b The Timeline follows the stack's selection
+  - [ ] B6.4b The Timeline follows the stack's selection — built, PR after B6.4
   - [ ] B6.5 One clock
   - [ ] B6.6 The stack on the phone
   - [ ] B6.7 Done-when and docs
@@ -307,6 +307,33 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-09-30: B6.4b — one selection: the Timeline follows the stack
+Following a plan in the Stack tab now narrows the Timeline to its work, the
+other half of design rule 9 ("one selection").
+- **What is a plan's work** (`src/frontend/lib/stack-timeline.ts`, pure). A
+  turn counts when its session is the one on one of the plan's tasks (each
+  stack task now carries `assigneeSession`), or when any call in it names
+  the plan or one of its tasks. A call's arguments arrive as an object when
+  live and as a JSON string when stored, possibly cut short. A uid is a
+  UUID, so finding it in the text is exact, and it survives the cut.
+- **The button is now "Follow" / "Following"**, because it does both: the
+  plan's footprint on the graph, and its turns in the Timeline. The focus in
+  the graph store carries the plan's task uids and sessions.
+- **The Timeline says so.** "Showing JIRA-150's work: 1 of 2 turns", with
+  **Show all**, which lets the selection go everywhere at once: graph,
+  Timeline and stack. The tab's count is the filtered count.
+- **Limit.** The lanes above the turn list still show commits and signals
+  from the awareness feed, which belong to workstreams, not plans. Only the
+  turns are narrowed.
+- **Tests.**
+  - Unit: `stack-timeline.test.ts` (3): the session, a call naming the plan
+    or a task (a bulk call too), and stored and cut-short arguments.
+  - Browser: `e2e/plan/stack-follow.spec.ts`, with screenshot
+    `stack-follow-timeline`. Two MCP agents each leave a note on one plan's
+    task. Following Billing leaves only its agent's turn, with the bar.
+    Show all brings the other back and lets the stack row go.
+    `stack-tab.spec.ts` now expects "Following".
 
 ### 2026-09-30: B6.4 — the Stack tab
 A **Stack** tab beside Plans in `PlanPanel` (`StackTab.tsx`) shows every plan

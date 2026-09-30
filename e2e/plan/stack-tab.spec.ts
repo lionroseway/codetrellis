@@ -57,10 +57,10 @@ test.describe('The Stack tab', () => {
     await exportsRow.scrollIntoViewIfNeeded();
     await shot(page, 'stack-tab');
 
-    // Show Billing on the graph: its footprint is highlighted.
+    // Follow Billing: its footprint is highlighted on the graph.
     await billingRow.getByTestId('stack-show-on-graph').click();
     await expect(billingRow.getByTestId('stack-show-on-graph')).toHaveAttribute('aria-pressed', 'true');
-    await expect(billingRow.getByTestId('stack-show-on-graph')).toHaveText(/On the graph/);
+    await expect(billingRow.getByTestId('stack-show-on-graph')).toHaveText(/Following/);
     await expect.poll(() => page.locator('[data-plan-highlighted]').count(), { timeout: 20_000 }).toBeGreaterThan(0);
     await shot(page, 'stack-on-graph');
 
