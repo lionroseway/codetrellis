@@ -77,9 +77,21 @@ The `src/backend/services/` directory holds ~50 services. Grouped by responsibil
   cloned repository cannot turn itself on; it records the repository it was
   turned on for, and a changed remote switches it off. Turning on and saving
   a token are grants (app window only, `grant-guard.ts`); turning off and
-  forgetting are anyone's. `activeReviewHost` is the one gate C2.2b's
-  adapter asks before any request. Routes: `GET/PUT /api/review-host`,
+  forgetting are anyone's. `activeReviewHost` is the one gate the adapter
+  asks before any request. Routes: `GET/PUT /api/review-host`,
   `PUT/DELETE /api/review-host/token`; UI: Settings → Review hosts.
+- **GitHub behind it** (C2.2b, `review-host/github.ts`, `host-state.ts`).
+  For each branch a plan works on: its pull request by head branch, and
+  when open its check runs, combined status and reviews. GET only, the base
+  fixed for github.com (`CODETRELLIS_GITHUB_API` points tests at a
+  stand-in), redirects refused so the token never reaches another host,
+  the token only in that request's header. Answers are kept two minutes
+  (one read per branch per two minutes, inside the 60 an hour a public
+  repository allows), shared while in flight, and forgotten when the host
+  is turned on or off or its token changes. `overlayHost` combines: open is
+  `in-review`, merged is `merged` by `pull-request`, closed is `closed`,
+  each `source: 'github'`; no pull request or a failed read keeps git's
+  state with a `hostNote`; git's proof of a merge stands over the host.
 
 ## Session persistence & power awareness
 

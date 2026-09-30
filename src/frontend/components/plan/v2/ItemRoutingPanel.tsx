@@ -32,6 +32,7 @@ import { useTerminalStore, type AgentPreset } from '../../../stores/terminal-sto
 import { suggestSectionBranch, worktreeDirFor } from '@shared/lib/branch-name';
 import { worktreeReadiness } from '../../../lib/section-worktrees';
 import { usePlanGitStates, GIT_STATE_TONE } from '../../../lib/plan-git-state';
+import { gitStateChip, sourceWords } from '@shared/lib/git-state-words';
 
 // ─── Cascade resolution (client-side mirror of backend logic) ───────────
 
@@ -756,18 +757,25 @@ interface SectionView {
 
 /**
  * Phase 32 C2.1 — what git proves about the branch this item is worked on,
- * and the commit that proves it. Only what git can say: in review, checks
- * and closed need a host, which is not asked.
+ * and the commit that proves it. C2.2b — where the person turned on a review
+ * host, what it said (in review, closed), with its pull request and source;
+ * a note when it was asked and added nothing.
  */
 function GitStateLine({ planUid, itemUid, branch }: { planUid: string; itemUid: string; branch: string }) {
   const s = usePlanGitStates(planUid, branch)[itemUid];
   if (!s) return null;
   return (
-    <div data-testid="worked-in-git" data-state={s.state} className="mt-1 flex items-center gap-1.5 text-[10.5px] text-foreground-muted">
-      <span className={`rounded border px-1 text-[10px] ${GIT_STATE_TONE[s.state] ?? 'border-white/10 text-foreground-subtle'}`}>{s.state === 'none' ? 'no branch' : s.state}</span>
-      <span>{s.words}</span>
-      {s.commit && <code className="font-mono text-[10px] text-foreground-subtle" title={s.commit}>{s.commit.slice(0, 7)}</code>}
-      <span className="text-foreground-subtle">· from git</span>
+    <div data-testid="worked-in-git" data-state={s.state} data-source={s.source} className="mt-1 text-[10.5px] text-foreground-muted">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className={`rounded border px-1 text-[10px] ${GIT_STATE_TONE[s.state] ?? 'border-white/10 text-foreground-subtle'}`}>{s.state === 'none' ? 'no branch' : gitStateChip(s)}</span>
+        <span>{s.words}</span>
+        {s.review && (
+          <a href={s.review.url} target="_blank" rel="noreferrer" className="text-accent hover:underline" data-testid="worked-in-pr">#{s.review.number}</a>
+        )}
+        {s.commit && <code className="font-mono text-[10px] text-foreground-subtle" title={s.commit}>{s.commit.slice(0, 7)}</code>}
+        <span className="text-foreground-subtle">· {sourceWords(s)}</span>
+      </div>
+      {s.hostNote && <div className="text-foreground-subtle" data-testid="worked-in-host-note">{s.hostNote}</div>}
     </div>
   );
 }

@@ -77,7 +77,8 @@ import { reviewQueue } from './services/review-queue-service';
 import { buildStack } from './services/stack-service';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
-import { planGitStates } from './services/item-git-state';
+import { planGitStatesFresh } from './services/item-git-state';
+import { forgetHostReads } from './services/review-host/host-state';
 import { forgetReviewHostToken, getReviewHost, ReviewHostError, saveReviewHostToken, setReviewHost } from './services/review-host/switch';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
 import { buildPlaybackSequence } from './services/playback-service';
@@ -2370,11 +2371,13 @@ app.get('/api/plans/:uid/waits', (req, res) => {
 
 /**
  * Phase 32 C2.1 — each item's state from git, for any host or none:
- * building, pushed or merged, with the commit that proves it. Read from
- * local refs only; nothing is fetched and no host is asked.
+ * building, pushed or merged, with the commit that proves it, from local
+ * refs; nothing is fetched. C2.2b — where the person turned on a review
+ * host for the project, what it says too (in review, closed), each state
+ * with its source; otherwise no host is asked.
  */
-app.get('/api/plans/:uid/git-state', (req, res) => {
-  const states = planGitStates(req.params.uid);
+app.get('/api/plans/:uid/git-state', async (req, res) => {
+  const states = await planGitStatesFresh(req.params.uid);
   if (!states) { res.status(404).json({ error: 'Plan not found' }); return; }
   res.json(states);
 });
@@ -2410,6 +2413,7 @@ app.put('/api/review-host', (req, res) => {
   if (enabled && !mayGrant(req)) { res.status(403).json({ error: `Only you can turn on a review host — in the CodeTrellis app, ${REVIEW_HOST_WHERE}.` }); return; }
   try {
     const status = setReviewHost(projectRoot, enabled, changedBy(req));
+    forgetHostReads();
     broadcast('review-host-changed', { project: projectRoot });
     res.json(status);
   } catch (err) { sendReviewHostError(res, err); }
@@ -2422,6 +2426,7 @@ app.put('/api/review-host/token', (req, res) => {
   try {
     const token: unknown = req.body?.token;
     const status = saveReviewHostToken(projectRoot, token);
+    forgetHostReads();
     broadcast('review-host-changed', { project: projectRoot });
     res.json(status);
   } catch (err) { sendReviewHostError(res, err); }
@@ -2431,6 +2436,7 @@ app.delete('/api/review-host/token', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   const status = forgetReviewHostToken(projectRoot);
+  forgetHostReads();
   broadcast('review-host-changed', { project: projectRoot });
   res.json(status);
 });

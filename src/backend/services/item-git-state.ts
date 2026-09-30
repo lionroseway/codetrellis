@@ -19,7 +19,9 @@
  *      · the branch is gone and a commit on the base names the item's key.
  *
  * A branch that stopped stays "pushed", never "merged": closed without
- * merging is something only a host can say (C2.2).
+ * merging is something only a host can say. When the person turned one on
+ * (C2.2b), `planGitStates` adds what it last said (review-host/host-state.ts),
+ * and `planGitStatesFresh` asks it first.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -32,6 +34,7 @@ import { listWorktrees } from './worktree-service';
 import { resolveTrustedProjectRoot } from './trusted-roots';
 import { resolveSection, usableBase } from './section-workstreams';
 import { gitStateWords } from '../../shared/lib/git-state-words';
+import { cachedHostRead, overlayHost, refreshHostReads } from './review-host/host-state';
 
 
 const SHA = /^[0-9a-f]{40}$/;
@@ -205,9 +208,41 @@ export function planGitStates(planUid: string, opts: { nowSec?: number } = {}): 
     if (!section) continue;
     const keys = [...new Set([item.uid.slice(0, 8), section.fromUid.slice(0, 8)])];
     const k = `${section.branch}\0${keys.join('\0')}`;
-    const state = seen.get(k) ?? branchGitState(repo, section.branch, base, keys, { refs, nowSec: opts.nowSec });
-    seen.set(k, state);
+    const git = seen.get(k) ?? branchGitState(repo, section.branch, base, keys, { refs, nowSec: opts.nowSec });
+    seen.set(k, git);
+    const state = overlayHost(git, cachedHostRead(root, section.branch));
     items.push({ ...state, itemUid: item.uid, fromUid: section.fromUid, words: gitStateWords(state) });
   }
   return { base, items };
+}
+
+/** The branches a plan's items are worked on. */
+function planBranches(planUid: string): { root: string; branches: string[] } | null {
+  const plan = getPlan(planUid);
+  if (!plan) return null;
+  let root: string;
+  try { root = resolveTrustedProjectRoot(plan.projectPath, 'plan git state'); } catch { return null; }
+  const branches = new Set<string>();
+  for (const item of listAllItems(planUid)) {
+    const section = resolveSection(item, getItem);
+    if (section && isSafeGitRef(section.branch)) branches.add(section.branch);
+  }
+  return { root, branches: [...branches] };
+}
+
+/**
+ * The same, after asking the review host about any branch whose answer is
+ * older than its TTL, when the person turned one on for the project. The
+ * window's route and get_plan use this; the brief reads what is kept.
+ */
+export async function planGitStatesFresh(planUid: string, opts: { nowSec?: number } = {}): Promise<ReturnType<typeof planGitStates>> {
+  const b = planBranches(planUid);
+  if (b && b.branches.length) await refreshHostReads(b.root, b.branches);
+  return planGitStates(planUid, opts);
+}
+
+/** Start a refresh without waiting, for a caller that answers from what is kept. */
+export function refreshPlanHostStates(planUid: string): void {
+  const b = planBranches(planUid);
+  if (b && b.branches.length) void refreshHostReads(b.root, b.branches);
 }

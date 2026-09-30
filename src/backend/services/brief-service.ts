@@ -30,7 +30,7 @@ import { listWorkstreams } from './workstream-service';
 import { resolveSection, branchOfRoot, whereWorked } from './section-workstreams';
 import { readSoFar } from './material-footprints';
 import { affectedByOtherWork } from './other-work';
-import { planGitStates } from './item-git-state';
+import { planGitStates, refreshPlanHostStates } from './item-git-state';
 import type { ItemCriterion } from '../../shared/types/criteria';
 
 const MAX_BODY_CHARS = 20_000;
@@ -277,8 +277,19 @@ export async function listMaterials(planUid: string): Promise<MaterialSummary[] 
   return out;
 }
 
-/** A task's git state, for its brief: the branch, the words and the proof; null when it is worked on no branch. */
+/**
+ * A task's git state, for its brief: the branch, the words and the proof;
+ * null when it is worked on no branch. What a review host said comes from
+ * what is kept (C2.2b): the brief never waits on the network, and a refresh
+ * is started for the next ask.
+ */
 function taskGitState(planUid: string, itemUid: string) {
   const s = planGitStates(planUid)?.items.find((x) => x.itemUid === itemUid);
-  return s ? { branch: s.branch, state: s.state, says: s.words, commit: s.commit, source: s.source } : null;
+  if (s) refreshPlanHostStates(planUid);
+  return s
+    ? {
+      branch: s.branch, state: s.state, says: s.words, commit: s.commit, source: s.source,
+      ...(s.review ? { pull_request: s.review } : {}), ...(s.hostNote ? { host_note: s.hostNote } : {}),
+    }
+    : null;
 }

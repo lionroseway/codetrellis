@@ -10,8 +10,8 @@ import { progressByWorktree, worktreeReadiness } from '../../../lib/section-work
 import { useAwarenessStore } from '../../../stores/awareness-store';
 import { useReplayStore } from '../../../stores/replay-store';
 import type { PlanItem, PlanItemKind, TaskStatus } from '@shared/types';
-import { usePlanGitStates, GIT_STATE_TONE, type PlanItemGitState } from '../../../lib/plan-git-state';
-import { gitStateChip } from '@shared/lib/git-state-words';
+import { usePlanGitStates, GIT_STATE_TONE, gitStateTitle, type PlanItemGitState } from '../../../lib/plan-git-state';
+import { gitStateChip, sourceWords } from '@shared/lib/git-state-words';
 
 const STATUS_ICON: Record<TaskStatus, { Icon: typeof Circle; tint: string }> = {
   pending: { Icon: Circle, tint: 'text-zinc-500' },
@@ -408,12 +408,13 @@ function ItemRow({
           ⎇ {item.workstream}
         </span>
       )}
-      {/* C2.1 — what git proves about that branch, on the section that names it. */}
+      {/* C2.1 — what git proves about that branch, on the section that names it; C2.2b — and a review host, when turned on. */}
       {item.workstream && gitState && gitState.state !== 'none' && (
         <span
           data-testid="item-git-state"
           data-state={gitState.state}
-          title={`${gitState.words} — from git${gitState.commit ? `, ${gitState.commit.slice(0, 7)}` : ''}`}
+          data-source={gitState.source}
+          title={gitStateTitle(gitState, sourceWords(gitState))}
           className={`shrink-0 rounded border px-1 text-[10px] ${GIT_STATE_TONE[gitState.state] ?? ''}`}
         >
           {gitStateChip(gitState)}
