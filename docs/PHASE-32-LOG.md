@@ -11,11 +11,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B6.7: H1 done when; B6 closes |
-| **Status** | A5 done (M5 met). B6.1–B6.6 merged (#231–#234, #236–#238): dependencies across plans, the stack for the window, agents and the phone, overlap bands, the Stack tab, Follow, and the stack at a past moment. B6.7 in review: the H1 done-when test and docs; `get_state_at` gains the stack |
-| **Next action** | Merge B6.7 when green, which closes B6 (Wave 2 step 6 of 15); B7 is refined into seven parts (§5 "B7: Conferring"): then B7.1, tasks say what they rely on |
+| **Stage / step** | Wave 2 — B7: conferring (refined into seven parts) |
+| **Status** | B6 done (#231–#234, #236–#239): the stack for the window, agents and the phone, overlaps in words, cross-plan waits, Follow, the stack at a past moment, and the H1 done-when. B7 refined: §5 "B7: Conferring" in the execution plan |
+| **Next action** | Merge the B7 refinement; then B7.1, tasks say what they rely on (`spec_links`, sections by heading) |
 | **Blockers** | none |
-| **Branch** | `feat/phase-32-b6-7-done-when` |
+| **Branch** | `feat/phase-32-b7-refine` |
 | **Last updated** | 2026-09-30 |
 
 ---
@@ -166,7 +166,7 @@
   - [x] B5.2 The state at a moment ([#210](https://github.com/lionroseway/codetrellis/pull/210))
   - [x] B5.3 One clock in the window ([#211](https://github.com/lionroseway/codetrellis/pull/211))
   - [x] B5.4 Catch-up, and `get_state_at` ([#213](https://github.com/lionroseway/codetrellis/pull/213))
-- [ ] B6 Stack view, refined in EXECUTION §5:
+- [x] B6 Stack view, refined in EXECUTION §5:
   - [x] B6.1 Dependencies resolve across plans (bug 11) (#231)
   - [x] B6.2 The stack: `/api/stack` and `get_stack` (#232)
   - [x] B6.3 Overlap bands, declared and actual (#233)
@@ -174,7 +174,7 @@
   - [x] B6.4b The Timeline follows the stack's selection (#236)
   - [x] B6.5 One clock (#237)
   - [x] B6.6 The stack on the phone (#238)
-  - [ ] B6.7 Done-when and docs — in review
+  - [x] B6.7 Done-when and docs (#239)
 - [ ] B7 Conferring
   - [ ] B7.1 Tasks say what they rely on (`spec_links`, sections by heading)
   - [ ] B7.2 Propose a spec change, with the tasks it affects
