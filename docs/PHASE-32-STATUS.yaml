@@ -14,8 +14,8 @@
 # and prs (PRs whose merge commit does not name the id).
 now:
   step: "Track D — D1.5a: test runs travel; headless sharing"
-  status: "D1.4 in review (#288). D1.5 refined into D1.5a and D1.5b. D1.5a built: run records in .codetrellis/runs (signed, each device's latest, the commit it ran on), teammates' runs read after a pull and grounding a file by commit; serve/start --share-task-state for a headless backend; Settings → Shared task state lists teammates' runs, the Inspector says whose run a file rests on. Harness shared-test-runs 4, unit run-record 3, browser 2 shots"
-  next: "Merge D1.4, then D1.5a, when green; then D1.5b (the done-when: a CI job claims, reports, edits the plan and commits; the desktop shows it after a pull)"
+  status: "D1.4 merged (#288). D1.5 refined into D1.5a and D1.5b. D1.5a built: run records in .codetrellis/runs (signed, each device's latest, the commit it ran on), teammates' runs read after a pull and grounding a file by commit; serve/start --share-task-state for a headless backend; Settings → Shared task state lists teammates' runs, the Inspector says whose run a file rests on. Harness shared-test-runs 4, unit run-record 3, browser 2 shots"
+  next: "Merge D1.5a when green; then D1.5b (the done-when: a CI job claims, reports, edits the plan and commits; the desktop shows it after a pull)"
   blockers: "None"
   updated: 2026-10-01
 sections:

@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Track D — D1.5a: test runs travel; headless sharing |
-| **Status** | D1.4 in review (#288). D1.5 refined into D1.5a and D1.5b. D1.5a built: run records in .codetrellis/runs (signed, each device's latest, the commit it ran on), teammates' runs read after a pull and grounding a file by commit; serve/start --share-task-state for a headless backend; Settings → Shared task state lists teammates' runs, the Inspector says whose run a file rests on. Harness shared-test-runs 4, unit run-record 3, browser 2 shots |
-| **In flight** | D1.4 in review (#288) on `feat/phase-32-d1-4-sessions-and-pipelines`; D1.5a building on `feat/phase-32-d1-5a-shared-runs` |
+| **Status** | D1.4 merged (#288). D1.5 refined into D1.5a and D1.5b. D1.5a built: run records in .codetrellis/runs (signed, each device's latest, the commit it ran on), teammates' runs read after a pull and grounding a file by commit; serve/start --share-task-state for a headless backend; Settings → Shared task state lists teammates' runs, the Inspector says whose run a file rests on. Harness shared-test-runs 4, unit run-record 3, browser 2 shots |
+| **In flight** | D1.5a building on `feat/phase-32-d1-5a-shared-runs`; D1.5b building on `feat/phase-32-d1-5b-done-when` |
 | **Last merged** | C3.6 (#284, `8300675`) |
-| **Next action** | Merge D1.4, then D1.5a, when green; then D1.5b (the done-when: a CI job claims, reports, edits the plan and commits; the desktop shows it after a pull) |
+| **Next action** | Merge D1.5a when green; then D1.5b (the done-when: a CI job claims, reports, edits the plan and commits; the desktop shows it after a pull) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `30cb422`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `39874d8`, with open PRs from GitHub.
 
 ---
 
@@ -253,10 +253,10 @@
   - [ ] D1.1 `codetrellis serve` (headless backend, loopback, token on every transport) and `scan`
   - [ ] D1.2 Keep-on-track verbs as an agent: next, claim, update, stuck, done, request, brief, awareness, check, report-tests; text or --json
   - [ ] D1.3 Changing the plan (show, add, edit, move) and `commit`, which commits only CodeTrellis's own files; `status`
-  - [ ] D1.4 A SessionStart hook recipe, a CI/CD recipe, and exit codes on status and check for gating (breakpoints, tests older than the code, failing criteria, stale system docs); this repository uses it (#288) — in review
+  - [ ] D1.4 A SessionStart hook recipe, a CI/CD recipe, and exit codes on status and check for gating (breakpoints, tests older than the code, failing criteria, stale system docs); this repository uses it
   - [ ] D1.5 The D done-when, refined into two parts (2026-10-01): — building
     - [ ] D1.5a Test runs travel as signed run records, grounding a teammate's run by commit; `--share-task-state` for a headless backend — building
-    - [ ] D1.5b The done-when: a cloud session or CI job claims, reports, edits the plan and commits; the desktop shows it after a pull
+    - [ ] D1.5b The done-when: a cloud session or CI job claims, reports, edits the plan and commits; the desktop shows it after a pull — building
   - [ ] Follow-up: Declared product flows checked hop by hop against the cross-system map in CI (owner's point, 2026-10-01): after Phase 32 unless pulled in
 
 ### Phase end
