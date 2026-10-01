@@ -24,6 +24,8 @@ export interface Plan {
   updatedAt: number;
   taskCount?: number;
   completedTaskCount?: number;
+  /** Phase 32 C2.6a — set by the plans list when the plan reached this machine through its files. */
+  arrival?: PlanArrival | null;
   /**
    * Phase 15 §15.D — git context for the plan. Captures the user's
    * intent ("we're working off `main` and landing on `feat/auth`")
@@ -958,4 +960,16 @@ export interface UpdatePlanItemInput {
   /** Required — the actor performing the update. */
   author: string;
   authorType: string;
+}
+
+/**
+ * Phase 32 C2.6a — how a plan first reached this machine through its files:
+ * who added it and in which commit, as git says. Null on a plan made here.
+ */
+export interface PlanArrival {
+  /** The commit's author; null when the plan's file was not committed yet. */
+  addedBy: string | null;
+  /** The short sha; null when not committed yet. */
+  commit: string | null;
+  arrivedAt: number;
 }

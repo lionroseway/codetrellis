@@ -80,6 +80,7 @@ import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError }
 import { planGitStatesFresh } from './services/item-git-state';
 import { planStatusFresh } from './services/plan-status';
 import { listSignedApprovals } from './services/signed-approvals';
+import { allPlanArrivals } from './services/plan-arrivals';
 import { forgetHostReads } from './services/review-host/host-state';
 import { forgetReviewHostToken, getReviewHost, ReviewHostError, saveReviewHostToken, setReviewHost } from './services/review-host/switch';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
@@ -2082,7 +2083,9 @@ app.get('/api/plans', (req, res) => {
   const projectPath = optionalProjectRoot(req, res);
   if (projectPath === null) return;
   const status = req.query.status as string | undefined;
-  res.json(planService.listPlans(projectPath, status));
+  // C2.6a — a plan that arrived through its files says from whom, as git says.
+  const arrivals = allPlanArrivals();
+  res.json(planService.listPlans(projectPath, status).map((p) => ({ ...p, arrival: arrivals.get(p.uid) ?? null })));
 });
 
 // Create plan

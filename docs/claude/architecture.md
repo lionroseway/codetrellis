@@ -156,6 +156,18 @@ signature scheme. The harness sets `CODETRELLIS_SIGN_APPROVALS=0` so a
 developer's own git key is never used by a test; the signing spec turns it
 on.
 
+## Teammates' plans after a pull (Phase 32 C2.6a)
+
+`services/plan-arrivals.ts`. When an import finds a plan this machine has
+never had, its arrival is recorded in `plan_arrivals` with who added it and
+in which commit, from `git log` on its `plan.yaml` (`lastCommitOf`, as skill
+arrivals do), never from the file's own `author` field. A folder imported
+before it was committed records nulls and learns its commit on a later
+import; one already known is never rewritten. `GET /api/plans` carries
+`arrival`, the Stack's plans `arrival` in words ("from Priya Shah, in
+3f9c2e1"), and `get_plan` `arrived_from`. The app never fetches: the pull is
+the person's, and the plan-file watcher imports what it lands.
+
 ## Session persistence & power awareness
 
 CodeTrellis treats long-running agent sessions as first-class — desktops don't sleep while agents are working, and reconnects rehydrate state rather than starting fresh.

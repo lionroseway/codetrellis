@@ -166,6 +166,7 @@ function PlanRow({ plan, open, onToggle, focused }: { plan: StackPlan; open: boo
         </button>
         <span className={`font-medium text-foreground ${plan.ticketKey ? 'font-mono' : ''}`}>{plan.label}</span>
         {plan.ticketKey && <span className="text-foreground-muted truncate">{plan.title}</span>}
+        {plan.arrival && <span className="text-sky-300/80 truncate" data-testid="stack-plan-arrival">{plan.arrival}</span>}
         <span className="flex items-center gap-1.5 shrink-0" title={`${plan.progress.done} of ${plan.progress.total} tasks done`}>
           <span className="block w-16 h-1 rounded-full bg-white/[0.06] overflow-hidden">
             <span className="block h-full bg-accent/60" style={{ width: `${pct}%` }} />

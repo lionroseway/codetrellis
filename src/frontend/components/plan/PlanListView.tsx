@@ -570,6 +570,16 @@ export function PlanList() {
                     {projectName(plan.projectPath)}
                   </span>
                 )}
+                {/* Phase 32 C2.6a — a teammate's plan, as git says it arrived. */}
+                {plan.arrival && (
+                  <span
+                    data-testid="plan-arrival"
+                    title="This plan reached this machine through its files (a pull or a copy). Who added it and in which commit is what git says."
+                    className="text-[10.5px] text-sky-300/80 truncate block mt-0.5"
+                  >
+                    {plan.arrival.addedBy && plan.arrival.commit ? `from ${plan.arrival.addedBy}, in ${plan.arrival.commit}` : 'arrived in its files, not committed yet'}
+                  </span>
+                )}
               </button>
               <StatusBadge status={plan.status} />
               {/* Delete button — visible on hover */}

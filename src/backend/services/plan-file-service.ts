@@ -71,6 +71,7 @@ import { guardDiskEdit, settleDiskHold } from './plan-doc-guard';
 import { onHitAnswered } from './breakpoint-service';
 import { importItemRefs, importPlanRefs, refsForItem, refsForPlan } from './plan-file-refs';
 import { importApprovals } from './signed-approvals';
+import { completePlanArrival, recordPlanArrival } from './plan-arrivals';
 
 // --- Public surface ---
 
@@ -460,8 +461,13 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
 
   const projectPath = importedPlanRoot(planUid, planDir, planRaw.projectPath);
 
-  // 1. Plan upsert (same for V1 and V2), and its tickets (C2.5a).
+  // 1. Plan upsert (same for V1 and V2), and its tickets (C2.5a). A plan new
+  // to this machine arrived through its files: who added it, and in which
+  // commit, as git says (C2.6a).
+  const arriving = !planService.getPlan(planUid);
   upsertPlan(planUid, planRaw, projectPath);
+  if (arriving) recordPlanArrival(planUid, planFile);
+  else completePlanArrival(planUid, planFile);
   if (planRaw.refs !== undefined) importPlanRefs(planUid, planRaw.refs);
 
   // 2. Detect format: version:2 in plan.yaml OR items/ directory → V2.

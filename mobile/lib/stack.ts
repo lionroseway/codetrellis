@@ -49,6 +49,8 @@ export interface StackPlan {
   needsYou: number;
   tasks: StackTask[];
   overlaps: StackOverlap[];
+  /** Phase 32 C2.6a — a teammate's plan, as git says it arrived: "from Priya Shah, in 3f9c2e1". */
+  arrival?: string | null;
 }
 
 export interface Stack {

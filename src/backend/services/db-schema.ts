@@ -247,6 +247,16 @@ export const SCHEMA_PLANS_CORE = `
     changed_by TEXT NOT NULL
   );
 
+  -- Phase 32 C2.6a: a plan that first reached this machine through its files
+  -- (a pull, a copy, an import), with who added it and in which commit, as
+  -- git says; nulls when it was not committed yet. A plan made here has none.
+  CREATE TABLE IF NOT EXISTS plan_arrivals (
+    plan_uid TEXT PRIMARY KEY,
+    added_by TEXT,
+    commit_sha TEXT,
+    arrived_at INTEGER NOT NULL
+  );
+
   -- Phase 32 C2.5b: approvals as signed statements. One row per approval
   -- this machine signed (or could not), and per signed record read from a
   -- plan's approvals/ folder, with whether it verified and why not. A

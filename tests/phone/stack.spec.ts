@@ -36,6 +36,7 @@ const STACK = {
     },
     {
       uid: 'p-exports', title: 'Exports', ticketKey: 'JIRA-150', label: 'JIRA-150', progress: { done: 0, total: 1 }, needsYou: 0,
+      arrival: 'from Priya Shah, in 3f9c2e1',
       overlaps: [overlap('p-billing', 'Billing v2', true)],
       tasks: [
         task({
@@ -66,6 +67,9 @@ test.describe('The stack', () => {
     const exportsPlan = plans.nth(1);
     await expect(exportsPlan).toContainText('JIRA-150');
     await expect(exportsPlan).toContainText('Exports');
+    // A teammate's plan, as git says it arrived (C2.6a); Sam's own says nothing of the kind.
+    await expect(exportsPlan.getByTestId('stack-plan-arrival')).toHaveText('from Priya Shah, in 3f9c2e1');
+    await expect(billing.getByTestId('stack-plan-arrival')).toHaveCount(0);
     await expect(exportsPlan.getByTestId('stack-wait')).toHaveText('↑ “Deploy exports” waits on “Migrate schema” in plan “Billing v2”.');
     await expect(exportsPlan.getByTestId('stack-on-it')).toHaveCount(0);
     await shot(page, 'stack');

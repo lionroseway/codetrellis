@@ -20,6 +20,7 @@ import { listAllItems, dependencyLookup } from './plan-item-service';
 import { dependencyState, waitSentence, type DependencyLookup } from './plan-dependencies';
 import { resolveSection } from './section-workstreams';
 import { getPlanExternalRefs } from './external-intake-service';
+import { arrivalWords, getPlanArrival } from './plan-arrivals';
 import { getExternalRefs } from './external-refs-service';
 import { listHits } from './breakpoint-service';
 import { listWorktrees } from './worktree-service';
@@ -40,6 +41,8 @@ export interface StackSources extends DependencyLookup {
   readsOf?(itemUid: string): StackRead[];
   /** Materials attached, as a brief lists them, to these items (HD3). */
   materialsOn?(itemUids: readonly string[]): string[];
+  /** C2.6a — how a plan reached this machine through its files, in words; null when made here. */
+  arrivalOf?(planUid: string): string | null;
 }
 
 const DAY_MONTH = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
@@ -145,6 +148,7 @@ export function stackPlanOf(
     needsYou: sources.waitingHits(plan.uid),
     tasks,
     overlaps: [],
+    arrival: sources.arrivalOf?.(plan.uid) ?? null,
   };
 }
 
@@ -159,6 +163,7 @@ const sources: StackSources = {
   waitingHits: (planUid) => listHits({ state: 'waiting', planUid }).length,
   readsOf: (itemUid) => readsFromDb(itemUid),
   materialsOn: (itemUids) => materialsFromDb(itemUids),
+  arrivalOf: (planUid) => { const a = getPlanArrival(planUid); return a ? arrivalWords(a) : null; },
 };
 
 const canon = (p: string): string => {
@@ -246,6 +251,7 @@ export function stackThen(
     waitingHits: (planUid) => waitingThen.filter((h) => h.planUid === planUid).length,
     readsOf: (itemUid) => readsFromDb(itemUid, at),
     materialsOn: (itemUids) => materialsFromDb(itemUids, at),
+    arrivalOf: sources.arrivalOf,
   };
   return assemble(projectPath, plans.map((p) => p.plan), (uid) => itemsOf.get(uid) ?? [], then, signalsThen, 'then');
 }
