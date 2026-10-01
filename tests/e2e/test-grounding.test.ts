@@ -87,6 +87,17 @@ test.describe.serial('Tests mapped to code', () => {
     expect(await grounding(`${SHARED}/validators.ts`)).toMatchObject({ state: 'stale', words: '⚠ tests older than the code: it changed after its 3 tests last ran' });
   });
 
+  test('B8.3a: the map for the graph says the same as each file, and leaves out what no test reaches', async () => {
+    const map = (await (await h.client.raw('GET', `/api/tests/grounding/map?project=${encodeURIComponent(root)}`)).json()) as { hasResults: boolean; files: Record<string, { state: string; words: string }> };
+    expect(map.hasResults).toBe(true);
+    expect(map.files[`${SHARED}/validators.ts`]).toEqual({ state: 'stale', words: '⚠ tests older than the code: it changed after its 3 tests last ran' });
+    expect(map.files[`${SHARED}/types.ts`]).toBeUndefined();
+    for (const [file, g] of Object.entries(map.files)) {
+      const one = await grounding(file);
+      expect({ state: one.state, words: one.words }, file).toEqual(g);
+    }
+  });
+
   test('a test file shows its own tests', async () => {
     expect(await grounding(DIRECT)).toMatchObject({ isTest: true, testFiles: [DIRECT], words: '✓ 2 tests passing' });
   });

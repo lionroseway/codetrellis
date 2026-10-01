@@ -13,10 +13,10 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — B8.2: tests mapped to code"
-  status: "B8.1 merged (#273). B8.2 built: a file's tests are those whose test file imports it, directly or through a barrel; it reads ✗ failing, ⚠ tests older than the code, ✓ passing or ○ no tests, for an agent (get_test_results for_file), the window (GET /api/tests/grounding) and in the Inspector's Tests line. Unit (grounding 3), harness (test-grounding 7), browser (inspector tests-line) green locally"
-  next: "Open B8.2's PR and merge when green; then B8.3 (the grounding overlay on the graph and a grounding line on each task)"
-  blockers: "C2.6b waits on the owner's choice; C3.3–C3.5 wait on the owner's answers (which key signs records; which providers first; what people without the app see; whether material reads are shared by default)"
+  step: "Wave 2 — B8.3a: the grounding overlay on the graph"
+  status: "B8.2 merged (#274). B8.3 split into a (the overlay) and b (the task line). B8.3a built: Overlays → Test grounding draws ✗ failing, ⚠ tests older than the code, ✓ passing or ○ no tests on each file, words on hover, and sums clusters; nothing before any report; GET /api/tests/grounding/map gives the same answer per file as the Inspector. Unit (graph-overlays 10), harness (test-grounding 8), browser (grounding-overlay, graph-overlays) green locally"
+  next: "Merge B8.3a when green; then back to C3, now answered: C3.3 (signed records), C3.4, C3.5, C3.6; then B8.3b and B8.4"
+  blockers: "None waiting on the owner: C2.6b moves to the phase end; C3.3–C3.5 answered 2026-10-01"
   updated: 2026-10-01
 sections:
   - title: Setup
@@ -475,7 +475,12 @@ sections:
           - id: B8.2
             title: "Tests mapped to code through imports: ✓ passing, ✗ failing, ○ no tests, ⚠ tests older than the code, per file"
           - id: B8.3
-            title: "The grounding overlay on the graph and a grounding line on each task (window, phone, get_brief)"
+            title: "Where it shows, split in two:"
+            items:
+              - id: B8.3a
+                title: "The grounding overlay on the graph: ✗ ⚠ ✓ ○ on files, summed on clusters, the same answer as the Inspector"
+              - id: B8.3b
+                title: "A grounding line on each task: \"3 criteria · 2 grounded · 1 waiting on a person\" (window, phone, get_brief)"
           - id: B8.4
             title: "Replay of grounding, and the J1 done-when: done on stale tests is refused and says so"
       - id: B9
@@ -530,7 +535,7 @@ sections:
               - id: C2.6a
                 title: "Teammates' plans after a pull: who added a plan and in which commit, as git says, in the plans list, the Stack and get_plan"
               - id: C2.6b
-                title: "Phase 32's own plan in CodeTrellis, npm run status reading through the app; the C2 done-when (owner's choice first)"
+                title: "Phase 32's own plan in CodeTrellis, npm run status reading through the app; the C2 done-when (at the phase end: the owner keeps the current way of working until then)"
       - id: C3
         title: "A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice), refined in EXECUTION §6:"
         items:
@@ -539,11 +544,11 @@ sections:
           - id: C3.2
             title: "A real disagreement is a signal: people acting at once are named on the task and in the inbox until one decides"
           - id: C3.3
-            title: "Signed records (the owner's choice of key first)"
+            title: "Signed records: the person's git SSH key when set up, else a key the app makes for the device"
           - id: C3.4
-            title: "A linked plans folder: a planning repo or a synced folder, placeholders never downloaded, materials by place and hash (the owner's choice of providers first)"
+            title: "A linked plans folder: a planning repo or a synced folder (OneDrive and SharePoint first), placeholders never downloaded, materials by place and hash"
           - id: C3.5
-            title: "Teammates' material reads, a separate switch (the owner's choice of default first)"
+            title: "Teammates' material reads, a separate switch, on by default once a folder is shared"
           - id: C3.6
             title: The C3 done-when
       - id: C4

@@ -46,7 +46,7 @@ import type { GraphNode, GraphEdge } from '@shared/types';
 import { useAwarenessStore } from '../../stores/awareness-store';
 import { OverlaysMenu } from '../graph/OverlaysMenu';
 import { openFileAt } from '../../lib/open-file-at';
-import { workCountsByFile, workCountLabel, collisionFiles, projectPrefix } from '../../lib/graph-overlays';
+import { workCountsByFile, workCountLabel, collisionFiles, projectPrefix, fileGrounding, clusterGrounding, type GroundingMapView } from '../../lib/graph-overlays';
 
 const nodeTypes = {
   packageNode: PackageNode,
@@ -861,6 +861,23 @@ export function MainCanvas() {
     () => (graphOverlays.includes('collisions') ? collisionFiles(signals, projectPrefix(root, workstreams)) : new Map<string, string[]>()),
     [graphOverlays, signals, workstreams, root],
   );
+  // B8.3a — every file's tests, from the reports agents handed over; read
+  // again when a report arrives. Nothing is fetched while the overlay is off.
+  const testsOverlay = graphOverlays.includes('tests');
+  const [groundingMap, setGroundingMap] = useState<GroundingMapView | null>(null);
+  useEffect(() => {
+    if (!testsOverlay || !root) { setGroundingMap(null); return; }
+    let live = true;
+    const load = () => {
+      fetch(`/api/tests/grounding/map?project=${encodeURIComponent(root)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((m) => { if (live) setGroundingMap(m as GroundingMapView | null); })
+        .catch(() => { /* keeps what is shown */ });
+    };
+    load();
+    window.addEventListener('tests-reported', load);
+    return () => { live = false; window.removeEventListener('tests-reported', load); };
+  }, [testsOverlay, root]);
 
   const displayGraphData = useMemo(() => {
     const hasPlanHighlights = (planOverlay || !!stackFocus) && planHighlightPaths.size > 0;
@@ -876,7 +893,7 @@ export function MainCanvas() {
     }
     const safeEdges = graphData?.edges ?? [];
 
-    if (!selectedNodeId && !hasPlanHighlights && codeBreakpoints.length === 0 && workCounts.size === 0 && collisions.size === 0) {
+    if (!selectedNodeId && !hasPlanHighlights && codeBreakpoints.length === 0 && workCounts.size === 0 && collisions.size === 0 && !groundingMap?.hasResults) {
       return { nodes: safeNodes, edges: safeEdges };
     }
     const isFile = (data: Record<string, unknown>) => data.nodeType === 'file' || data.nodeType === undefined;
@@ -918,6 +935,12 @@ export function MainCanvas() {
             // B3.3 — each other workstream's lines in this file, and whether it is in an open overlap.
             workCount: isFile(data) && workCounts.has(nodePath) ? workCountLabel(workCounts.get(nodePath)!) : undefined,
             collisionTitle: isFile(data) && collisions.has(nodePath) ? collisions.get(nodePath)!.join('\n') : undefined,
+            // B8.3a — what the file's tests last said, or a cluster's files summed.
+            grounding: isFile(data)
+              ? fileGrounding(groundingMap, nodePath)
+              : data.nodeType === 'package' && Array.isArray(data.files)
+                ? clusterGrounding(groundingMap, (data.files as unknown[]).filter((f): f is string => typeof f === 'string'))
+                : undefined,
           },
         };
       }),
@@ -930,7 +953,7 @@ export function MainCanvas() {
         },
       })),
     };
-  }, [graphData, selectedNodeId, planHighlightPaths, planOverlay, stackFocus, breakpoints, graphOverlays, workCounts, collisions]);
+  }, [graphData, selectedNodeId, planHighlightPaths, planOverlay, stackFocus, breakpoints, graphOverlays, workCounts, collisions, groundingMap]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(displayGraphData?.nodes ?? []);
   const [edges, setEdges, onEdgesChange] = useEdgesState(displayGraphData?.edges ?? []);

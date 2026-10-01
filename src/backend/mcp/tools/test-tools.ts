@@ -39,6 +39,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (!root) return noProject;
       try {
         const out = ingestTestReport(root, file, authorFromExtra(deps, extra));
+        if (!out.already) deps.broadcast('tests-reported', { project: root });
         const r = out.report;
         const failing = r.failed + r.errors;
         return text({
