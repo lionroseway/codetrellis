@@ -24,6 +24,8 @@ import '@xyflow/react/dist/style.css';
 
 import { useProjectStore } from '../../stores/project-store';
 import { useReplayStore } from '../../stores/replay-store';
+import { usePlayForwardStore } from '../../stores/play-forward-store';
+import { overlapsByFile, filePlannedMark, clusterPlannedMark } from '../../lib/play-forward';
 import { hhmm } from '../../lib/replay';
 import { useGraphStore } from '../../stores/graph-store';
 import { useAgentStore } from '../../stores/agent-store';
@@ -97,6 +99,9 @@ export function MainCanvas() {
   // B5.3: while replaying, the graph as it was at the cursor's frame, frozen.
   const replayGraph = useReplayStore((s) => (s.active ? s.graph : null));
   const replayAt = useReplayStore((s) => (s.active && s.state ? s.state.at : null));
+  // B9.2: while playing forward, what every active plan says it will change.
+  const forward = usePlayForwardStore((s) => (s.active ? s.data : null));
+  const playingForward = usePlayForwardStore((s) => s.active);
   const setTrellisMode = useGraphStore((s) => s.setTrellisMode);
   const scopePath = useGraphStore((s) => s.scopePath);
   const setScopePath = useGraphStore((s) => s.setScopePath);
@@ -788,6 +793,10 @@ export function MainCanvas() {
   const rawGraphData = useMemo(() => {
     // Replay (B5.3): the frame's graph, as it was, whatever the mode.
     if (replayGraph) return buildFromSnapshot(replayGraph.edges, viewDepth, layoutMode, null, true, null, scopePath);
+    // Play-forward (B9.2): the live graph with every active plan's planned changes, dashed.
+    if (forward && depEdges.length > 0) {
+      return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, null, recentlyChanged, forward.projection, layoutMode, 'planned', scopePath);
+    }
     // Current/Planned mode: render from frozen snapshot
     if ((trellisMode === 'current' || trellisMode === 'planned') && currentSnapshot) {
       return buildFromSnapshot(
@@ -817,7 +826,7 @@ export function MainCanvas() {
     if (depEdges.length === 0) return { nodes: [], edges: [] };
     // Plan intent on the live graph is an overlay (B3.3); the Planned view asks for it outright.
     return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, recentlyChanged, trellisMode === 'planned' || (projectionEnabled && planOverlay) ? projectionData : null, layoutMode, trellisMode, scopePath);
-  }, [replayGraph, depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, liveWorkingTreeDiff, recentlyChanged, projectionData, projectionEnabled, planOverlay, layoutMode, trellisMode, currentSnapshot, scopePath]);
+  }, [replayGraph, forward, depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, liveWorkingTreeDiff, recentlyChanged, projectionData, projectionEnabled, planOverlay, layoutMode, trellisMode, currentSnapshot, scopePath]);
 
   // One element per id, whichever builder ran. Duplicate ids leak DOM on
   // every render; see `uniqueGraph` for how much.
@@ -880,6 +889,9 @@ export function MainCanvas() {
     return () => { live = false; window.removeEventListener('tests-reported', load); };
   }, [testsOverlay, root, replayAt]);
 
+  // B9.2 — each file's planned overlaps while playing forward.
+  const plannedByFile = useMemo(() => overlapsByFile(forward), [forward]);
+
   const displayGraphData = useMemo(() => {
     const hasPlanHighlights = (planOverlay || !!stackFocus) && planHighlightPaths.size > 0;
     const codeBreakpoints = graphOverlays.includes('breakpoints') ? breakpoints.filter((b) => b.kind === 'code') : [];
@@ -894,7 +906,7 @@ export function MainCanvas() {
     }
     const safeEdges = graphData?.edges ?? [];
 
-    if (!selectedNodeId && !hasPlanHighlights && codeBreakpoints.length === 0 && workCounts.size === 0 && collisions.size === 0 && !groundingMap?.hasResults) {
+    if (!selectedNodeId && !hasPlanHighlights && codeBreakpoints.length === 0 && workCounts.size === 0 && collisions.size === 0 && !groundingMap?.hasResults && plannedByFile.size === 0) {
       return { nodes: safeNodes, edges: safeEdges };
     }
     const isFile = (data: Record<string, unknown>) => data.nodeType === 'file' || data.nodeType === undefined;
@@ -942,6 +954,14 @@ export function MainCanvas() {
               : data.nodeType === 'package' && Array.isArray(data.files)
                 ? clusterGrounding(groundingMap, (data.files as unknown[]).filter((f): f is string => typeof f === 'string'))
                 : undefined,
+            // B9.2 — a dashed "◇ planned overlap" zone on a file, or on a cluster holding one.
+            plannedOverlap: plannedByFile.size === 0
+              ? undefined
+              : isFile(data)
+                ? filePlannedMark(plannedByFile, nodePath)
+                : data.nodeType === 'package' && Array.isArray(data.files)
+                  ? clusterPlannedMark(plannedByFile, (data.files as unknown[]).filter((f): f is string => typeof f === 'string'))
+                  : undefined,
           },
         };
       }),
@@ -954,7 +974,7 @@ export function MainCanvas() {
         },
       })),
     };
-  }, [graphData, selectedNodeId, planHighlightPaths, planOverlay, stackFocus, breakpoints, graphOverlays, workCounts, collisions, groundingMap]);
+  }, [graphData, selectedNodeId, planHighlightPaths, planOverlay, stackFocus, breakpoints, graphOverlays, workCounts, collisions, groundingMap, plannedByFile]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(displayGraphData?.nodes ?? []);
   const [edges, setEdges, onEdgesChange] = useEdgesState(displayGraphData?.edges ?? []);
@@ -1167,6 +1187,13 @@ export function MainCanvas() {
           {testsOverlay && groundingMap?.hasResults ? ' · tests as reported by then' : ''} · replaying
         </div>
       )}
+      {playingForward && replayAt === null && (
+        <div data-testid="play-forward-canvas" className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-10 rounded-full border border-violet-400/40 bg-background/80 px-3 py-1 text-[11px] text-violet-200 shadow">
+          ◇ Playing forward · now → all plans done
+          {forward ? ` · planned by ${forward.plans.length} active ${forward.plans.length === 1 ? 'plan' : 'plans'}` : ''}
+          {forward && forward.overlaps.length > 0 ? ` · ${forward.overlaps.length} planned ${forward.overlaps.length === 1 ? 'overlap' : 'overlaps'}` : ''} · nothing dashed exists yet
+        </div>
+      )}
       <div className="pointer-events-none absolute inset-0 opacity-45 [background-image:radial-gradient(circle_at_center,rgba(59,130,246,0.08)_0,transparent_46%),linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:100%_100%,28px_28px,28px_28px]" />
       <ReactFlow
         nodes={nodes}
@@ -1246,14 +1273,14 @@ export function MainCanvas() {
                     key={mode}
                     onClick={() => setTrellisMode(mode)}
                     // While replaying (B5.3), the canvas is none of these: it is the frame's graph.
-                    disabled={replayAt !== null}
-                    aria-pressed={replayAt === null && trellisMode === mode}
+                    disabled={replayAt !== null || playingForward}
+                    aria-pressed={replayAt === null && !playingForward && trellisMode === mode}
                     className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all disabled:opacity-40 ${
-                      replayAt === null && trellisMode === mode
+                      replayAt === null && !playingForward && trellisMode === mode
                         ? `bg-white/[0.08] ${color} shadow-[0_0_6px_currentColor]`
                         : 'text-zinc-500 hover:text-zinc-300'
                     }`}
-                    title={replayAt !== null ? 'Replaying: go back to live to change the view' : `${label} view`}
+                    title={replayAt !== null ? 'Replaying: go back to live to change the view' : playingForward ? 'Playing forward: go back to now to change the view' : `${label} view`}
                   >
                     <Icon size={11} />
                     {label}

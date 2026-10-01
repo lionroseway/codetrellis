@@ -13,6 +13,7 @@ import { StackTab } from './StackTab';
 import { useBreakpointsFeed } from './Breakpoints';
 import { TimelineLanes } from './TimelineLanes';
 import { ReplayBar, ReplayStart } from './ReplayBar';
+import { PlayForwardBar, PlayForwardStart } from './PlayForwardBar';
 import { useGraphStore } from '../../stores/graph-store';
 import { turnInPlan } from '../../lib/stack-timeline';
 
@@ -147,6 +148,7 @@ export function PlanPanel() {
       </div>
 
       <ReplayBar />
+      <PlayForwardBar />
       <div className="flex-1 overflow-y-auto p-2">
         {activeTab === 'plans' && (
           <PlanList />
@@ -172,7 +174,10 @@ export function PlanPanel() {
                 </div>
               </div>
             )}
-            <ReplayStart />
+            <div className="flex flex-wrap gap-2">
+              <ReplayStart />
+              <PlayForwardStart where="timeline" />
+            </div>
             <TimelineLanes
               turns={turns}
               onSelectTurn={(turnId) => setFocusTurn((f) => ({ turnId, seq: (f?.seq ?? 0) + 1 }))}

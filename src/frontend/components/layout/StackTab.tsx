@@ -6,6 +6,9 @@ import { usePlanStore } from '../../stores/plan-store';
 import { revealPlanItem } from '../../lib/open-plan-item';
 import { useReplayStore } from '../../stores/replay-store';
 import { hhmm } from '../../lib/replay';
+import { usePlayForwardStore } from '../../stores/play-forward-store';
+import { planOverlapLines } from '../../lib/play-forward';
+import { PlayForwardStart } from './PlayForwardBar';
 import type { Stack, StackPlan, StackTask, StackDependency } from '@shared/types';
 
 /**
@@ -28,6 +31,10 @@ import type { Stack, StackPlan, StackTask, StackDependency } from '@shared/types
  * One clock (B6.5): while replay is on, the tab shows the stack at the
  * cursor, as it was then, from `/api/replay/state`: who was on each task,
  * its branch, what it waited on and where plans met, at that moment.
+ *
+ * Playing forward (B9.2), each plan also says where it will meet another if
+ * both go ahead: "◇ will overlap JIRA-150: invoice.ts", from what their
+ * unfinished tasks plan.
  */
 
 const REFRESH_MS = 30_000;
@@ -49,6 +56,7 @@ export function StackTab() {
   const focus = useGraphStore((s) => s.stackFocus);
   const replaying = useReplayStore((s) => s.active);
   const replayState = useReplayStore((s) => s.state);
+  const forward = usePlayForwardStore((s) => (s.active ? s.data : null));
 
   const load = useCallback(async () => {
     if (!root) return;
@@ -112,6 +120,11 @@ export function StackTab() {
             : 'No plan in this project is under way. A plan shows here from when it is created until it is completed or archived.'}
         </div>
       )}
+      {!replaying && (
+        <div className="px-2">
+          <PlayForwardStart where="stack" />
+        </div>
+      )}
       {shown && shown.plans.length > 0 && (
         <>
           <div className="flex items-center gap-1.5 px-2 text-foreground-muted">
@@ -129,6 +142,7 @@ export function StackTab() {
               open={!collapsed.has(plan.uid)}
               onToggle={() => toggle(plan.uid)}
               focused={focus?.planUid === plan.uid}
+              planned={replaying ? [] : planOverlapLines(forward, plan.uid)}
             />
           ))}
         </>
@@ -137,7 +151,11 @@ export function StackTab() {
   );
 }
 
-function PlanRow({ plan, open, onToggle, focused }: { plan: StackPlan; open: boolean; onToggle: () => void; focused: boolean }) {
+function PlanRow({ plan, open, onToggle, focused, planned }: {
+  plan: StackPlan; open: boolean; onToggle: () => void; focused: boolean;
+  /** B9.2 — while playing forward, where this plan will meet another if both go ahead. */
+  planned: ReturnType<typeof planOverlapLines>;
+}) {
   const paths = useMemo(() => [...new Set(plan.tasks.flatMap((t) => t.files))], [plan.tasks]);
   const pct = plan.progress.total ? Math.round((plan.progress.done / plan.progress.total) * 100) : 0;
 
@@ -216,6 +234,24 @@ function PlanRow({ plan, open, onToggle, focused }: { plan: StackPlan; open: boo
                 {o.words}
               </span>
               <span className="truncate text-foreground-subtle" data-testid="stack-overlap-detail" title={o.detail}>{o.detail}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {planned.length > 0 && (
+        <div className="px-7 pb-1.5 space-y-0.5" data-testid="stack-planned-overlaps">
+          {planned.map((o) => (
+            <div key={o.id} className="flex items-baseline gap-1.5 min-w-0">
+              <span
+                data-testid="stack-planned-overlap"
+                data-serious={o.serious ? 'yes' : 'no'}
+                className={`px-1.5 rounded shrink-0 border border-dashed ${o.sequenced ? 'border-violet-300/20 text-violet-300/60' : 'border-violet-400/50 text-violet-200'}`}
+                title={o.detail}
+              >
+                {o.words}
+              </span>
+              {o.serious && <span className="text-violet-100 shrink-0">serious</span>}
             </div>
           ))}
         </div>

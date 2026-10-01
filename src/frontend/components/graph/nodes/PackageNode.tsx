@@ -6,6 +6,7 @@ import { farStatusStyle, getChangeVisual, LOD_ZOOM, statusOutline, type GraphNod
 import { useUiStore } from '../../../stores/ui-store';
 import { BreakpointBadge } from './BreakpointBadge';
 import { GroundingMark } from './GroundingMark';
+import { PlannedOverlapMark } from './PlannedOverlapMark';
 
 interface PackageNodeData extends GraphNodeVisualData {
   label: string;
@@ -45,6 +46,7 @@ function PackageNodeComponent({ data }: NodeProps) {
       <Handle type="target" position={Position.Top} className="!h-2.5 !w-2.5 !border-0 !bg-blue-100 !shadow-[0_0_12px_rgba(59,130,246,0.65)]" />
       <BreakpointBadge title={(data as Record<string, unknown>).breakpointTitle} />
       <GroundingMark grounding={(data as Record<string, unknown>).grounding} />
+      <PlannedOverlapMark planned={(data as Record<string, unknown>).plannedOverlap} />
       <div className="pointer-events-none absolute inset-0 rounded-[24px] bg-[radial-gradient(circle_at_top_left,rgba(191,219,254,0.18),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.2),transparent_44%)]" />
       <div className="relative z-10">
         <div className="flex items-start gap-3">
