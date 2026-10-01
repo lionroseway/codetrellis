@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Wave 2 — C3.6: the C3 done-when, a shared plans folder end to end |
-| **Status** | C3.5 in review (#283). C3.6 built: the C3 journey over a synced OneDrive folder, two machines, end to end; found and fixed teammates' keys missing from Settings in a linked folder, and the window and the Brief now name whose read it was. Harness (journey 8; material 21), browser (journey 2, awareness tab 13) green locally |
-| **In flight** | C3.5 in review (#283) on `feat/phase-32-c3-5-teammates-reads`; C3.6 building on `feat/phase-32-c3-6-shared-folder-journey` |
-| **Last merged** | C3.4c (#282, `f5d2834`) |
-| **Next action** | Merge C3.5, then C3.6 when green; then D1 (the CLI) |
+| **Status** | C3.5 merged (#283). C3.6 built: the C3 journey over a synced OneDrive folder, two machines, end to end; found and fixed teammates' keys missing from Settings in a linked folder, and the window and the Brief now name whose read it was. Harness (journey 8; material 21), browser (journey 2, awareness tab 13) green locally |
+| **In flight** | C3.6 building on `feat/phase-32-c3-6-shared-folder-journey` |
+| **Last merged** | C3.5 (#283, `5a11937`) |
+| **Next action** | Merge C3.6 when green; then D1 (the CLI) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `f5d2834`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `5a11937`, with open PRs from GitHub.
 
 ---
 
@@ -238,7 +238,7 @@
     - [x] C3.4a Link a plans folder: named portably in the committed config, confirmed once per device by the person; plans, records and keys read and written there (#280)
     - [x] C3.4b OneDrive and SharePoint found where their clients put them; a placeholder is "not on this device" and never opened (#281)
     - [x] C3.4c Materials in the folder by their place and hash, never a full path; A6's signals match across machines (#282)
-  - [ ] C3.5 Teammates' material reads, a separate switch, on by default once a folder is shared (#283) — in review
+  - [x] C3.5 Teammates' material reads, a separate switch, on by default once a folder is shared (#283)
   - [ ] C3.6 The C3 done-when — building
 - [ ] C4 Recurring playbooks
 - [x] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
@@ -445,7 +445,12 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   {materialReads}`; the Settings box.
 - **Found on the way.** The signals' inputs listed only tasks this machine
   had read, so a task only a teammate read was left out: they are listed
-  from both now.
+  from both now. In CI, two harness tests unrelated to the change failed every attempt:
+  the approved-webhook control wrote its rule after the scan had cached the
+  project's config, so delivery hung on a watcher (it had flaked in #282
+  too); it writes the rule first now. And `awareness-h1` lost its backend
+  between tests once, with nothing logged; it passed on the next run and
+  locally, and the harness now says when a backend dies mid-suite.
 - **Tests.** Unit `read-record.test.ts` (6), `material-signals.test.ts` +1.
   Harness `material-reads.test.ts` (7: off with task state; one record per
   version; Sam's machine names Alex, unverified then trusted; Alex's names

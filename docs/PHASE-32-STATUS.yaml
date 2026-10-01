@@ -14,8 +14,8 @@
 # and prs (PRs whose merge commit does not name the id).
 now:
   step: "Wave 2 — C3.6: the C3 done-when, a shared plans folder end to end"
-  status: "C3.5 in review (#283). C3.6 built: the C3 journey over a synced OneDrive folder, two machines, end to end; found and fixed teammates' keys missing from Settings in a linked folder, and the window and the Brief now name whose read it was. Harness (journey 8; material 21), browser (journey 2, awareness tab 13) green locally"
-  next: "Merge C3.5, then C3.6 when green; then D1 (the CLI)"
+  status: "C3.5 merged (#283). C3.6 built: the C3 journey over a synced OneDrive folder, two machines, end to end; found and fixed teammates' keys missing from Settings in a linked folder, and the window and the Brief now name whose read it was. Harness (journey 8; material 21), browser (journey 2, awareness tab 13) green locally"
+  next: "Merge C3.6 when green; then D1 (the CLI)"
   blockers: "None"
   updated: 2026-10-01
 sections:
