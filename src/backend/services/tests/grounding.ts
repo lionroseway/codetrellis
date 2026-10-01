@@ -26,7 +26,9 @@ import path from 'node:path';
 import { importersOf } from '../importers';
 import { getDb } from '../database';
 import { resolveWithin } from '../confined-fs';
-import { listTestResults, type TestResultRow } from './test-results';
+import { listTestResults, testResultsAt, type TestResultRow } from './test-results';
+import { listFrames } from '../replay-frames';
+import { getSnapshot, type TrellisSnapshotData } from '../trellis-service';
 import { changedSinceCommit, listTeammateRuns, type TeammateRun } from './teammate-runs';
 import type { RunFile } from '../task-records/run-record';
 
@@ -78,7 +80,7 @@ export function groundingWords(tests: ReadonlyArray<Weighted>, lastRunAt: number
 }
 
 /** The words, given whether the code changed after the tests ran. A teammate's run counts its passing tests in one entry. */
-function wordsOf(tests: ReadonlyArray<Weighted>, stale: boolean): { state: GroundingState; words: string } {
+export function wordsOf(tests: ReadonlyArray<Weighted>, stale: boolean): { state: GroundingState; words: string } {
   const n = (t: Weighted) => t.count ?? 1;
   const total = tests.reduce((a, t) => a + n(t), 0);
   if (total === 0) return { state: 'untested', words: '○ no tests: no test with a reported result imports it' };
@@ -217,4 +219,105 @@ export function groundingMap(projectRoot: string): GroundingMap {
     counts[g.state]++;
   }
   return { files, hasResults: true, counts };
+}
+
+export interface GroundingMapAt extends GroundingMap {
+  at: number;
+  /** When the graph shown for that moment was taken, or null when none was by then. */
+  frameAt: number | null;
+  /** Said when something live is not part of a past moment. */
+  note: string | null;
+}
+
+/**
+ * The overlay at a past moment (B8.4b, JOURNEYS J2): what the tests said by
+ * `at`, on the graph as it was then. Its pieces are what was kept:
+ *
+ *  - the results: each test's newest run among the reports handed over by
+ *    then (`testResultsAt`);
+ *  - the files and imports: the replay frame at or before `at`, so a file
+ *    added since is not there and one removed since is. Which imports are
+ *    re-exports is read from the graph now (frames do not keep it), as a
+ *    barrel rarely stops being one;
+ *  - older than the code: a file whose content then differs from its content
+ *    in the first frame taken at or after its tests' run (an agent edits,
+ *    runs its tests, and its turn ends: that frame is the code the run was
+ *    about). A change between the run and that frame is missed, never one
+ *    invented; with no such frame by then, nothing is said.
+ *
+ * A teammate's run is left out: only their latest is kept, with no time it
+ * arrived, so it cannot be placed at a past moment. The answer says so.
+ */
+export function groundingMapAt(projectRoot: string, at: number): GroundingMapAt {
+  const counts: Record<GroundingState, number> = { failing: 0, stale: 0, passing: 0, untested: 0 };
+  const files: GroundingMap['files'] = {};
+  const note = listTeammateRuns(projectRoot).length > 0
+    ? 'Teammates\' runs are shown live only: only their latest is kept, so a past moment counts the runs reported here.'
+    : null;
+  const frameBy = (t: number) => listFrames(projectRoot, { to: t, limit: 1, newestFirst: true })[0] ?? null;
+  const frame = frameBy(at);
+  const results = testResultsAt(projectRoot, at);
+  if (results.length === 0) return { files, hasResults: false, counts, at, frameAt: frame?.at ?? null, note };
+  if (!frame) return { files, hasResults: true, counts, at, frameAt: null, note };
+
+  const graphs = new Map<number, TrellisSnapshotData | null>();
+  const graphOf = (id: number) => {
+    if (!graphs.has(id)) graphs.set(id, getSnapshot(id)?.data ?? null);
+    return graphs.get(id)!;
+  };
+  const then = graphOf(frame.id);
+  if (!then) return { files, hasResults: true, counts, at, frameAt: frame.at, note };
+  const hashThen = new Map(then.files.map((f) => [f.path, f.contentHash]));
+  const importsOf = new Map<string, string[]>();
+  for (const e of then.edges) importsOf.set(e.source, [...(importsOf.get(e.source) ?? []), e.target]);
+  const reexports = new Set((getDb().exec(
+    `SELECT f.relative_path, t.relative_path FROM imports i JOIN files f ON i.file_id = f.id JOIN files t ON t.path = i.resolved_path
+      WHERE i.is_reexport = 1`,
+  )[0]?.values ?? []).map((r) => `${String(r[0]).split(path.sep).join('/')}\0${String(r[1]).split(path.sep).join('/')}`));
+
+  // Each test file's results, and when it last ran.
+  const byTestFile = new Map<string, TestResultRow[]>();
+  for (const t of results) {
+    const tf = testFileOf(projectRoot, t);
+    if (tf) byTestFile.set(tf, [...(byTestFile.get(tf) ?? []), t]);
+  }
+  // The files each test file reaches: itself, what it imports, and on through barrels' re-exports.
+  const reachedBy = new Map<string, Set<string>>();
+  const reach = (file: string, tf: string) => reachedBy.set(file, (reachedBy.get(file) ?? new Set()).add(tf));
+  for (const tf of byTestFile.keys()) {
+    reach(tf, tf);
+    const seen = new Set<string>([tf]);
+    let frontier = (importsOf.get(tf) ?? []).map((target) => ({ from: tf, target }));
+    for (let depth = 0; depth <= MAX_BARRELS && frontier.length; depth++) {
+      const next: typeof frontier = [];
+      for (const { target } of frontier) {
+        if (seen.has(target)) continue;
+        seen.add(target);
+        reach(target, tf);
+        next.push(...(importsOf.get(target) ?? []).filter((t) => reexports.has(`${target}\0${t}`)).map((t) => ({ from: target, target: t })));
+      }
+      frontier = next;
+    }
+  }
+
+  for (const [file, testFiles] of reachedBy) {
+    if (!hashThen.has(file)) continue;
+    // A test file is its own: its results, not those of tests that import it.
+    const own = byTestFile.has(file) ? [file] : [...testFiles].filter((tf) => tf !== file);
+    const tests: Weighted[] = [];
+    let stale = false;
+    for (const tf of own) {
+      const rows = byTestFile.get(tf) ?? [];
+      tests.push(...rows);
+      const ranAt = Math.max(...rows.map((r) => r.ranAt));
+      const atRun = listFrames(projectRoot, { from: ranAt, to: frame.at, limit: 1 })[0] ?? null;
+      const hashAtRun = atRun ? graphOf(atRun.id)?.files.find((f) => f.path === file)?.contentHash : undefined;
+      if (hashAtRun !== undefined && hashAtRun !== hashThen.get(file)) stale = true;
+    }
+    const g = wordsOf(tests, stale);
+    if (g.state === 'untested' && tests.length === 0) continue;
+    files[file] = g;
+    counts[g.state]++;
+  }
+  return { files, hasResults: true, counts, at, frameAt: frame.at, note };
 }

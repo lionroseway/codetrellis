@@ -280,6 +280,21 @@ export const SCHEMA_PLANS_CORE = `
     ran_at INTEGER NOT NULL,
     PRIMARY KEY (project_root, test_key)
   );
+  -- Phase 32 B8.4b: every report's own cases, so replay can say what the
+  -- tests said at a past moment (test_results keeps only the latest). Kept
+  -- as long as replay frames are.
+  CREATE TABLE IF NOT EXISTS test_report_cases (
+    report_id INTEGER NOT NULL,
+    test_key TEXT NOT NULL,
+    suite TEXT,
+    classname TEXT,
+    name TEXT NOT NULL,
+    file TEXT,
+    result TEXT NOT NULL,
+    duration_ms INTEGER,
+    message TEXT,
+    PRIMARY KEY (report_id, test_key)
+  );
 
   -- Phase 32 C3.1: task state shared as records in the project's files, per
   -- project, on this device only (never the committed config). Off until
