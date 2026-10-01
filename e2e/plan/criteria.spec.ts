@@ -7,6 +7,8 @@
  * glyph and a word (§10.4), so the checks read the words.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { gotoWithProject, seedPlan, openPlan, cleanupPlans } from '../helpers/setup';
 import { createMcpClient } from '../helpers/mcp-client';
@@ -51,6 +53,57 @@ test.describe('Acceptance criteria', () => {
     // Scoped to the rows: for a moment the composer still holds the same words.
     // The ↩ line, not the composer: for a moment both hold the same words.
     await expect(page.getByTestId('criterion-row').getByText(/^↩ EMEA excludes the Nordics restatement/)).toBeVisible();
+  });
+
+  test('B8.3b: the grounding line above the criteria follows them, from the real backend', async ({ page, request }) => {
+    await gotoWithProject(page);
+    const PLAN_TITLE = planTitle();
+    await seedPlan(request, {
+      title: PLAN_TITLE,
+      actions: [{ title: 'Revenue summary', body: 'Summarise Q3.\n\n## Acceptance criteria\n- [ ] Reads well to the board\n' }],
+    });
+    await openPlan(page, PLAN_TITLE);
+    await page.getByTestId('plan-item-tree').getByText('Revenue summary').first().click();
+    const block = page.getByTestId('criteria-block');
+    const line = block.getByTestId('grounding-line');
+    // A judgement only a person can make waits on one until they approve it.
+    await expect(line).toHaveAttribute('aria-label', '1 criterion · 1 waiting on a person', { timeout: 10_000 });
+    await expect(line).toHaveAttribute('data-grounded', 'no');
+    await block.getByRole('button', { name: /Approve/ }).click();
+    await expect(line).toHaveAttribute('aria-label', '1 criterion · grounded');
+    await expect(line).toHaveAttribute('data-grounded', 'yes');
+  });
+
+  test('B8.3b: a mixed line, each part naming its criteria and why', async ({ page, request }) => {
+    const answer = {
+      words: '3 criteria · 1 grounded · 1 waiting on a person · 1 changed since', total: 3, grounded: false,
+      counts: { grounded: 1, waiting: 1, sent_back: 0, changed: 1, failing: 0, no_evidence: 0 },
+      criteria: [
+        { uid: 'c1', text: 'A summary exists', grade: 'grounded', why: 'its checks pass on the evidence there' },
+        { uid: 'c2', text: 'Reads well to the board', grade: 'waiting', why: 'only a person can judge it' },
+        { uid: 'c3', text: 'EMEA revenue matches the ledger', grade: 'changed', why: 'a file it was approved on has changed since' },
+      ],
+    };
+    await page.route('**/api/items/*/grounding', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(answer) }));
+    await gotoWithProject(page);
+    const PLAN_TITLE = planTitle();
+    await seedPlan(request, {
+      title: PLAN_TITLE,
+      actions: [{ title: 'Q3 revenue summary', body: 'Summarise Q3.\n\n## Acceptance criteria\n- [ ] A summary exists\n- [ ] Reads well to the board\n- [ ] EMEA revenue matches the ledger\n' }],
+    });
+    await openPlan(page, PLAN_TITLE);
+    await page.getByTestId('plan-item-tree').getByText('Q3 revenue summary').first().click();
+    const block = page.getByTestId('criteria-block');
+    const line = block.getByTestId('grounding-line');
+    await expect(line).toHaveAttribute('aria-label', answer.words, { timeout: 10_000 });
+    await expect(line.getByTestId('grounding-grounded')).toHaveText('·✓1 grounded');
+    await expect(line.getByTestId('grounding-waiting')).toHaveAttribute('title', 'Reads well to the board: only a person can judge it');
+    await expect(line.getByTestId('grounding-changed')).toHaveText('·⚠1 changed since');
+    const out = path.join('test-results', 'ux-audit');
+    fs.mkdirSync(out, { recursive: true });
+    // The line alone: the rows below are the seeded ones, not the answer it was given.
+    await line.scrollIntoViewIfNeeded();
+    await line.screenshot({ path: path.join(out, 'criteria-grounding-line.png') });
   });
 
   test('adding a criterion, and the gate standing for one', async ({ page, request }) => {

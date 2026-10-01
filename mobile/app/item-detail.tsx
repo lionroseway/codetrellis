@@ -23,7 +23,7 @@ import Markdown from '../components/Markdown';
 import MarkdownBody from '../components/MarkdownBody';
 import CommentComposer from '../components/CommentComposer';
 import ItemCreator from '../components/ItemCreator';
-import { listItemCriteria, stateColour, stateLabel, type PhoneCriterion } from '../lib/approvals';
+import { listItemCriteria, stateColour, stateLabel, type PhoneCriterion, type PhoneGrounding } from '../lib/approvals';
 
 // --- Types -------------------------------------------------------------------
 
@@ -118,6 +118,7 @@ export default function ItemDetailScreen() {
   const [externalRefs, setExternalRefs] = useState<ItemExternalRef[]>([]);
   const [attachments, setAttachments] = useState<ItemAttachment[]>([]);
   const [criteria, setCriteria] = useState<PhoneCriterion[]>([]);
+  const [grounding, setGrounding] = useState<PhoneGrounding | null>(null);
   const [saving, setSaving] = useState(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [editField, setEditField] = useState<null | 'assignee' | 'blocked'>(null);
@@ -143,7 +144,9 @@ export default function ItemDetailScreen() {
       setAttachments(Array.isArray(wrapped.attachments) ? wrapped.attachments : []);
       // What the item is judged on (Phase 31 §12). A desktop from before
       // the phone could approve does not have the method — show none.
-      listItemCriteria(uid).then((r) => setCriteria(r.criteria ?? [])).catch(() => setCriteria([]));
+      listItemCriteria(uid)
+        .then((r) => { setCriteria(r.criteria ?? []); setGrounding(r.grounding ?? null); })
+        .catch(() => { setCriteria([]); setGrounding(null); });
 
       // Fetch children (subtasks)
       if (planUid) {
@@ -658,6 +661,10 @@ export default function ItemDetailScreen() {
           <Text style={styles.sectionLabel}>
             CRITERIA ({criteria.filter((c) => c.state === 'met').length}/{criteria.length} met)
           </Text>
+          {/* B8.3b — how far they rest on evidence, in the desktop's words. */}
+          {!!grounding?.words && (
+            <Text testID="grounding-line" style={[styles.groundingLine, grounding.grounded && styles.groundingAll]}>{grounding.words}</Text>
+          )}
           {criteria.map((c) => (
             <TouchableOpacity
               key={c.uid}
@@ -673,6 +680,9 @@ export default function ItemDetailScreen() {
                 <Text style={[styles.refUrl, { color: stateColour(c.state) }]} numberOfLines={1}>
                   {stateLabel(c.state)}
                 </Text>
+                {!!grounding?.grades[c.uid] && (
+                  <Text style={styles.groundingWhy} numberOfLines={2}>{grounding.grades[c.uid].why}</Text>
+                )}
               </View>
             </TouchableOpacity>
           ))}
@@ -1113,6 +1123,9 @@ const styles = StyleSheet.create({
   // External ref / attachment cards
   addRefBox: { marginTop: 6 },
   refHint: { color: '#52525b', fontSize: 11, marginTop: 8, fontStyle: 'italic' },
+  groundingLine: { color: '#fbbf24', fontSize: 12, marginBottom: 8 },
+  groundingAll: { color: '#4ade80' },
+  groundingWhy: { color: '#71717a', fontSize: 11, marginTop: 2 },
   refCard: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -11,6 +11,7 @@
 import { listCriteria } from './criteria-service';
 import { checkCriterion } from './criterion-loop-service';
 import { getItem } from './plan-item-service';
+import { refreshArtefactHashes } from './artefact-service';
 import { groundingLine, type CriterionGrade, type GroundingLine } from '../../shared/lib/grounding-line';
 import type { ItemCriterion } from '../../shared/types';
 
@@ -28,7 +29,9 @@ export function gradeCriterion(c: Pick<ItemCriterion, 'kind' | 'policy' | 'state
     if (!c.submitted && c.state === 'open') return { grade: 'no_evidence', why: failures[0] ?? 'nothing offered yet' };
     return { grade: 'failing', why: failures[0] ?? 'its checks fail' };
   }
-  if (c.state === 'met') return { grade: 'grounded', why: 'met, and its checks still pass' };
+  if (c.state === 'met') return { grade: 'grounded', why: check ? 'met, and its checks still pass' : 'met' };
+  // Its checks could not run: say only what its state says.
+  if (!check) return c.submitted ? { grade: 'waiting', why: 'submitted; its checks could not run here' } : { grade: 'no_evidence', why: 'nothing offered yet' };
   // A judgement has no mechanical check: only a person can ground it.
   if (c.kind === 'manual') return { grade: 'waiting', why: c.submitted ? 'submitted; only a person can judge it' : 'only a person can judge it' };
   if (c.state === 'submitted') return { grade: 'waiting', why: 'its checks pass; a person decides' };
@@ -37,6 +40,8 @@ export function gradeCriterion(c: Pick<ItemCriterion, 'kind' | 'policy' | 'state
 
 export async function taskGrounding(itemUid: string): Promise<TaskGrounding | null> {
   if (!getItem(itemUid)) return null;
+  // Files change while nobody looks: a criterion approved on one that has since changed reads "changed since" now.
+  await refreshArtefactHashes(itemUid).catch(() => []);
   const graded: GradedCriterion[] = [];
   for (const c of listCriteria(itemUid)) {
     const check = await checkCriterion(c.uid).catch(() => null);

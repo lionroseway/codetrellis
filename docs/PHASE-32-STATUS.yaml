@@ -14,8 +14,8 @@
 # and prs (PRs whose merge commit does not name the id).
 now:
   step: "Track B — B8.3b: a grounding line on each task"
-  status: "Track D done (D1.1–D1.5b, #285–#290). B8.3b building: each criterion graded once (grounded, waiting on a person, sent back, changed since, failing, no evidence yet) into one line, \"3 criteria · 2 grounded · 1 waiting on a person\"; served at GET /api/items/:uid/grounding, in get_brief and in the phone's criteria.list"
-  next: "The line in the window's criteria block and on the phone's task screen; unit, harness, browser and phone tests; docs"
+  status: "B8.3b built: each criterion graded once (grounded, waiting on a person, sent back, changed since, failing, no evidence yet) into one line, served at GET /api/items/:uid/grounding, in get_brief and in the phone's criteria.list; the window's criteria block and the phone's task screen show it. Unit 2 files, harness task-grounding 5, browser criteria.spec 2, phone item-grounding 2"
+  next: "Merge B8.3b when green; then B8.4 (replay of the overlay, and J1 end to end)"
   blockers: "None"
   updated: 2026-10-01
 sections:

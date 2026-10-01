@@ -817,7 +817,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       description:
         'Everything you need to work an item, in one call: its goal and body, the guide (the plan\'s pages, in order), ' +
         'the materials you were given (name, type, size, and what read_material returns for each), every acceptance ' +
-        'criterion with its kind, policy, state and what it still needs, any note a person sent back, and what this ' +
+        'criterion with its kind, policy, state and what it still needs, how far they rest on evidence (grounding: the line a person sees, and each criterion\'s grade and why), any note a person sent back, and what this ' +
         'task has read so far (read_so_far: each material, the parts, by whom, and the file\'s hash then), and what other ' +
         'tasks\' work did to this one (affected_by_other_work: a shared file changed, different versions read, the same ' +
         'output written). Start here, ' +

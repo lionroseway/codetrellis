@@ -18,10 +18,10 @@
 | | |
 |---|---|
 | **Stage / step** | Track B — B8.3b: a grounding line on each task |
-| **Status** | Track D done (D1.1–D1.5b, #285–#290). B8.3b building: each criterion graded once (grounded, waiting on a person, sent back, changed since, failing, no evidence yet) into one line, "3 criteria · 2 grounded · 1 waiting on a person"; served at GET /api/items/:uid/grounding, in get_brief and in the phone's criteria.list |
+| **Status** | B8.3b built: each criterion graded once (grounded, waiting on a person, sent back, changed since, failing, no evidence yet) into one line, served at GET /api/items/:uid/grounding, in get_brief and in the phone's criteria.list; the window's criteria block and the phone's task screen show it. Unit 2 files, harness task-grounding 5, browser criteria.spec 2, phone item-grounding 2 |
 | **In flight** | B8.3b building on `feat/phase-32-b8-3b-grounding-line` |
 | **Last merged** | C3.6 (#284, `8300675`) |
-| **Next action** | The line in the window's criteria block and on the phone's task screen; unit, harness, browser and phone tests; docs |
+| **Next action** | Merge B8.3b when green; then B8.4 (replay of the overlay, and J1 end to end) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
@@ -408,9 +408,32 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | D1.5 is refined into D1.5a (test runs travel; headless sharing) and D1.5b (the done-when). Test results never left the machine they were reported on, and records carry only task state, so "the desktop shows the tests after a pull" had nothing to show | The done-when names tests; building the missing piece inside the done-when step would hide a design change in a test |
 | 2026-10-01 | D1.5a: a test run travels as one signed record per device, its latest (older ones removed by their writer), naming the commit it ran on; a teammate's run is judged by commit, never by the file's time | Write-once files per writer, as C3.1's, so branches never edit the same file; keeping only the latest stops the folder growing with every CI run. A pull rewrites the files it brings, so by time every run made elsewhere would read "older than the code" |
 | 2026-10-01 | D1.5a: `--share-task-state` turns sharing on for a headless backend from the command line, refused for the desktop app's own data dir | In the app only the window may turn it on (the grant rule). A headless backend has no window: the person who wrote the hook or the pipeline is choosing, and an agent that could run the command can already write the project's files. The app's own switch stays the window's |
+| 2026-10-01 | B8.3b: one grade per criterion, from its state and the criterion loop's own checks, in a fixed order (changed since and sent back before what its checks say; a judgement waits on a person until approved); the line lists only the grades there are | One grader means the window, the phone and an agent's brief can never disagree about a task; reusing check_criterion's checks means \"grounded\" is exactly what an agent's own check would say. A line of zeroes is noise |
 ---
 
 ## Entries
+
+### 2026-10-01: B8.3b — a grounding line on each task
+- **Journey.** Sam's "Q3 revenue summary" is judged on three criteria: EMEA
+  revenue cited from the ledger (the agent proposes, Sam decides), the
+  summary written (an output the agent may mark met), and whether it reads
+  well to the board (only Sam can judge). Above the criteria the window
+  says "3 criteria · 1 waiting on a person · 2 no evidence yet"; the agent
+  offers its evidence and it passes: "1 grounded · 2 waiting on a person";
+  Sam approves: "all grounded"; the ledger changes under the approval:
+  "changed since"; the summary turns out older than the work: "failing".
+  The phone's task screen and the agent's brief say the same line at every
+  turn, and each criterion's why.
+- **Built.** `shared/lib/grounding-line.ts` (the words), `services/task-grounding.ts`
+  (the grades, from the criterion loop's checks), `GET /api/items/:uid/grounding`,
+  `grounding` in `get_brief` and in the phone's `criteria.list`, the line in
+  the window's criteria block (`GroundingLine.tsx`) and on the phone's task
+  screen, with each criterion's why there.
+- **Tests.** Unit `grounding-line.test.ts`, `task-grounding.test.ts`.
+  Harness `task-grounding.test.ts` (5; the window's route, the brief and a
+  paired phone compared at each step). Browser `criteria.spec.ts` (2, one
+  against the real backend, one shot). Phone `item-grounding.spec.ts` (2,
+  shot; the phone preview can now open a task).
 
 ### 2026-10-01: D1.5b — the Track D done-when
 - **Journey.** A cloud session on Sam's repository, no desktop app. Its
