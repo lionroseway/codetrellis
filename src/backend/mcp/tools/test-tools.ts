@@ -13,6 +13,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { authorFromExtra } from '../helpers';
 import { ingestTestReport, listTestReports, listTestResults, testsSummary, TestReportError } from '../../services/tests/test-results';
+import { groundingOf, NotAFileError } from '../../services/tests/grounding';
+import { ConfinementError } from '../../services/confined-fs';
 
 const noProject = { isError: true, content: [{ type: 'text' as const, text: 'No project is open, and none was named.' }] };
 const text = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] });
@@ -60,16 +62,36 @@ export function register(server: McpServer, deps: ToolDeps): void {
       description:
         'What the last test runs said, from the reports handed over with report_tests or as a test criterion\'s evidence: ' +
         'each test\'s last result and when that run happened, failing first. Pass match to narrow to tests whose file, ' +
-        'class or suite contains it (e.g. "billing/invoice"), or failing_only. CodeTrellis never runs tests itself.',
+        'class or suite contains it (e.g. "billing/invoice"), or failing_only. Pass for_file to ask about a source file ' +
+        'instead: its tests are those whose test file imports it (directly or through a barrel), and it reads passing, ' +
+        'failing, "tests older than the code" (it changed after they last ran — run them again before claiming done) or ' +
+        'no tests. CodeTrellis never runs tests itself.',
       inputSchema: {
         match: z.string().max(300).optional(),
         failing_only: z.boolean().optional(),
+        for_file: z.string().min(1).max(500).optional().describe('A source file, relative to the project root: its tests and whether they still hold.'),
         project_path: z.string().optional().describe('Absolute path of an opened project. Defaults to the active project.'),
       },
     },
-    async ({ match, failing_only, project_path }) => {
+    async ({ match, failing_only, for_file, project_path }) => {
       const root = project_path ?? deps.getActiveProjectPath();
       if (!root) return noProject;
+      if (for_file) {
+        try {
+          const g = groundingOf(root, for_file);
+          return text({
+            file: g.path, state: g.state, says: g.words, test_files: g.testFiles,
+            ...(g.lastRunAt ? { last_run_at: new Date(g.lastRunAt).toISOString() } : {}),
+            ...(g.changedAt ? { changed_at: new Date(g.changedAt).toISOString() } : {}),
+            tests: g.tests.filter((t) => !failing_only || t.result === 'failed' || t.result === 'error')
+              .map((t) => ({ test: t.label, result: t.result, ...(t.message ? { why: t.message } : {}), test_file: t.testFile })),
+          });
+        } catch (err) {
+          if (err instanceof ConfinementError) return { isError: true, content: [{ type: 'text' as const, text: `${for_file} is not a file inside this project.` }] };
+          if (err instanceof NotAFileError) return { isError: true, content: [{ type: 'text' as const, text: err.message }] };
+          throw err;
+        }
+      }
       const tests = listTestResults(root, { match, limit: 200 })
         .filter((t) => !failing_only || t.result === 'failed' || t.result === 'error');
       return text({

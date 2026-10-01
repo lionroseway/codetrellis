@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — B8.1: per-test results"
-  status: "C3.2 merged (#272); C3.3–C3.5 wait on the owner, so B8 is next. B8 refined into four parts (EXECUTION §5). B8.1 built: a JUnit report read test by test, each test's last result kept per project (an older run never replaces a newer one); report_tests and get_test_results for any agent, GET /api/tests for the window; a test criterion's check names its failing tests with why. CodeTrellis runs no tests. Unit (junit 6), harness (test-results 7), browser (test-results) green locally"
-  next: "Open B8.1's PR and merge when green; then B8.2 (tests mapped to code through imports)"
+  step: "Wave 2 — B8.2: tests mapped to code"
+  status: "B8.1 merged (#273). B8.2 built: a file's tests are those whose test file imports it, directly or through a barrel; it reads ✗ failing, ⚠ tests older than the code, ✓ passing or ○ no tests, for an agent (get_test_results for_file), the window (GET /api/tests/grounding) and in the Inspector's Tests line. Unit (grounding 3), harness (test-grounding 7), browser (inspector tests-line) green locally"
+  next: "Open B8.2's PR and merge when green; then B8.3 (the grounding overlay on the graph and a grounding line on each task)"
   blockers: "C2.6b waits on the owner's choice; C3.3–C3.5 wait on the owner's answers (which key signs records; which providers first; what people without the app see; whether material reads are shared by default)"
   updated: 2026-10-01
 sections:
