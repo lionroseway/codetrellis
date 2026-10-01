@@ -72,4 +72,35 @@ test.describe('Playing the plans forward', () => {
     await expect(vatRow.getByTestId('stack-planned-overlap')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Live', exact: true }).first()).toBeEnabled();
   });
+
+  test('B9.3a: acting on one from the bar: leave it, then re-sequence, said with who and when', async ({ page, request }) => {
+    const tag = Math.random().toString(36).slice(2, 6);
+    const VAT = `E2E B9 VAT rounding ${tag}`;
+    const CURRENCY = `E2E B9 Currency ${tag}`;
+    await seedPlan(request, { title: VAT, projectPath: FIXTURE_PATH, actions: [{ title: 'Round VAT per line', fileSpecs: [{ path: VALIDATORS, action: 'modify' }] }] });
+    await seedPlan(request, { title: CURRENCY, projectPath: FIXTURE_PATH, actions: [{ title: 'Add a currency field', fileSpecs: [{ path: VALIDATORS, action: 'modify' }] }] });
+
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
+    await page.getByRole('button', { name: 'Stack', exact: true }).first().click();
+    await page.getByTestId('play-forward-start-stack').click();
+    const row = page.getByTestId('play-forward-overlap-row').filter({ hasText: VAT });
+    await expect(row).toHaveCount(1, { timeout: 10_000 });
+
+    // Fine, leave it: said under it, and drawn quieter on the graph.
+    await row.getByTestId('play-forward-leave').click();
+    await expect(row.getByTestId('play-forward-decision')).toHaveText(/^Left as it is by .+ · \d\d:\d\d( [AP]M)?$/);
+    await expect(row.getByTestId('play-forward-leave')).toHaveCount(0);
+
+    // Re-sequence: choose which goes first; the overlap then reads sequenced.
+    await row.getByTestId('play-forward-resequence').click();
+    await expect(row.getByTestId('play-forward-choose-first')).toContainText('Which goes first?');
+    fs.mkdirSync(OUT, { recursive: true });
+    await row.screenshot({ path: path.join(OUT, 'play-forward-choose-first.png') });
+    await row.getByTestId('play-forward-first').filter({ hasText: `${VAT} first` }).click();
+    await expect(row.getByTestId('play-forward-overlap')).toHaveText(new RegExp(` · sequenced: ${CURRENCY} waits on ${VAT}$`), { timeout: 10_000 });
+    await expect(row.getByTestId('play-forward-decision')).toHaveText(new RegExp(`^${VAT} goes first; ${CURRENCY} waits · .+ · \\d\\d:\\d\\d( [AP]M)?$`));
+    // Sequenced, there is nothing left to decide here.
+    await expect(row.getByTestId('play-forward-resequence')).toHaveCount(0);
+    await row.screenshot({ path: path.join(OUT, 'play-forward-resequenced.png') });
+  });
 });

@@ -76,6 +76,7 @@ import { reviewPlan, renderReviewMarkdown } from './services/plan-review-service
 import { reviewQueue } from './services/review-queue-service';
 import { buildStack } from './services/stack-service';
 import { buildPlayForward } from './services/play-forward';
+import { resequence, tellAgents, leaveOverlap, OverlapActionError } from './services/planned-overlap-actions';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
 import { planGitStatesFresh } from './services/item-git-state';
@@ -4180,6 +4181,44 @@ app.get('/api/play-forward', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   res.json(buildPlayForward(projectRoot));
+});
+
+/**
+ * Phase 32 B9.3a — a person acts on a planned overlap: re-sequence the plans
+ * (`first`: the plan that goes first), tell the agents holding its tasks
+ * once, or leave it. The author comes from the transport; no MCP tool
+ * reaches these. The project is the query's, confined like every other.
+ */
+app.post('/api/play-forward/overlaps/:id/:action', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const action = req.params.action;
+  if (action !== 'resequence' && action !== 'tell' && action !== 'leave') {
+    res.status(404).json({ error: 'Unknown action: resequence, tell or leave.' });
+    return;
+  }
+  const who = personFrom(req);
+  const by = { author: who.author, authorType: who.authorType };
+  try {
+    let result: Record<string, unknown> = {};
+    if (action === 'resequence') {
+      const first = typeof req.body?.first === 'string' ? req.body.first : '';
+      if (!first) { res.status(400).json({ error: 'Say which plan goes first: first (a plan uid).' }); return; }
+      const r = resequence(projectRoot, req.params.id, first, by);
+      for (const t of r.waiting) broadcast('plan-item-updated', { planUid: planItemService.getItem(t.uid)?.planUid, itemUid: t.uid, kind: 'action', changes: { dependencies: true } });
+      result = { waiting: r.waiting };
+    } else if (action === 'tell') {
+      result = tellAgents(projectRoot, req.params.id, by);
+    } else {
+      leaveOverlap(projectRoot, req.params.id, by);
+    }
+    broadcast('play-forward-changed', { project: projectRoot });
+    saveNow(() => exportDatabase());
+    res.json({ ...result, playForward: buildPlayForward(projectRoot) });
+  } catch (err) {
+    if (err instanceof OverlapActionError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
 });
 
 app.get('/api/plans/:uid/review', (req, res) => {

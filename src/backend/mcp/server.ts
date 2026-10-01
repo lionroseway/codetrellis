@@ -35,6 +35,7 @@ import { recordFolderRequest } from '../services/folder-requests';
 import { noticeFor } from '../services/awareness-notices';
 import { replyNoticeFor } from '../services/awareness-replies';
 import { proposalNoticeFor } from '../services/spec-proposals-service';
+import { plannedOverlapNoticeFor } from '../services/planned-overlap-actions';
 import { candidateWorkstreamRoots, firstWorkstreamRoot, matchWorkstreamRoot } from '../services/workstream-binding';
 import { fileURLToPath } from 'node:url';
 import * as budgetService from '../services/budget-service';
@@ -568,6 +569,9 @@ function setupMcpServerInstance(sessionId: string): McpServer {
         // A spec change proposed to a page this session's task relies on (B7.3), once.
         const proposal = proposalNoticeFor(sessionId, agentInfo.type ?? null);
         if (proposal) result.content.push({ type: 'text', text: proposal });
+        // A planned overlap a person asked this session to know about (B9.3a), once.
+        const planned = plannedOverlapNoticeFor(sessionId);
+        if (planned) result.content.push({ type: 'text', text: planned });
       }
       const summary = result?._meta?.summary;
       broadcastToolEvent({

@@ -265,7 +265,13 @@ sentence. A person decides (accept, amend or reject); no tool decides one.
 
 When a spec you rely on changes, your next call says so
 ("── CodeTrellis: spec changed ──"): re-read the page and re-plan what it
-touches. A direct
+touches.
+
+Before claiming work, \`get_play_forward\` shows what every active plan
+will change and where two will meet ("◇ planned overlap"). If a person
+asks you to know about one ("── CodeTrellis: planned overlap ──"), another
+plan's task plans to touch what yours does: agree an order before changing
+it. Only a person re-sequences plans. A direct
 edit to a page others rely on is saved but names who relies on it; a page
 the person guards pauses the edit and says to propose instead.
 

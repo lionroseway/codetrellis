@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track B — B9.2: the window plays forward"
-  status: "B9.1 in review (#294). B9.2 built (stacked on it): Play the plans forward from the Stack tab or the Timeline; the bar says now → all plans done and each planned overlap; the graph draws planned files dashed and planned overlaps as dashed ◇ zones on files and clusters; each plan in the stack says where it will meet another. Unit 3, browser play-forward.spec (shots)"
-  next: "Merge B9.1, then B9.2, when green; then B9.3 (acting on a planned overlap)"
+  step: "Track B — B9.3a: acting on a planned overlap"
+  status: "B9.1 merged (#294); B9.2 in review (#295). B9.3 split in two; B9.3a built (stacked on B9.2): Re-sequence (the person picks which plan goes first; the others' tasks wait on its tasks; a loop refused), Tell both agents (told once, on the next call), Fine, leave it; each kept with who and when and said under the overlap in the bar. Harness planned-overlap-actions 4, browser play-forward.spec 2 (shots)"
+  next: "Merge B9.2, then B9.3a, when green; then B9.3b (a new planned overlap said on approval; the phone decides)"
   blockers: "None"
   updated: 2026-10-01
 sections:
@@ -496,7 +496,12 @@ sections:
           - id: B9.2
             title: "The window plays forward: dashed planned changes and ◇ planned overlaps on the graph, in the Stack tab"
           - id: B9.3
-            title: "Acting on a planned overlap: re-sequence, tell both agents, leave it; a new one said on approval"
+            title: "Acting on a planned overlap, split in two:"
+            items:
+              - id: B9.3a
+                title: "Re-sequence, tell both agents, or leave it: by a person, kept with who and when"
+              - id: B9.3b
+                title: "A new planned overlap said on approval; deciding one from the phone"
           - id: B9.4
             title: "The phone and the G3 done-when"
       - id: B10

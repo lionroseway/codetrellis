@@ -17,11 +17,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B9.2: the window plays forward |
-| **Status** | B9.1 in review (#294). B9.2 built (stacked on it): Play the plans forward from the Stack tab or the Timeline; the bar says now → all plans done and each planned overlap; the graph draws planned files dashed and planned overlaps as dashed ◇ zones on files and clusters; each plan in the stack says where it will meet another. Unit 3, browser play-forward.spec (shots) |
-| **In flight** | B9.2 in review (#295) on `feat/phase-32-b9-2-play-forward-window` |
+| **Stage / step** | Track B — B9.3a: acting on a planned overlap |
+| **Status** | B9.1 merged (#294); B9.2 in review (#295). B9.3 split in two; B9.3a built (stacked on B9.2): Re-sequence (the person picks which plan goes first; the others' tasks wait on its tasks; a loop refused), Tell both agents (told once, on the next call), Fine, leave it; each kept with who and when and said under the overlap in the bar. Harness planned-overlap-actions 4, browser play-forward.spec 2 (shots) |
+| **In flight** | B9.2 in review (#295) on `feat/phase-32-b9-2-play-forward-window`; B9.3a building on `feat/phase-32-b9-3a-planned-overlap-actions` |
 | **Last merged** | B9.1 (#294, `09f2c47`) |
-| **Next action** | Merge B9.1, then B9.2, when green; then B9.3 (acting on a planned overlap) |
+| **Next action** | Merge B9.2, then B9.3a, when green; then B9.3b (a new planned overlap said on approval; the phone decides) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
@@ -211,7 +211,9 @@
 - [ ] B9 Play-forward (code, and the materials tasks rely on) — building
   - [x] B9.1 The data: every active plan projected, planned overlaps (file, function, material), REST and get_play_forward (#294)
   - [ ] B9.2 The window plays forward: dashed planned changes and ◇ planned overlaps on the graph, in the Stack tab (#295) — in review
-  - [ ] B9.3 Acting on a planned overlap: re-sequence, tell both agents, leave it; a new one said on approval
+  - [ ] B9.3 Acting on a planned overlap, split in two: — building
+    - [ ] B9.3a Re-sequence, tell both agents, or leave it: by a person, kept with who and when — building
+    - [ ] B9.3b A new planned overlap said on approval; deciding one from the phone
   - [ ] B9.4 The phone and the G3 done-when
 - [ ] B10 The record
 
@@ -418,6 +420,8 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | B8.4a: an agent's `update_item(status: done)` is refused only while a test criterion's report is older than the item's code; other failing checks still do not stop it there, and a person's "done" is never refused | J1 asks exactly this, and it is the one failure an agent cannot argue with: the report is about code that is gone. D1.2 left gating `update_item` on every check as a separate decision; that still stands. A person may close a task for reasons the checks cannot see |
 | 2026-10-01 | B9 is refined into four parts (EXECUTION §5): the data, the window, acting on a planned overlap, the phone and G3. G3's question (run on approval?) is answered by computing play-forward on read, and B9.3 says a new planned overlap when an approval forms one | Computed on read it is never out of date and costs nothing until asked; saying a new one at approval is the moment G3 cares about, without a job that runs |
 | 2026-10-01 | B9.1: only unfinished tasks are projected, and which planned files exist is read from the project's folder through confined-fs, not the held graph | A done task's change is the code now, not the future. The server's graph is the last project scanned (HD1), so it cannot say whether another project's file exists; a planned path is agent-written and is confined like any other |
+| 2026-10-01 | B9.3 is split into B9.3a (the three actions, in the window) and B9.3b (said on approval; the phone) | The actions are one service and one surface; the approval notice and the phone's RPCs each touch another door with its own tests |
+| 2026-10-01 | B9.3a: what a person does about a planned overlap is kept by the overlap's id (its subject and its plans), and re-sequencing writes ordinary task dependencies rather than a new kind of order | The same plans meeting on the same thing is the same question, so the answer carries over; a dependency is what every "what is next" door (B6.1) already honours, so a re-sequenced plan holds its work back without anything new |
 | 2026-10-01 | B9.2: replay and play-forward are one clock with two directions; entering one leaves the other, and the canvas's views wait while either is on. The Stack tab shows each plan's "◇ will overlap" lines only while playing forward | Two clocks at once would draw two moments on one graph. The declared overlap band (B6.3) is today's; the ◇ lines are what the plans will do, so they belong to the forward clock, not beside today's |
 | 2026-10-01 | B8.4b: a past moment's overlay is rebuilt from what was kept (each report's cases, and the replay frame's files and imports), not recorded per frame; "older than the code" then compares a file's content with the first frame after its tests ran | Nothing new is taken at each frame, so replay costs nothing until it is used. The first frame after a run is the code the run was about (an agent edits, runs, and its turn ends); the frame before it would call every edit made just before the run stale. This can miss an edit between the run and that frame; it never invents one |
 | 2026-10-01 | B8.4b: a teammate's run is shown live only, and the answer says so | Only each device's latest run is kept (D1.5a) and nothing records when it arrived here, so it cannot be placed at a past moment honestly |
@@ -425,6 +429,23 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-01: B9.3a — acting on a planned overlap
+- **Journey.** JIRA-142 and JIRA-150 both plan to change validators.ts, and
+  an agent holds each task. Playing forward, Sam presses "Tell both agents":
+  each agent's next step carries "── CodeTrellis: planned overlap ──" with
+  the other plan's task, once. He presses "Fine, leave it": "Left as it is by
+  Sam · 18:57" under it, drawn quieter. Then "Re-sequence these plans",
+  "JIRA-142 first": JIRA-150's task waits on JIRA-142's, and the overlap
+  reads "sequenced: JIRA-150 waits on JIRA-142". JIRA-150 first would make
+  them wait on each other, and is refused.
+- **Built.** `services/planned-overlap-actions.ts`, two tables, `POST
+  /api/play-forward/overlaps/:id/(resequence|tell|leave)` (person from the
+  transport, project from the query), the notice in the MCP interception,
+  decisions on each overlap in the answer, the bar's buttons and the
+  decision line, a guide paragraph.
+- **Tests.** Harness `planned-overlap-actions.test.ts` (4). Browser
+  `plan/play-forward.spec.ts` (2, twice; shots).
 
 ### 2026-10-01: B9.2 — the window plays forward
 - **Journey.** Two plans in the sample app both plan to change validators.ts;
