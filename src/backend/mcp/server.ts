@@ -130,6 +130,7 @@ import { registerContributionTools } from './tools/contribution-tools';
 import { registerAudioTools } from './tools/audio-tools';
 import { registerPeerTools } from './tools/peer-tools';
 import { register as registerAwarenessTools } from './tools/awareness-tools';
+import { register as registerTestTools } from './tools/test-tools';
 import { register as registerResources } from './resources';
 
 // ── Constants ───────────────────────────────────────────────────────
@@ -672,6 +673,7 @@ function setupMcpServerInstance(sessionId: string): McpServer {
   registerChannelTools(mcpServer, deps);
   registerSystemDocsTools(mcpServer, deps);
   registerGovernanceTools(mcpServer, deps);
+  registerTestTools(mcpServer, deps);
   registerBudgetTools(mcpServer, deps);
   registerIntakeTools(mcpServer, deps);
   registerReviewTools(mcpServer, deps);

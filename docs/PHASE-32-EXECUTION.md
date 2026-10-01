@@ -731,6 +731,21 @@ verbatim in a notice title.
 | C4 | Recurring playbooks |
 | C5 | One plan across worktrees: sections of a plan assigned to workstreams (owner's ask, 2026-09-28) |
 
+### B8: Grounding
+
+Refined 2026-10-01 (observability doc §9, CURRENT-STATE §21, JOURNEYS J).
+"Grounded" is a claim with evidence that can be checked and is still true
+now; for code most of that evidence is tests. CodeTrellis never runs tests
+(J1's question, settled by §9's principle): the agent runs them, and
+CodeTrellis checks the report is real, recent and about the right code.
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| B8.1 | Per-test results: a JUnit report read test by test (`tests/junit.ts`: suite, class, name, file, result, time, the first line of why; nesting, CDATA, entities, 20,000 cases at most); each test's last result kept per project with when its run happened (the report's mtime), an older run never replacing a newer one, the same bytes twice changing nothing. MCP `report_tests(path)` (`write`) and `get_test_results(match?, failing_only?)` (`read`), REST `GET /api/tests`; a `test` criterion's check counts the cases themselves, names the failing tests with why, and keeps their results, credited to whoever recorded the file. A report outside the project, missing, or not JUnit is refused with how to write one | unit (`junit.test.ts`); harness `test-results.test.ts` (reported, again, newer and older runs, refusals, a test criterion); browser `test-results.spec.ts` (the Checks panel names the failing test, shot) |
+| B8.2 | Tests mapped to code: a test file covers the files it imports (the same import data as awareness), and each file reads ✓ n passing, ✗ n failing, ○ no tests, or ⚠ tests older than the code (its last change after the run its tests come from); `get_test_results` and `GET /api/tests` by file | unit (mapping, staleness); harness |
+| B8.3 | Where it shows: the grounding overlay on the graph (B3's overlay list), and a grounding line on each task ("3 criteria · 2 grounded · 1 waiting on a person": evidence attached, checks passing, nothing changed since), in the window, on the phone and in `get_brief` | unit; harness; browser (shots); phone |
+| B8.4 | Replay and the done-when: the overlay at a past moment (J2: `billing/` from "○ no tests" to "✓ 12 passing"), and J1 end to end: "done" on a report older than the code is refused and the task says "⚠ tests older than the code" | harness; browser |
+
 ### C1: Skills on plans and tasks
 
 | Sub-step | Delivers | Tests |

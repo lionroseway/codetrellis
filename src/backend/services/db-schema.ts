@@ -247,6 +247,40 @@ export const SCHEMA_PLANS_CORE = `
     changed_by TEXT NOT NULL
   );
 
+  -- Phase 32 B8.1: test reports an agent or a test criterion handed over,
+  -- and each test's last result from them. CodeTrellis never runs tests:
+  -- these are what the runs said, with when they ran (the report's mtime).
+  CREATE TABLE IF NOT EXISTS test_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_root TEXT NOT NULL,
+    path TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    tests INTEGER NOT NULL,
+    passed INTEGER NOT NULL,
+    failed INTEGER NOT NULL,
+    errors INTEGER NOT NULL,
+    skipped INTEGER NOT NULL,
+    ran_at INTEGER NOT NULL,
+    reported_at INTEGER NOT NULL,
+    reported_by TEXT NOT NULL,
+    reported_by_type TEXT NOT NULL,
+    UNIQUE (project_root, sha256)
+  );
+  CREATE TABLE IF NOT EXISTS test_results (
+    project_root TEXT NOT NULL,
+    test_key TEXT NOT NULL,
+    suite TEXT,
+    classname TEXT,
+    name TEXT NOT NULL,
+    file TEXT,
+    result TEXT NOT NULL,
+    duration_ms INTEGER,
+    message TEXT,
+    report_id INTEGER NOT NULL,
+    ran_at INTEGER NOT NULL,
+    PRIMARY KEY (project_root, test_key)
+  );
+
   -- Phase 32 C3.1: task state shared as records in the project's files, per
   -- project, on this device only (never the committed config). Off until
   -- the person turns it on.

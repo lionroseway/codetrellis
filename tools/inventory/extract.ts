@@ -113,7 +113,7 @@ const REST_DOMAINS: Record<string, DomainKey> = {
   plans: 'c', items: 'c', tasks: 'c', 'plan-docs': 'c', 'plan-history': 'c', 'plan-phases': 'c',
   'plan-templates': 'c', comments: 'c', attachments: 'c', refs: 'c', 'team-activity': 'c',
   contributions: 'c', 'contributor-branch': 'c', pantry: 'c', skills: 'c', stack: 'c', 'spec-proposals': 'c',
-  criteria: 'd',
+  criteria: 'd', tests: 'd',
   artefacts: 'e',
   channels: 'f', presence: 'f', 'screenshot-response': 'f',
   agent: 'g', 'agent-events': 'g', breakpoints: 'g', 'breakpoint-hits': 'g', mcp: 'g', sessions: 'g', sensors: 'g', workstreams: 'g', awareness: 'g',
@@ -143,6 +143,8 @@ const TOOL_FILE_DOMAINS: Record<string, DomainKey> = {
   session: 'g', ui: 'g', budget: 'g', awareness: 'g',
   'project-config': 'a',
   drift: 'h', governance: 'h', review: 'h', git: 'h',
+  // Phase 32 B8: tests are a criterion's evidence (0.4d's domain).
+  test: 'd',
   terminal: 'i', audio: 'i',
   mobile: 'j', peer: 'j',
   'system-docs': 'l', intake: 'l',

@@ -18,6 +18,7 @@
  * needs the plan review, and the review reads criteria.
  */
 
+import { ingestTestReport } from './tests/test-results';
 import { recordCheckRun } from './agent-event-log';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -177,6 +178,10 @@ function check(
     materialsRead: criterion.kind === 'citation' ? materialsReadSince(item.uid, startedAt) : undefined,
     code,
     openHighSignals,
+    // B8.1: a JUnit report read by a test check keeps each test's result.
+    onTestReport: criterion.kind === 'test' && root
+      ? (a) => { ingestTestReport(root, a.path, { author: a.recordedBy, authorType: a.recordedByType }); }
+      : undefined,
   });
 }
 
