@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import type { CriterionKind, CriterionPolicy, CriterionState, ItemCriterion, TaskAttachment } from '@shared/types';
+import type { CriterionKind, CriterionPolicy, CriterionState, ItemCriterion, SignedApproval, TaskAttachment } from '@shared/types';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { describeLocator, openArtefactAt } from '../../../lib/open-artefact-at';
 import { BRIEF_WORDS, briefState } from '../../../lib/brief-vocabulary';
 import { criterionOrigin } from '../../../lib/criterion-origin';
 import { UnverifiedIf } from '../../UnverifiedTag';
+import { SignedApprovalLines, useSignedApprovals } from './SignedApprovalLines';
 
 /**
  * Phase 31 §4.1–4.3 — what this item is judged on, and where each
@@ -63,6 +64,9 @@ export function CriteriaBlock({
   const setDraft = (text: string) => setPending(itemUid, { text, kind });
   const setKind = (k: CriterionKind) => setPending(itemUid, { text: draft, kind: k });
   const [error, setError] = useState<string | null>(null);
+  // C2.5b — each approval signed, kept local, verified or not, read again when a decision changes.
+  // Above the early return below: a hook must run on every render.
+  const signed = useSignedApprovals(itemUid, criteria.map((c) => `${c.uid}:${c.state}:${c.latestSignoff?.uid ?? ''}`).join('|'));
 
   const met = criteria.filter((c) => c.state === 'met').length;
 
@@ -92,7 +96,7 @@ export function CriteriaBlock({
         {vocabulary === 'brief' ? BRIEF_WORDS.criteria : 'Acceptance criteria'} <span className="opacity-60">· {met}/{criteria.length} met</span>
       </h3>
       <ul className="space-y-2">
-        {criteria.map((c) => <CriterionRow key={c.uid} itemUid={itemUid} criterion={c} attachments={attachments} vocabulary={vocabulary} you={you} />)}
+        {criteria.map((c) => <CriterionRow key={c.uid} itemUid={itemUid} criterion={c} attachments={attachments} vocabulary={vocabulary} you={you} signed={signed.filter((a) => a.criterionUid === c.uid)} />)}
       </ul>
 
       {adding ? (
@@ -141,10 +145,12 @@ export function CriteriaBlock({
 }
 
 function CriterionRow({
-  itemUid, criterion: c, attachments, vocabulary, you,
+  itemUid, criterion: c, attachments, vocabulary, you, signed,
 }: {
   itemUid: string;
   criterion: ItemCriterion;
+  /** C2.5b — its approvals as signed statements. */
+  signed: SignedApproval[];
   attachments: TaskAttachment[];
   vocabulary: 'plan' | 'brief';
   you: string | null;
@@ -249,6 +255,7 @@ function CriterionRow({
               )}
             </p>
           )}
+          <SignedApprovalLines approvals={signed} />
           {c.state === 'stale' && (
             <p className="text-[11px] text-amber-300/90 mt-1">⚠ A file this was approved on has changed since. Look again.</p>
           )}

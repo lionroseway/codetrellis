@@ -18,6 +18,9 @@
 import { recordCriterionDecision } from './agent-event-log';
 import { randomUUID } from 'node:crypto';
 import { getDb } from './database';
+import { getPlan } from './plan-service';
+import { resolveTrustedProjectRoot } from './trusted-roots';
+import { signApproval } from './signed-approvals';
 import { markDirty } from './persistence';
 import { actorTypeOf, isHumanDecision, isUnverifiedDecision, type DecisionAuthority } from './human-decision';
 import { currentHashes } from './artefact-service';
@@ -577,8 +580,11 @@ export function decideCriterion(
     throw new CriterionError('Say what is wrong — a send-back note is what the agent reads next.');
   }
   const anchor = input.decision === 'sent_back' ? parseAnchor(input.anchor, criterion.itemUid) : null;
-  appendSignoff(criterionUid, input.decision, decision.actor, actorTypeOf(decision), decision.channel, note, anchor, decision.device ?? null);
+  const signed = appendSignoff(criterionUid, input.decision, decision.actor, actorTypeOf(decision), decision.channel, note, anchor, decision.device ?? null);
   markDirty();
+  // C2.5b — a person's approval is also signed with their git SSH key, where
+  // the plan is shared through a folder and git signing is set up.
+  if (input.decision === 'approved' && isHumanDecision(decision)) signPersonsApproval(criterion, signed);
   return getCriterion(criterionUid)!;
 }
 
@@ -611,7 +617,7 @@ function appendSignoff(
   note: string | null,
   anchor: { attachmentUid: string; locator: unknown } | null = null,
   device: string | null = null,
-): void {
+): { uid: string; evidenceHashes: Record<string, string | null>; at: number } {
   // An approval records the hash of every file it was taken on, so a later
   // edit to any of them shows as `stale` rather than silently still `met`.
   let evidenceHashes: Record<string, string | null> = {};
@@ -621,18 +627,38 @@ function appendSignoff(
       .filter((u): u is string => !!u);
     evidenceHashes = currentHashes(uids);
   }
+  const uid = randomUUID();
+  const at = tick();
   getDb().run(
     `INSERT INTO criterion_signoffs
        (uid, criterion_uid, decision, actor, actor_type, channel, note, evidence_hashes, created_at,
         anchor_attachment_uid, anchor_locator, device)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      randomUUID(), criterionUid, decision, actor, actorType, channel, note, JSON.stringify(evidenceHashes), tick(),
+      uid, criterionUid, decision, actor, actorType, channel, note, JSON.stringify(evidenceHashes), at,
       anchor?.attachmentUid ?? null, anchor ? JSON.stringify(anchor.locator) : null, device,
     ],
   );
   // ✓ or ✗ on the Timeline lane of the workstream the item is worked in (B2.2).
   recordCriterionDecision({ criterionUid, decision, actor, actorType, channel });
+  return { uid, evidenceHashes, at };
+}
+
+/**
+ * Phase 32 C2.5b — a teammate's approval read from a plan's approvals/ folder,
+ * whose SSH signature verified against git's allowed signers. Added as that
+ * person's sign-off, channel `file`; never twice. Only signed-approvals.ts
+ * calls this, and only after verifying.
+ */
+export function addVerifiedSignoff(input: { uid: string; criterionUid: string; actor: string; evidence: Record<string, string | null>; at: number }): boolean {
+  if (rows(`SELECT 1 FROM criterion_signoffs WHERE uid = ?`, [input.uid]).length) return false;
+  getDb().run(
+    `INSERT INTO criterion_signoffs (uid, criterion_uid, decision, actor, actor_type, channel, note, evidence_hashes, created_at)
+     VALUES (?, ?, 'approved', ?, 'human', 'file', NULL, ?, ?)`,
+    [input.uid, input.criterionUid, input.actor, JSON.stringify(input.evidence), input.at],
+  );
+  markDirty();
+  return true;
 }
 
 // ── Plan files (export / import) ──────────────────────────────────────
@@ -802,4 +828,21 @@ function parseKind(kind: unknown): CriterionKind {
 function parsePolicy(policy: unknown): CriterionPolicy {
   if (!isPolicy(policy)) throw new CriterionError(`policy must be one of: ${CRITERION_POLICIES.join(', ')}`);
   return policy;
+}
+
+/** Sign a person's approval (C2.5b); never undoes or blocks the approval itself. */
+function signPersonsApproval(criterion: ItemCriterion, signed: { uid: string; evidenceHashes: Record<string, string | null>; at: number }): void {
+  try {
+    const planRow = rows(`SELECT plan_uid FROM plan_items WHERE uid = ?`, [criterion.itemUid])[0];
+    if (!planRow) return;
+    const planUid = planRow[0] as string;
+    const plan = getPlan(planUid);
+    let repo: string | null = null;
+    try { repo = plan?.projectPath ? resolveTrustedProjectRoot(plan.projectPath, 'signed approval') : null; } catch { repo = null; }
+    const planDir = repo ? _lazy___plan_file_service.getLinkedPlanDir(planUid, repo) : null;
+    signApproval({
+      signoffUid: signed.uid, planUid, itemUid: criterion.itemUid, criterionUid: criterion.uid,
+      criterionText: criterion.text, evidence: signed.evidenceHashes, at: signed.at, repo, planDir,
+    });
+  } catch { /* the approval stands; it is just not signed */ }
 }

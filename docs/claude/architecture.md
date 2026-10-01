@@ -134,6 +134,28 @@ and `claimItem` none at all; `writeFileAtomic` leaves a file alone when its
 content would not change. Import still reads an older file's `status`, and a
 file without a claim or blocked reason leaves this machine's alone.
 
+## Approvals as signed statements (Phase 32 C2.5b)
+
+`services/signed-approvals.ts` over `signed-approval-record.ts` (pure). A
+person's approval of a criterion (the app window, or a confirmed phone;
+never plain HTTP, which may be a script) is kept here as always. Where the
+plan is shared through a folder and git signing is set up with an SSH key
+(`gpg.format ssh`, `user.signingkey`, `user.email`), it is also written as
+`<plan>/approvals/<uid>.yaml`: the statement (canonical JSON of the
+criterion, its wording's sha256, the evidence hashes, the signer and when)
+and an `ssh-keygen -Y sign` signature under the namespace
+`codetrellis-approval`. One file per approval, only ever added. Import checks
+each with `ssh-keygen -Y verify` against git's `gpg.ssh.allowedSignersFile`:
+a verified record for an unchanged criterion adds that person's sign-off
+(channel `file`); anything else is kept as "can't verify" with why and
+counts for nothing. Without signing, the approval stays on the machine and
+says why. `signed_approvals` holds each outcome; `GET
+/api/items/:uid/signed-approvals` lists them and the criteria block shows
+one line under each criterion. The app holds no key and implements no
+signature scheme. The harness sets `CODETRELLIS_SIGN_APPROVALS=0` so a
+developer's own git key is never used by a test; the signing spec turns it
+on.
+
 ## Session persistence & power awareness
 
 CodeTrellis treats long-running agent sessions as first-class — desktops don't sleep while agents are working, and reconnects rehydrate state rather than starting fresh.

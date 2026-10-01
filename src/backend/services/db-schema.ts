@@ -247,6 +247,24 @@ export const SCHEMA_PLANS_CORE = `
     changed_by TEXT NOT NULL
   );
 
+  -- Phase 32 C2.5b: approvals as signed statements. One row per approval
+  -- this machine signed (or could not), and per signed record read from a
+  -- plan's approvals/ folder, with whether it verified and why not. A
+  -- verified record also adds the person's sign-off to criterion_signoffs.
+  CREATE TABLE IF NOT EXISTS signed_approvals (
+    uid TEXT PRIMARY KEY,
+    plan_uid TEXT NOT NULL,
+    item_uid TEXT NOT NULL,
+    criterion_uid TEXT NOT NULL,
+    signer TEXT,
+    origin TEXT NOT NULL,
+    state TEXT NOT NULL,
+    reason TEXT,
+    file TEXT,
+    at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_signed_approvals_item ON signed_approvals(item_uid);
+
   -- Phase 32 C1.4: a skill that arrived in a plan file (pulled through git,
   -- or edited by hand) is held back from agents until a person accepts it.
   -- One row per arrival: who added it and in which commit, as git says.
