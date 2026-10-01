@@ -105,6 +105,12 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   detect_conflicts: 'read',
   resolve_conflict: 'write',
 
+  // ── test-tools (Phase 32 B8.1) ──────────────────────────────────────
+  // Handing over a report keeps results in this machine's database: a write.
+  // Reading what the runs said is a read. Neither runs anything.
+  report_tests: 'write',
+  get_test_results: 'read',
+
   // ── governance-tools ────────────────────────────────────────────────
   get_freeze_status: 'read',
   set_freeze: 'write',

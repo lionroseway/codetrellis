@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — C3.2: a real disagreement is a signal"
-  status: "C3.1 merged (#271). C3.2 built: when records made without seeing each other leave a task in two states, the task names both (window, phone, get_plan), it joins what the plan waits on, and a state-split signal is in the inbox; Keep on the item (or any later change) ends it on every machine; a second record forged in one person's name and number is named, high, and neither is taken. Unit (item-status, signal-words), harness (task-records 12, awareness, phone-awareness, plan-status), browser (shared-task-state 3) green locally"
-  next: "Open C3.2's PR and merge when green; then C3.3 needs the owner's choice of key, so C3.6's journey or B8 next"
+  step: "Wave 2 — B8.1: per-test results"
+  status: "C3.2 merged (#272); C3.3–C3.5 wait on the owner, so B8 is next. B8 refined into four parts (EXECUTION §5). B8.1 built: a JUnit report read test by test, each test's last result kept per project (an older run never replaces a newer one); report_tests and get_test_results for any agent, GET /api/tests for the window; a test criterion's check names its failing tests with why. CodeTrellis runs no tests. Unit (junit 6), harness (test-results 7), browser (test-results) green locally"
+  next: "Open B8.1's PR and merge when green; then B8.2 (tests mapped to code through imports)"
   blockers: "C2.6b waits on the owner's choice; C3.3–C3.5 wait on the owner's answers (which key signs records; which providers first; what people without the app see; whether material reads are shared by default)"
   updated: 2026-10-01
 sections:
@@ -468,7 +468,16 @@ sections:
           - id: B7.7
             title: I1 done-when and docs
       - id: B8
-        title: Grounding
+        title: "Grounding, refined in EXECUTION §5:"
+        items:
+          - id: B8.1
+            title: "Per-test results: JUnit read test by test, each test's last result kept; report_tests, get_test_results, GET /api/tests; a test criterion names its failing tests"
+          - id: B8.2
+            title: "Tests mapped to code through imports: ✓ passing, ✗ failing, ○ no tests, ⚠ tests older than the code, per file"
+          - id: B8.3
+            title: "The grounding overlay on the graph and a grounding line on each task (window, phone, get_brief)"
+          - id: B8.4
+            title: "Replay of grounding, and the J1 done-when: done on stale tests is refused and says so"
       - id: B9
         title: Play-forward (code, and the materials tasks rely on)
       - id: B10

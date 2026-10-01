@@ -109,7 +109,11 @@ refused. You cannot approve your own work — a person signs off, in
 CodeTrellis or on their phone, and may send it back with a note (it shows
 as \`sent_back_note\`). When you come back to a plan, \`get_worklist\` is
 everything you owe, sent-back notes first; \`run_checks\` re-checks the
-whole plan and says what went stale. \`add_criterion\`
+whole plan and says what went stale. CodeTrellis never runs tests: run
+them yourself with a JUnit reporter and hand the report over with
+\`report_tests(path)\`, which keeps each test's result;
+\`get_test_results\` says what the last runs said, failing first.
+\`add_criterion\`
 records one the user asks for, in their words. \`set_item_blocked\` when
 something stops you, because a blocked item the user can see beats a
 silent stall.
@@ -471,6 +475,8 @@ edges.
 | \`submit_criterion(criterion_uid, evidence?, note?)\` | Offer evidence; refused if a check fails; a person decides unless policy is \`agent\` |
 | \`get_worklist(plan_uid)\` | Everything you owe: sent back (with note and place), stale, failing, not started |
 | \`run_checks(plan_uid)\` | Re-check the whole plan and record it; says what moved since the last run |
+| \`report_tests(path)\` | Hand over a test run's JUnit report: each test's result is kept, and the failing ones are named with why. CodeTrellis never runs tests |
+| \`get_test_results(match?, failing_only?)\` | What the last runs said, test by test, failing first, with when each ran |
 | \`approve_gate(uid)\` | Retired — refuses. Sign-off is a person's, not a tool's |
 | \`list_items(plan_uid, ...)\` | Query items by parent / kind / status / title |
 | \`search_items(plan_uid, query)\` | Full-text search across titles and bodies |

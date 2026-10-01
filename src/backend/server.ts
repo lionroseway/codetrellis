@@ -83,6 +83,7 @@ import { listSignedApprovals } from './services/signed-approvals';
 import { allPlanArrivals } from './services/plan-arrivals';
 import { forgetHostReads } from './services/review-host/host-state';
 import { forgetReviewHostToken, getReviewHost, ReviewHostError, saveReviewHostToken, setReviewHost } from './services/review-host/switch';
+import { listTestReports, listTestResults, testsSummary } from './services/tests/test-results';
 import { getSharedTaskState, keepMyState, readAndTell, setRecordAppliedListener, setSharedTaskState, setSplitChangedListener, startRecordWatcher, writeRecordFor } from './services/task-records/shared-state';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
 import { buildPlaybackSequence } from './services/playback-service';
@@ -2456,6 +2457,19 @@ app.put('/api/review-host/token', (req, res) => {
     broadcast('review-host-changed', { project: projectRoot });
     res.json(status);
   } catch (err) { sendReviewHostError(res, err); }
+});
+
+// Phase 32 B8.1 — what the last test runs said. CodeTrellis never runs tests:
+// these are the reports agents handed over (report_tests, a test criterion).
+app.get('/api/tests', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const match = typeof req.query.match === 'string' ? req.query.match.slice(0, 300) : undefined;
+  res.json({
+    summary: testsSummary(projectRoot),
+    reports: listTestReports(projectRoot, 10),
+    tests: listTestResults(projectRoot, { match, limit: 500 }),
+  });
 });
 
 // Phase 32 C3.1 — task state shared as records in the project's files. Per

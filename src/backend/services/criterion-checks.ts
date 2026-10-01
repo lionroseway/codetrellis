@@ -15,6 +15,7 @@
  * the facts and hands them in, so the rules here are testable on their own.
  */
 
+import { parseJUnit, testLabel } from './tests/junit';
 import fs from 'node:fs';
 import path from 'node:path';
 import { readFileWithin, resolveWithin } from './confined-fs';
@@ -72,6 +73,11 @@ export interface CheckContext {
    * not, or when they were not gathered.
    */
   openHighSignals?: Array<{ heading: string; words: string }>;
+  /**
+   * Told of each JUnit report a `test` check read (B8.1), so each test's
+   * result is kept, credited to whoever recorded the file.
+   */
+  onTestReport?: (artefact: Artefact) => void;
 }
 
 const pass = (message: string, attachmentUid: string | null = null): CheckFinding => ({ status: 'pass', message, attachmentUid });
@@ -408,11 +414,24 @@ export function runChecks(ctx: CheckContext): CriterionCheck {
         }
         const read = readForCheck(root!, a);
         if (!read.ok) { findings.push(read.finding); continue; }
-        const counts = /\.xml$/i.test(a.path) ? junitCounts(read.buf.toString('utf8')) : null;
+        const xml = /\.xml$/i.test(a.path) ? read.buf.toString('utf8') : null;
+        // The cases themselves when the report lists them (B8.1); its totals
+        // attributes otherwise, which some runners leave out.
+        const parsed = xml !== null ? parseJUnit(xml) : null;
+        const counts = parsed && parsed.cases.length
+          ? { tests: parsed.totals.tests, failures: parsed.totals.failed, errors: parsed.totals.errors }
+          : xml !== null ? junitCounts(xml) : null;
+        if (counts && ctx.onTestReport) {
+          try { ctx.onTestReport(a); } catch { /* keeping results never changes the check */ }
+        }
         if (!counts) {
           findings.push(unverified(`${a.path} is not a JUnit report, so its pass and fail counts were not read`, a.uid));
         } else if (counts.failures + counts.errors > 0) {
-          findings.push(fail(`${a.path} reports ${counts.failures + counts.errors} of ${counts.tests} tests failing`, a.uid));
+          // Which tests (B8.1): the first three by name, with the first line of why.
+          const cases = (parsed?.cases ?? []).filter((c) => c.result === 'failed' || c.result === 'error');
+          const named = cases.slice(0, 3).map((c) => `${testLabel(c)}${c.message ? ` (${c.message})` : ''}`);
+          const more = cases.length > 3 ? `; and ${cases.length - 3} more` : '';
+          findings.push(fail(`${a.path} reports ${counts.failures + counts.errors} of ${counts.tests} tests failing${named.length ? `: ${named.join('; ')}${more}` : ''}`, a.uid));
         } else if (counts.tests === 0) {
           findings.push(fail(`${a.path} reports no tests run`, a.uid));
         } else {

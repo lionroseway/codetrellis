@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — C3.2: a real disagreement is a signal |
-| **Status** | C3.1 merged (#271). C3.2 built: when records made without seeing each other leave a task in two states, the task names both (window, phone, get_plan), it joins what the plan waits on, and a state-split signal is in the inbox; Keep on the item (or any later change) ends it on every machine; a second record forged in one person's name and number is named, high, and neither is taken. Unit (item-status, signal-words), harness (task-records 12, awareness, phone-awareness, plan-status), browser (shared-task-state 3) green locally |
-| **In flight** | C3.2 building on `feat/phase-32-c3-2-disagreements` |
-| **Last merged** | C3.1 (#271, `4e8be2f`) |
-| **Next action** | Open C3.2's PR and merge when green; then C3.3 needs the owner's choice of key, so C3.6's journey or B8 next |
+| **Stage / step** | Wave 2 — B8.1: per-test results |
+| **Status** | C3.2 merged (#272); C3.3–C3.5 wait on the owner, so B8 is next. B8 refined into four parts (EXECUTION §5). B8.1 built: a JUnit report read test by test, each test's last result kept per project (an older run never replaces a newer one); report_tests and get_test_results for any agent, GET /api/tests for the window; a test criterion's check names its failing tests with why. CodeTrellis runs no tests. Unit (junit 6), harness (test-results 7), browser (test-results) green locally |
+| **In flight** | B8.1 building on `feat/phase-32-b8-1-per-test-results` |
+| **Last merged** | C3.2 (#272, `516b858`) |
+| **Next action** | Open B8.1's PR and merge when green; then B8.2 (tests mapped to code through imports) |
 | **Blockers** | C2.6b waits on the owner's choice; C3.3–C3.5 wait on the owner's answers (which key signs records; which providers first; what people without the app see; whether material reads are shared by default) |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `4e8be2f`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `516b858`, with open PRs from GitHub.
 
 ---
 
@@ -199,7 +199,11 @@
   - [ ] Follow-up: Linking a plan schedules one more export ~200 ms later; an edit to its files in that window is overwritten, not imported (found building B7.5b)
   - [x] B7.6 The phone (#249)
   - [x] B7.7 I1 done-when and docs (#250)
-- [ ] B8 Grounding
+- [ ] B8 Grounding, refined in EXECUTION §5: — building
+  - [ ] B8.1 Per-test results: JUnit read test by test, each test's last result kept; report_tests, get_test_results, GET /api/tests; a test criterion names its failing tests — building
+  - [ ] B8.2 Tests mapped to code through imports: ✓ passing, ✗ failing, ○ no tests, ⚠ tests older than the code, per file
+  - [ ] B8.3 The grounding overlay on the graph and a grounding line on each task (window, phone, get_brief)
+  - [ ] B8.4 Replay of grounding, and the J1 done-when: done on stale tests is refused and says so
 - [ ] B9 Play-forward (code, and the materials tasks rely on)
 - [ ] B10 The record
 
@@ -226,7 +230,7 @@
     - [ ] C2.6b Phase 32's own plan in CodeTrellis, npm run status reading through the app; the C2 done-when (owner's choice first)
 - [ ] C3 A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice), refined in EXECUTION §6: — building
   - [x] C3.1 Task state as records in the project's files: one new file per change, one writer each, read from all; a teammate's state says whose record and that it is unverified; off until the person turns it on (#271)
-  - [ ] C3.2 A real disagreement is a signal: people acting at once are named on the task and in the inbox until one decides — building
+  - [x] C3.2 A real disagreement is a signal: people acting at once are named on the task and in the inbox until one decides (#272)
   - [ ] C3.3 Signed records (the owner's choice of key first)
   - [ ] C3.4 A linked plans folder: a planning repo or a synced folder, placeholders never downloaded, materials by place and hash (the owner's choice of providers first)
   - [ ] C3.5 Teammates' material reads, a separate switch (the owner's choice of default first)
@@ -358,6 +362,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | A plan file's refs are added on import, never removed, and only http(s) links are read | A file is anyone's text. Adding is what a pull should do; removing on a file's word would let an edit take a ticket away silently, and a `javascript:` or `file:` link would be one click from harm |
 | 2026-10-01 | C2.6 is refined into C2.6a (teammates' plans after a pull) and C2.6b (Phase 32's own plan in CodeTrellis). C2.6b waits on the owner: keep `PHASE-32-STATUS.yaml` as intent and import it as a plan, or replace it with the plan's files | Moving the phase's own tracker changes how every session reads the work, so it is the owner's choice, not a build step. C2.6a stands alone and needs no such choice |
 | 2026-10-01 | A pulled plan's author is who committed its `plan.yaml`, as `git log` says, never the file's own `author` field | A plan file is anyone's text; the commit is how it arrived (the authorship rule). The same reading as C1.4's skill arrivals |
+| 2026-10-01 | B8 is refined into four parts (EXECUTION §5). CodeTrellis never runs tests, as observability §9 says; JOURNEYS J1's open question is settled by that principle | Running an agent's tests would make the app an executor with the project's full reach; checking what the run reported keeps provenance with the agent and judgement with the person (the Phase 31 rule) |
 | 2026-10-01 | C3 is refined into six parts (EXECUTION §6). C3.1 and C3.2 need no answer; C3.3 (which key signs records), C3.4 (which providers first; what people without the app see) and C3.5 (whether material reads are shared by default) wait on the owner | Records, their order and their disagreements are the same whichever key, provider or default is chosen, so building them first loses nothing |
 | 2026-10-01 | Task-state records are turned on per project, on this device, by the person; off writes and reads none | They add files to the team's repository or folder, which is sharing; the same rule as a review host. Reading teammates' records only when sharing is on keeps one switch with one meaning |
 | 2026-10-01 | A teammate's record is applied only when it was made having seen this machine's latest record for that task; records made at once that disagree are each kept, none applied | Clocks drift, so "newest" is not knowable from times; a silent pick would hide a real disagreement, which C3.2 names |
@@ -365,6 +370,41 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-01: B8 refined; B8.1 — per-test results
+
+C3.2 merged (#272). C3.3–C3.5 wait on the owner's answers, and C3.6 needs
+them, so the next step that needs none is B8, refined into four parts in
+EXECUTION §5 (decision row). CodeTrellis never runs tests: the agent runs
+them, and CodeTrellis checks the report is real, recent and about the
+right code.
+
+- **Test by test** (`services/tests/junit.ts`). A JUnit report's cases,
+  each with its suite, class, name, file (when the runner writes one),
+  result, time and the first line of why it failed; nested suites, CDATA
+  and entities read; 20,000 cases at most, and it says when it stopped.
+- **Each test's last result** (`tests/test-results.ts`, tables
+  `test_reports`, `test_results`), per project, with when its run happened:
+  the report file's mtime, which B8.2 compares with the code. The same
+  bytes twice change nothing; an older run handed over late never replaces
+  a newer result.
+- **For any agent and the window.** `report_tests(path)` (`write`) and
+  `get_test_results(match?, failing_only?)` (`read`), in the new
+  `test-tools.ts`; `GET /api/tests`. A report outside the project, missing,
+  or not JUnit is refused, with the reporter flags that write one.
+- **A test criterion names its failing tests**: "reports 1 of 2 tests
+  failing: VatTest › rounds per line (expected 2.40 to be 2.41)" in the
+  check and the Checks panel, and its results are kept, credited to whoever
+  recorded the report.
+
+Found on the way: the check read only a report's totals attributes, so a
+report that lists its cases without them (several runners leave them out)
+read as "no tests run" and failed; it now counts the cases themselves.
+
+Tests: unit `junit.test.ts` (6); harness `test-results.test.ts` (7: none
+yet; reported with failing by name; again; the window and the tool agree;
+newer and older runs; refusals; a test criterion's check); browser
+`test-results.spec.ts` (shot `test-results-checks`).
 
 ### 2026-10-01: C3.2 — a real disagreement is a signal
 

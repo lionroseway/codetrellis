@@ -17,8 +17,8 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 261 | 259 | 0 | 0 | 217 | 0 |
-| MCP tools | 202 | 202 | 0 | 0 | 185 | 0 |
+| REST routes | 262 | 260 | 0 | 0 | 217 | 0 |
+| MCP tools | 204 | 204 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 90 | 79 | 0 | 0 | 78 | 0 |
 | Frontend components | 119 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 37 | n/a | n/a | n/a | 0 | 0 |
@@ -31,7 +31,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4a Project and scan | 19 | 12 | 10 | 0 | 0 | 0 |
 | 0.4b Graph | 19 | 15 | 8 | 13 | 0 | 0 |
 | 0.4c Plans and items | 107 | 58 | 25 | 60 | 0 | 0 |
-| 0.4d Criteria and sign-off | 9 | 7 | 3 | 0 | 0 | 0 |
+| 0.4d Criteria and sign-off | 10 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 12 | 7 | 1 | 0 | 0 |
 | 0.4g Agents and MCP | 26 | 32 | 10 | 28 | 0 | 0 |
@@ -43,12 +43,12 @@ records that — but "✗ none" is proof of a gap.
 
 ## MCP tools: registry vs capability matrix
 
-- Registered by the server: **202**
-- Rows in `TOOL_CAPABILITIES`: **202**
+- Registered by the server: **204**
+- Rows in `TOOL_CAPABILITIES`: **204**
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (261)
+## REST routes (262)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -69,7 +69,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 173 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 174 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -164,7 +164,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/items/:uid/claim` |  | ✗ none | 2 | ✓ 0.4c-2: claims and records the assignee; full lifecycle (full-loop) |  |  |
 | c | `POST /api/items/:uid/code-reference` |  | ✗ none | 1 | ✓ 0.4c-1: appends line ranges; shows in the overlay; refusals (code-reference, e2e add-to-plan; bug 21) |  |  |
 | c | `POST /api/items/:uid/comments` |  | ✗ none | 3 | ✓ 0.4c: exercised by phone-plans, short-references, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `POST /api/items/:uid/criteria` |  | ✗ none | 9 | ✓ 0.4c: exercised by artefacts-stale, brief-surface, criteria-loops, criteria-signoff, +3 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/items/:uid/criteria` |  | ✗ none | 10 | ✓ 0.4c: exercised by artefacts-stale, brief-surface, criteria-loops, criteria-signoff, +3 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/items/:uid/keep-state` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/move` |  | ✗ none | 1 | ✓ 0.4c-2: re-parents and reorders; cycles, self, foreign and missing parents 400 (item-surface; bug 23) |  |  |
 | c | `POST /api/items/:uid/progress` |  | ✗ none | 1 | ✓ 0.4c: exercised by task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -172,9 +172,9 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/items/:uid/skill-arrivals/accept` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/spec-proposals` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/worktree` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans` |  | 1 | 99 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans` |  | 1 | 100 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 2 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `POST /api/plans/:planUid/items` |  | ✗ none | 65 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:planUid/items` |  | ✗ none | 66 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 2 | ✓ 0.4c: exercised by criteria-loops (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/docs` |  | ✗ none | 7 | ✓ 0.4c: exercised by full-loop, phone-plans, plan-docs, plan-export, +2 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -202,6 +202,7 @@ records that — but "✗ none" is proof of a gap.
 | d | `GET /api/plans/:uid/signoff-pack` |  | ✗ none | 4 | ✓ 0.4d: every criterion, unverified approval tagged, file with hash at approval; unknown plan 404 (signoff-surface) |  |  |
 | d | `GET /api/plans/:uid/signoff-pack.html` |  | ✗ none | 4 | ✓ 0.4d: attachment download, CSP sandbox, nosniff; unverified approvals listed apart (signoff-surface) |  |  |
 | d | `GET /api/plans/:uid/worklist` |  | ✗ none | 1 | ✓ 0.4d: sent back first with note, then open; met/waiting counted; stale after source moves (signoff-surface) |  |  |
+| d | `GET /api/tests` |  | ✗ none | 1 |  |  |  |
 | d | `POST /api/criteria/:uid/check` |  | ✗ none | 1 | ✓ 0.4d: holds while cited cell exists, fails with the reason once it is gone; 404 (signoff-surface) |  |  |
 | d | `POST /api/criteria/:uid/decide` |  | ✗ none | 6 | ✓ 0.4d: approve / send back (note required); HTTP records unverified, app window records human (criteria-signoff, ipc-dispatcher unit) |  |  |
 | d | `POST /api/plans/:uid/signoff-pack/verify` |  | ✗ none | 1 | ✓ 0.4d: matches, then changed after edit; empty, non-pack and other plan's pack refused (signoff-surface) |  |  |
@@ -314,7 +315,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `POST /api/system-docs/:uid/verify` |  | ✗ none | 1 | ✓ 0.4l: re-stamped at HEAD after a commit, freshness clears, desktop told; unknown 404 (sysdocs-intake) |  |  |
 | l | `PUT /api/system-docs/:uid` |  | ✗ none | 2 | ✓ 0.4l: named fields only, author from how it arrived — the body cannot name one (sysdocs-intake); bug 47 |  |  |
 
-## MCP tools (202)
+## MCP tools (204)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -405,15 +406,17 @@ records that — but "✗ none" is proof of a gap.
 | c | `update_plan` | plan · write | ✗ none | 2 | ✓ 0.4c-1: title/status/description, version recorded; write-through continues after a rename (plan-tools; bug 22) |  |  |
 | d | `add_criterion` | plan-item · write | ✗ none | 3 | ✓ 0.4d: kept at propose, tagged with the agent's name in the app (criteria-signoff, criteria.spec) |  |  |
 | d | `approve_gate` | plan-item · read | ✗ none | 1 | ✓ 0.4d: retired — refuses and points at submit_criterion (criteria-signoff) |  |  |
-| d | `check_criterion` | plan-item · read | ✗ none | 2 | ✓ 0.4d: refuses a cell outside the file, passes once fixed (criteria-loops) |  |  |
+| d | `check_criterion` | plan-item · read | ✗ none | 3 | ✓ 0.4d: refuses a cell outside the file, passes once fixed (criteria-loops) |  |  |
+| d | `get_test_results` | test · read | ✗ none | 1 |  |  |  |
 | d | `get_worklist` | plan-item · read | ✗ none | 1 | ✓ 0.4d: hands back the send-back note and where it points (criteria-loops) |  |  |
 | d | `list_criteria` | plan-item · read | ✗ none | 4 | ✓ 0.4d: migrated line verbatim plus the gate, with decided_by (criteria-signoff) |  |  |
+| d | `report_tests` | test · write | ✗ none | 1 |  |  |  |
 | d | `run_checks` | plan-item · read | ✗ none | 1 | ✓ 0.4d: names the stale criterion and the changed file; approves nothing (criteria-loops) |  |  |
 | d | `submit_criterion` | plan-item · write | ✗ none | 7 | ✓ 0.4d: submitting is not approving; agent policy self-approves in the agent's name (criteria-signoff) |  |  |
 | e | `get_brief` | plan-item · read | ✗ none | 11 | ✓ 0.4e: item, guide from pages, own files + pages' materials only, still_needs; unknown refused (brief-surface) |  |  |
 | e | `list_materials` | plan-item · read | ✗ none | 1 | ✓ 0.4e: every file item by item in tree order, outputs included; unknown refused (brief-surface) |  |  |
 | e | `read_material` | plan-item · files | ✗ none | 5 | ✓ 0.4e: CSV by {range} (bug 24), text by {lines}, image as itself; read logged on the item (brief-surface, read unit) |  |  |
-| e | `record_artefact` | plan-item · write | ✗ none | 4 | ✓ 0.4e: agent records an output (brief-surface, criteria-loops) |  |  |
+| e | `record_artefact` | plan-item · write | ✗ none | 5 | ✓ 0.4e: agent records an output (brief-surface, criteria-loops) |  |  |
 | f | `await_ack` | presence · write | ✗ none | 1 | ✓ 0.4f: released by ack; instant when already acked; unknown card an error at once; dismissed → via dismissed (presence-channels; bug 25) |  |  |
 | f | `await_decision` | presence · read | ✗ none | 8 |  |  |  |
 | f | `await_user_input` | presence · write | ✗ none | 1 | ✓ 0.4f: gets the reply; a newer question supersedes an older wait at once (presence-channels; bug 25) |  |  |
