@@ -90,6 +90,14 @@ test.describe.serial('Recurring playbooks', () => {
     expect(s.runs.map((r) => r.state)).toEqual(['missed', 'missed', 'in_progress', 'next']);
     expect(s.runs[2].planUid).toBe(a.planUid);
     expect(s.due).toBeNull();
+
+    // C4.2b — the run says which series and period it is, and who started it (here, over plain HTTP).
+    const rec = (await (await h.client.raw('GET', `/api/plans/${a.planUid}/recurrence`)).json()) as { recurrence: { line: string; words: string } };
+    expect(rec.recurrence.line).toMatch(new RegExp(`^Daily security check · ${label(now)} run · started by .+$`));
+    expect(rec.recurrence.words).toBe('every day 00:00 · skill: security-review');
+    const other = (await h.client.createPlan({ title: 'Not a run', projectPath: root })).uid;
+    expect(((await (await h.client.raw('GET', `/api/plans/${other}/recurrence`)).json()) as { recurrence: unknown }).recurrence).toBeNull();
+    expect((await h.client.raw('GET', '/api/plans/no-such-plan/recurrence')).status).toBe(404);
   });
 
   test('an agent\'s list_recurring is the same answer', async () => {

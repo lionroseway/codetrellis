@@ -231,3 +231,46 @@ export function startRun(projectRoot: string, ruleId: string, by: { author: stri
   markDirty();
   return { plan: getPlan(uid) ?? applied.plan, created: true, info: { rule: rule.id, period, label, previous: previous?.uid ?? null, carried, startedBy: by.author, startedAt: now } };
 }
+
+export interface PlanRecurrence extends RecurrenceInfo {
+  title: string;
+  words: string;
+  /** "Daily security check · 1 Oct run · started by the schedule · 1 task carried from 30 Sep" */
+  line: string;
+  /** The carried tasks with their titles, for the run's page. */
+  carriedTasks: Array<{ itemUid: string; title: string; from: string }>;
+}
+
+/**
+ * The series a plan is a run of, or null (C4.2b). A run started here says
+ * what it carried and who started it; one that arrived from a teammate is
+ * recognised by its id among the rule's recent periods, and says only which.
+ */
+export function recurrenceOf(projectRoot: string, planUid: string, now = Date.now()): PlanRecurrence | null {
+  const rules = rulesOf(projectRoot);
+  let info = runInfo(planUid);
+  if (!info) {
+    outer: for (const rule of rules) {
+      for (let p = currentPeriod(rule, now), i = 0; i < LOOK_BACK; p = previousPeriod(p), i++) {
+        if (runUid(projectRoot, rule.id, periodId(p)) === planUid) {
+          info = { rule: rule.id, period: periodId(p), label: periodLabel(p), previous: null, carried: [] };
+          break outer;
+        }
+      }
+    }
+  }
+  if (!info) return null;
+  const rule = rules.find((r) => r.id === info!.rule);
+  const title = rule?.title ?? info.rule;
+  const carriedTasks = info.carried.map((c) => ({ ...c, title: planItemService.getItem(c.itemUid)?.title ?? '(removed)' }));
+  const who = info.startedBy === 'schedule' ? 'started by the schedule' : info.startedBy ? `started by ${info.startedBy}` : null;
+  const from = info.carried[0]?.from;
+  const carriedWords = carriedTasks.length ? `${carriedTasks.length} ${carriedTasks.length === 1 ? 'task' : 'tasks'} carried from ${from}` : null;
+  return {
+    ...info,
+    title,
+    words: rule ? seriesWords(rule) : '',
+    line: [title, `${info.label} run`, who, carriedWords].filter(Boolean).join(' · '),
+    carriedTasks,
+  };
+}
