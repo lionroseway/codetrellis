@@ -14,8 +14,8 @@
 # and prs (PRs whose merge commit does not name the id).
 now:
   step: "Track C — C4.2b: Settings → Recurring playbooks, and a run's own line"
-  status: "C4.1 (#299) and C4.2a (#300) in review. C4.2b built (stacked on C4.2a): Settings → Recurring playbooks sets a rule for the team (playbook, every, on, at, zone, carry over, skills) and stops one; a run's page says which series and period it is, who started it, and names its carried tasks, recognised by its id when it came from a teammate. Unit recurring-service 11, harness recurring 7, browser settings/recurring.spec 2 (shots)"
-  next: "Merge C4.1, C4.2a and C4.2b in turn when green; then C4.3 (the phone, an agent only by opt-in, and the C4 done-when)"
+  status: "C4.1 (#299) and C4.2a (#300) merged. C4.2b built: Settings → Recurring playbooks sets a rule for the team (playbook, every, on, at, zone, carry over, skills) and stops one; a run's page says which series and period it is, who started it, and names its carried tasks, recognised by its id when it came from a teammate. Unit recurring-service 11, harness recurring 7, browser settings/recurring.spec 2 (shots)"
+  next: "Merge C4.2b when green; then C4.3 (the phone, an agent only by opt-in, and the C4 done-when)"
   blockers: "None"
   updated: 2026-10-01
 sections:
