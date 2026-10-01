@@ -120,7 +120,28 @@ event rather than `await_user_input` because the question then travels with
 the plan's files: a person who pulls later still sees it, and their steer
 in the app is the answer.
 
-Changing and committing the plan (D1.3) works the same way.
+**Changing and committing the plan (D1.3).** `src/cli/plan-verbs.ts`, over
+the same connection:
+
+| Verb | Tool(s) |
+|---|---|
+| `plan show [--plan]` | `get_plan` (its tasks, each with its short uid and what the plan says of it) |
+| `plan add <title…> [--under <task>] [--page] [--body]` | `add_item` (an action, or a page with `--page`) |
+| `plan edit <task> [--title] [--body]` | `update_item` |
+| `plan move <task> (--under <task> \| --top) [--position N]` | `move_item` |
+| `commit [-m <subject>]` | `commit_manifest_changes` with only the changed paths under `.codetrellis/` |
+| `status [--plan]` | `list_plans`, `get_plan`'s state, open `need-decision` / `need-context` / `stuck` channel events |
+
+`commit` lists what changed under `.codetrellis/` with `git status`
+(the plan's files, task records, read records, keys, channel events) and
+commits those paths and nothing else, so the agent's own code stays
+unstaged for it to commit as it would. The subject is `-m`, else "Update
+the plan: " and the tasks it touched; the body names them. The author is
+the person's git identity, the agent its co-author, as for any
+`commit_manifest_changes`. Nothing changed is not an error: it says so
+and exits 0. `status` is the plan's own state, so it says what the app
+and the phone say: progress, what is in progress (claimed), what is
+blocked and why, and what waits on the person.
 
 `getMcpSetup` (`/api/mcp/setup`) returns the connector's command, JSON and
 `claude mcp add` line; Settings, the guide and the status bar all copy the

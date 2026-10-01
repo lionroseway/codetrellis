@@ -49,6 +49,8 @@ export interface ToolAnswer {
 }
 
 export interface Agent {
+  /** The name this connection gave itself (see agentName). */
+  readonly name: string;
   call(name: string, args: Record<string, unknown>): Promise<ToolAnswer>;
   close(): Promise<void>;
 }
@@ -74,6 +76,7 @@ export async function connectAgent(opts: { dataDir: string; name: string; cwd: s
   const client = new Client({ name: opts.name, version: 'cli' }, { capabilities: {} });
   await client.connect(transport);
   return {
+    name: opts.name,
     async call(name, args) {
       const res = (await client.callTool({ name, arguments: args })) as { content?: Array<{ type: string; text?: string }>; isError?: boolean };
       const text = (res.content ?? []).find((c) => c.type === 'text' && typeof c.text === 'string')?.text ?? '';

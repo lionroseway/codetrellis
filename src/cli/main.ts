@@ -19,6 +19,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { connectorLine, flag, headlessDataDir, parseArgs, USAGE, type Parsed } from './args';
 import { VERBS } from './verbs';
+import { PLAN_VERBS } from './plan-verbs';
 
 const out = (s: string) => process.stdout.write(s.endsWith('\n') ? s : `${s}\n`);
 const fail = (s: string, code = 2): never => {
@@ -151,7 +152,8 @@ async function verb(name: string, p: Parsed): Promise<void> {
     throw err;
   }
   try {
-    const { out: text, code } = await runVerb(name, agent, p, cwd);
+    const { runPlanVerb } = await import('./plan-verbs');
+    const { out: text, code } = PLAN_VERBS.has(name) ? await runPlanVerb(name, agent, p, cwd) : await runVerb(name, agent, p, cwd);
     if (text) out(text);
     process.exitCode = code;
   } catch (err) {
@@ -178,7 +180,7 @@ async function main(): Promise<void> {
     case 'scan': return scanOnce(p);
     case 'mcp': return mcp(p);
     default:
-      if (VERBS.has(p.command)) return verb(p.command, p);
+      if (VERBS.has(p.command) || PLAN_VERBS.has(p.command)) return verb(p.command, p);
       fail(`unknown command "${p.command}". Run codetrellis --help.`);
   }
 }

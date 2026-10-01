@@ -34,6 +34,8 @@ export function parseArgs(argv: readonly string[]): Parsed {
       continue;
     }
     if (a === '-h') { flags.help = true; continue; }
+    // git's own short form for a commit message: `codetrellis commit -m "…"`.
+    if (a === '-m' && i + 1 < argv.length) { flags.m = argv[++i]; continue; }
     if (command === null) command = a;
     else rest.push(a);
   }
@@ -125,6 +127,15 @@ which; text, or --json):
   codetrellis awareness                        what overlaps your work
   codetrellis check <path>                     before an edit: overlaps, and whether a breakpoint holds it
   codetrellis report-tests <junit.xml>         tell CodeTrellis how the tests went
+
+Changing and committing the plan:
+
+  codetrellis plan show [--plan <uid>]
+  codetrellis plan add <title…> [--under <task>] [--page] [--body <text>]
+  codetrellis plan edit <task> [--title <text>] [--body <text>]
+  codetrellis plan move <task> (--under <task> | --top) [--position N]
+  codetrellis commit [-m <subject>]            commits only CodeTrellis's own files (.codetrellis/)
+  codetrellis status                           plans, what is under way, blocked, and waiting on you
 
   <task> is a uid, or its first characters ("6cb8cf43", "task 6cb8cf43").
   Exit codes: 0 done, 1 refused, 2 usage, 3 held or not answered yet.

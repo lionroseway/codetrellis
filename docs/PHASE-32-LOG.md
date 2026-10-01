@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track D — D1.2: the keep-on-track verbs |
-| **Status** | D1.1 merged (#285). D1.2 built: next, claim, update, stuck, done (refused while a criterion's check fails), request (asks on the plan, waits for the person's steer), brief, awareness, check (exit 3 when held) and report-tests, each an agent's MCP call, words or --json. Unit (agent 2), harness (cli-verbs 10) green locally |
-| **In flight** | D1.2 building on `feat/phase-32-d1-2-keep-on-track` |
+| **Stage / step** | Track D — D1.3: changing the plan and committing it |
+| **Status** | D1.2 merged (#286). D1.3 built: plan show/add/edit/move over the plan tools, commit (only CodeTrellis's own files, the message naming the tasks, the agent as co-author), status (in progress, blocked, waiting on the person, as get_plan says). Harness cli-plan 5 green locally |
+| **In flight** | D1.3 building on `feat/phase-32-d1-3-plan-and-commit` |
 | **Last merged** | C3.6 (#284, `8300675`) |
-| **Next action** | Merge D1.2 when green; then D1.3 (plan show/add/edit/move, commit, status) |
+| **Next action** | Merge D1.3 when green; then D1.4 (SessionStart hook and CI recipes, gating exit codes, dogfood here) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `d38d08f`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `04e4e49`, with open PRs from GitHub.
 
 ---
 
@@ -251,8 +251,8 @@
 ### Track D: agents on demand
 - [ ] D1 The `codetrellis` CLI (owner's decision, 2026-10-01), refined in EXECUTION §6b: — building
   - [ ] D1.1 `codetrellis serve` (headless backend, loopback, token on every transport) and `scan`
-  - [ ] D1.2 Keep-on-track verbs as an agent: next, claim, update, stuck, done, request, brief, awareness, check, report-tests; text or --json — building
-  - [ ] D1.3 Changing the plan (show, add, edit, move) and `commit`, which commits only CodeTrellis's own files; `status`
+  - [ ] D1.2 Keep-on-track verbs as an agent: next, claim, update, stuck, done, request, brief, awareness, check, report-tests; text or --json
+  - [ ] D1.3 Changing the plan (show, add, edit, move) and `commit`, which commits only CodeTrellis's own files; `status` — building
   - [ ] D1.4 A SessionStart hook recipe, a CI/CD recipe, and exit codes on status and check for gating (breakpoints, tests older than the code, failing criteria, stale system docs); this repository uses it
   - [ ] D1.5 The D done-when: a cloud session or CI job claims, reports, edits the plan and commits; the desktop shows it after a pull
   - [ ] Follow-up: Declared product flows checked hop by hop against the cross-system map in CI (owner's point, 2026-10-01): after Phase 32 unless pulled in
@@ -401,9 +401,31 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | C3.6: the done-when runs over a synced folder, not git: the sync is a copy of what each device wrote, and one record arrives as a placeholder first | git was C3.1's test; the folder is what business teams use and what C3.4 added, and partial arrival is the case only a synced folder has |
 | 2026-10-01 | D1.1: `serve` runs the backend in its own process with the existing token and loopback rules, adding only a headless switch that starts no update poller and no peer manager; its data is in the user's cache, one folder per project | A runner has nobody to offer an update to and no phone to pair; a second set of security rules for the CLI would be a second thing to get wrong. Data in the checkout would be committed by accident |
 | 2026-10-01 | D1.2: `request` asks through a channel event and waits for a steer in reply, not `await_user_input`; `done` runs each criterion's check first and refuses on a failure, in the CLI | `await_user_input` answers only from a window connected to the same backend, so a cloud session's question would reach nobody; a channel event travels with the plan and is answered in the app. Gating `update_item` itself would change every agent's behaviour, which is a separate decision |
+| 2026-10-01 | D1.3: `commit` commits only the changed paths under `.codetrellis/`, through `commit_manifest_changes`, and never stages the agent's code; nothing to commit is exit 0 | The agent's code is its own to commit, with its own message; mixing the plan into it hides the plan's change in a code review. One commit tool keeps the author the person and the agent a co-author, as every other agent commit is. A hook that runs `commit` on every stop must not fail when the plan did not change |
 ---
 
 ## Entries
+
+### 2026-10-01: D1.3 — changing the plan and committing it
+- **Journey.** Sam's agent runs only `codetrellis`. `plan show` reads
+  "Exports" and its task. It adds "Add the CSV export" with a body,
+  renames it, adds a step under it and moves the step to the top level;
+  the plan's files follow within a moment. It has changed
+  `validators.ts` too. `commit` commits the plan's files and nothing else:
+  `validators.ts` is still modified and unstaged, the message names both
+  tasks, Sam is the author and the agent the co-author. Committing again
+  has nothing to do; `-m` names the subject. After it claims a task,
+  reports 40%, says another is stuck and asks a question, `status` says
+  what is in progress, what is blocked and why, and what waits on Sam,
+  with the same progress words as the app.
+- **Built.** `src/cli/plan-verbs.ts` (plan show/add/edit/move, commit,
+  status, words or `--json`), the agent's name on the connection for the
+  commit's co-author, `-m`, usage text.
+- **Decided.** `commit` is the plan's files only (see the decision row).
+  "In progress" is the plan's: a claimed task. Progress reported on an
+  unclaimed task does not put it there, which is what the app shows too.
+- **Tests.** Harness `cli-plan.test.ts` (5, the journey above, with two
+  usage errors).
 
 ### 2026-10-01: D1.2 — the keep-on-track verbs
 - **Journey.** Sam's agent runs only `codetrellis`. `next` names "Write the
