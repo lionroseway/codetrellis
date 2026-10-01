@@ -3,11 +3,11 @@
  * (JOURNEYS I1).
  *
  * An agent working "Add currency" proposes a new Fields section for
- * "Invoice format"; the agent on "Show totals" (relies on Fields) says it
+ * "Invoice format"; the agent on "Show invoice totals" (relies on Fields) says it
  * changes its work. Awareness counts it, and "Waiting on you" shows
  * "✎ … proposes a change to § Fields", why, now and proposed, and the reply.
  * The person amends the text and accepts it. The page has the amended text;
- * "Show totals" says "Spec changed", and once its agent's next call has
+ * "Show invoice totals" says "Spec changed", and once its agent's next call has
  * told it, says so.
  */
 import fs from 'node:fs';
@@ -20,6 +20,8 @@ const OUT = path.join('test-results', 'ux-audit');
 const SPEC = 'E2E Spec decide Invoicing';
 const CHECKOUT = 'E2E Spec decide Checkout';
 const BILLING = 'E2E Spec decide Billing';
+// A title no other spec uses: plans opened on the other worker are broadcast
+// to this page too, and spec-held-edit seeds its own "Show totals".
 const BODY = '# Invoice format\n\nAn invoice is JSON.\n\n## Fields\n\n- amount\n\n## Totals\n\nSum of lines.\n';
 
 async function shot(target: Page | ReturnType<Page['getByTestId']>, name: string) {
@@ -38,7 +40,7 @@ test.describe('Deciding a spec change', () => {
     const spec = await seedPlan(request, { title: SPEC });
     const made = await request.post(`${API}/plans/${spec.uid}/items`, { headers: authHeaders(), data: { kind: 'object', title: 'Invoice format', body: BODY } });
     const pageUid = ((await made.json()) as { uid: string }).uid;
-    const checkout = await seedPlan(request, { title: CHECKOUT, actions: [{ title: 'Show totals' }] });
+    const checkout = await seedPlan(request, { title: CHECKOUT, actions: [{ title: 'Show invoice totals' }] });
     const billing = await seedPlan(request, { title: BILLING, actions: [{ title: 'Add currency' }] });
     const showTotals = checkout.actionUids[0];
     expect((await request.put(`${API}/items/${showTotals}/relies-on`, { headers: authHeaders(), data: { reliesOn: [{ page: pageUid, section: 'fields' }] } })).ok()).toBeTruthy();
@@ -72,7 +74,7 @@ test.describe('Deciding a spec change', () => {
       await expect(card.getByTestId('proposal-diff')).toContainText('- currency');
       await expect(card.getByTestId('proposal-impacts')).toContainText('1 task in 1 plan relies on this. 1 of 1 replied.');
       await expect(card.getByTestId('proposal-impact')).toContainText('Changes 1 task');
-      await expect(card.getByTestId('proposal-impact')).toContainText('Show totals (E2E Spec decide Checkout)');
+      await expect(card.getByTestId('proposal-impact')).toContainText('Show invoice totals (E2E Spec decide Checkout)');
       await shot(card, 'spec-decision-card');
 
       // Amend, then accept.
@@ -91,7 +93,7 @@ test.describe('Deciding a spec change', () => {
 
       // The relying task says the spec changed, until and after its agent is told.
       await openPlan(page, CHECKOUT);
-      await page.getByText('Show totals', { exact: true }).first().click();
+      await page.getByTestId('plan-item-tree').getByText('Show invoice totals', { exact: true }).first().click();
       const changed = page.getByTestId('spec-changed');
       await expect(changed).toBeVisible({ timeout: 10_000 });
       await expect(changed).toContainText('Spec changed');
@@ -104,7 +106,7 @@ test.describe('Deciding a spec change', () => {
       expect(later).toContain('Their note: Name the standard.');
       await page.reload();
       await openPlan(page, CHECKOUT);
-      await page.getByText('Show totals', { exact: true }).first().click();
+      await page.getByTestId('plan-item-tree').getByText('Show invoice totals', { exact: true }).first().click();
       await expect(page.getByTestId('spec-changed')).toContainText('its agent has been told', { timeout: 10_000 });
     } finally {
       proposer.close();
