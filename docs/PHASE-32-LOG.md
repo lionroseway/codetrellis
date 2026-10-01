@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Track C — C4.2a: recurring runs due, in the window |
-| **Status** | C4.1 in review (#299). C4.2 split in two; C4.2a built (stacked on C4.1): a run is started by the schedule as its moment comes while the app runs; one due while it was closed is asked about in the Awareness inbox (Start, or Not this time, then missed); each series is one row in the plans list, a run opens its plan and the due one starts from the row. Unit recurring-service 9, harness recurring 7, browser recurring.spec 1 (shots) |
-| **In flight** | C4.1 in review (#299) on `feat/phase-32-c4-1-recurring-runs`; C4.2a building on `feat/phase-32-c4-2a-due-in-window` |
-| **Last merged** | B9.4 (#298, `fa788d7`) |
-| **Next action** | Merge C4.1, then C4.2a, when green; then C4.2b (Settings → Recurring playbooks; the run's line) |
+| **Status** | C4.1 merged (#299). C4.2 split in two; C4.2a built: a run is started by the schedule as its moment comes while the app runs; one due while it was closed is asked about in the Awareness inbox (Start, or Not this time, then missed); each series is one row in the plans list, a run opens its plan and the due one starts from the row. Unit recurring-service 9, harness recurring 7, browser recurring.spec 1 (shots) |
+| **In flight** | C4.2a in review (#300) on `feat/phase-32-c4-2a-due-in-window`; C4.2b in review (#301) on `feat/phase-32-c4-2b-settings-and-run-line` |
+| **Last merged** | C4.1 (#299, `03de0dd`) |
+| **Next action** | Merge C4.2a when green; then C4.2b (Settings → Recurring playbooks; the run's line) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `fa788d7`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `03de0dd`, with open PRs from GitHub.
 
 ---
 
@@ -249,10 +249,10 @@
   - [x] C3.5 Teammates' material reads, a separate switch, on by default once a folder is shared (#283)
   - [x] C3.6 The C3 done-when (#284)
 - [ ] C4 Recurring playbooks, refined in EXECUTION §6: — building
-  - [ ] C4.1 The data: a rule on a playbook in the committed config, one run per period by its id, the series, carry-over (#299) — in review
+  - [x] C4.1 The data: a rule on a playbook in the committed config, one run per period by its id, the series, carry-over (#299)
   - [ ] C4.2 Due, in the window, split in two: — building
-    - [ ] C4.2a Started as it comes; asked about when it fell due while the app was closed; the series row in the plans list — building
-    - [ ] C4.2b Settings → Recurring playbooks; a run's series, period and carried tasks on the run
+    - [ ] C4.2a Started as it comes; asked about when it fell due while the app was closed; the series row in the plans list (#300) — in review
+    - [ ] C4.2b Settings → Recurring playbooks; a run's series, period and carried tasks on the run (#301) — in review
   - [ ] C4.3 The phone, an agent only by opt-in, and the C4 done-when
 - [x] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
   - [x] C5.1 `workstream` on an item, inherited; `assign_workstream`; next and claim respect it (#186)
