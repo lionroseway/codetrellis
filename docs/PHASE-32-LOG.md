@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — C2.4a: every item a state with its source, and one status view |
-| **Status** | C2.3 merged (#265); C2.2 and C2.3 done. C2.4 refined into a (read side) and b (no state change writes a file). C2.4a built: every item's state with its source — git or the review host for an item on a branch, the plan itself for everything else in words, with who recorded it; sections sum their tasks; the view (progress counting git merges, waiting on someone, in progress, lineage ticket → plan → PR only from a host) as GET /api/plans/:uid/status, the phone's plan.status and get_plan's state; window header chip, tree row hovers, the item page's State line, the phone's Status card. Unit (1746), harness (plan-status 6), browser (plan-status, git-state specs), phone (plan-status 2) green locally |
-| **In flight** | C2.4a building on `feat/phase-32-c2-4a-status-read` |
-| **Last merged** | C2.3 (#265, `27adc85`) |
-| **Next action** | Merge C2.4a when CI is green; then C2.4b on feat/phase-32-c2-4b-no-state-writes (state leaves the plan's files; a state-only change writes nothing; unchanged files not rewritten) |
+| **Stage / step** | Wave 2 — C2.4b: no state change writes a file |
+| **Status** | C2.4a merged (#266). C2.4b built: an item's file carries no status, progress, blocked reason, claim, progress report or updatedAt; a state-only update and a claim schedule no write-through; unchanged files are not rewritten; import still reads an older file's status and leaves this machine's claim alone. Unit, harness (plan-state-writes 4, task-context, the plan-file specs) green locally |
+| **In flight** | C2.4b building on `feat/phase-32-c2-4b-no-state-writes` |
+| **Last merged** | C2.4a (#266, `dd69b85`) |
+| **Next action** | Merge C2.4b when CI is green; then C2.5 (ticket refs in the plan files; approvals as signed statements), refined first |
 | **Blockers** | none |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `27adc85`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `dd69b85`, with open PRs from GitHub.
 
 ---
 
@@ -216,8 +216,8 @@
     - [x] C2.2b GitHub behind it: open, merged and closed pull requests, checks and approvals, read only when turned on; in review and closed, from GitHub (#264)
   - [x] C2.3 GitLab and Bitbucket on the same interface (Azure DevOps, Gitea later) (#265)
   - [ ] C2.4 Status read, not written: intent in the plan's YAML, state from git, a host or the plan itself, each saying its source; no STATUS.md — building
-    - [ ] C2.4a Every item a state with its source (git, a host, or the plan with who recorded it), and one status view: progress, waiting, in progress, lineage; window, phone and get_plan — building
-    - [ ] C2.4b No state change writes a file: state leaves the plan's files, a state-only change schedules no write-through, unchanged files are not rewritten
+    - [x] C2.4a Every item a state with its source (git, a host, or the plan with who recorded it), and one status view: progress, waiting, in progress, lineage; window, phone and get_plan (#266)
+    - [ ] C2.4b No state change writes a file: state leaves the plan's files, a state-only change schedules no write-through, unchanged files are not rewritten — building
   - [ ] C2.5 Ticket refs in the plan files; approvals as signed statements
   - [ ] C2.6 Teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when
 - [ ] C3 A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice)
@@ -347,6 +347,39 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-01: C2.4b — no state change writes a file
+
+C2.4a merged (#266). The plan's files now keep intent only:
+
+- **An item's file carries no state**: no `status`, `progressPercent`,
+  `blockedReason`, claim (`assignee`, `assigneeType`, `assigneeModel`), no
+  progress report (a comment of kind `progress`, which carries the percent)
+  and no `updatedAt`, which every change bumped, a status change included.
+  Notes, blockers and questions are people's words and still ride.
+- **A state change writes nothing**: an update that changes only state
+  (`isStateOnly` in `shared/lib/item-status.ts`) schedules no write-through,
+  a claim schedules none, and `writeFileAtomic` leaves a file alone when its
+  content would not change, so a re-export for some other reason touches
+  only what changed.
+- **Older files still work**: a file that carries a `status` is read on
+  import. A file without a claim or blocked reason now leaves this
+  machine's alone, where it used to clear them, which would have wiped
+  every claim on the first pull once files stopped carrying them.
+
+Found on the way: the criteria check schedules a re-export when a task is
+claimed; with no `updatedAt` in the file, that re-export now writes
+nothing.
+
+`task-context.test.ts` asserted that progress round-trips through a file;
+it now asserts the opposite, as decided (decision row of 2026-10-01).
+Tests: unit `isStateOnly`; harness `plan-state-writes.test.ts` (4: a
+status change, a claim, progress by REST and by `update_item_progress`, and
+a blocker leave `git status` clean while each state is still read; the
+file has no state fields; a rename still writes; an older file's status is
+read and a file without a claim keeps it), and the plan-file specs
+(`plan-export`, `manifest-conflicts`, `checkout-identity`,
+`next-up-and-sync`, `cdev-*`, `plan-doc-guard` and others) green.
 
 ### 2026-10-01: C2.4a — every item a state with its source
 

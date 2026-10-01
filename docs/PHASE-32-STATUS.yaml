@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — C2.4a: every item a state with its source, and one status view"
-  status: "C2.3 merged (#265); C2.2 and C2.3 done. C2.4 refined into a (read side) and b (no state change writes a file). C2.4a built: every item's state with its source — git or the review host for an item on a branch, the plan itself for everything else in words, with who recorded it; sections sum their tasks; the view (progress counting git merges, waiting on someone, in progress, lineage ticket → plan → PR only from a host) as GET /api/plans/:uid/status, the phone's plan.status and get_plan's state; window header chip, tree row hovers, the item page's State line, the phone's Status card. Unit (1746), harness (plan-status 6), browser (plan-status, git-state specs), phone (plan-status 2) green locally"
-  next: "Merge C2.4a when CI is green; then C2.4b on feat/phase-32-c2-4b-no-state-writes (state leaves the plan's files; a state-only change writes nothing; unchanged files not rewritten)"
+  step: "Wave 2 — C2.4b: no state change writes a file"
+  status: "C2.4a merged (#266). C2.4b built: an item's file carries no status, progress, blocked reason, claim, progress report or updatedAt; a state-only update and a claim schedule no write-through; unchanged files are not rewritten; import still reads an older file's status and leaves this machine's claim alone. Unit, harness (plan-state-writes 4, task-context, the plan-file specs) green locally"
+  next: "Merge C2.4b when CI is green; then C2.5 (ticket refs in the plan files; approvals as signed statements), refined first"
   blockers: none
   updated: 2026-10-01
 sections:

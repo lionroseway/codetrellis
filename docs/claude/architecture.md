@@ -126,6 +126,14 @@ the item page's State line), the phone's `plan.status` and `get_plan`'s
 `state`. Nothing is written: there is no STATUS.md, and reading writes no
 file.
 
+C2.4b keeps state out of the plan's files too. `serializeItem` writes no
+`status`, `progressPercent`, `blockedReason`, claim (`assignee*`),
+progress report or `updatedAt`; `updateItem` schedules no write-through for
+an update that changes only those (`isStateOnly`, `shared/lib/item-status.ts`)
+and `claimItem` none at all; `writeFileAtomic` leaves a file alone when its
+content would not change. Import still reads an older file's `status`, and a
+file without a claim or blocked reason leaves this machine's alone.
+
 ## Session persistence & power awareness
 
 CodeTrellis treats long-running agent sessions as first-class — desktops don't sleep while agents are working, and reconnects rehydrate state rather than starting fresh.

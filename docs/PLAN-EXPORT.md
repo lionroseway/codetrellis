@@ -210,6 +210,16 @@ under the nearest exported ancestor.
 
 **Runtime / device-local state** (DB only, NOT exported):
 
+- **An item's state** (Phase 32 C2.4b): its `status`, `progressPercent`,
+  `blockedReason`, who has claimed it (`assignee`, `assigneeType`,
+  `assigneeModel`), its progress reports (comments of kind `progress`) and
+  its `updatedAt`. The item's file says what the task is; its state is read
+  from git, a review host, or this machine's record (C2.4a), so a status
+  change, a claim or progress rewrites no file and a pull carries no churn.
+  A file written before this still carries a `status`, and it is read; a
+  file without a claim leaves this machine's claim alone. A file whose
+  content would not change is not rewritten. Until C3's signed records, a
+  teammate does not see a no-branch task's recorded state.
 - Deviations (re-derived on scan)
 - Trellis snapshots (per-device baseline)
 - Agent sessions (live state)
@@ -260,6 +270,9 @@ acceptanceCriteria: |
 ```
 
 ### `tasks/001-add-jwt-types.yaml`
+
+A legacy (V1) task file. A plan item's file under `items/` has the same
+spirit but carries no state (§9): no `status`, `assignee` or progress.
 
 ```yaml
 uid: 7c8d9e0f-aaaa-bbbb-cccc-ddddeeeeffff
