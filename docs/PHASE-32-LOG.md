@@ -19,13 +19,13 @@
 |---|---|
 | **Stage / step** | Wave 2 — C3.3: signed task-state records |
 | **Status** | B8.3a merged (#275). Track D (the codetrellis CLI) added after C3, the owner's decision. C3.3 built: each record is signed when written, with git's SSH key when git signing is set up, else with a key the app makes for the device, introduced once in .codetrellis/keys; a teammate's key is trusted once in Settings → Shared task state after checking its fingerprint; a record that verifies reads "in their signed record", any other "unverified" with why; trusting a key relabels that device's records without a new change. Unit (signing 8, record, item-status), harness (task-records 19, git key and device key), browser (shared-task-state 8) green locally |
-| **In flight** | B8.3 in review (#275) on `feat/phase-32-b8-3-grounding-overlay`; C3.3 building on `feat/phase-32-c3-3-signed-records` |
-| **Last merged** | B8.2 (#274, `deee2c9`) |
+| **In flight** | C3.3 building on `feat/phase-32-c3-3-signed-records` |
+| **Last merged** | B8.3a (#275, `5e2269f`) |
 | **Next action** | Merge C3.3 when green; then C3.4 (a linked plans folder: OneDrive and SharePoint first), C3.5, C3.6; then D1 (the CLI) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `deee2c9`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `5e2269f`, with open PRs from GitHub.
 
 ---
 
@@ -202,8 +202,8 @@
 - [ ] B8 Grounding, refined in EXECUTION §5: — building
   - [x] B8.1 Per-test results: JUnit read test by test, each test's last result kept; report_tests, get_test_results, GET /api/tests; a test criterion names its failing tests (#273)
   - [x] B8.2 Tests mapped to code through imports: ✓ passing, ✗ failing, ○ no tests, ⚠ tests older than the code, per file (#274)
-  - [ ] B8.3 Where it shows, split in two: (#275) — in review
-    - [ ] B8.3a The grounding overlay on the graph: ✗ ⚠ ✓ ○ on files, summed on clusters, the same answer as the Inspector
+  - [ ] B8.3 Where it shows, split in two: — building
+    - [x] B8.3a The grounding overlay on the graph: ✗ ⚠ ✓ ○ on files, summed on clusters, the same answer as the Inspector (#275)
     - [ ] B8.3b A grounding line on each task: "3 criteria · 2 grounded · 1 waiting on a person" (window, phone, get_brief)
   - [ ] B8.4 Replay of grounding, and the J1 done-when: done on stale tests is refused and says so
 - [ ] B9 Play-forward (code, and the materials tasks rely on)
