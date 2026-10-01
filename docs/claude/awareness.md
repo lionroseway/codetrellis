@@ -362,6 +362,49 @@ the signal behind it, and the wait across plans.
   shows each overlap's detail on the row, not only on hover. Harness:
   `stack-materials.test.ts`; browser: `stack-materials.spec.ts`.
 
+## Play-forward: where the plans will meet (B9, G3)
+
+The stack's overlap bands (B6.3) are today's. Play-forward is what the plans
+say they will do: every active plan's unfinished tasks projected at once, and
+where two or more will meet if they go ahead. Nothing in it exists yet.
+
+- **The data** (B9.1, `services/play-forward.ts`, `shared/types/play-forward.ts`).
+  Files by verb, functions, and the materials the tasks' briefs list, each
+  with its plan and task. A planned overlap is two or more plans on one file,
+  function or material: "◇ planned overlap: JIRA-142 and JIRA-150 both plan
+  to change invoice.ts". The same function, or a delete or move against a
+  change, is serious; the same file or material is mild. Tasks that already
+  wait on one another make it `sequenced`. Its `id` is the same for the same
+  subject and plans, so a decision carries over. Computed on read, never
+  stored. `/api/play-forward`, `get_play_forward` (read) and the phone's
+  `playForward.summary` (read) return the same object.
+- **The window** (B9.2, `PlayForwardBar.tsx`, `lib/play-forward.ts`). "Play
+  the plans forward", beside Replay and in the Stack tab: the bar, dashed
+  planned files on the graph, a dashed "◇ planned overlap" zone on the
+  cluster that holds each one, and "◇ will overlap …" under each plan in the
+  stack. Replay and play-forward are one clock: entering one leaves the other.
+- **Deciding one** (B9.3a, `services/planned-overlap-actions.ts`). A person
+  re-sequences the plans (the one chosen goes first, and the other plans'
+  tasks in it wait on its tasks through ordinary dependencies, so every
+  "what is next" door holds them back; a choice that would make tasks wait on
+  each other is refused), tells the agents (each session holding a task in it
+  is told once, on its next call, "── CodeTrellis: planned overlap ──"), or
+  leaves it (drawn quieter). Each decision is kept by the overlap's id with
+  who, from the transport, and when. `POST
+  /api/play-forward/overlaps/:id/(resequence|tell|leave)`. No MCP tool
+  decides.
+- **On approval** (B9.3b). Approving a plan into a planned overlap that no one
+  has answered (not sequenced, not left) says so in the approval's answer
+  (`plannedOverlaps`, from REST and from the phone's `plan.update`). The
+  Awareness inbox says it once ("Approving JIRA-150 puts it in a planned
+  overlap"), with Play forward and Seen.
+- **The phone** (B9.3b–B9.4, `mobile/app/stack.tsx`, `mobile/lib/play-forward.ts`).
+  The Stack screen opens with "Played forward": the words, the unseen
+  approvals, and each planned overlap with what was last decided and the
+  window's three choices (`playForward.decide`, write, as the phone's
+  person). Each plan's card says where it will meet another. A desktop
+  without play-forward still shows the stack.
+
 ## Conferring: when the spec is wrong (B7, I1)
 
 A plan's spec lives in pages (Object items). When an agent finds one is
@@ -469,6 +512,8 @@ run as a plain `codex` client with no hook and no watcher in
 - **A person's message reaches only the agents in the signal's
   workstreams**, quoted as theirs, and is never shown to an agent as
   another agent's words.
+- **Only a person decides a planned overlap.** An agent reads play-forward
+  and is told; it never re-sequences, tells or leaves one.
 - **Nothing is installed silently.** The skill and the hook follow Add to
   Claude Desktop: a diff first, then only what was ticked, from the app
   window only.
@@ -514,6 +559,12 @@ run as a plain `codex` client with no hook and no watcher in
     is one signal naming both, told once to each agent on its next call,
     said from each task's side in its brief, and one line in the digest on
     the desktop and the phone;
+  - `play-forward`, `planned-overlap-actions`, `play-forward-approval`;
+  - `play-forward-g3`, the G3 "done when": two approved plans that both plan
+    to change one file. The window, an MCP client and the phone agree on
+    play-forward and on the stack. Re-sequencing from the window makes the
+    later plan's task wait, everywhere. Telling both agents from the phone
+    reaches each once, and the decisions read the same on all three;
   - `awareness-m5`, the M5 "done when": billing-v2 changes a function
     checkout-fix imports. Its review (JSON and markdown) and its PR body say
     so, and the queue puts it first with that reason, for three different

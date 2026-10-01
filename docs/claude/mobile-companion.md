@@ -247,8 +247,16 @@ a paired phone in `stack.test.ts`.
   in a planned overlap that was not sequenced or left, as `PUT
   /api/plans/:uid` does.
 
-The harness checks all three from a paired phone in
-`play-forward-approval.test.ts`; the phone's screen is B9.4.
+- **`stack`** (B9.4) opens with **Played forward** when any planned overlap
+  exists: the words, the approvals not yet marked seen, and each overlap
+  with what was last decided and Re-sequence (pick which goes first), Tell
+  both agents, Fine, leave it. Each plan's card says "◇ will overlap
+  JIRA-150: charge.ts". A decision reloads the stack, because re-sequencing
+  changes what waits.
+
+The harness checks the RPCs from a paired phone in
+`play-forward-approval.test.ts` and `play-forward-g3.test.ts`;
+`tests/phone/stack.spec.ts` photographs the screen.
 
 ### A plan's status (Phase 32 C2.4)
 
