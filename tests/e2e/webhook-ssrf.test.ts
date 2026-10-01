@@ -138,11 +138,15 @@ test.describe('20 — webhook SSRF', () => {
     const h = await setupHarness('webhook-ssrf-control');
     const listener = await trap();
     try {
-      await h.client.scanProject(h.fixture.projectPath);
       await h.client.raw('PUT', '/api/settings', {
         webhooks: { allowedHosts: ['127.0.0.1'], allowLoopback: true },
       });
 
+      // The rule is in the project before it is opened, as the refusals above
+      // have it. Written after the scan, the scan had already cached the
+      // project's config as empty, and delivery hung on the config watcher
+      // noticing a file in a folder that did not exist yet: on a loaded CI
+      // runner it sometimes did not, and nothing was ever sent.
       const configDir = path.join(h.fixture.projectPath, '.codetrellis');
       fs.mkdirSync(configDir, { recursive: true });
       fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({
@@ -154,6 +158,7 @@ test.describe('20 — webhook SSRF', () => {
           }],
         },
       }, null, 2));
+      await h.client.scanProject(h.fixture.projectPath);
 
       const agent = await h.spawnAgent({ agentType: 'claude-code' });
       const plan = JSON.parse((await agent.callTool('create_plan', {
