@@ -240,9 +240,15 @@ test.describe.serial('A shared plans folder, end to end', () => {
     expect(r2.text).toContain('EMEA,131');
 
     sync(sam, dana);
+    // Settled, not just raised: until Dana's app has hashed the export the
+    // sync just brought, "current" is still last week's, and the same split
+    // is first reported the other way round (CI caught that state).
     let found: Signal[] = [];
-    await expect.poll(async () => (found = (await signals(dana)).filter((s) => s.subject.material)).map((s) => s.kind), { timeout: 20_000 }).toEqual(['version-split']);
-    expect(found[0].subject).toMatchObject({ material: 'plans://Materials/sales.csv', readVersions: { [`task:${figures}`]: 'current', [`task:${report}`]: 'earlier' } });
+    await expect.poll(async () => {
+      found = (await signals(dana)).filter((s) => s.subject.material);
+      return found.map((s) => [s.kind, s.subject.readVersions]);
+    }, { timeout: 30_000 }).toEqual([['version-split', { [`task:${figures}`]: 'current', [`task:${report}`]: 'earlier' }]]);
+    expect(found[0].subject).toMatchObject({ material: 'plans://Materials/sales.csv' });
     // Sam's key is trusted here, so his read is named as his.
     expect(found[0].summary).toContain('“Check the figures” (Sam Lee)');
     expect(found[0].summary).toContain('“Check the figures” has the current one');
