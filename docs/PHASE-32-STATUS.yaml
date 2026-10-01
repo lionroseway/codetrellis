@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — C3.4c: materials by their place in the plans folder"
-  status: "C3.4b merged (#281). C3.4c built: a material in the linked plans folder is stored as plans://<place> and read at each device's own path; roles travel in plan files; imported materials are watched; three readers no longer open a file still in the cloud. Unit (material-place 2), harness (plans-folder 18; related 86) green locally"
-  next: "Merge C3.4c when green; then C3.5 (teammates' material reads, on by default once a folder is shared), C3.6 (the C3 done-when); then D1 (the CLI)"
+  step: "Wave 2 — C3.5: teammates' material reads"
+  status: "C3.4c in review (#282). C3.5 built: each app writes which version of each material its tasks read as signed records beside the task-state records, reads its teammates', and the material signals name whose read it was; on by default while task state is shared, off in Settings. Unit (1803), harness (material-reads 7) and browser (shared-task-state 9) green locally"
+  next: "Merge C3.4c, then C3.5 when green; then C3.6 (the C3 done-when); then D1 (the CLI)"
   blockers: "None"
   updated: 2026-10-01
 sections:

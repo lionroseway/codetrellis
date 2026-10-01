@@ -13,6 +13,10 @@
  * fingerprint with him and trusts it, and his record on the report now reads
  * "in their signed record", with whose key on hover.
  *
+ * C3.5: below the switch, teammates' material reads are on by default while
+ * task state is shared, and say where they go and whose are here. Dana
+ * turns them off: the section says what stays on this device.
+ *
  * The answers are served (the backend's side, two machines and git between
  * them, with the grant rule, is tests/e2e/task-records.test.ts).
  */
@@ -39,26 +43,40 @@ const samKey = (trusted: boolean) => ({
 });
 const NOT_TRUSTED = "it is signed with Sam Lee's device key, which you have not trusted yet";
 
-const state = (enabled: boolean, trusted = false) => ({
+const READS_ON = 'On: which version of each material your tasks read is written to .codetrellis/reads, and teammates\' reads are compared with yours. Reads from Sam Lee are here.';
+const READS_OFF = 'Off: which version of each material your tasks read stays on this device, and teammates\' reads are not used.';
+const reads = (sharing: boolean, on: boolean | null) => {
+  const enabled = sharing && on !== false;
+  return {
+    enabled, chosen: on !== null, changedAt: on === null ? null : Date.now(), changedBy: on === null ? null : 'dana@acme.test',
+    mine: enabled ? 4 : 0, teammates: enabled ? 3 : 0, people: enabled ? ['Sam Lee'] : [],
+    says: !sharing ? 'Shared with task state: turn that on first.' : enabled ? READS_ON : READS_OFF,
+  };
+};
+
+const state = (enabled: boolean, trusted = false, readsOn: boolean | null = null) => ({
   project: '/work/board-pack', enabled, changedAt: enabled ? Date.now() : null, changedBy: enabled ? 'dana@acme.test' : null,
   writer: '3f9c2e1a7b4d5e6f', name: 'Dana Ortiz', records: 3, writers: 2, says: enabled ? ON : OFF,
   signing: SIGNING, keys: enabled ? [samKey(trusted)] : [],
   checked: enabled
     ? (trusted ? { verified: 2, unverified: 0, reasons: [] } : { verified: 0, unverified: 2, reasons: [{ why: NOT_TRUSTED, records: 2 }] })
     : { verified: 0, unverified: 0, reasons: [] },
+  materialReads: reads(enabled, readsOn),
 });
 
 async function serve(page: Page, start = { enabled: false }) {
   let enabled = start.enabled;
   let trusted = false;
+  let readsOn: boolean | null = null;
   const sent: unknown[] = [];
   await page.route('**/api/shared-task-state?*', async (route) => {
     if (route.request().method() === 'PUT') {
-      const body = route.request().postDataJSON() as { enabled: boolean };
+      const body = route.request().postDataJSON() as { enabled?: boolean; materialReads?: boolean };
       sent.push(body);
-      enabled = body.enabled;
+      if (body.enabled !== undefined) enabled = body.enabled;
+      if (body.materialReads !== undefined) readsOn = body.materialReads;
     }
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(state(enabled, trusted)) });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(state(enabled, trusted, readsOn)) });
   });
   await page.route('**/api/shared-task-state/keys', async (route) => {
     const body = route.request().postDataJSON() as { trust: boolean };
@@ -101,6 +119,35 @@ test.describe('Shared task state', () => {
     fs.mkdirSync(OUT, { recursive: true });
     await dialog.screenshot({ path: path.join(OUT, 'shared-task-state-settings.png') });
     expect(sent).toEqual([{ enabled: true }]);
+  });
+
+  test('C3.5: teammates\' material reads are on by default while task state is shared, and Dana can turn them off', async ({ page }) => {
+    const sent = await serve(page);
+    await page.setViewportSize({ width: 1280, height: 1000 });
+    await gotoWithProject(page);
+    const { dialog, section } = await openSection(page);
+    const box = section.getByTestId('shared-reads');
+    // Off with task state: nothing to switch yet.
+    await expect(box.getByTestId('shared-reads-says')).toHaveText('Shared with task state: turn that on first.');
+    await expect(box.getByTestId('shared-reads-toggle')).toHaveCount(0);
+
+    await section.getByTestId('shared-state-toggle').click();
+    await expect(box.getByTestId('shared-reads-says')).toHaveText(READS_ON);
+    await expect(box).toContainText('On by default while task state is shared.');
+    await expect(box.getByTestId('shared-reads-counts')).toHaveText('4 versions read here are recorded; 3 reads from teammates are compared with yours.');
+    const toggle = box.getByTestId('shared-reads-toggle');
+    await expect(toggle).toHaveText('Stop sharing reads');
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    fs.mkdirSync(OUT, { recursive: true });
+    await dialog.screenshot({ path: path.join(OUT, 'shared-task-state-reads.png') });
+
+    await toggle.click();
+    await expect(box.getByTestId('shared-reads-says')).toHaveText(READS_OFF);
+    await expect(toggle).toHaveText('Share reads');
+    await expect(box.getByTestId('shared-reads-counts')).toHaveCount(0);
+    await expect(box).not.toContainText('On by default');
+    await dialog.screenshot({ path: path.join(OUT, 'shared-task-state-reads-off.png') });
+    expect(sent).toEqual([{ enabled: true }, { materialReads: false }]);
   });
 
   test('C3.3: the section says how this device signs, and Dana trusts Sam\'s key after checking its fingerprint', async ({ page }) => {

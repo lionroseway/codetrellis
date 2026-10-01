@@ -37,8 +37,11 @@ export interface MaterialTaskInput {
   title: string;
   /** Paths in its brief: its own recorded files and its plan's pages' materials. */
   brief: string[];
-  /** Its latest read of each material, with the hash it saw and the task that holds the file. */
-  reads: Array<{ path: string; sha256: string | null; owner: string; ownerTitle: string }>;
+  /**
+   * Its latest read of each material, with the hash it saw and the task that
+   * holds the file; `by` names the teammate when that read was theirs (C3.5).
+   */
+  reads: Array<{ path: string; sha256: string | null; owner: string; ownerTitle: string; by?: string | null }>;
   /** Files it records as outputs. */
   outputs: string[];
   /** Parts of materials it cites, with the file's hash when cited and whether a person signed that criterion off. */
@@ -75,6 +78,12 @@ export function computeMaterialSignals(tasks: readonly MaterialTaskInput[], curr
     const now = current[m] ?? null;
     const readers = ordered.filter((t) => t.reads.some((r) => r.path === m));
     const lastHash = (t: MaterialTaskInput) => t.reads.find((r) => r.path === m)?.sha256 ?? null;
+    // Tasks named with the teammate whose read it was, when it was one (C3.5):
+    // “Board report” (Alex Kim). Only in the words: the shape stays the tasks.
+    const readersNamed = (ids: string[]) => listed(ids.map((id) => {
+      const by = ordered.find((t) => t.id === id)?.reads.find((r) => r.path === m)?.by;
+      return `“${title.get(id) ?? id}”${by ? ` (${by})` : ''}`;
+    }));
 
     // ── contract ──────────────────────────────────────────────────────
     // Cited against a version that is no longer there.
@@ -104,7 +113,7 @@ export function computeMaterialSignals(tasks: readonly MaterialTaskInput[], curr
         ? `; ${readers.length === 2 ? 'neither' : 'none'} has the current one`
         : `; ${named(onCurrent)} ${onCurrent.length === 1 ? 'has' : 'have'} the current one`;
       emit('version-split', 'medium', `material:${m}`, { material: m, readVersions }, ids,
-        `${named(ids)} read different versions of \`${m}\`${tail}`);
+        `${readersNamed(ids)} read different versions of \`${m}\`${tail}`);
       continue;
     }
 
@@ -112,7 +121,7 @@ export function computeMaterialSignals(tasks: readonly MaterialTaskInput[], curr
     if (now !== null && readers.length >= 2 && readers.every((t) => lastHash(t) !== null && lastHash(t) !== now)) {
       const ids = readers.map((t) => t.id);
       emit('stale-base', 'low', `material:${m}`, { material: m }, ids,
-        `\`${m}\` changed after ${named(ids)} read it, and ${ids.length === 2 ? 'neither' : 'none'} has read it since`);
+        `\`${m}\` changed after ${readersNamed(ids)} read it, and ${ids.length === 2 ? 'neither' : 'none'} has read it since`);
     }
   }
 

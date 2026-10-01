@@ -85,7 +85,7 @@ import { forgetHostReads } from './services/review-host/host-state';
 import { forgetReviewHostToken, getReviewHost, ReviewHostError, saveReviewHostToken, setReviewHost } from './services/review-host/switch';
 import { listTestReports, listTestResults, testsSummary } from './services/tests/test-results';
 import { groundingMap, groundingOf, NotAFileError } from './services/tests/grounding';
-import { getSharedTaskState, keepMyState, readAndTell, setRecordAppliedListener, setSharedTaskState, setSplitChangedListener, startRecordWatcher, stopRecordWatcher, trustTeammateKey, writeRecordFor } from './services/task-records/shared-state';
+import { getSharedTaskState, keepMyState, readAndTell, setRecordAppliedListener, setSharedMaterialReads, setSharedTaskState, setSplitChangedListener, startRecordWatcher, stopRecordWatcher, trustTeammateKey, writeRecordFor } from './services/task-records/shared-state';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
 import { buildPlaybackSequence } from './services/playback-service';
 import * as commentService from './services/comment-service';
@@ -2512,9 +2512,16 @@ app.put('/api/shared-task-state', async (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   const enabled = req.body?.enabled;
-  if (typeof enabled !== 'boolean') { res.status(400).json({ error: 'enabled must be true or false' }); return; }
+  const materialReads = req.body?.materialReads;
+  if (enabled !== undefined && typeof enabled !== 'boolean') { res.status(400).json({ error: 'enabled must be true or false' }); return; }
+  if (materialReads !== undefined && typeof materialReads !== 'boolean') { res.status(400).json({ error: 'materialReads must be true or false' }); return; }
+  if (enabled === undefined && materialReads === undefined) { res.status(400).json({ error: 'enabled or materialReads (true or false) is required' }); return; }
   if (enabled && !mayGrant(req)) { res.status(403).json({ error: `Only you can share task state through the project's files — in the CodeTrellis app, ${SHARED_STATE_WHERE}.` }); return; }
-  const status = setSharedTaskState(projectRoot, enabled, changedBy(req));
+  // C3.5 — teammates' material reads, a separate switch: on is the person's too.
+  if (materialReads && !mayGrant(req)) { res.status(403).json({ error: `Only you can share which versions of materials your tasks read — in the CodeTrellis app, ${SHARED_STATE_WHERE}.` }); return; }
+  let status = getSharedTaskState(projectRoot);
+  if (enabled !== undefined) status = setSharedTaskState(projectRoot, enabled, changedBy(req));
+  if (materialReads !== undefined) status = setSharedMaterialReads(projectRoot, materialReads, changedBy(req));
   // A change made right after this answer writes the first record: the
   // watcher must already be watching where it goes.
   if (enabled) await startRecordWatcher(projectRoot);

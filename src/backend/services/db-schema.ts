@@ -321,6 +321,33 @@ export const SCHEMA_PLANS_CORE = `
     confirmed_by TEXT NOT NULL
   );
 
+  -- Phase 32 C3.5: teammates' material reads. The switch, per project on this
+  -- device: no row means on whenever task state is shared (the owner's
+  -- choice); a row says the person turned it off, or back on. And each
+  -- teammate's read record read here, with whether it verified (C3.3); none
+  -- of this device's own, which material_reads already has.
+  CREATE TABLE IF NOT EXISTS shared_material_reads (
+    project_root TEXT PRIMARY KEY,
+    enabled INTEGER NOT NULL,
+    changed_at INTEGER NOT NULL,
+    changed_by TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS teammate_material_reads (
+    writer TEXT NOT NULL,
+    item_uid TEXT NOT NULL,
+    counter INTEGER NOT NULL,
+    plan_uid TEXT NOT NULL,
+    name TEXT NOT NULL,
+    reader TEXT NOT NULL,
+    attachment_uid TEXT,
+    path TEXT NOT NULL,
+    sha256 TEXT,
+    at INTEGER NOT NULL,
+    verdict TEXT,
+    PRIMARY KEY (writer, item_uid, counter)
+  );
+  CREATE INDEX IF NOT EXISTS idx_teammate_material_reads_item ON teammate_material_reads(item_uid, at);
+
   CREATE TABLE IF NOT EXISTS task_record_device_key (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     public_key TEXT NOT NULL,

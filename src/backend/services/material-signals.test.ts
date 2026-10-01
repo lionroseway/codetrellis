@@ -80,6 +80,17 @@ describe('material signals', () => {
     assert.match(computeMaterialSignals([report, pack], { [SALES]: 'c'.repeat(64) })[0].summary, /neither has the current one$/);
   });
 
+  test('a teammate\'s read is named with whose it was, and the shape stays the tasks (C3.5)', () => {
+    const report = task('report', 'Q3 report', { reads: [{ ...read(V1), by: 'Alex Kim' }] });
+    const pack = task('pack', 'Board pack', { reads: [read(V2)] });
+    const [s] = computeMaterialSignals([report, pack], { [SALES]: V2 });
+    assert.equal(s.summary, '“Board pack”, “Q3 report” (Alex Kim) read different versions of `data/sales-2026.xlsx`; “Board pack” has the current one');
+    const [plain] = computeMaterialSignals([task('report', 'Q3 report', { reads: [read(V1)] }), pack], { [SALES]: V2 });
+    assert.equal(s.id, plain.id);
+    const stale = computeMaterialSignals([report, task('pack', 'Board pack', { reads: [{ ...read(V1), by: 'Sam Lee, unverified' }] })], { [SALES]: V2 })[0];
+    assert.equal(stale.summary, '`data/sales-2026.xlsx` changed after “Board pack” (Sam Lee, unverified), “Q3 report” (Alex Kim) read it, and neither has read it since');
+  });
+
   test('stale-base: it changed after both read it, and neither read it since', () => {
     const report = task('report', 'Q3 report', { reads: [read(V1)] });
     const pack = task('pack', 'Board pack', { reads: [read(V1)] });

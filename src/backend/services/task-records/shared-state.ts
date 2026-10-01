@@ -50,6 +50,10 @@ import {
   type RecordedState, type SignedPart, type TaskRecord,
 } from './record';
 import {
+  forgetReadsBy, forgetTeammateReads, materialReadsChoice, readCounts, readTeammateReads, READS_DIR, setMaterialReadsChoice, writeReadRecord,
+  type MaterialReadsChoice,
+} from './material-reads';
+import {
   checkContext, decideKey, listTeammateKeys, readKeyIntroductions, signRecord, signingWay, verifyTaskRecord,
   type CheckContext, type SigningWay, type TeammateKey, type Verdict,
 } from './trust';
@@ -78,6 +82,8 @@ export interface SharedTaskStateStatus {
   keys: TeammateKey[];
   /** Teammates' records, by whether they verified, and why the others did not. */
   checked: { verified: number; unverified: number; reasons: Array<{ why: string; records: number }> };
+  /** Teammates' material reads (C3.5): on by default while task state is shared. */
+  materialReads: MaterialReadsChoice & { mine: number; teammates: number; people: string[]; says: string };
 }
 
 // ── The switch ───────────────────────────────────────────────────────────
@@ -162,7 +168,65 @@ export function getSharedTaskState(projectRoot: string): SharedTaskStateStatus {
     signing: signingWay(projectRoot),
     keys: listTeammateKeys(projectRoot),
     checked: checkedCounts(projectRoot),
+    materialReads: materialReadsStatus(projectRoot, enabled, home),
   };
+}
+
+function materialReadsStatus(projectRoot: string, sharing: boolean, home: string | null): SharedTaskStateStatus['materialReads'] {
+  const choice = materialReadsChoice(projectRoot, sharing);
+  const n = readCounts(projectRoot, home, writerId());
+  const people = n.people.length ? n.people.join(', ') : null;
+  const says = !sharing
+    ? 'Shared with task state: turn that on first.'
+    : !choice.enabled
+      ? 'Off: which version of each material your tasks read stays on this device, and teammates\' reads are not used.'
+      : `On: which version of each material your tasks read is written to ${READS_DIR}, and teammates' reads are compared with yours.${people ? ` Reads from ${people} are here.` : ''}`;
+  return { ...choice, ...n, says };
+}
+
+/** Whether a project's tasks' material reads are shared (C3.5). */
+export function isSharingMaterialReads(projectRoot: string): boolean {
+  return materialReadsChoice(projectRoot, isSharingTaskState(projectRoot)).enabled;
+}
+
+/**
+ * Turn sharing material reads on or off for a project, on this device. Off
+ * forgets teammates' reads here, so no signal rests on them; on reads them.
+ * The caller checks that turning it on is the person's.
+ */
+export function setSharedMaterialReads(projectRoot: string, enabled: boolean, by: string): SharedTaskStateStatus {
+  setMaterialReadsChoice(projectRoot, enabled, by);
+  if (!enabled) forgetTeammateReads(projectRoot);
+  else {
+    const home = plansHome(projectRoot);
+    if (home && isSharingTaskState(projectRoot)) readTeammateReads(projectRoot, home, writerId());
+  }
+  splitsChanged(projectRoot);
+  return getSharedTaskState(projectRoot);
+}
+
+/**
+ * Write this device's record of a task reading a material (C3.5), when its
+ * project shares material reads: which file, as stored, and which version.
+ */
+export function shareMaterialRead(itemUid: string, attachmentUid: string, by: { author: string; authorType: string }): string | null {
+  const item = getItem(itemUid);
+  if (!item) return null;
+  const root = sharingRootOf(item.planUid);
+  if (!root || !isSharingMaterialReads(root)) return null;
+  const home = plansHome(root);
+  if (!home) return null;
+  const att = getDb().exec('SELECT value, sha256, kind FROM attachments WHERE uid = ?', [attachmentUid])[0]?.values[0];
+  if (!att || String(att[2]) !== 'file_ref') return null;
+  try {
+    return writeReadRecord(
+      { projectRoot: root, home, me: writerId(), name: writerName(root) },
+      { plan: item.planUid, item: item.uid, by, material: String(att[0]), attachment: attachmentUid, sha256: att[1] == null ? null : String(att[1]) },
+    );
+  } catch (err) {
+    console.warn('[TaskRecords] could not write a material-read record:', (err as Error).message);
+    return null;
+  }
 }
 
 /** Turn sharing on or off for this project, on this device. Turning on reads what is already there. */
@@ -178,6 +242,8 @@ export function setSharedTaskState(projectRoot: string, enabled: boolean, by: st
     readProjectRecords(projectRoot);
   } else {
     stopRecordWatcher(projectRoot);
+    // Teammates' reads came with sharing (C3.5): no signal rests on them now.
+    if (forgetTeammateReads(projectRoot)) splitsChanged(projectRoot);
   }
   return getSharedTaskState(projectRoot);
 }
@@ -402,6 +468,8 @@ export function readProjectRecords(projectRoot: string, onlyPlan?: string, onApp
       onApplied?.(applied);
     }
   }
+  // Teammates' material reads (C3.5), when they are shared too.
+  if (isSharingMaterialReads(projectRoot) && readTeammateReads(projectRoot, home, me, onlyPlan) > 0) changed = true;
   if (changed) splitsChanged(projectRoot);
   return result;
 }
@@ -416,6 +484,14 @@ export function readProjectRecords(projectRoot: string, onlyPlan?: string, onApp
 export function trustTeammateKey(writer: string, fingerprint: string, trust: boolean, by: string): { key: TeammateKey; rechecked: string[] } | null {
   const key = decideKey(writer, fingerprint, trust, by);
   if (!key) return null;
+  // Its material reads are read again, so who read them is checked again (C3.5).
+  forgetReadsBy(writer);
+  const me = writerId();
+  for (const v of getDb().exec('SELECT project_root FROM shared_task_state WHERE enabled = 1')[0]?.values ?? []) {
+    const root = String(v[0]);
+    const home = plansHome(root);
+    if (home && isSharingMaterialReads(root) && readTeammateReads(root, home, me) > 0) splitsChanged(root);
+  }
   const rechecked: string[] = [];
   for (const h of headsBy(writer)) {
     const item = getItem(h.itemUid);
@@ -460,9 +536,11 @@ export function startRecordWatcher(projectRoot: string): Promise<void> {
   const home = plansHome(projectRoot);
   if (!home) return Promise.resolve();
   const dir = path.join(home, RECORDS_DIR);
-  try { fs.mkdirSync(dir, { recursive: true }); } catch { return Promise.resolve(); }
+  // Teammates' material reads arrive beside their records (C3.5).
+  const reads = path.join(home, READS_DIR);
+  try { fs.mkdirSync(dir, { recursive: true }); fs.mkdirSync(reads, { recursive: true }); } catch { return Promise.resolve(); }
   let timer: NodeJS.Timeout | null = null;
-  const watcher = chokidar.watch(dir, {
+  const watcher = chokidar.watch([dir, reads], {
     ignoreInitial: true, persistent: true, depth: 3, followSymlinks: false,
     awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },
   });
