@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B9 refined, B9.1: playing the plans forward (the data) |
-| **Status** | B8 done (#292, #293). B9 refined into four parts; B9.1 built: services/play-forward.ts projects every active plan's unfinished tasks (files, functions, materials) with ◇ planned overlaps (mild or serious, sequenced when their tasks already wait), GET /api/play-forward and get_play_forward. Unit 5, harness play-forward 5 |
-| **In flight** | B9.1 building on `feat/phase-32-b9-1-play-forward` |
-| **Last merged** | B8.4b (#293, `655c925`) |
-| **Next action** | Merge B9.1 when green; then B9.2 (the window plays forward) |
+| **Stage / step** | Track B — B9.2: the window plays forward |
+| **Status** | B9.1 in review (#294). B9.2 built (stacked on it): Play the plans forward from the Stack tab or the Timeline; the bar says now → all plans done and each planned overlap; the graph draws planned files dashed and planned overlaps as dashed ◇ zones on files and clusters; each plan in the stack says where it will meet another. Unit 3, browser play-forward.spec (shots) |
+| **In flight** | B9.2 in review (#295) on `feat/phase-32-b9-2-play-forward-window` |
+| **Last merged** | B9.1 (#294, `09f2c47`) |
+| **Next action** | Merge B9.1, then B9.2, when green; then B9.3 (acting on a planned overlap) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `655c925`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `09f2c47`, with open PRs from GitHub.
 
 ---
 
@@ -209,8 +209,8 @@
     - [x] B8.4a J1: an agent's "done" on a test report older than the code is refused, and the task says "⚠ tests older than the code" (#292)
     - [x] B8.4b J2: the grounding overlay at a past moment in replay (billing/ from "○ no tests" to "✓ 12 passing") (#293)
 - [ ] B9 Play-forward (code, and the materials tasks rely on) — building
-  - [ ] B9.1 The data: every active plan projected, planned overlaps (file, function, material), REST and get_play_forward — building
-  - [ ] B9.2 The window plays forward: dashed planned changes and ◇ planned overlaps on the graph, in the Stack tab
+  - [x] B9.1 The data: every active plan projected, planned overlaps (file, function, material), REST and get_play_forward (#294)
+  - [ ] B9.2 The window plays forward: dashed planned changes and ◇ planned overlaps on the graph, in the Stack tab (#295) — in review
   - [ ] B9.3 Acting on a planned overlap: re-sequence, tell both agents, leave it; a new one said on approval
   - [ ] B9.4 The phone and the G3 done-when
 - [ ] B10 The record
@@ -418,12 +418,31 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | B8.4a: an agent's `update_item(status: done)` is refused only while a test criterion's report is older than the item's code; other failing checks still do not stop it there, and a person's "done" is never refused | J1 asks exactly this, and it is the one failure an agent cannot argue with: the report is about code that is gone. D1.2 left gating `update_item` on every check as a separate decision; that still stands. A person may close a task for reasons the checks cannot see |
 | 2026-10-01 | B9 is refined into four parts (EXECUTION §5): the data, the window, acting on a planned overlap, the phone and G3. G3's question (run on approval?) is answered by computing play-forward on read, and B9.3 says a new planned overlap when an approval forms one | Computed on read it is never out of date and costs nothing until asked; saying a new one at approval is the moment G3 cares about, without a job that runs |
 | 2026-10-01 | B9.1: only unfinished tasks are projected, and which planned files exist is read from the project's folder through confined-fs, not the held graph | A done task's change is the code now, not the future. The server's graph is the last project scanned (HD1), so it cannot say whether another project's file exists; a planned path is agent-written and is confined like any other |
+| 2026-10-01 | B9.2: replay and play-forward are one clock with two directions; entering one leaves the other, and the canvas's views wait while either is on. The Stack tab shows each plan's "◇ will overlap" lines only while playing forward | Two clocks at once would draw two moments on one graph. The declared overlap band (B6.3) is today's; the ◇ lines are what the plans will do, so they belong to the forward clock, not beside today's |
 | 2026-10-01 | B8.4b: a past moment's overlay is rebuilt from what was kept (each report's cases, and the replay frame's files and imports), not recorded per frame; "older than the code" then compares a file's content with the first frame after its tests ran | Nothing new is taken at each frame, so replay costs nothing until it is used. The first frame after a run is the code the run was about (an agent edits, runs, and its turn ends); the frame before it would call every edit made just before the run stale. This can miss an edit between the run and that frame; it never invents one |
 | 2026-10-01 | B8.4b: a teammate's run is shown live only, and the answer says so | Only each device's latest run is kept (D1.5a) and nothing records when it arrived here, so it cannot be placed at a past moment honestly |
 | 2026-10-01 | B8.3b: one grade per criterion, from its state and the criterion loop's own checks, in a fixed order (changed since and sent back before what its checks say; a judgement waits on a person until approved); the line lists only the grades there are | One grader means the window, the phone and an agent's brief can never disagree about a task; reusing check_criterion's checks means \"grounded\" is exactly what an agent's own check would say. A line of zeroes is noise |
 ---
 
 ## Entries
+
+### 2026-10-01: B9.2 — the window plays forward
+- **Journey.** Two plans in the sample app both plan to change validators.ts;
+  one also creates currency.ts. In the Stack tab Sam presses "Play the plans
+  forward". The bar reads "◇ Playing forward · now → all plans done",
+  "Planned by 2 active plans · 1 file to change, 1 to create · 1 planned
+  overlap · nothing here exists yet", and the overlap in words; clicking it
+  shows the file. The graph draws currency.ts as a new file and the
+  `shared` cluster as a dashed "◇ planned overlap" zone; the canvas says
+  nothing dashed exists yet. Each plan in the stack says "◇ will overlap
+  E2E B9 Currency: validators.ts". The views wait; Back to now puts
+  everything back.
+- **Built.** `stores/play-forward-store.ts`, `lib/play-forward.ts`,
+  `PlayForwardBar.tsx` (bar and start), `PlannedOverlapMark.tsx` on file and
+  cluster nodes, the canvas's graph and note, the Stack tab's lines.
+- **Tests.** Unit `lib/play-forward.test.ts` (3). Browser
+  `plan/play-forward.spec.ts` (shots), twice, with `stack-tab.spec.ts` and
+  `agent/replay.spec.ts` (9 each run).
 
 ### 2026-10-01: B9 refined; B9.1 — playing the plans forward (the data)
 - **Journey.** Sam's project has four active plans and a finished one.

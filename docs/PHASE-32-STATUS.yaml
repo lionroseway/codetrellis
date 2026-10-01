@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track B — B9 refined, B9.1: playing the plans forward (the data)"
-  status: "B8 done (#292, #293). B9 refined into four parts; B9.1 built: services/play-forward.ts projects every active plan's unfinished tasks (files, functions, materials) with ◇ planned overlaps (mild or serious, sequenced when their tasks already wait), GET /api/play-forward and get_play_forward. Unit 5, harness play-forward 5"
-  next: "Merge B9.1 when green; then B9.2 (the window plays forward)"
+  step: "Track B — B9.2: the window plays forward"
+  status: "B9.1 in review (#294). B9.2 built (stacked on it): Play the plans forward from the Stack tab or the Timeline; the bar says now → all plans done and each planned overlap; the graph draws planned files dashed and planned overlaps as dashed ◇ zones on files and clusters; each plan in the stack says where it will meet another. Unit 3, browser play-forward.spec (shots)"
+  next: "Merge B9.1, then B9.2, when green; then B9.3 (acting on a planned overlap)"
   blockers: "None"
   updated: 2026-10-01
 sections:
