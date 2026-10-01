@@ -92,10 +92,35 @@ under tsx in one process.
 - The process handlers and graceful shutdown are `backend/lifecycle.ts`,
   shared with the web entry `backend/index.ts`.
 
-The verbs an agent uses to keep itself on track (D1.2) and to change and
-commit the plan (D1.3) are thin clients over the MCP tools through this
-connector, so each is an agent's call: attributed, capability-checked and in
-the Timeline.
+**Keeping on track (D1.2).** `src/cli/verbs.ts`, over one MCP connection
+(`src/cli/agent.ts`, SSE with the token from the data dir and the folder as
+the connector's binding header), so each verb is an agent's call:
+attributed, capability-checked, held by breakpoints and in the Timeline.
+The CLI names itself `--as`, else `CODETRELLIS_AGENT`, else `claude-code`
+under Claude Code (`CLAUDECODE=1`), else `codetrellis-cli`; the server maps
+the name and refuses the person's.
+
+| Verb | Tool(s) |
+|---|---|
+| `next [--plan]` | `get_next_item` (the only active plan of this repository when not named) |
+| `claim <task>` | `claim_item` |
+| `update <task> --progress N [--note]` | `update_item_progress` |
+| `stuck <task> <why…>` | `set_item_blocked` |
+| `done <task>` | `check_criterion` on each criterion, then `update_item(status: done)`; refused with the failing checks, as `submit_criterion` is |
+| `request <question…> [--options a,b] [--item] [--no-wait] [--timeout s]` | `post_channel_event` (need-decision with options, else need-context), then polls `list_channel_events` for a `steer` responding to it |
+| `brief <task>` / `awareness` | `get_brief` / `get_awareness` |
+| `check <path>` | `check_footprint` + `check_breakpoint` |
+| `report-tests <junit.xml>` | `report_tests` |
+
+A task is a uid or its first characters, as the app quotes it ("task
+6cb8cf43"), resolved within this repository's plans. Words by default,
+`--json` for what the tool said. Exit codes: 0 done, 1 refused, 2 usage,
+3 held (`check`) or not answered yet (`request`). `request` uses a channel
+event rather than `await_user_input` because the question then travels with
+the plan's files: a person who pulls later still sees it, and their steer
+in the app is the answer.
+
+Changing and committing the plan (D1.3) works the same way.
 
 `getMcpSetup` (`/api/mcp/setup`) returns the connector's command, JSON and
 `claude mcp add` line; Settings, the guide and the status bar all copy the

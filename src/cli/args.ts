@@ -110,4 +110,22 @@ export const USAGE = `codetrellis — CodeTrellis for agents, without the deskto
   codetrellis mcp [--data-dir <dir>]
       The stdio MCP connector an agent's config launches. Finds the headless
       backend for the folder it is started in, else the desktop app's.
+
+Keeping on track, as the agent running the command (--as <name> to say
+which; text, or --json):
+
+  codetrellis next [--plan <uid>]              the task to pick up
+  codetrellis claim <task>                     take it
+  codetrellis update <task> --progress N [--note <text>]
+  codetrellis stuck <task> <why…>              blocked, and why
+  codetrellis done <task>                      refused while a criterion's check fails
+  codetrellis request <question…> [--options a,b] [--item <task>] [--no-wait] [--timeout <s>]
+                                               ask the person; waits for their answer
+  codetrellis brief <task>                     what the task needs
+  codetrellis awareness                        what overlaps your work
+  codetrellis check <path>                     before an edit: overlaps, and whether a breakpoint holds it
+  codetrellis report-tests <junit.xml>         tell CodeTrellis how the tests went
+
+  <task> is a uid, or its first characters ("6cb8cf43", "task 6cb8cf43").
+  Exit codes: 0 done, 1 refused, 2 usage, 3 held or not answered yet.
 `;

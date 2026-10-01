@@ -18,6 +18,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { connectorLine, flag, headlessDataDir, parseArgs, USAGE, type Parsed } from './args';
+import { VERBS } from './verbs';
 
 const out = (s: string) => process.stdout.write(s.endsWith('\n') ? s : `${s}\n`);
 const fail = (s: string, code = 2): never => {
@@ -137,6 +138,30 @@ async function mcp(p: Parsed): Promise<void> {
   await import('../backend/mcp/connector/main');
 }
 
+/** A keep-on-track verb, run as the agent that called it (D1.2). */
+async function verb(name: string, p: Parsed): Promise<void> {
+  const { agentName, connectAgent, dataDirFor, NotRunningError } = await import('./agent');
+  const { runVerb, UsageError } = await import('./verbs');
+  const cwd = process.cwd();
+  let agent;
+  try {
+    agent = await connectAgent({ dataDir: dataDirFor(flag(p, 'data-dir'), cwd, process.env), name: agentName(flag(p, 'as'), process.env), cwd });
+  } catch (err) {
+    if (err instanceof NotRunningError) fail(err.message, 1);
+    throw err;
+  }
+  try {
+    const { out: text, code } = await runVerb(name, agent, p, cwd);
+    if (text) out(text);
+    process.exitCode = code;
+  } catch (err) {
+    if (err instanceof UsageError) { process.stderr.write(`codetrellis: ${err.message}\n`); process.exitCode = 2; }
+    else throw err;
+  } finally {
+    await agent.close();
+  }
+}
+
 /** This CLI's launcher, as an agent's config names it. */
 function binPath(): string {
   return path.resolve(__dirname, '..', '..', 'bin', 'codetrellis.mjs');
@@ -152,7 +177,9 @@ async function main(): Promise<void> {
     case 'serve': return serve(p);
     case 'scan': return scanOnce(p);
     case 'mcp': return mcp(p);
-    default: fail(`unknown command "${p.command}". Run codetrellis --help.`);
+    default:
+      if (VERBS.has(p.command)) return verb(p.command, p);
+      fail(`unknown command "${p.command}". Run codetrellis --help.`);
   }
 }
 

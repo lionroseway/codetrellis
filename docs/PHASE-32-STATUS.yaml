@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track D — D1.1: `codetrellis serve` and `scan`"
-  status: "C3 done (#271–#284). D1.1 built: `codetrellis serve` runs the backend headless (loopback, the token on every transport, no update check or peers, data in the user's cache) and prints the connector line; `codetrellis mcp` finds it from the project folder; `scan` scans once. Unit (args 3), harness (cli-serve 6) green locally"
-  next: "Merge D1.1 when green; then D1.2 (the keep-on-track verbs)"
+  step: "Track D — D1.2: the keep-on-track verbs"
+  status: "D1.1 merged (#285). D1.2 built: next, claim, update, stuck, done (refused while a criterion's check fails), request (asks on the plan, waits for the person's steer), brief, awareness, check (exit 3 when held) and report-tests, each an agent's MCP call, words or --json. Unit (agent 2), harness (cli-verbs 10) green locally"
+  next: "Merge D1.2 when green; then D1.3 (plan show/add/edit/move, commit, status)"
   blockers: "None"
   updated: 2026-10-01
 sections:

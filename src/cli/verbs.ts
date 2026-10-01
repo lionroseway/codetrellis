@@ -1,0 +1,236 @@
+/**
+ * The verbs an agent uses to keep itself on track (Phase 32 D1.2), each a
+ * thin client over one or two MCP tools, so nothing here decides anything
+ * the server does not already decide for any agent.
+ *
+ *   next [--plan <uid>]                     get_next_item
+ *   claim <task>                            claim_item
+ *   update <task> --progress N [--note …]   update_item_progress
+ *   stuck <task> <why…>                     set_item_blocked
+ *   done <task>                             check_criterion on each, then update_item(done)
+ *   request <question…> [--options a,b]     post_channel_event, then wait for a steer
+ *   brief <task>                            get_brief
+ *   awareness                               get_awareness
+ *   check <path>                            check_footprint + check_breakpoint
+ *   report-tests <junit.xml>                report_tests
+ *
+ * A task is its uid, or the first characters of one ("6cb8cf43", or
+ * "task 6cb8cf43" as the app quotes it) when they name one task in this
+ * project's plans. Words by default; `--json` prints what the tool said.
+ *
+ * Exit codes: 0 done, 1 refused (the tool said no, or `done` with a failing
+ * check), 2 a usage error, 3 held (`check`: a breakpoint holds the path) or
+ * timed out (`request` with nobody answering yet).
+ */
+
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { flag, type Parsed } from './args';
+import type { Agent, ToolAnswer } from './agent';
+
+export const VERBS = new Set(['next', 'claim', 'update', 'stuck', 'done', 'request', 'brief', 'awareness', 'check', 'report-tests']);
+
+export class UsageError extends Error {}
+/** A verb's outcome: what to print, and how the process exits. */
+export interface Outcome { out: string; code: number }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const asObj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {});
+
+/** The project the agent works in: the repository root of where it stands. */
+export function projectRoot(cwd: string): string {
+  try {
+    const top = execFileSync('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    if (top) return fs.realpathSync(top);
+  } catch { /* not a repository */ }
+  return fs.realpathSync(cwd);
+}
+
+interface Ctx { agent: Agent; p: Parsed; cwd: string; json: boolean }
+
+function said(a: ToolAnswer, words: (j: Record<string, unknown>) => string, ctx: Ctx): Outcome {
+  if (a.isError) return { out: a.text, code: 1 };
+  if (ctx.json) return { out: a.json !== null ? JSON.stringify(a.json) : JSON.stringify({ text: a.text }), code: 0 };
+  return { out: a.json !== null ? words(asObj(a.json)) : a.text, code: 0 };
+}
+
+async function plansHere(ctx: Ctx): Promise<Array<{ uid: string; title: string; status: string }>> {
+  const a = await ctx.agent.call('list_plans', { project_path: projectRoot(ctx.cwd), limit: 100 });
+  if (a.isError) return [];
+  return (asObj(a.json).plans as Array<{ uid: string; title: string; status: string }> | undefined) ?? [];
+}
+
+/** The plan to work from: the one named, else the only active one in this project. */
+async function planOf(ctx: Ctx): Promise<string> {
+  const named = flag(ctx.p, 'plan');
+  if (named) return named;
+  const plans = (await plansHere(ctx)).filter((pl) => pl.status !== 'archived' && pl.status !== 'done');
+  if (plans.length === 1) return plans[0].uid;
+  if (plans.length === 0) throw new UsageError(`No plan in ${projectRoot(ctx.cwd)}. Name one with --plan <uid>.`);
+  throw new UsageError(`Several plans in this project; name one with --plan:\n${plans.map((pl) => `  ${pl.uid}  ${pl.title}`).join('\n')}`);
+}
+
+/** A task by its uid or the start of one, within this project's plans. */
+async function taskOf(ctx: Ctx, ref: string | undefined): Promise<string> {
+  if (!ref) throw new UsageError('Which task? Give its uid, or the first characters of it.');
+  const want = ref.replace(/^task\s+/i, '').trim().toLowerCase();
+  if (UUID.test(want)) return want;
+  if (!/^[0-9a-f-]{6,}$/.test(want)) throw new UsageError(`"${ref}" is not a task uid or the start of one.`);
+  const found: Array<{ uid: string; title: string }> = [];
+  for (const pl of await plansHere(ctx)) {
+    const a = await ctx.agent.call('list_items', { plan_uid: pl.uid, limit: 500 });
+    for (const it of (asObj(a.json).items as Array<{ uid: string; title: string }> | undefined) ?? []) {
+      if (it.uid.toLowerCase().startsWith(want)) found.push(it);
+    }
+  }
+  if (found.length === 1) return found[0].uid;
+  if (found.length === 0) throw new UsageError(`No task starting "${want}" in this project's plans.`);
+  throw new UsageError(`"${want}" names ${found.length} tasks; give more of the uid:\n${found.map((t) => `  ${t.uid}  ${t.title}`).join('\n')}`);
+}
+
+const taskWords = (t: Record<string, unknown>) => `${t.title ?? 'a task'} (${t.uid ?? '?'})${t.status ? `, ${String(t.status).replace('_', ' ')}` : ''}`;
+
+export async function runVerb(verb: string, agent: Agent, p: Parsed, cwd: string): Promise<Outcome> {
+  const ctx: Ctx = { agent, p, cwd, json: p.flags.json === true };
+  const [first, ...more] = p.rest;
+  switch (verb) {
+    case 'next': {
+      const a = await agent.call('get_next_item', { plan_uid: await planOf(ctx) });
+      return said(a, (j) => {
+        const item = asObj(j.item ?? j.next ?? j);
+        return item.uid ? `Next: ${taskWords(item)}${j.reason ? `\n${String(j.reason)}` : ''}` : (typeof j.message === 'string' ? j.message : 'Nothing to pick up: every task is done, claimed or waiting.');
+      }, ctx);
+    }
+    case 'claim': {
+      const a = await agent.call('claim_item', { uid: await taskOf(ctx, first) });
+      return said(a, (j) => `Claimed ${taskWords(asObj(j.item ?? j))}.`, ctx);
+    }
+    case 'update': {
+      const uid = await taskOf(ctx, first);
+      const raw = flag(p, 'progress');
+      const percent = raw === undefined ? NaN : Number(raw);
+      if (!Number.isInteger(percent) || percent < 0 || percent > 100) throw new UsageError('--progress takes a whole number from 0 to 100.');
+      const note = flag(p, 'note');
+      const a = await agent.call('update_item_progress', { uid, percent, ...(note ? { message: note } : {}) });
+      return said(a, () => `${percent}%${note ? `: ${note}` : ''}`, ctx);
+    }
+    case 'stuck': {
+      const uid = await taskOf(ctx, first);
+      const reason = more.join(' ').trim();
+      if (!reason) throw new UsageError('Say why: codetrellis stuck <task> <why…>');
+      const a = await agent.call('set_item_blocked', { uid, reason });
+      return said(a, () => `Blocked: ${reason}`, ctx);
+    }
+    case 'done': {
+      const uid = await taskOf(ctx, first);
+      // As submit_criterion refuses a submission whose check fails, a task is
+      // not marked done while one of its criteria's checks fails.
+      const list = await agent.call('list_criteria', { item_uid: uid });
+      const criteria = (Array.isArray(list.json) ? list.json : (asObj(list.json).criteria as unknown[] | undefined) ?? []) as Array<{ uid: string; text: string }>;
+      const failing: Array<{ text: string; findings: string[] }> = [];
+      for (const c of criteria) {
+        const chk = await agent.call('check_criterion', { criterion_uid: c.uid });
+        const j = asObj(chk.json);
+        if (!chk.isError && j.ok === false) {
+          const findings = ((j.findings as Array<{ status: string; message: string }> | undefined) ?? []).filter((f) => f.status === 'fail').map((f) => f.message);
+          failing.push({ text: c.text, findings });
+        }
+      }
+      if (failing.length) {
+        if (ctx.json) return { out: JSON.stringify({ done: false, failing }), code: 1 };
+        return { out: `Not marked done: ${failing.length === 1 ? 'a criterion\'s check fails' : `${failing.length} criteria's checks fail`}.\n${failing.map((f) => `  ✗ ${f.text}${f.findings.length ? `\n    ${f.findings.join('\n    ')}` : ''}`).join('\n')}`, code: 1 };
+      }
+      const a = await agent.call('update_item', { uid, status: 'done' });
+      return said(a, (j) => `Done: ${taskWords(asObj(j.item ?? j))}`, ctx);
+    }
+    case 'request': return request(ctx, [first, ...more].filter(Boolean).join(' ').trim());
+    case 'brief': {
+      const a = await agent.call('get_brief', { item_uid: await taskOf(ctx, first) });
+      if (a.isError) return { out: a.text, code: 1 };
+      return { out: ctx.json || a.json === null ? (a.json !== null ? JSON.stringify(a.json) : a.text) : JSON.stringify(a.json, null, 2), code: 0 };
+    }
+    case 'awareness': {
+      const a = await agent.call('get_awareness', { project_path: projectRoot(cwd) });
+      return said(a, (j) => {
+        const signals = (j.signals as Array<{ summary: string; severity: string }> | undefined) ?? [];
+        return signals.length ? signals.map((s) => `${s.severity === 'high' ? '⚠' : '·'} ${s.summary}`).join('\n') : 'Nothing overlaps your work.';
+      }, ctx);
+    }
+    case 'check': return check(ctx, first);
+    case 'report-tests': {
+      if (!first) throw new UsageError('Which report? codetrellis report-tests <junit.xml>');
+      const a = await agent.call('report_tests', { path: first, project_path: projectRoot(cwd) });
+      return said(a, (j) => typeof j.summary === 'string' ? j.summary : JSON.stringify(j), ctx);
+    }
+    default: throw new UsageError(`unknown verb ${verb}`);
+  }
+}
+
+/**
+ * Ask the person. The question is a channel event on the plan (it travels
+ * with the plan's files, so a person who pulls later still sees it); unless
+ * `--no-wait`, this waits for their steer in reply, up to `--timeout`
+ * seconds (default 300), and exits 3 if none came yet.
+ */
+async function request(ctx: Ctx, question: string): Promise<Outcome> {
+  if (!question) throw new UsageError('Ask something: codetrellis request <question…>');
+  const plan = await planOf(ctx);
+  const item = flag(ctx.p, 'item') ? await taskOf(ctx, flag(ctx.p, 'item')) : null;
+  const options = (flag(ctx.p, 'options') ?? '').split(',').map((o) => o.trim()).filter(Boolean);
+  const since = Date.now() - 1_000;
+  const posted = await ctx.agent.call('post_channel_event', {
+    plan_uid: plan, item_uid: item, message: question,
+    event_type: options.length ? 'need-decision' : 'need-context',
+    ...(options.length ? { options } : {}),
+  });
+  if (posted.isError) return { out: posted.text, code: 1 };
+  const uid = String(asObj(posted.json).uid ?? '');
+  if (ctx.p.flags['no-wait']) {
+    return { out: ctx.json ? JSON.stringify({ asked: uid, answered: false }) : `Asked (${uid}). Not waiting for the answer.`, code: 0 };
+  }
+  const timeout = Number(flag(ctx.p, 'timeout') ?? 300);
+  if (!Number.isFinite(timeout) || timeout < 0) throw new UsageError('--timeout takes seconds.');
+  const until = Date.now() + timeout * 1000;
+  for (;;) {
+    const a = await ctx.agent.call('list_channel_events', { plan_uid: plan, event_types: ['steer'], since_ms: since });
+    const events = (Array.isArray(a.json) ? a.json : (asObj(a.json).events as unknown[] | undefined) ?? []) as Array<Record<string, unknown>>;
+    const reply = events.find((e) => {
+      const payload = asObj(e.payload);
+      return e.respondsTo === uid || e.responds_to === uid || payload.respondsTo === uid || payload.responds_to === uid;
+    });
+    if (reply) {
+      const text = String(reply.message ?? asObj(reply.payload).message ?? '');
+      const by = String(reply.author ?? reply.authorName ?? 'the person');
+      return { out: ctx.json ? JSON.stringify({ asked: uid, answered: true, answer: text, by }) : `${by}: ${text}`, code: 0 };
+    }
+    if (Date.now() >= until) {
+      return { out: ctx.json ? JSON.stringify({ asked: uid, answered: false, timedOut: true }) : `No answer yet to ${uid}; it stays open on the plan.`, code: 3 };
+    }
+    await new Promise((r) => setTimeout(r, Math.min(2_000, Math.max(100, until - Date.now()))));
+  }
+}
+
+/** Before an edit: who else touches this file, and whether a breakpoint holds it. */
+async function check(ctx: Ctx, file: string | undefined): Promise<Outcome> {
+  if (!file) throw new UsageError('Which file? codetrellis check <path>');
+  const root = projectRoot(ctx.cwd);
+  const rel = path.isAbsolute(file) ? path.relative(root, file) : path.relative(root, path.resolve(ctx.cwd, file));
+  const footprint = await ctx.agent.call('check_footprint', { paths: [rel], project_path: root });
+  const breakpoint = await ctx.agent.call('check_breakpoint', { path: rel });
+  // pass | continue (a person let it through, maybe with a steer) | paused | stop.
+  const bp = asObj(breakpoint.json);
+  const held = bp.status === 'paused' || bp.status === 'stop';
+  if (ctx.json) return { out: JSON.stringify({ path: rel, held, footprint: footprint.json ?? footprint.text, breakpoint: breakpoint.json ?? breakpoint.text }), code: held ? 3 : 0 };
+  const lines: string[] = [];
+  if (held) lines.push(`✋ ${String(bp.message ?? breakpoint.text)}`);
+  else if (bp.status === 'continue') lines.push(`${rel}: go ahead${bp.steer ? `, with this steer: ${String(bp.steer)}` : ''}.`);
+  else lines.push(`${rel}: no breakpoint holds it.`);
+  const entry = asObj(((asObj(footprint.json).paths as unknown[] | undefined) ?? [])[0]);
+  const changedIn = (entry.changed_in as Array<{ branch?: string | null; workstream: string }> | undefined) ?? [];
+  const importedBy = (entry.imported_by as string[] | undefined) ?? [];
+  if (changedIn.length) lines.push(`  also changed in ${changedIn.map((c) => c.branch ?? c.workstream).join(', ')}`);
+  if (importedBy.length) lines.push(`  imported by ${importedBy.length} file${importedBy.length === 1 ? '' : 's'}: ${importedBy.slice(0, 5).join(', ')}${importedBy.length > 5 ? ', …' : ''}`);
+  if (footprint.isError) lines.push(footprint.text);
+  return { out: lines.join('\n'), code: held ? 3 : 0 };
+}
