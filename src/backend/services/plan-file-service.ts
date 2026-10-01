@@ -65,6 +65,7 @@ import type {
  */
 import { stampSelfWrite, wasJustWrittenByUs } from './self-write-tracker';
 import { getEffectiveDefaultVisibility } from './project-config-service';
+import { getPlansFolder, plansHome, PlansFolderError, projectOfPlansHome } from './plans-home';
 import { heldByAnotherCheckout } from './checkout-identity';
 import { cleanBranch } from './section-workstreams';
 import { guardDiskEdit, settleDiskHold } from './plan-doc-guard';
@@ -200,19 +201,23 @@ export function exportPlan(planUid: string, projectRoot: string): ExportPlanResu
   // else has it, so it follows the title (Phase 32 §0.6): the window saves
   // the title as it is typed, and a plan written at its first save was
   // otherwise named for half a word.
-  const wanted = path.join(projectRoot, '.codetrellis', 'plans', makePlanSlug(plan));
+  // Where the project keeps its plans on this device (C3.4a): the project,
+  // or its linked plans folder. None when it names a folder not linked here.
+  const home = plansHome(projectRoot);
+  if (!home) throw new PlansFolderError(getPlansFolder(projectRoot).says);
+  const wanted = path.join(home, '.codetrellis', 'plans', makePlanSlug(plan));
   let planDir = getLinkedPlanDir(planUid, projectRoot);
-  if (planDir && planDir !== wanted) planDir = followTitleIfUncommitted(projectRoot, planDir, wanted);
+  if (planDir && planDir !== wanted) planDir = followTitleIfUncommitted(home, planDir, wanted);
   planDir ??= wanted;
   ensureDir(planDir);
 
   // Detect V2 items — if any exist, use V2 export path.
   const v2Items = planItemService.listAllItems(planUid);
   if (v2Items.length > 0) {
-    return exportPlanV2(plan, planDir, v2Items, projectRoot);
+    return exportPlanV2(plan, planDir, v2Items, home);
   }
 
-  return exportPlanV1(plan, planDir, planUid, projectRoot);
+  return exportPlanV1(plan, planDir, planUid, home);
 }
 
 /** V1 export path — phases + tasks + docs as separate directories. */
@@ -450,7 +455,8 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
   // from this copy is imported over it — not its title, status or items. If
   // this copy differs, it is this workstream's change.
   const held = planService.getPlan(planUid);
-  const sitsIn = checkoutOfPlanDir(planDir);
+  const checkout = checkoutOfPlanDir(planDir);
+  const sitsIn = checkout ? projectOfPlansHome(checkout) ?? checkout : null;
   if (held && sitsIn && heldByAnotherCheckout(held.projectPath, sitsIn)) {
     return {
       plan: held, phases: [], tasks: [], docs: [], items: [],
@@ -844,7 +850,9 @@ function upsertItem(
  * explicit import step.
  */
 export function discoverPlanDirs(projectRoot: string): string[] {
-  const root = path.join(projectRoot, '.codetrellis', 'plans');
+  const home = plansHome(projectRoot);
+  if (!home) return [];
+  const root = path.join(home, '.codetrellis', 'plans');
   if (!fs.existsSync(root)) return [];
   return fs.readdirSync(root)
     .map((name) => path.join(root, name))
@@ -870,7 +878,9 @@ export function discoverPlanDirs(projectRoot: string): string[] {
 export function getLinkedPlanDir(planUid: string, projectRoot: string): string | null {
   const plan = planService.getPlan(planUid);
   if (!plan) return null;
-  const plansRoot = path.join(projectRoot, '.codetrellis', 'plans');
+  const home = plansHome(projectRoot);
+  if (!home) return null;
+  const plansRoot = path.join(home, '.codetrellis', 'plans');
   const dir = path.join(plansRoot, makePlanSlug(plan));
   if (fs.existsSync(path.join(dir, 'plan.yaml'))) return dir;
 
@@ -1016,7 +1026,9 @@ export function reconcilePlanState(projectRoot: string): {
  */
 export function pruneOrphanedDirs(projectRoot: string, dirPaths: string[]): { removed: number; skipped: string[] } {
   const orphans = new Set(reconcilePlanState(projectRoot).orphanedOnDisk.map((o) => o.dirPath));
-  const plansRoot = path.join(projectRoot, '.codetrellis', 'plans');
+  const home = plansHome(projectRoot);
+  if (!home) return { removed: 0, skipped: [...dirPaths] };
+  const plansRoot = path.join(home, '.codetrellis', 'plans');
   let removed = 0;
   const skipped: string[] = [];
   for (const dir of dirPaths) {
@@ -1123,7 +1135,11 @@ export function startPlanFileWatcher(projectRoot: string): Promise<void> {
     return watcherReady.get(projectRoot) ?? Promise.resolve(); // already watching
   }
 
-  const plansRoot = path.join(projectRoot, '.codetrellis', 'plans');
+  // The project's plans folder on this device (C3.4a); none to watch when it
+  // names one not linked here. Linking restarts this watcher.
+  const home = plansHome(projectRoot);
+  if (!home) return Promise.resolve();
+  const plansRoot = path.join(home, '.codetrellis', 'plans');
 
   // Pre-create the plans dir before binding chokidar to it. Without
   // this, chokidar v4 + `ignoreInitial: true` + a target that comes
@@ -1598,7 +1614,9 @@ export function importedPlanRoot(planUid: string, planDir: string, declared: unk
   const plansDir = path.dirname(slugDir);
   const dotDir = path.dirname(plansDir);
   if (path.basename(plansDir) === 'plans' && path.basename(dotDir) === '.codetrellis') {
-    return path.dirname(dotDir);
+    // A linked plans folder holds another project's plans (C3.4a): the plan
+    // belongs to that project, not to the folder it sits in.
+    return projectOfPlansHome(path.dirname(dotDir)) ?? path.dirname(dotDir);
   }
 
   if (typeof declared === 'string' && path.isAbsolute(declared)) return declared;

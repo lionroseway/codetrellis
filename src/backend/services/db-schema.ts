@@ -310,6 +310,17 @@ export const SCHEMA_PLANS_CORE = `
   -- used when git signing has no SSH key; the private half stays here. And
   -- teammates' device keys, as introduced in a project's .codetrellis/keys:
   -- 'new' until the person trusts or refuses one, in Settings.
+  -- Phase 32 C3.4a: this device's copy of a project's plans folder, as the
+  -- person confirmed it. The committed config only names the folder; a
+  -- cloned repository never points the app at one by itself.
+  CREATE TABLE IF NOT EXISTS linked_plans_folder (
+    project_root TEXT PRIMARY KEY,
+    local_path TEXT NOT NULL,
+    ref TEXT NOT NULL,
+    confirmed_at INTEGER NOT NULL,
+    confirmed_by TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS task_record_device_key (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     public_key TEXT NOT NULL,

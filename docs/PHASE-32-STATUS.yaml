@@ -14,8 +14,8 @@
 # and prs (PRs whose merge commit does not name the id).
 now:
   step: "Wave 2 — C3.4a: link a plans folder"
-  status: "C3.3 merged (#279): records are signed with git's key or the device's, a teammate's key trusted once. C3.4 refined into a (link a plans folder, named portably, confirmed per device), b (OneDrive and SharePoint, placeholders never opened) and c (materials by place and hash)"
-  next: "Build C3.4a: plansFolder in the config, linked_plans_folder per device, planningRoot used for plans, records and keys; Settings → Plans folder"
+  status: "C3.4a built: the committed config names a plans folder portably (a git remote, or a provider and a place), each device's copy confirmed by the person; plans, records and keys read and written there; Settings → Plans folder. Found and fixed: the records watcher was not awaited, so a cold first run could miss a teammate's record. Unit, harness (plans-folder 9, plan-file 66, task-records), browser (plans-folder, shots) green locally"
+  next: "Merge C3.4a when green; then C3.4b (OneDrive and SharePoint found where their clients put them; placeholders never opened)"
   blockers: "None"
   updated: 2026-10-01
 sections:

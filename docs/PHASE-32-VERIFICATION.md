@@ -17,12 +17,12 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 265 | 263 | 0 | 0 | 217 | 0 |
+| REST routes | 269 | 267 | 0 | 0 | 217 | 0 |
 | MCP tools | 204 | 204 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 90 | 79 | 0 | 0 | 78 | 0 |
-| Frontend components | 120 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 121 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 37 | n/a | n/a | n/a | 0 | 0 |
-| Settings sections | 14 | n/a | n/a | n/a | 11 | 13 |
+| Settings sections | 15 | n/a | n/a | n/a | 11 | 13 |
 
 ## By domain
 
@@ -38,7 +38,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4h Drift, governance, review | 11 | 25 | 9 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 37 | 0 |
-| 0.4k Settings, updates, privacy | 18 | 0 | 3 | 8 | 0 | 14 |
+| 0.4k Settings, updates, privacy | 22 | 0 | 3 | 9 | 0 | 15 |
 | 0.4l System docs and intake | 7 | 11 | 6 | 1 | 0 | 0 |
 
 ## MCP tools: registry vs capability matrix
@@ -48,7 +48,7 @@ records that — but "✗ none" is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (265)
+## REST routes (269)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -69,7 +69,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 175 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 176 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -101,7 +101,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `GET /api/comments` |  | ✗ none | 1 | ✓ 0.4c-2: threaded with replies (item-surface) |  |  |
 | c | `GET /api/contributions` |  | ✗ none | 3 | ✓ 0.4c: exercised by cdev-phase7, review-confinement, surfaced-rest (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/items/:itemUid/refs` |  | ✗ none | 3 | ✓ 0.4c: exercised by phone-plans, references (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `GET /api/items/:uid` |  | ✗ none | 16 | ✓ 0.4c: exercised by agent-loop, criteria-signoff, drift-review-tools, full-loop, +5 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/items/:uid` |  | ✗ none | 17 | ✓ 0.4c: exercised by agent-loop, criteria-signoff, drift-review-tools, full-loop, +5 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/items/:uid/attachments` |  | ✗ none | 1 | ✓ 0.4c: exercised by filesystem-sinks, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/items/:uid/comments` |  | ✗ none | 2 | ✓ 0.4c: exercised by phone-plans, short-references, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/items/:uid/criteria` |  | ✗ none | 3 | ✓ 0.4c: exercised by artefacts-stale, brief-surface, criteria-loops, criteria-signoff, +3 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -124,7 +124,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `GET /api/plans/:planUid/channels` |  | ✗ none | 5 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:planUid/items` |  | ✗ none | 10 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 | ✓ 0.4c: exercised by full-loop (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `GET /api/plans/:uid` |  | ✗ none | 15 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans/:uid` |  | ✗ none | 16 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:uid/budget` |  | ✗ none | 1 | ✓ 0.4g: report incl. flaggedChanges; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
 | c | `GET /api/plans/:uid/changes` |  | ✗ none | 2 | ✓ 0.4c: exercised by full-loop, plan-rest (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:uid/changes/:changeId` |  | ✗ none | 1 | ✓ 0.4c-1: one projected change; unknown 404 (plan-rest) |  |  |
@@ -146,7 +146,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `GET /api/plans/:uid/status` |  | ✗ none | 4 |  |  |  |
 | c | `GET /api/plans/:uid/versions` |  | ✗ none | 3 | ✓ 0.4c: exercised by full-loop, plan-tools, plan-versions (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:uid/waits` |  | ✗ none | 1 |  |  |  |
-| c | `GET /api/plans/discover` |  | ✗ none | 1 | ✓ 0.4c-1: exported plan directories (plan-rest) |  |  |
+| c | `GET /api/plans/discover` |  | ✗ none | 2 | ✓ 0.4c-1: exported plan directories (plan-rest) |  |  |
 | c | `GET /api/plans/reconcile` |  | ✗ none | 1 | ✓ 0.4c-1: the orphan once its plan is archived (plan-rest) |  |  |
 | c | `GET /api/plans/stitched` |  | ✗ none | 2 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/skills` |  | ✗ none | 1 |  |  |  |
@@ -172,13 +172,13 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/items/:uid/skill-arrivals/accept` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/spec-proposals` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/worktree` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans` |  | 1 | 100 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans` |  | 1 | 101 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 2 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `POST /api/plans/:planUid/items` |  | ✗ none | 66 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:planUid/items` |  | ✗ none | 67 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 2 | ✓ 0.4c: exercised by criteria-loops (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/docs` |  | ✗ none | 7 | ✓ 0.4c: exercised by full-loop, phone-plans, plan-docs, plan-export, +2 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `POST /api/plans/:uid/export` |  | ✗ none | 15 | ✓ 0.4c: exercised by cdev-cross-repo, contributor-branch-index, criteria-signoff, next-up-and-sync, +4 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:uid/export` |  | ✗ none | 16 | ✓ 0.4c: exercised by cdev-cross-repo, contributor-branch-index, criteria-signoff, next-up-and-sync, +4 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/phases` |  | ✗ none | 2 | ✓ 0.4c: exercised by full-loop, plan-phases, plan-templates (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/publish-as-template` |  | ✗ none | 1 | ✓ 0.4c: exercised by plan-templates (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/reconcile` |  | ✗ none | 2 | ✓ 0.4c: exercised by drift-review-tools, full-loop (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -189,7 +189,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/plans/import-external` |  | ✗ none | 1 | ✓ 0.4c-1: issue checklist becomes Actions; unknown source 400 (plan-rest) |  |  |
 | c | `POST /api/plans/prune-orphans` |  | ✗ none | 1 | ✓ 0.4c-1: removes only the opened project's current orphans; everything else skipped (plan-rest) |  |  |
 | c | `POST /api/spec-proposals/:uid/decision` |  | ✗ none | 2 |  |  |  |
-| c | `PUT /api/items/:uid` |  | ✗ none | 22 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
+| c | `PUT /api/items/:uid` |  | ✗ none | 23 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
 | c | `PUT /api/items/:uid/relies-on` |  | ✗ none | 7 |  |  |  |
 | c | `PUT /api/items/:uid/workstream` |  | ✗ none | 12 |  |  |  |
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 3 | ✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -292,9 +292,11 @@ records that — but "✗ none" is proof of a gap.
 | j | `POST /api/peers/remote-terminals/:fingerprint/:terminalId/write` |  | ✗ none | 1 | ✓ 0.4j: input reaches the peer; unknown terminal 404, no data 400 (phone-sync-and-tools) |  |  |
 | j | `POST /api/sync/export` |  | ✗ none | 1 | ✓ 0.4j: export then import round trip (cdev-phase5) |  |  |
 | j | `POST /api/sync/import` |  | ✗ none | 1 | ✓ 0.4j: export then import round trip (cdev-phase5) |  |  |
+| k | `DELETE /api/plans-folder/link` |  | ✗ none | 1 |  |  |  |
 | k | `DELETE /api/review-host/token` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/logs/path` |  | ✗ none | 2 | ✓ 0.4k: today's file under the data dir's logs (settings-surface) |  |  |
 | k | `GET /api/logs/tail` |  | ✗ none | 2 | ✓ 0.4k: answers without a file logger; maxBytes must be a whole number (settings-surface) |  |  |
+| k | `GET /api/plans-folder` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/power/status` |  | ✗ none | 2 | ✓ 0.4j: same as the phone's power.status (phone-channels-projects) |  |  |
 | k | `GET /api/review-host` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/settings` |  | ✗ none | 11 | ✓ 0.4k: every section; what was saved comes back after a restart (settings-surface) |  |  |
@@ -302,10 +304,12 @@ records that — but "✗ none" is proof of a gap.
 | k | `GET /api/shared-task-state` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/updates/download/status` |  | ✗ none | 1 | ✓ 0.4k: idle and complete before anything is downloaded (update-download) |  |  |
 | k | `GET /api/updates/status` |  | ✗ none | 2 | ✓ 0.4k: idle when the check is off; available / up-to-date / error after a check, platform and version named (updates) |  |  |
+| k | `POST /api/plans-folder/link` |  | ✗ none | 1 |  |  |  |
 | k | `POST /api/shared-task-state/keys` |  | ✗ none | 1 |  |  |  |
 | k | `POST /api/updates/check` |  | ✗ none | 1 | ✓ 0.4k: a person's check goes out even with the automatic one off; no asset for this platform is not offered; website down falls back to GitHub; both down an error with the last good answer kept (updates) |  |  |
 | k | `POST /api/updates/download` |  | ✗ none | 2 | ✓ 0.4k: refused with nothing fetched unless https on the releases repo; a refusal no longer blocks later downloads (updates; bug 44), update-download |  |  |
 | k | `POST /api/updates/download/cancel` |  | ✗ none | 1 | ✓ 0.4k: answers cleanly with nothing running (update-download) |  |  |
+| k | `PUT /api/plans-folder` |  | ✗ none | 1 |  |  |  |
 | k | `PUT /api/review-host` |  | ✗ none | 2 |  |  |  |
 | k | `PUT /api/review-host/token` |  | ✗ none | 2 |  |  |  |
 | k | `PUT /api/settings` |  | 1 | 24 | ✓ 0.4k: partial saves keep siblings (nested too), hosts normalised, windows told; every field checked, a bad value 400 with the reason and nothing stored (settings-surface); phone-safe subset from the phone (phone-channels-projects) |  |  |
@@ -622,7 +626,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (120)
+## Frontend components (121)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -740,6 +744,7 @@ records that — but "✗ none" is proof of a gap.
 | k | `settings/AddToClaudeCode.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/AddToClaudeDesktop.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/AddToGeminiCli.tsx` |  | n/a | n/a |  |  |  |
+| k | `settings/PlansFolderSection.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/ReviewHostSection.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/SettingsModal.tsx` |  | n/a | n/a |  | ✓ 0.5 — one height for every section (0.5b) |  |
 | k | `settings/SharedTaskStateSection.tsx` |  | n/a | n/a |  |  |  |
@@ -789,7 +794,7 @@ records that — but "✗ none" is proof of a gap.
 | j | `workstream-detail.tsx` |  | n/a | 1 |  |  |  |
 | j | `workstreams.tsx` |  | n/a | 1 |  |  |  |
 
-## Settings sections (14)
+## Settings sections (15)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -801,6 +806,7 @@ records that — but "✗ none" is proof of a gap.
 | k | `logs` |  | n/a | n/a | ✓ 0.4k: output area, refresh, reveal (e2e logs); tail and path (settings-surface) | ✓ 0.5 — says when this run writes no log file (0.5b) |  |
 | k | `mcp` |  | n/a | n/a | ✓ 0.4k: a refused port says why and nothing changes (e2e sections-save); port, autodetect, config snippet (e2e mcp-server); agent grants (agent-ui-tools) | ✓ 0.5 — a refused value is named as a person reads it (0.5b) |  |
 | k | `plans` |  | n/a | n/a | ✓ 0.4k: default visibility saves (e2e sections-save, e2e plans) | ✓ 0.5a — stale "coming" note and raw markdown link fixed |  |
+| k | `plans-folder` |  | n/a | n/a |  |  |  |
 | k | `power` |  | n/a | n/a | ✓ 0.4k: a keep-awake trigger saves, siblings kept (e2e sections-save, settings-surface) | ✓ 0.5 — plain words, status says what is happening (0.5b) |  |
 | k | `review-hosts` |  | n/a | n/a | ✓ C2.2a: off until turned on per project; turning on and saving a token only from the app window; token never echoed, kept in the OS keychain or memory only; the switch no longer applies when the remote names another repository; nothing requested (harness review-host-switch) | ✓ C2.2a: names the host and what it would read before anything is; says where the token is kept (e2e review-host-settings) |  |
 | k | `shared-state` |  | n/a | n/a |  |  |  |

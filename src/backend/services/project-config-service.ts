@@ -18,6 +18,7 @@ import {
   type StuckSensorConfig,
   type AwarenessSensorConfig,
   type FreezeConfig,
+  type PlansFolderRef,
 } from '../../shared/types';
 import { getSettings } from './settings-service';
 
@@ -91,6 +92,32 @@ export function getProjectConfig(projectRoot: string): ProjectConfig {
  * (would silently double an entry on re-save). Callers wanting to
  * append should read, push, write.
  */
+/**
+ * A plans folder as the committed config names it, or null. The file is
+ * anyone's text: a remote with credentials in it, a place that climbs out of
+ * the provider's root or is absolute, or a provider we do not know is not
+ * read (Phase 32 C3.4a).
+ */
+export function parsePlansFolderRef(raw: unknown): PlansFolderRef | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  if (r.kind === 'git') {
+    const remote = typeof r.remote === 'string' ? r.remote.trim() : '';
+    if (!remote || remote.length > 400 || /\s/.test(remote)) return null;
+    // https://user:secret@host/… or ssh with a password: never kept.
+    if (/^[a-z][a-z0-9+.-]*:\/\/[^/@]*:[^/@]*@/i.test(remote)) return null;
+    return { kind: 'git', remote };
+  }
+  if (r.kind === 'synced') {
+    const provider = r.provider === 'onedrive' || r.provider === 'sharepoint' || r.provider === 'folder' ? r.provider : null;
+    const place = typeof r.place === 'string' ? r.place.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : '';
+    if (!provider || !place || place.length > 512) return null;
+    if (/^[a-z]:/i.test(place) || place.split('/').some((seg) => seg === '' || seg === '.' || seg === '..')) return null;
+    return { kind: 'synced', provider, place };
+  }
+  return null;
+}
+
 export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): ProjectConfig {
   const key = normaliseProjectRoot(projectRoot);
   const current = getProjectConfig(key);
@@ -116,6 +143,12 @@ export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): 
 
   // Strip empty groups so an empty config file isn't `{plans: {}}` —
   // it should just be `{}` until an override is set.
+  // A key patched to undefined is a cleared override (C3.4a's folder).
+  if (next.plans) {
+    for (const k of Object.keys(next.plans) as Array<keyof typeof next.plans>) {
+      if (next.plans[k] === undefined) delete next.plans[k];
+    }
+  }
   if (next.plans && Object.keys(next.plans).length === 0) {
     delete next.plans;
   }
@@ -407,6 +440,8 @@ function parseProjectConfig(raw: unknown): ProjectConfig {
     if (p.attachmentLocation === 'project' || p.attachmentLocation === 'user') {
       plansOut.attachmentLocation = p.attachmentLocation;
     }
+    const folder = parsePlansFolderRef(p.folder);
+    if (folder) plansOut.folder = folder;
     if (Object.keys(plansOut).length > 0) result.plans = plansOut;
   }
 

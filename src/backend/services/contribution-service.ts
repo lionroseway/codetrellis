@@ -43,6 +43,7 @@ function assertSafeBranchSegment(branch: string): string {
 import fs from 'node:fs';
 import path from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { plansHome } from './plans-home';
 
 // --- Types -------------------------------------------------------------------
 
@@ -238,6 +239,8 @@ export function acceptContributions(
   branch: string,
   planSlug: string,
 ): AcceptResult {
+  // The project's plans may live in a linked plans folder (Phase 32 C3.4a).
+  projectRoot = plansHome(projectRoot) ?? projectRoot;
   // VALIDATE BEFORE BUILDING THE PATH (Phase 19, finding 12).
   //
   // The delete at the end of this function is confined, which was the part
@@ -354,6 +357,8 @@ export function prepareContributorBranch(
   branchName: string,
   options?: { includeItems?: string[] },
 ): PrepareContributorBranchResult {
+  // The project's plans may live in a linked plans folder (Phase 32 C3.4a).
+  projectRoot = plansHome(projectRoot) ?? projectRoot;
   const planDir = path.join(projectRoot, '.codetrellis', 'plans', planSlug);
 
   if (!fs.existsSync(planDir)) {

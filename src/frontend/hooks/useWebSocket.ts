@@ -415,6 +415,10 @@ export function useWebSocket() {
           if (type === 'shared-task-state-changed') {
             window.dispatchEvent(new CustomEvent('shared-task-state-changed', { detail: payload }));
           }
+          // C3.4a — a plans folder named, linked or unlinked: Settings refreshes.
+          if (type === 'plans-folder-changed') {
+            window.dispatchEvent(new CustomEvent('plans-folder-changed', { detail: payload }));
+          }
           // Phase 32 B7.2 — a spec change was proposed (and, from B7.4, decided).
           if (typeof type === 'string' && type.startsWith('spec-proposal-')) {
             window.dispatchEvent(new CustomEvent('spec-proposals-changed', { detail: payload }));

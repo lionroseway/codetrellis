@@ -13,6 +13,7 @@ import { execFileSync } from 'node:child_process';
 import { assertSafeGitRef } from './git-safety';
 import path from 'node:path';
 import { parse as parseYaml } from 'yaml';
+import { plansHome } from './plans-home';
 
 // --- Types -------------------------------------------------------------------
 
@@ -66,6 +67,8 @@ export function getPlanAtCommit(
   planSlug: string,
   commitHash: string,
 ): HistoricalPlanState | null {
+  // The project's plans may live in a linked plans folder (Phase 32 C3.4a).
+  projectRoot = plansHome(projectRoot) ?? projectRoot;
   // VALIDATE BEFORE IT REACHES A GIT ARGUMENT (Phase 19, finding 10).
   //
   // execFileSync means there is no shell, so nothing here can be shell-

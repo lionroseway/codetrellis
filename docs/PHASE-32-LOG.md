@@ -18,10 +18,10 @@
 | | |
 |---|---|
 | **Stage / step** | Wave 2 — C3.4a: link a plans folder |
-| **Status** | C3.3 merged (#279): records are signed with git's key or the device's, a teammate's key trusted once. C3.4 refined into a (link a plans folder, named portably, confirmed per device), b (OneDrive and SharePoint, placeholders never opened) and c (materials by place and hash) |
-| **In flight** | C3.4 building on `feat/phase-32-c3-4-linked-plans-folder` |
+| **Status** | C3.4a built: the committed config names a plans folder portably (a git remote, or a provider and a place), each device's copy confirmed by the person; plans, records and keys read and written there; Settings → Plans folder. Found and fixed: the records watcher was not awaited, so a cold first run could miss a teammate's record. Unit, harness (plans-folder 9, plan-file 66, task-records), browser (plans-folder, shots) green locally |
+| **In flight** | C3.4a building on `feat/phase-32-c3-4a-link-plans-folder` |
 | **Last merged** | C3.3 (#279, `960f7f5`) |
-| **Next action** | Build C3.4a: plansFolder in the config, linked_plans_folder per device, planningRoot used for plans, records and keys; Settings → Plans folder |
+| **Next action** | Merge C3.4a when green; then C3.4b (OneDrive and SharePoint found where their clients put them; placeholders never opened) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
@@ -235,7 +235,7 @@
   - [x] C3.2 A real disagreement is a signal: people acting at once are named on the task and in the inbox until one decides (#272)
   - [x] C3.3 Signed records: the person's git SSH key when set up, else a key the app makes for the device (#279)
   - [ ] C3.4 A linked plans folder: a planning repo or a synced folder (OneDrive and SharePoint first), placeholders never downloaded, materials by place and hash, split in three: — building
-    - [ ] C3.4a Link a plans folder: named portably in the committed config, confirmed once per device by the person; plans, records and keys read and written there
+    - [ ] C3.4a Link a plans folder: named portably in the committed config, confirmed once per device by the person; plans, records and keys read and written there — building
     - [ ] C3.4b OneDrive and SharePoint found where their clients put them; a placeholder is "not on this device" and never opened
     - [ ] C3.4c Materials in the folder by their place and hash, never a full path; A6's signals match across machines
   - [ ] C3.5 Teammates' material reads, a separate switch, on by default once a folder is shared
@@ -398,6 +398,41 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-01: C3.4a — link a plans folder
+- **Journey.** Dana's team keeps its plans in their own repository. In
+  Settings → Plans folder she picks "A planning repository", gives its
+  remote and saves it for the team: it goes in the project's committed
+  config, her path does not. The section says the plans live there and
+  that nothing is read until she links her copy. She gives the wrong
+  folder and is told its remote is another; then her clone, and the
+  section shows it linked, with Unlink. Her plan and its task records are
+  written to the planning repository, not the code. Sam clones both, his
+  planning copy somewhere else: his app reads nothing there until he
+  links it, then has the plan, and his progress reaches Dana through the
+  planning repository. A OneDrive or SharePoint folder is named by its
+  place under the provider's root instead.
+- **Built.** `plans-home.ts` (`plansHome`, naming, linking, matching a
+  copy, `projectOfPlansHome`); `plans.folder` in the project config with
+  its parser; `linked_plans_folder`; plan-file export, discovery, linked
+  dir, prune and watcher, channel events, contributions, plan history,
+  pantry, task records and key introductions all built on `plansHome`;
+  import maps a linked folder to its project; the trusted plan-dir check
+  accepts linked folders; four routes; Settings → Plans folder.
+- **Found on the way.** On a cold first run, Sam's record never reached
+  Dana: the records watcher was started but not awaited when sharing was
+  turned on, and Dana's next change created the records folder before
+  chokidar was ready, so that folder was never watched. The watcher's start
+  is now awaited where a record may be written next, as the plan watcher's
+  already was.
+- **Tests.** Unit `plans-home.test.ts` (remotes, the config's refusals,
+  synced matching, words). Harness `plans-folder.test.ts` 9 (here by
+  default; named, unlinked, export refused; wrong folder refused; linked,
+  plan and records in the planning repo; Sam unlinked reads nothing, then
+  links at his own path and has the plan; his progress reaches Dana;
+  unlinked stops reading; synced by place; plain HTTP refused). Browser
+  `plans-folder.spec.ts` 2, with shots. The plan-file harness tests (66)
+  pass unchanged.
 
 ### 2026-10-01: C3.3 — signed task-state records
 - **Journey.** Sam has no git signing key, so the first record his app
