@@ -302,6 +302,7 @@ const SIGNAL_WORDS: Record<AwarenessSignal['kind'], string> = {
   drift: 'A line of work is changing files outside its task.',
   'stale-base': 'A line of work is behind main on files it changes.',
   'version-split': 'Two tasks are working from different versions of the same file.',
+  'state-split': 'Two people set one task two ways at once.',
 };
 
 /** A material signal's kind in words (A6.3): the same rule of naming nothing. */

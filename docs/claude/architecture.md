@@ -151,7 +151,14 @@ head that is a teammate's and new to this machine (`task_record_heads`) is
 applied through `applyRecordedState` with author type `record`, which
 `recordedWords` says as "recorded by Sam Lee in their record, unverified".
 Heads that disagree (people acting at once) are kept unapplied with the
-split noted for C3.2. Records are untrusted: uid folder names only, a
+split kept in `task_record_heads` (`task-records/heads.ts`, database only). C3.2 names it:
+the item's state carries `atOnce` ("set two ways at once: Sam Lee says in
+progress, Dana Ortiz says blocked"), it joins what the plan waits on, an
+agent's `get_plan` says `set_at_once`, and it is a `state-split` signal in
+the inbox (see awareness.md); Keep on the item page (`POST
+/api/items/:uid/keep-state`) writes this machine's state again as a record
+that has seen both, which ends it. Two different records under one writer
+and counter are a forged split: neither is taken. Records are untrusted: uid folder names only, a
 record naming another task than its folder is refused, 16 KB and 5,000 per
 item at most, read through `readTextWithin`, written through
 `writeFileWithin`. Routes: `GET/PUT /api/shared-task-state`.

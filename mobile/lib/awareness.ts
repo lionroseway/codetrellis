@@ -9,7 +9,7 @@
 
 import { rpc } from './rpc';
 
-export type SignalKind = 'collision' | 'contract' | 'drift' | 'stale-base' | 'version-split';
+export type SignalKind = 'collision' | 'contract' | 'drift' | 'stale-base' | 'version-split' | 'state-split';
 export type SignalSeverity = 'high' | 'medium' | 'low';
 export type SignalState = 'open' | 'acknowledged' | 'intended' | 'dismissed' | 'resolved';
 

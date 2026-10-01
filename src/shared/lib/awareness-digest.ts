@@ -51,6 +51,7 @@ const QUESTION: Record<AwarenessSignal['kind'], string> = {
   drift: 'is the wider scope meant?',
   'stale-base': 'rebase now, or later?',
   'version-split': 'which version should both use?',
+  'state-split': 'which state is right?',
 };
 
 /** Tasks' materials (A6.3) ask their own question where the code one would not fit. */

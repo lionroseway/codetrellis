@@ -127,6 +127,17 @@ inputs (`materialInputsOf`) are the tasks' footprints (A6.2) and each
 material's hash as last re-taken; the artefact watcher re-takes it on a
 change and refreshes the project's signals.
 
+**Teammates' records** (C3.2, `task-records/split-signals.ts`) raise one
+more kind, `state-split`: two people set one task two ways at once, from
+records made without seeing each other's (C3.1). Its workstream is the task
+(`task:<uid>`), its sides are the people (`subject.said`: who set it to
+what), medium, or high when two different records claim to be the same
+change by one person (`forged`). It is drafted in the same `refreshSignals`
+pass from `task_record_heads` (read straight from the tables, so the signal
+engine never loads the plan services), refreshed whenever a split starts or
+ends, and resolves when anyone's next record of the task, made having seen
+both, settles it (`POST /api/items/:uid/keep-state` keeps this machine's).
+
 **Where they show** (A6.4): each task's Brief page has "Other work
 affected", a line per material signal naming the task, from its side
 (`briefLine` in `signal-words.ts`: "sales.csv changed since “Q3 report”

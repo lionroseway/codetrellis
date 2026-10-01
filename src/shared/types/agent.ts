@@ -264,9 +264,10 @@ export interface WorkstreamLineChanges {
  * `stale-base` come from the footprints; `rule`, `duplicate` and `decision`
  * follow (awareness spec §4.3). Tasks' materials (A6.3) raise the same kinds
  * with `subject.material` set, and one of their own: `version-split`, two
- * tasks that read different versions of one file.
+ * tasks that read different versions of one file. `state-split` (C3.2) is
+ * two people setting one task two ways at once, from their records.
  */
-export type SignalKind = 'collision' | 'contract' | 'drift' | 'stale-base' | 'version-split';
+export type SignalKind = 'collision' | 'contract' | 'drift' | 'stale-base' | 'version-split' | 'state-split';
 export type SignalSeverity = 'high' | 'medium' | 'low';
 /**
  * Where a signal stands (A1.6, set by a person from A1.8):
@@ -355,6 +356,12 @@ export interface AwarenessSignal {
     signedOff?: string[];
     /** Version split: which version each task read last. */
     readVersions?: Record<string, 'current' | 'earlier'>;
+    /**
+     * State split (C3.2): who set the task (`items[0]`) to what, from records
+     * made without seeing each other's. `forged`: two different records claim
+     * to be the same change by that person.
+     */
+    said?: Array<{ name: string; status: string | null; forged?: boolean }>;
   };
   /** The workstreams it names, by folder, sorted. */
   workstreams: string[];

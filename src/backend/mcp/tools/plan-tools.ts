@@ -685,7 +685,11 @@ async function statusForAgent(planUid: string) {
     items: s.items.map((i) => ({
       item_uid: i.itemUid, title: i.title, kind: i.kind, state: i.state, says: i.words, source: i.source,
       ...(i.recorded ? { recorded_by: i.recorded.by, recorded_at: i.recorded.at } : {}),
+      // C3.1: taken from a teammate's record in the project's files, which anyone could have written.
+      ...(i.recorded?.byType === 'record' ? { recorded_in: "the teammate's record, unverified" } : {}),
       ...(i.branch ? { branch: i.branch } : {}), ...(i.gitNote ? { git_note: i.gitNote } : {}),
+      // C3.2: set two ways at once by people who had not seen each other's change; nothing is picked.
+      ...(i.atOnce ? { set_at_once: i.atOnce.words } : {}),
     })),
     note: 'Read, never written: source says where each state came from — git or the review host for an item on a branch, the plan itself ("plan") for everything else.',
   };

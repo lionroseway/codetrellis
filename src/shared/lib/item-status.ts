@@ -54,7 +54,16 @@ export interface PlanItemFacts {
   criteria?: CriteriaTally | null;
   /** The newest status change, from the plan's events. */
   recorded?: StateRecord | null;
+  /** People who set it two ways at once, from their records (C3.2). */
+  atOnce?: AtOnceClaim[] | null;
 }
+
+/**
+ * One person's state for a task, from a record made without seeing the
+ * other's (C3.2). `forged`: a second, different record under the same
+ * writer and counter, which no honest writer makes.
+ */
+export interface AtOnceClaim { name: string; status: string | null; at: number; forged?: boolean }
 
 export interface ItemStatus {
   itemUid: string;
@@ -73,6 +82,11 @@ export interface ItemStatus {
   gitNote?: string;
   /** The git (and host) state, when that is the source. */
   git?: ItemGitState & { words: string };
+  /**
+   * Set two ways at once by people who had not seen each other's change
+   * (C3.2): nothing is picked, each is named until one of them decides.
+   */
+  atOnce?: { words: string; claims: AtOnceClaim[] };
 }
 
 const TASK_STATUS: Record<string, PlanStateName> = {
@@ -127,6 +141,20 @@ export function isFinished(state: ItemStateName): boolean {
   return state === 'done' || state === 'merged';
 }
 
+/**
+ * "set two ways at once: Sam Lee says done, Dana Ortiz says blocked". A
+ * forged pair says that instead: two different records claim to be one.
+ */
+export function atOnceWords(claims: readonly AtOnceClaim[]): string {
+  const forged = claims.filter((c) => c.forged);
+  if (forged.length) {
+    const who = [...new Set(forged.map((c) => c.name))].join(' and ');
+    return `two different records claim to be the same change by ${who}; neither is taken`;
+  }
+  const said = claims.map((c) => `${c.name} says ${taskStateWords({ status: c.status }).words}`);
+  return `set two ways at once: ${said.join(', ')}`;
+}
+
 /** "from the plan", or the git source's words. */
 export function stateFromWords(source: ItemStateSource): string {
   return source === 'plan' ? 'from the plan' : sourceWords({ source });
@@ -144,9 +172,9 @@ export function recordedWords(r: StateRecord | null | undefined): string | null 
 }
 
 /** The line an item's page and a row's hover say: "in progress, 40% — from the plan, recorded by Sam, 26 Sep". */
-export function statusLine(s: Pick<ItemStatus, 'words' | 'source' | 'recorded' | 'gitNote'>): string {
+export function statusLine(s: Pick<ItemStatus, 'words' | 'source' | 'recorded' | 'gitNote' | 'atOnce'>): string {
   const from = [stateFromWords(s.source), s.source === 'plan' ? recordedWords(s.recorded) : null].filter(Boolean).join(', ');
-  return `${s.words} — ${from}${s.gitNote ? `; ${s.gitNote}` : ''}`;
+  return `${s.words} — ${from}${s.gitNote ? `; ${s.gitNote}` : ''}${s.atOnce ? `; ${s.atOnce.words}` : ''}`;
 }
 
 /**
@@ -188,6 +216,7 @@ export function itemStatuses(
         ...(g ? { gitNote: gitStateWords(g) } : {}),
       };
     }
+    if (f.kind === 'action' && f.atOnce?.length) s.atOnce = { words: atOnceWords(f.atOnce), claims: f.atOnce };
     out.set(f.uid, s);
     return s;
   };
@@ -252,7 +281,7 @@ export interface PlanStatusView {
 const UNDER_WAY: ReadonlySet<ItemStateName> = new Set(['assigned', 'in-progress', 'building', 'pushed', 'in-review']);
 
 function lineOf(s: ItemStatus): StatusLine {
-  return { itemUid: s.itemUid, title: s.title, words: s.words, source: s.source, from: s.from };
+  return { itemUid: s.itemUid, title: s.title, words: s.atOnce ? `${s.words}; ${s.atOnce.words}` : s.words, source: s.source, from: s.from };
 }
 
 /** Where a branch's work is, for the lineage: "PR #118 (open)", "MR !42 (merged)", or what git proves. */
@@ -277,7 +306,8 @@ export function branchLineageWords(g: ItemGitState): string {
 export function planStatusView(statuses: readonly ItemStatus[], tickets: readonly string[], updatedAt: number | null): PlanStatusView {
   const tasks = statuses.filter((s) => s.kind === 'action' && s.state !== 'skipped');
   const done = tasks.filter((s) => isFinished(s.state)).length;
-  const waiting = statuses.filter((s) => s.kind === 'action' && (s.state === 'blocked' || /waiting for sign-off/.test(s.words))).map(lineOf);
+  // Set two ways at once (C3.2) waits on the people who did it.
+  const waiting = statuses.filter((s) => s.kind === 'action' && (s.state === 'blocked' || !!s.atOnce || /waiting for sign-off/.test(s.words))).map(lineOf);
   const inProgress = statuses.filter((s) => s.kind === 'action' && UNDER_WAY.has(s.state) && !waiting.some((w) => w.itemUid === s.itemUid)).map(lineOf);
 
   const head = [tickets.join(', '), 'this plan'].filter(Boolean).join(' → ');

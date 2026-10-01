@@ -17,7 +17,7 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 260 | 258 | 0 | 0 | 217 | 0 |
+| REST routes | 261 | 259 | 0 | 0 | 217 | 0 |
 | MCP tools | 202 | 202 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 90 | 79 | 0 | 0 | 78 | 0 |
 | Frontend components | 119 | n/a | n/a | n/a | 0 | 23 |
@@ -30,7 +30,7 @@ records that — but "✗ none" is proof of a gap.
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 19 | 12 | 10 | 0 | 0 | 0 |
 | 0.4b Graph | 19 | 15 | 8 | 13 | 0 | 0 |
-| 0.4c Plans and items | 106 | 58 | 25 | 60 | 0 | 0 |
+| 0.4c Plans and items | 107 | 58 | 25 | 60 | 0 | 0 |
 | 0.4d Criteria and sign-off | 9 | 7 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 12 | 7 | 1 | 0 | 0 |
@@ -48,7 +48,7 @@ records that — but "✗ none" is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (260)
+## REST routes (261)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -165,6 +165,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/items/:uid/code-reference` |  | ✗ none | 1 | ✓ 0.4c-1: appends line ranges; shows in the overlay; refusals (code-reference, e2e add-to-plan; bug 21) |  |  |
 | c | `POST /api/items/:uid/comments` |  | ✗ none | 3 | ✓ 0.4c: exercised by phone-plans, short-references, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/items/:uid/criteria` |  | ✗ none | 9 | ✓ 0.4c: exercised by artefacts-stale, brief-surface, criteria-loops, criteria-signoff, +3 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/items/:uid/keep-state` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/move` |  | ✗ none | 1 | ✓ 0.4c-2: re-parents and reorders; cycles, self, foreign and missing parents 400 (item-surface; bug 23) |  |  |
 | c | `POST /api/items/:uid/progress` |  | ✗ none | 1 | ✓ 0.4c: exercised by task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/items/:uid/restore-version/:version` |  | ✗ none | 1 | ✓ 0.4c-2: old state back as a new version; unknown 404 (item-surface) |  |  |
@@ -219,7 +220,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `DELETE /api/breakpoints/:id` |  | ✗ none | 3 |  |  |  |
 | g | `GET /api/agent-events` |  | ✗ none | 6 |  |  |  |
 | g | `GET /api/agent/status` |  | ✗ none | 3 | ✓ 0.4g: the session watcher's state, nothing more (misc-endpoints) |  |  |
-| g | `GET /api/awareness` |  | ✗ none | 23 |  |  |  |
+| g | `GET /api/awareness` |  | ✗ none | 24 |  |  |  |
 | g | `GET /api/breakpoint-hits` |  | ✗ none | 3 |  |  |  |
 | g | `GET /api/breakpoints` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/mcp/config` |  | ✗ none | 1 | ✓ 0.4g: a copied config carries the token and connects (misc-endpoints) |  |  |
@@ -363,7 +364,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `export_plan_to_files` | plan · files | ✗ none | 3 | ✓ 0.4c: exercised by cdev-phase3-demo, cdev-phase6, cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `get_item` | plan-item · read | ✗ none | 6 | ✓ 0.4c: exercised by cdev-phase5, intake, plan-items, short-references (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `get_next_item` | plan-item · read | ✗ none | 6 | ✓ 0.4c: exercised by agent-loop, criteria-signoff (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `get_plan` | plan · read | ✗ none | 6 | ✓ 0.4c: exercised by cdev-sensors, plan-tools (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `get_plan` | plan · read | ✗ none | 7 | ✓ 0.4c: exercised by cdev-sensors, plan-tools (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `get_plan_summary` | plan-item · read | ✗ none | 1 | ✓ 0.4c-2: counts by kind, byStatus, completion (item-surface) |  |  |
 | c | `get_plan_timeline` | plan-item · read | ✗ none | 1 | ✓ 0.4c: exercised by plan-items (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `get_skill` | plan-item · read | ✗ none | 1 |  |  |  |
@@ -559,7 +560,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `plan.items` | read | ✗ none | 1 | ✓ 0.4j: items with status; unknown plan refused (phone-plans) |  |  |
 | c | `plan.list` | read | ✗ none | 1 | ✓ 0.4j: counts per plan; filter by an opened project only (phone-plans) |  |  |
 | c | `plan.nextItem` | read | ✗ none | 1 | ✓ 0.4j: same as the desktop's next-task; none while nothing is pending (phone-plans) |  |  |
-| c | `plan.status` | read | ✗ none | 1 |  |  |  |
+| c | `plan.status` | read | ✗ none | 2 |  |  |  |
 | c | `plan.template.create` | write | ✗ none | 1 | ✓ 0.4j: plan with items; desktop told with the plan; unknown template refused (phone-plans); bug 37 |  |  |
 | c | `plan.template.list` | read | ✗ none | 1 | ✓ 0.4j: same templates as the desktop (phone-plans) |  |  |
 | c | `plan.update` | write | ✗ none | 1 | ✓ 0.4j: the desktop's edit path — desktop told, status checked, unknown refused (phone-plans); bugs 37, 38 |  |  |
@@ -581,7 +582,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `awareness.answer` | write | 1 | 1 |  |  |  |
 | g | `awareness.needsYou` | read | ✗ none | 2 |  |  |  |
 | g | `awareness.reply` | write | ✗ none | 2 |  |  |  |
-| g | `awareness.signal` | read | ✗ none | 2 |  |  |  |
+| g | `awareness.signal` | read | ✗ none | 3 |  |  |  |
 | g | `breakpoint.answer` | write | 1 | 2 | ✓ B4.4: continue, steer (needs a note) or stop in the person's name; confirmed pairing only, audited, desktop told; the first answer stands (phone-breakpoints) |  |  |
 | g | `breakpoint.waiting` | read | 1 | 2 | ✓ B4.4: held calls oldest first in the desktop's words, pauses and breaches, with the three answers worded for each (phone-breakpoints) |  |  |
 | g | `budget.acknowledge` | write | 1 | 1 | ✓ 0.4j: unflagged, desktop told (phone-sync-and-tools), mobile-budget unit |  |  |

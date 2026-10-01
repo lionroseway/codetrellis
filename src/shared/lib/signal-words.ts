@@ -14,6 +14,8 @@ import type { AwarenessSignal } from '../types';
 export function kindWords(s: Pick<AwarenessSignal, 'kind' | 'subject'>): string {
   // Tasks' materials (A6.3).
   if (s.kind === 'version-split') return 'Different versions';
+  // Teammates' records (C3.2).
+  if (s.kind === 'state-split') return s.subject.said?.some((c) => c.forged) ? 'A record in someone else\'s name' : 'Set two ways at once';
   if (s.subject.material) {
     if (s.kind === 'contract') return 'Changed material';
     if (s.kind === 'stale-base') return 'Material changed';
@@ -48,6 +50,9 @@ export interface SideWords {
 
 const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
+const STATUS_WORDS: Record<string, string> = { pending: 'not started', assigned: 'assigned', in_progress: 'in progress', blocked: 'blocked', done: 'done', skipped: 'skipped' };
+const statusWords = (status: string | null) => STATUS_WORDS[status ?? 'pending'] ?? 'not started';
+
 /** What it is about: the file and, for a function, the function. */
 function about(s: Pick<AwarenessSignal, 'subject'>): string {
   if (s.subject.file && s.subject.symbol) return `${s.subject.symbol} in ${s.subject.file}`;
@@ -56,6 +61,18 @@ function about(s: Pick<AwarenessSignal, 'subject'>): string {
 
 /** Each side and what it is doing, in plain words, in `sideRootsOf` order. */
 export function sideWords(s: Pick<AwarenessSignal, 'kind' | 'workstreams' | 'subject'>, label: (root: string) => string): SideWords[] {
+  // A task set two ways at once (C3.2): one side per person, on the one task.
+  if (s.kind === 'state-split') {
+    const root = s.workstreams[0];
+    const task = s.subject.labels?.[root] ?? label(root);
+    return (s.subject.said ?? []).map((c) => ({
+      root,
+      name: c.name,
+      words: c.forged
+        ? `A record claiming to be ${c.name}'s sets “${task}” to ${statusWords(c.status)}; another record claims to be the same change.`
+        : `${c.name} set “${task}” to ${statusWords(c.status)}, without having seen the other change.`,
+    }));
+  }
   const roots = sideRootsOf(s);
   return roots.map((root, i): SideWords => {
     // A task is named by its title, carried on the signal (A6.3).
@@ -162,6 +179,8 @@ export function briefLine(
     }
     case 'stale-base':
       return `${m} changed after this task and ${namesOf(s, others)} read it.`;
+    case 'state-split':
+      return (s.subject.said ?? []).map((c) => `${c.name}${c.forged ? ' (claimed)' : ''} set this task to ${statusWords(c.status)}`).join('; ') + ', at once.';
     case 'collision':
       return `This task and ${namesOf(s, others)} both record ${m} as their output.`;
     case 'drift': {

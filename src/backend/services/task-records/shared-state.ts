@@ -39,6 +39,8 @@ import { getPlan } from '../plan-service';
 import { applyRecordedState, getItem } from '../plan-item-service';
 import { getLinkedPlanDir } from '../plan-file-service';
 import type { PlanItem } from '../../../shared/types';
+import { headOf, setHead, splitOf } from './heads';
+import type { AtOnceClaim } from '../../../shared/lib/item-status';
 import {
   distinctRecords, isRecordId, parseRecord, readItem, recordFileName, seenOf, serializeRecord,
   type RecordedState, type TaskRecord,
@@ -183,27 +185,15 @@ function itemFolder(projectRoot: string, planUid: string, itemUid: string) {
   return itemFolders(projectRoot, planUid).find((f) => f.item === itemUid) ?? { plan: planUid, item: itemUid, dir, files: [] };
 }
 
-// ── The head this machine last took or wrote ─────────────────────────────
+// ── The head this machine last took or wrote: heads.ts ───────────────────
 
-function headOf(itemUid: string): { writer: string; counter: number; split: string | null } | null {
-  const v = getDb().exec('SELECT writer, counter, split FROM task_record_heads WHERE item_uid = ?', [itemUid])[0]?.values[0];
-  return v ? { writer: String(v[0]), counter: Number(v[1]), split: (v[2] as string | null) ?? null } : null;
+let splitListener: ((projectRoot: string) => void) | undefined;
+/** Told when a project's splits start or end (the server refreshes its signals then). */
+export function setSplitChangedListener(fn: ((projectRoot: string) => void) | undefined): void {
+  splitListener = fn;
 }
-
-function setHead(itemUid: string, writer: string, counter: number, split: string | null): void {
-  getDb().run(
-    `INSERT INTO task_record_heads (item_uid, writer, counter, split) VALUES (?, ?, ?, ?)
-     ON CONFLICT(item_uid) DO UPDATE SET writer = excluded.writer, counter = excluded.counter, split = excluded.split`,
-    [itemUid, writer, counter, split],
-  );
-  markDirty();
-}
-
-/** People acting at once on this item, as last read: who, and what each said. C3.2 makes it a signal. */
-export function splitOf(itemUid: string): Array<{ name: string; status: string | null; at: number }> | null {
-  const s = headOf(itemUid)?.split;
-  if (!s) return null;
-  try { return JSON.parse(s) as Array<{ name: string; status: string | null; at: number }>; } catch { return null; }
+function splitsChanged(projectRoot: string): void {
+  try { splitListener?.(projectRoot); } catch (err) { console.warn('[TaskRecords] signal refresh failed:', err); }
 }
 
 // ── Writing ──────────────────────────────────────────────────────────────
@@ -249,8 +239,26 @@ export function writeRecordFor(item: PlanItem, by: { author: string; authorType:
     plan: item.planUid, item: item.uid, by, state: stateOf(item),
   };
   const file = writeFileWithin(root, path.join(folder.dir, recordFileName(me, counter)), serializeRecord(record), 'task record');
+  // Made having seen everyone's latest, so it ends a split this machine had (C3.2).
+  const ended = !!headOf(item.uid)?.split;
   setHead(item.uid, me, counter, null);
+  if (ended) splitsChanged(root);
   return file;
+}
+
+/**
+ * Settle a task people set two ways at once by keeping this machine's state
+ * (C3.2): a new record of it, made having seen theirs, which ends the split
+ * here and, once it reaches them, there. Taking a teammate's state is just
+ * setting it, which writes a record as any change does.
+ */
+export function keepMyState(itemUid: string, by: { author: string; authorType: string }): { ok: true; file: string } | { ok: false; status: number; error: string } {
+  const item = getItem(itemUid);
+  if (!item || item.kind !== 'action') return { ok: false, status: 404, error: 'no such task' };
+  if (!splitOf(itemUid)) return { ok: false, status: 409, error: 'Nobody set this task two ways at once, so there is nothing to settle.' };
+  const file = writeRecordFor(item, by);
+  if (!file) return { ok: false, status: 409, error: 'This project does not share task state, so no record can be written.' };
+  return { ok: true, file: path.basename(file) };
 }
 
 // ── Reading and taking teammates' state ──────────────────────────────────
@@ -268,6 +276,8 @@ function recordAuthor(r: TaskRecord): { author: string; authorType: string } {
 
 export interface ReadResult { read: number; applied: string[]; split: string[] }
 
+const claimOf = (r: TaskRecord, forged = false): AtOnceClaim => ({ name: r.name, status: r.state.status, at: r.at, ...(forged ? { forged: true } : {}) });
+
 /**
  * Read every writer's records in a project (or one plan's), and take each
  * item's settled state when it is a teammate's this machine has not taken.
@@ -277,24 +287,31 @@ export function readProjectRecords(projectRoot: string, onlyPlan?: string, onApp
   const result: ReadResult = { read: 0, applied: [], split: [] };
   if (!isSharingTaskState(projectRoot)) return result;
   const me = writerId();
+  let changed = false;
   for (const f of itemFolders(projectRoot, onlyPlan)) {
     const item = getItem(f.item);
     // Only a task this machine has, in the plan the folder names.
     if (!item || item.planUid !== f.plan || item.kind !== 'action') continue;
     if (getPlan(f.plan)?.projectPath !== projectRoot) continue;
-    const records = distinctRecords(readFolder(projectRoot, f)).records;
+    const { records, clashing } = distinctRecords(readFolder(projectRoot, f));
     result.read += records.length;
     const read = readItem(records);
     const known = headOf(item.uid);
-    if (read.kind === 'split') {
-      const split = JSON.stringify(read.heads.map((h) => ({ name: h.name, status: h.state.status, at: h.at })));
-      if (known?.split !== split) setHead(item.uid, known?.writer ?? '', known?.counter ?? 0, split);
+    // Two different records under one writer and counter: someone wrote one
+    // in another's name. Neither is taken, and both are named (C3.2).
+    const claims = clashing.length
+      ? clashing.flatMap((c) => [claimOf(records.find((r) => r.writer === c.writer && r.counter === c.counter)!, true), claimOf(c, true)])
+      : read.kind === 'split' ? read.heads.map((h) => claimOf(h)) : null;
+    if (claims) {
+      const split = JSON.stringify(claims);
+      if (known?.split !== split) { setHead(item.uid, known?.writer ?? '', known?.counter ?? 0, split); changed = true; }
       result.split.push(item.uid);
       continue;
     }
     if (read.kind !== 'settled') continue;
     const { head } = read;
     if (known && known.writer === head.writer && known.counter === head.counter && !known.split) continue;
+    if (known?.split) changed = true;
     setHead(item.uid, head.writer, head.counter, null);
     if (head.writer === me) continue;
     const s = head.state;
@@ -308,6 +325,7 @@ export function readProjectRecords(projectRoot: string, onlyPlan?: string, onApp
       onApplied?.(applied);
     }
   }
+  if (changed) splitsChanged(projectRoot);
   return result;
 }
 
