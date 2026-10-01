@@ -14,6 +14,11 @@
  *  - ○ no tests: nothing with a result imports it.
  *
  * CodeTrellis runs nothing: these are what the runs handed over said.
+ *
+ * A teammate's run (D1.5a), read from their run record after a pull, counts
+ * the same, and for each test file the newest run wins, here or theirs. It
+ * is judged by commit: older than the code when the file or its test changed
+ * since the commit the run was made on, or differed from it when it ran.
  */
 
 import fs from 'node:fs';
@@ -22,6 +27,8 @@ import { importersOf } from '../importers';
 import { getDb } from '../database';
 import { resolveWithin } from '../confined-fs';
 import { listTestResults, type TestResultRow } from './test-results';
+import { changedSinceCommit, listTeammateRuns, type TeammateRun } from './teammate-runs';
+import type { RunFile } from '../task-records/run-record';
 
 export type GroundingState = 'failing' | 'stale' | 'passing' | 'untested';
 
@@ -33,13 +40,16 @@ export interface FileGrounding {
   words: string;
   /** The test files that import it, relative. */
   testFiles: string[];
-  tests: Array<Pick<TestResultRow, 'label' | 'result' | 'message' | 'ranAt'> & { testFile: string }>;
+  /** Each test, or for a teammate's run its failing tests and a count of the rest (`count`). */
+  tests: Array<Pick<TestResultRow, 'label' | 'result' | 'message' | 'ranAt'> & { testFile: string; count?: number }>;
   /** When its newest test run happened (ms), or null. */
   lastRunAt: number | null;
   /** When the file last changed on disk (ms), or null when it is not there. */
   changedAt: number | null;
   /** The file is itself a test file with results. */
   isTest: boolean;
+  /** When the newest run it rests on was a teammate's (D1.5a): whose, verified or not, and at which commit. */
+  from: { who: string; verified: boolean; commit: string | null; at: number } | null;
 }
 
 export class NotAFileError extends Error {}
@@ -60,45 +70,89 @@ export function testFileOf(root: string, t: Pick<TestResultRow, 'file' | 'classn
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
+type Weighted = Pick<TestResultRow, 'result'> & { count?: number };
+
 /** The words for a file's tests, pure: the state and its sentence. */
-export function groundingWords(tests: ReadonlyArray<Pick<TestResultRow, 'result'>>, lastRunAt: number | null, changedAt: number | null): { state: GroundingState; words: string } {
-  if (tests.length === 0) return { state: 'untested', words: '○ no tests: no test with a reported result imports it' };
-  const failing = tests.filter((t) => t.result === 'failed' || t.result === 'error').length;
-  const ran = tests.filter((t) => t.result !== 'skipped').length;
-  const stale = changedAt !== null && lastRunAt !== null && changedAt > lastRunAt + SLACK_MS;
-  if (failing) return { state: 'failing', words: `✗ ${failing} of ${plural(tests.length, 'test')} failing${stale ? ', and it changed after they ran' : ''}` };
-  if (stale) return { state: 'stale', words: `⚠ tests older than the code: it changed after its ${plural(tests.length, 'test')} last ran` };
-  if (ran === 0) return { state: 'untested', words: `○ ${plural(tests.length, 'test')}, all skipped` };
+export function groundingWords(tests: ReadonlyArray<Weighted>, lastRunAt: number | null, changedAt: number | null): { state: GroundingState; words: string } {
+  return wordsOf(tests, changedAt !== null && lastRunAt !== null && changedAt > lastRunAt + SLACK_MS);
+}
+
+/** The words, given whether the code changed after the tests ran. A teammate's run counts its passing tests in one entry. */
+function wordsOf(tests: ReadonlyArray<Weighted>, stale: boolean): { state: GroundingState; words: string } {
+  const n = (t: Weighted) => t.count ?? 1;
+  const total = tests.reduce((a, t) => a + n(t), 0);
+  if (total === 0) return { state: 'untested', words: '○ no tests: no test with a reported result imports it' };
+  const failing = tests.filter((t) => t.result === 'failed' || t.result === 'error').reduce((a, t) => a + n(t), 0);
+  const ran = tests.filter((t) => t.result !== 'skipped').reduce((a, t) => a + n(t), 0);
+  if (failing) return { state: 'failing', words: `✗ ${failing} of ${plural(total, 'test')} failing${stale ? ', and it changed after they ran' : ''}` };
+  if (stale) return { state: 'stale', words: `⚠ tests older than the code: it changed after its ${plural(total, 'test')} last ran` };
+  if (ran === 0) return { state: 'untested', words: `○ ${plural(total, 'test')}, all skipped` };
   return { state: 'passing', words: `✓ ${plural(ran, 'test')} passing` };
 }
 
+/** A teammate's run of one test file, as entries: each failing test, then the passing and skipped counted. */
+function runEntries(run: TeammateRun, f: RunFile): FileGrounding['tests'] {
+  const out: FileGrounding['tests'] = f.failing.map((x) => ({ label: x.name, result: x.result, message: x.why, ranAt: run.at, testFile: f.file }));
+  // Failing tests beyond those named are counted, not listed.
+  if (f.failed > f.failing.length) out.push({ label: `${f.failed - f.failing.length} more failing`, result: 'failed', message: null, ranAt: run.at, testFile: f.file, count: f.failed - f.failing.length });
+  if (f.passed) out.push({ label: `${plural(f.passed, 'test')} passing`, result: 'passed', message: null, ranAt: run.at, testFile: f.file, count: f.passed });
+  if (f.skipped) out.push({ label: `${plural(f.skipped, 'test')} skipped`, result: 'skipped', message: null, ranAt: run.at, testFile: f.file, count: f.skipped });
+  return out;
+}
+
 /** One file's grounding. `candidate` is absolute or relative to the project. */
-export function groundingOf(projectRoot: string, candidate: string, known?: TestResultRow[]): FileGrounding {
+export function groundingOf(projectRoot: string, candidate: string, known?: TestResultRow[], knownRuns?: TeammateRun[]): FileGrounding {
   const abs = resolveWithin(projectRoot, path.isAbsolute(candidate) ? candidate : path.join(projectRoot, candidate), 'file');
   const rel = path.relative(projectRoot, abs).split(path.sep).join('/');
   // A folder has no tests of its own; saying "no tests" of one would mislead.
   try { if (fs.lstatSync(abs).isDirectory()) throw new NotAFileError(`${rel || '.'} is a folder, not a file.`); } catch (err) { if (err instanceof NotAFileError) throw err; }
   const results = known ?? listTestResults(projectRoot, { limit: 100_000 });
+  const runs = knownRuns ?? listTeammateRuns(projectRoot);
   const withFile = results.map((t) => ({ t, testFile: testFileOf(projectRoot, t) }));
-  const own = withFile.filter((x) => x.testFile === rel);
-  let covering: typeof withFile;
+  const isOwn = withFile.some((x) => x.testFile === rel) || runs.some((r) => r.files.some((f) => f.file === rel));
   let testFiles: string[];
-  if (own.length) {
-    covering = own;
+  if (isOwn) {
     testFiles = [rel];
   } else {
     const importers = new Set(importersOf(abs).map((i) => i.relativePath.split(path.sep).join('/')));
-    covering = withFile.filter((x) => x.testFile !== null && importers.has(x.testFile));
-    testFiles = [...new Set(covering.map((x) => x.testFile!))].sort();
+    const known = new Set<string>([...withFile.map((x) => x.testFile).filter((f): f is string => !!f), ...runs.flatMap((r) => r.files.map((f) => f.file))]);
+    testFiles = [...known].filter((f) => importers.has(f)).sort();
   }
   let changedAt: number | null = null;
   try { changedAt = Math.round(fs.lstatSync(abs).mtimeMs); } catch { /* not on disk */ }
-  const lastRunAt = covering.length ? Math.max(...covering.map((x) => x.t.ranAt)) : null;
-  const { state, words } = groundingWords(covering.map((x) => x.t), lastRunAt, changedAt);
+
+  // Each test file's newest run, here or a teammate's.
+  const tests: FileGrounding['tests'] = [];
+  let stale = false;
+  let lastRunAt: number | null = null;
+  let newestRun: TeammateRun | null = null;
+  for (const tf of testFiles) {
+    const local = withFile.filter((x) => x.testFile === tf);
+    const localAt = local.length ? Math.max(...local.map((x) => x.t.ranAt)) : -Infinity;
+    let best: { run: TeammateRun; file: RunFile } | null = null;
+    for (const run of runs) {
+      const f = run.files.find((x) => x.file === tf);
+      if (f && run.at > localAt && (!best || run.at > best.run.at)) best = { run, file: f };
+    }
+    if (best) {
+      tests.push(...runEntries(best.run, best.file));
+      // By commit: the code or its test changed since, or differed when it ran.
+      const since = best.run.commit ? changedSinceCommit(projectRoot, best.run.commit) : null;
+      if (!since || since.has(rel) || since.has(tf) || best.run.dirty.includes(rel) || best.run.dirty.includes(tf)) stale = true;
+      if (!newestRun || best.run.at > newestRun.at) newestRun = best.run;
+      lastRunAt = Math.max(lastRunAt ?? 0, best.run.at);
+    } else if (local.length) {
+      tests.push(...local.map((x) => ({ label: x.t.label, result: x.t.result, message: x.t.message, ranAt: x.t.ranAt, testFile: tf })));
+      if (changedAt !== null && changedAt > localAt + SLACK_MS) stale = true;
+      lastRunAt = Math.max(lastRunAt ?? 0, localAt);
+    }
+  }
+  const words = wordsOf(tests, stale);
+  if (newestRun && tests.length) words.words += `, in ${newestRun.who}'s run at ${newestRun.commit ? newestRun.commit.slice(0, 7) : 'an unknown commit'}${newestRun.verified ? '' : ', unverified'}`;
   return {
-    path: rel, state, words, testFiles,
-    tests: covering.map((x) => ({ label: x.t.label, result: x.t.result, message: x.t.message, ranAt: x.t.ranAt, testFile: x.testFile! })),
-    lastRunAt, changedAt, isTest: own.length > 0,
+    path: rel, state: words.state, words: words.words, testFiles: testFiles.filter((tf) => tests.some((t) => t.testFile === tf)),
+    tests, lastRunAt, changedAt, isTest: isOwn,
+    from: newestRun ? { who: newestRun.who, verified: newestRun.verified, commit: newestRun.commit, at: newestRun.at } : null,
   };
 }
 
@@ -122,10 +176,14 @@ const MAX_BARRELS = 5;
  */
 export function groundingMap(projectRoot: string): GroundingMap {
   const results = listTestResults(projectRoot, { limit: 100_000 });
+  const runs = listTeammateRuns(projectRoot);
   const counts: Record<GroundingState, number> = { failing: 0, stale: 0, passing: 0, untested: 0 };
   const files: GroundingMap['files'] = {};
-  if (results.length === 0) return { files, hasResults: false, counts };
-  const testFiles = new Set(results.map((t) => testFileOf(projectRoot, t)).filter((f): f is string => !!f));
+  if (results.length === 0 && runs.length === 0) return { files, hasResults: false, counts };
+  const testFiles = new Set([
+    ...results.map((t) => testFileOf(projectRoot, t)).filter((f): f is string => !!f),
+    ...runs.flatMap((r) => r.files.map((f) => f.file)),
+  ]);
   const importsOf = (absFile: string): Array<{ path: string; reexport: boolean }> =>
     (getDb().exec(
       `SELECT i.resolved_path, i.is_reexport FROM imports i JOIN files f ON i.file_id = f.id
@@ -153,7 +211,7 @@ export function groundingMap(projectRoot: string): GroundingMap {
   }
   for (const rel of candidates) {
     let g: FileGrounding;
-    try { g = groundingOf(projectRoot, rel, results); } catch { continue; }
+    try { g = groundingOf(projectRoot, rel, results, runs); } catch { continue; }
     if (g.state === 'untested' && g.tests.length === 0) continue;
     files[rel] = { state: g.state, words: g.words };
     counts[g.state]++;

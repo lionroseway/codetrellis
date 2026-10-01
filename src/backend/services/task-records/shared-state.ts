@@ -53,6 +53,9 @@ import {
   forgetReadsBy, forgetTeammateReads, materialReadsChoice, readCounts, readTeammateReads, READS_DIR, setMaterialReadsChoice, writeReadRecord,
   type MaterialReadsChoice,
 } from './material-reads';
+import { myRunCount, readTeammateRuns, RUNS_DIR, writeRunRecord } from './test-runs';
+import { forgetTeammateRuns, listTeammateRuns } from '../tests/teammate-runs';
+import { setReportListener } from '../tests/test-results';
 import {
   checkContext, decideKey, listTeammateKeys, readKeyIntroductions, signRecord, signingWay, verifyTaskRecord,
   type CheckContext, type SigningWay, type TeammateKey, type Verdict,
@@ -84,6 +87,8 @@ export interface SharedTaskStateStatus {
   checked: { verified: number; unverified: number; reasons: Array<{ why: string; records: number }> };
   /** Teammates' material reads (C3.5): on by default while task state is shared. */
   materialReads: MaterialReadsChoice & { mine: number; teammates: number; people: string[]; says: string };
+  /** D1.5a: test runs shared with task state: this device's latest, and each teammate's read here. */
+  runs: { mine: number; teammates: Array<{ who: string; verified: boolean; at: number; commit: string | null; tests: number; failing: number }>; says: string };
 }
 
 // ── The switch ───────────────────────────────────────────────────────────
@@ -170,8 +175,31 @@ export function getSharedTaskState(projectRoot: string): SharedTaskStateStatus {
     keys: listTeammateKeys(home && home !== projectRoot ? [projectRoot, home] : [projectRoot]),
     checked: checkedCounts(projectRoot),
     materialReads: materialReadsStatus(projectRoot, enabled, home),
+    runs: runsStatus(projectRoot, enabled, home),
   };
 }
+
+function runsStatus(projectRoot: string, sharing: boolean, home: string | null): SharedTaskStateStatus['runs'] {
+  const teammates = listTeammateRuns(projectRoot).map((r) => ({
+    who: r.who, verified: r.verified, at: r.at, commit: r.commit, tests: r.totals.tests, failing: r.totals.failed + r.totals.errors,
+  }));
+  const from = teammates.length ? ` Runs from ${[...new Set(teammates.map((t) => t.who))].join(', ')} are here.` : '';
+  return {
+    mine: myRunCount(home, writerId()),
+    teammates,
+    says: sharing
+      ? `On with task state: each test run reported here is written to ${RUNS_DIR}, and teammates' runs ground your files by the commit they ran on.${from}`
+      : 'Shared with task state: turn that on first.',
+  };
+}
+
+// D1.5a: a new run reported here is shared where task state is.
+setReportListener((run) => {
+  if (!isSharingTaskState(run.projectRoot)) return;
+  const home = plansHome(run.projectRoot);
+  if (!home) return;
+  writeRunRecord({ projectRoot: run.projectRoot, home, me: writerId(), name: writerName(run.projectRoot) }, run);
+});
 
 function materialReadsStatus(projectRoot: string, sharing: boolean, home: string | null): SharedTaskStateStatus['materialReads'] {
   const choice = materialReadsChoice(projectRoot, sharing);
@@ -245,6 +273,8 @@ export function setSharedTaskState(projectRoot: string, enabled: boolean, by: st
     stopRecordWatcher(projectRoot);
     // Teammates' reads came with sharing (C3.5): no signal rests on them now.
     if (forgetTeammateReads(projectRoot)) splitsChanged(projectRoot);
+    // And their test runs (D1.5a): nothing here is grounded on them now.
+    if (forgetTeammateRuns({ projectRoot })) runsChanged(projectRoot);
   }
   return getSharedTaskState(projectRoot);
 }
@@ -316,6 +346,11 @@ function itemFolder(projectRoot: string, home: string, planUid: string, itemUid:
 
 let splitListener: ((projectRoot: string) => void) | undefined;
 /** Told when a project's splits start or end (the server refreshes its signals then). */
+let runsListener: ((projectRoot: string) => void) | undefined;
+/** Told when teammates' test runs here changed (the server broadcasts it, so grounding is asked again). */
+export function setRunsChangedListener(fn: ((projectRoot: string) => void) | undefined): void { runsListener = fn; }
+function runsChanged(projectRoot: string): void { try { runsListener?.(projectRoot); } catch { /* a listener never stops a read */ } }
+
 export function setSplitChangedListener(fn: ((projectRoot: string) => void) | undefined): void {
   splitListener = fn;
 }
@@ -471,6 +506,8 @@ export function readProjectRecords(projectRoot: string, onlyPlan?: string, onApp
   }
   // Teammates' material reads (C3.5), when they are shared too.
   if (isSharingMaterialReads(projectRoot) && readTeammateReads(projectRoot, home, me, onlyPlan) > 0) changed = true;
+  // Teammates' test runs (D1.5a).
+  if (readTeammateRuns(projectRoot, home, me) > 0) runsChanged(projectRoot);
   if (changed) splitsChanged(projectRoot);
   return result;
 }
@@ -485,13 +522,15 @@ export function readProjectRecords(projectRoot: string, onlyPlan?: string, onApp
 export function trustTeammateKey(writer: string, fingerprint: string, trust: boolean, by: string): { key: TeammateKey; rechecked: string[] } | null {
   const key = decideKey(writer, fingerprint, trust, by);
   if (!key) return null;
-  // Its material reads are read again, so who read them is checked again (C3.5).
+  // Its material reads and test runs are read again, so who made them is checked again (C3.5, D1.5a).
   forgetReadsBy(writer);
+  forgetTeammateRuns({ writer });
   const me = writerId();
   for (const v of getDb().exec('SELECT project_root FROM shared_task_state WHERE enabled = 1')[0]?.values ?? []) {
     const root = String(v[0]);
     const home = plansHome(root);
     if (home && isSharingMaterialReads(root) && readTeammateReads(root, home, me) > 0) splitsChanged(root);
+    if (home && readTeammateRuns(root, home, me) > 0) runsChanged(root);
   }
   const rechecked: string[] = [];
   for (const h of headsBy(writer)) {
@@ -537,11 +576,12 @@ export function startRecordWatcher(projectRoot: string): Promise<void> {
   const home = plansHome(projectRoot);
   if (!home) return Promise.resolve();
   const dir = path.join(home, RECORDS_DIR);
-  // Teammates' material reads arrive beside their records (C3.5).
+  // Teammates' material reads (C3.5) and test runs (D1.5a) arrive beside their records.
   const reads = path.join(home, READS_DIR);
-  try { fs.mkdirSync(dir, { recursive: true }); fs.mkdirSync(reads, { recursive: true }); } catch { return Promise.resolve(); }
+  const runs = path.join(home, RUNS_DIR);
+  try { for (const d of [dir, reads, runs]) fs.mkdirSync(d, { recursive: true }); } catch { return Promise.resolve(); }
   let timer: NodeJS.Timeout | null = null;
-  const watcher = chokidar.watch([dir, reads], {
+  const watcher = chokidar.watch([dir, reads, runs], {
     ignoreInitial: true, persistent: true, depth: 3, followSymlinks: false,
     awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },
   });

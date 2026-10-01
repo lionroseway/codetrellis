@@ -85,7 +85,8 @@ import { forgetHostReads } from './services/review-host/host-state';
 import { forgetReviewHostToken, getReviewHost, ReviewHostError, saveReviewHostToken, setReviewHost } from './services/review-host/switch';
 import { listTestReports, listTestResults, testsSummary } from './services/tests/test-results';
 import { groundingMap, groundingOf, NotAFileError } from './services/tests/grounding';
-import { getSharedTaskState, keepMyState, readAndTell, setRecordAppliedListener, setSharedMaterialReads, setSharedTaskState, setSplitChangedListener, startRecordWatcher, stopRecordWatcher, trustTeammateKey, writeRecordFor } from './services/task-records/shared-state';
+import { teammateRunSummaries } from './services/tests/teammate-runs';
+import { getSharedTaskState, keepMyState, readAndTell, setRecordAppliedListener, setSharedMaterialReads, setSharedTaskState, setRunsChangedListener, setSplitChangedListener, startRecordWatcher, stopRecordWatcher, trustTeammateKey, writeRecordFor } from './services/task-records/shared-state';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
 import { buildPlaybackSequence } from './services/playback-service';
 import * as commentService from './services/comment-service';
@@ -2471,6 +2472,8 @@ app.get('/api/tests', (req, res) => {
     summary: testsSummary(projectRoot),
     reports: listTestReports(projectRoot, 10),
     tests: listTestResults(projectRoot, { match, limit: 500 }),
+    // D1.5a: teammates' latest runs, read from the plans folder.
+    teammates: teammateRunSummaries(projectRoot),
   });
 });
 
@@ -5915,6 +5918,8 @@ export async function initializeBackend(): Promise<void> {
   // C3.2: people setting a task two ways at once is a signal; it starts and
   // ends with the records, so the project's signals are refreshed then.
   setSplitChangedListener((projectRoot) => { refreshSignals(projectRoot); });
+  // D1.5a: a teammate's test run arrived (or was forgotten): grounding is asked again.
+  setRunsChangedListener((projectRoot) => { broadcast('tests-reported', { project: projectRoot }); });
   planItemService.setStatusChangeListener(({ planUid, itemUid }) => {
     const plan = planService.getPlan(planUid);
     if (!plan?.projectPath) return;

@@ -348,6 +348,26 @@ export const SCHEMA_PLANS_CORE = `
   );
   CREATE INDEX IF NOT EXISTS idx_teammate_material_reads_item ON teammate_material_reads(item_uid, at);
 
+  -- Phase 32 D1.5a: each teammate device's latest test run in a project, read
+  -- from its run record in the plans folder (.codetrellis/runs/). One row per
+  -- device: a newer run replaces it. Forgotten when sharing is turned off.
+  CREATE TABLE IF NOT EXISTS teammate_test_runs (
+    project_root TEXT NOT NULL,
+    writer TEXT NOT NULL,
+    counter INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    by_author TEXT NOT NULL,
+    by_type TEXT NOT NULL,
+    commit_sha TEXT,
+    dirty TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    report TEXT NOT NULL,
+    totals TEXT NOT NULL,
+    files TEXT NOT NULL,
+    verdict TEXT,
+    PRIMARY KEY (project_root, writer)
+  );
+
   CREATE TABLE IF NOT EXISTS task_record_device_key (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     public_key TEXT NOT NULL,

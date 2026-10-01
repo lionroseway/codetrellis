@@ -13,6 +13,7 @@ test('a command, its flags with and without values, and the rest in order', () =
   assert.deepEqual(p.rest, ['extra', '--not-a-flag']);
   // A switch never swallows the next word.
   assert.deepEqual(parseArgs(['scan', '--json', 'here']).rest, ['here']);
+  for (const sw of ['--quiet', '--share-task-state', '--top', '--page']) assert.deepEqual(parseArgs(['start', sw, 'here']).rest, ['here'], sw);
   assert.equal(parseArgs(['-h']).flags.help, true);
   assert.equal(parseArgs([]).command, null);
 });

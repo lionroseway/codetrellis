@@ -16,7 +16,7 @@ export interface Parsed {
 }
 
 /** Flags that never take a value, so `--json foo` keeps `foo` as an argument. */
-const SWITCHES = new Set(['json', 'help', 'no-wait']);
+const SWITCHES = new Set(['json', 'help', 'no-wait', 'quiet', 'share-task-state', 'top', 'page']);
 
 export function parseArgs(argv: readonly string[]): Parsed {
   const flags: Record<string, string | true> = {};
@@ -101,15 +101,17 @@ export function connectorLine(nodePath: string, binPath: string, dataDir: string
 
 export const USAGE = `codetrellis — CodeTrellis for agents, without the desktop app
 
-  codetrellis serve [--project <dir>] [--data-dir <dir>] [--port <n>] [--mcp-port <n>] [--json]
+  codetrellis serve [--project <dir>] [--data-dir <dir>] [--port <n>] [--mcp-port <n>] [--share-task-state] [--json]
       Run the backend headless for a project: loopback only, the capability
       token on every transport, no discovery, peers or update check. Prints
-      the line an agent's MCP config needs.
+      the line an agent's MCP config needs. --share-task-state writes task
+      state and test runs to the project's files and reads teammates', as the
+      app's Settings switch does.
 
   codetrellis scan [--project <dir>] [--data-dir <dir>] [--json]
       Scan a project once and print what was found, then exit.
 
-  codetrellis start [--project <dir>] [--data-dir <dir>] [--timeout <s>] [--quiet | --json]
+  codetrellis start [--project <dir>] [--data-dir <dir>] [--timeout <s>] [--share-task-state] [--quiet | --json]
       serve in the background, unless it already runs for this folder; for a
       session-start hook or a CI step. Its log is serve.log in the data dir.
 

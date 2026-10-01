@@ -34,6 +34,8 @@ interface Status {
   keys: TeammateKey[];
   checked: { verified: number; unverified: number; reasons: Array<{ why: string; records: number }> };
   materialReads: { enabled: boolean; chosen: boolean; changedAt: number | null; changedBy: string | null; mine: number; teammates: number; people: string[]; says: string };
+  /** D1.5a: test runs travel with task state. Absent from an older backend. */
+  runs?: { mine: number; teammates: Array<{ who: string; verified: boolean; at: number; commit: string | null; tests: number; failing: number }>; says: string };
 }
 
 interface TeammateKey {
@@ -180,6 +182,31 @@ export function SharedTaskStateSection() {
             <p className="text-[11px] text-foreground-muted" data-testid="shared-reads-counts">
               {plural(status.materialReads.mine, 'version')} read here {status.materialReads.mine === 1 ? 'is' : 'are'} recorded; {plural(status.materialReads.teammates, 'read')} from teammates {status.materialReads.teammates === 1 ? 'is' : 'are'} compared with yours.
             </p>
+          )}
+        </div>
+      )}
+
+      {status?.runs && (
+        <div className="rounded border border-white/[0.06] bg-white/[0.02] p-3 space-y-2 text-[12px]" data-testid="shared-runs">
+          <div className="text-foreground-subtle text-[11px] uppercase tracking-wider">Test runs</div>
+          <p className="text-foreground-muted leading-relaxed">
+            Each run reported here, and the commit it ran on, so a run in a cloud session or a CI job says whether your files&apos; tests pass, after you pull.
+          </p>
+          <p className={status.enabled ? 'text-emerald-300' : 'text-foreground'} data-testid="shared-runs-says">{status.runs.says}</p>
+          {status.enabled && status.runs.teammates.length > 0 && (
+            <ul className="space-y-1" data-testid="shared-runs-list">
+              {status.runs.teammates.map((r) => (
+                <li key={`${r.who}-${r.at}`} className="flex items-baseline justify-between gap-3 text-[11px]">
+                  <span className="text-foreground min-w-0 truncate">
+                    {r.who}
+                    <span className="text-foreground-muted"> · {r.commit ? <code className="font-mono">{r.commit.slice(0, 7)}</code> : 'no commit'} · {new Date(r.at).toLocaleString()}</span>
+                  </span>
+                  <span className={`shrink-0 ${r.failing ? 'text-red-300' : 'text-emerald-300'}`}>
+                    {r.failing ? `✗ ${r.failing} of ${r.tests} failing` : `✓ ${r.tests} passing`}{r.verified ? '' : ' · unverified'}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       )}

@@ -27,6 +27,20 @@ const fail = (s: string, code = 2): never => {
   process.exit(code);
 };
 
+/**
+ * `--share-task-state` (D1.5a): write this backend's task state and test runs
+ * to the project's files, and read teammates', as the app's Settings switch
+ * does. In the app only the window may turn it on; a headless backend has no
+ * window, and the person who wrote the command (in a hook or a pipeline) is
+ * the one choosing. Never for the desktop app's own data dir: that switch
+ * stays the window's.
+ */
+async function shareTaskState(project: string): Promise<void> {
+  const { setSharedTaskState, startRecordWatcher } = await import('../backend/services/task-records/shared-state');
+  setSharedTaskState(project, true, 'the command line (--share-task-state)');
+  await startRecordWatcher(project);
+}
+
 /** The backend logs to the console; none of it may reach stdout. */
 function backendLogToStderr(): void {
   const toErr = (...args: unknown[]) => console.error(...args);
@@ -53,6 +67,13 @@ function portOf(p: Parsed, name: string): string | undefined {
 
 /** Boot the backend in this process, headless, on loopback; open the project. */
 async function boot(p: Parsed, project: string, dataDir: string) {
+  if (p.flags['share-task-state']) {
+    const { defaultDataDir } = await import('../backend/mcp/connector/files');
+    // The app's own folder, whatever CODETRELLIS_DATA_DIR says (a job may set that to its cache).
+    if (path.resolve(dataDir) === path.resolve(defaultDataDir({}))) {
+      fail('--share-task-state is for a headless backend; in the app, turn it on in Settings → Shared task state.', 2);
+    }
+  }
   process.env.CODETRELLIS_DATA_DIR = dataDir;
   process.env.CODETRELLIS_HEADLESS = '1';
   const port = portOf(p, 'port');
@@ -77,6 +98,7 @@ async function boot(p: Parsed, project: string, dataDir: string) {
   });
   const scan = await res.json().catch(() => ({})) as { fileCount?: number; astStats?: { fileCount?: number; symbolCount?: number; importCount?: number; resolvedImports?: number }; error?: string };
   if (!res.ok) fail(`could not open ${project}: ${scan.error ?? res.status}`, 1);
+  if (p.flags['share-task-state']) await shareTaskState(project);
   // The MCP server's URL, as the connector will read it (never the token).
   const { readConnectTarget } = await import('../backend/mcp/connector/files');
   const target = readConnectTarget(dataDir);
@@ -192,6 +214,7 @@ async function start(p: Parsed): Promise<void> {
   const log = fs.openSync(path.join(dataDir, 'serve.log'), 'a');
   const args = [binPath(), 'serve', '--project', project, '--data-dir', dataDir];
   for (const k of ['port', 'mcp-port']) { const v = portOf(p, k); if (v !== undefined) args.push(`--${k}`, v); }
+  if (p.flags['share-task-state']) args.push('--share-task-state');
   const { spawn } = await import('node:child_process');
   const child = spawn(process.execPath, args, { detached: true, stdio: ['ignore', log, log], cwd: project, env: process.env });
   child.unref();

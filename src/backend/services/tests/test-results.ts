@@ -128,8 +128,23 @@ export function ingestTestReport(
   }
   markDirty();
   const report = reportRow(db.exec(`SELECT ${REPORT_COLS} FROM test_reports WHERE id = ?`, [id])[0].values[0]);
+  // D1.5a: a new run is shared with teammates, where task state is.
+  try { reportListener?.({ projectRoot, path: rel, ranAt, by, totals: t, cases: parsed.cases }); } catch (err) { console.warn('[Tests] sharing the run failed:', err); }
   return { report, already: false, failing, truncated: parsed.truncated };
 }
+
+export interface RecordedRun {
+  projectRoot: string;
+  /** The report, project-relative. */
+  path: string;
+  ranAt: number;
+  by: { author: string; authorType: string };
+  totals: { tests: number; passed: number; failed: number; errors: number; skipped: number };
+  cases: TestCase[];
+}
+let reportListener: ((run: RecordedRun) => void) | undefined;
+/** Told of each new run as it is recorded (not one read before). */
+export function setReportListener(fn: ((run: RecordedRun) => void) | undefined): void { reportListener = fn; }
 
 /**
  * The project's tests with their last results, failing first. `match`

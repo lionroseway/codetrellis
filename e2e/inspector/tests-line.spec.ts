@@ -66,4 +66,20 @@ test.describe('Inspector: a file\'s tests', () => {
     await expect(line.getByTestId('inspector-tests-words')).toHaveText('⚠ tests older than the code: it changed after its 2 tests last ran');
     await line.screenshot({ path: path.join(OUT, 'inspector-tests-stale.png') });
   });
+
+  test('a file grounded by a teammate\'s run says whose, at which commit, and that it is unverified (D1.5a)', async ({ page }) => {
+    const words = '✓ 2 tests passing, in ci for Build bot\'s run at b7e41c0, unverified';
+    await page.route('**/api/tests/grounding?*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      path: FILE, state: 'passing', words, isTest: false, testFiles: ['src/shared/lib/item-status.test.ts'],
+      tests: [{ label: '2 tests passing', result: 'passed', message: null, testFile: 'src/shared/lib/item-status.test.ts', count: 2 }],
+      from: { who: 'ci for Build bot', verified: false, commit: 'b7e41c09d2f5a8836c1e0f4a9b2d7c5e8a1f3d60', at: Date.UTC(2026, 9, 1, 13, 40) },
+    }) }));
+    await gotoWithProject(page);
+    await pickInExplorer(page, FILE);
+    const line = page.getByTestId('inspector-tests');
+    await expect(line).toHaveAttribute('data-state', 'passing');
+    await expect(line.getByTestId('inspector-tests-words')).toHaveText(words);
+    fs.mkdirSync(OUT, { recursive: true });
+    await line.screenshot({ path: path.join(OUT, 'inspector-tests-teammate.png') });
+  });
 });

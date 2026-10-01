@@ -24,6 +24,7 @@ keeps its `node_modules`. Node 26, as `.nvmrc` says.
 | `codetrellis start [--quiet \| --json]` | `serve` in the background for the folder, unless one already runs there; returns once the project is scanned. Being up already is success. Its log is `serve.log` in the data dir |
 | `codetrellis stop` | Ends it |
 | `codetrellis serve` | The same backend in the foreground (D1.1) |
+| `--share-task-state` (on `start` or `serve`) | Writes task state and test runs to the project's files and reads teammates', as the app's Settings switch does (D1.5a). Refused for the desktop app's own data dir, whose switch stays the window's |
 
 The data dir is the user's cache, one folder per project
 (`~/.cache/codetrellis/<name>-<hash>` on Linux), never the checkout.
@@ -119,6 +120,27 @@ app, and live in that machine's database. So the breakpoint gate holds on
 a laptop (a pre-push hook with the app open, where `check` talks to the
 app) and finds none in CI. That is deliberate: a breakpoint is "ask me
 first", and nobody can be asked from a runner.
+
+## Test runs that travel (D1.5a)
+
+With task state shared, each new run reported (`report-tests`) is also
+written to `.codetrellis/runs/<writer>-<counter>.yaml`: by test file, the
+counts and the failing tests with why, the commit it ran on, and the files
+that differed from that commit then. A device keeps only its latest; its
+older files are removed when it writes a new one. `codetrellis commit`
+commits it with the plan's files.
+
+A teammate's run, read after a pull, grounds a file on this machine by
+commit: its tests are older than the code when the file or its test changed
+since that commit, or differed from it when the tests ran. Not by the
+file's time: a pull rewrites the files it brings. For each test file the
+newest run counts, this machine's or a teammate's; the Inspector names
+whose ("✓ 2 tests passing, in ci for Build bot's run at b7e41c0,
+unverified"), and Settings → Shared task state lists them.
+
+So a pipeline that should report back to the person's desktop runs
+`codetrellis start --share-task-state`, reports, and commits and pushes the
+run with `codetrellis commit`. One that only gates needs neither.
 
 ## Exit codes
 
