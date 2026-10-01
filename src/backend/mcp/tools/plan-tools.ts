@@ -12,6 +12,7 @@ import { resultWithMeta, authorFromExtra } from '../helpers';
 import { buildPlanPrompt, buildItemPrompt } from '../prompt-builders';
 import { getActiveProjectRoot, isTrustedProjectRoot } from '../../services/trusted-roots';
 import { buildStack } from '../../services/stack-service';
+import { buildPlayForward } from '../../services/play-forward';
 
 export function register(server: McpServer, deps: ToolDeps): void {
   // --- Plan CRUD ---
@@ -160,6 +161,28 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const root = project_path ?? getActiveProjectRoot();
       if (!root) return { isError: true, content: [{ type: 'text' as const, text: 'No project is open.' }] };
       return { content: [{ type: 'text' as const, text: JSON.stringify(buildStack(root), null, 2) }] };
+    },
+  );
+
+  // --- get_play_forward (Phase 32 B9.1) ---
+
+  server.registerTool(
+    'get_play_forward',
+    {
+      description:
+        'Play the plans forward: what every active plan in the project says it will change, from its unfinished tasks, ' +
+        'and where two plans will meet if they go ahead ("◇ planned overlap: JIRA-142 and JIRA-150 both plan to change ' +
+        'src/billing/invoice.ts"), including materials both rely on. The same function, or one plan deleting what another ' +
+        'changes, is serious; an overlap whose tasks already wait on one another is sequenced. Nothing here exists yet. ' +
+        'Use it before claiming work that a planned overlap names.',
+      inputSchema: {
+        project_path: z.string().optional().describe('An opened project. Omit for the one open in the app.'),
+      },
+    },
+    async ({ project_path }) => {
+      const root = project_path ?? getActiveProjectRoot();
+      if (!root) return { isError: true, content: [{ type: 'text' as const, text: 'No project is open.' }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(buildPlayForward(root), null, 2) }] };
     },
   );
 

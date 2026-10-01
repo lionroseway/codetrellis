@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track B — B8.4b: the grounding overlay in replay (J2)"
-  status: "B8.4a in review (#292). B8.4b built: each report keeps its cases; GET /api/tests/grounding/map?at= answers from the reports handed over by then on the replay frame's graph (older than the code against the first frame after the run); the overlay follows the replay cursor and the canvas says tests as reported by then. Harness grounding-replay 5 (and 53 related), browser graph/grounding-replay.spec (shots)"
-  next: "Merge B8.4a, then B8.4b, when green; then B9 (play-forward)"
+  step: "Track B — B9 refined, B9.1: playing the plans forward (the data)"
+  status: "B8 done (#292, #293). B9 refined into four parts; B9.1 built: services/play-forward.ts projects every active plan's unfinished tasks (files, functions, materials) with ◇ planned overlaps (mild or serious, sequenced when their tasks already wait), GET /api/play-forward and get_play_forward. Unit 5, harness play-forward 5"
+  next: "Merge B9.1 when green; then B9.2 (the window plays forward)"
   blockers: "None"
   updated: 2026-10-01
 sections:
@@ -490,6 +490,15 @@ sections:
                 title: "J2: the grounding overlay at a past moment in replay (billing/ from \"○ no tests\" to \"✓ 12 passing\")"
       - id: B9
         title: Play-forward (code, and the materials tasks rely on)
+        items:
+          - id: B9.1
+            title: "The data: every active plan projected, planned overlaps (file, function, material), REST and get_play_forward"
+          - id: B9.2
+            title: "The window plays forward: dashed planned changes and ◇ planned overlaps on the graph, in the Stack tab"
+          - id: B9.3
+            title: "Acting on a planned overlap: re-sequence, tell both agents, leave it; a new one said on approval"
+          - id: B9.4
+            title: "The phone and the G3 done-when"
       - id: B10
         title: The record
   - title: "Track C: shared ways of working"
