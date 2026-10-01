@@ -25,6 +25,8 @@ import { decodeXml, parseWorkbookSheets, sheetDimension } from '../../shared/lib
 import { parseRange, toSpan, TEXT_EXTS } from '../../shared/lib/locator';
 import { csvShape, parseCsv } from '../../shared/lib/csv';
 import type { CheckFinding, CriterionCheck, CriterionKind } from '../../shared/types';
+import { locateStored } from './material-place';
+import { isPlaceholder } from './cloud-files';
 
 /** Past this, a file is not read for a check — the finding says so. */
 export const MAX_CHECK_READ_BYTES = 50 * 1024 * 1024;
@@ -88,14 +90,21 @@ const unverified = (message: string, attachmentUid: string | null = null): Check
 
 type Read = { ok: true; buf: Buffer } | { ok: false; finding: CheckFinding };
 
-function readForCheck(root: string, a: Artefact): Read {
+function readForCheck(projectRoot: string, a: Artefact): Read {
+  // Project-relative, or a place in the linked plans folder (C3.4c).
+  const at = locateStored(a.path, projectRoot);
+  if (!at) return { ok: false, finding: unverified(`${a.path} is in a plans folder not linked on this device, so it was not checked`, a.uid) };
+  const { root, rel } = at;
   try {
-    const st = fs.lstatSync(resolveWithin(root, a.path, 'artefact'));
+    const abs = resolveWithin(root, rel, 'artefact');
+    const st = fs.lstatSync(abs);
     if (!st.isFile()) return { ok: false, finding: fail(`${a.path} is no longer a regular file in the project`, a.uid) };
+    // Still only in the cloud (C3.4b): opening it to check it would download it.
+    if (isPlaceholder(abs)) return { ok: false, finding: unverified(`${a.path} is not on this device yet, so its contents were not checked`, a.uid) };
     if (st.size > MAX_CHECK_READ_BYTES) {
       return { ok: false, finding: unverified(`${a.path} is larger than ${MAX_CHECK_READ_BYTES / 1024 / 1024} MB, so its contents were not checked`, a.uid) };
     }
-    return { ok: true, buf: readFileWithin(root, a.path, 'artefact') };
+    return { ok: true, buf: readFileWithin(root, rel, 'artefact') };
   } catch {
     return { ok: false, finding: fail(`${a.path} is not in the project any more, or is now a link`, a.uid) };
   }

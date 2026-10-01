@@ -68,9 +68,19 @@ export class PlansFolderError extends Error {}
 interface LinkRow { path: string; ref: string; confirmedAt: number; confirmedBy: string }
 
 function linkRow(projectRoot: string): LinkRow | null {
-  const v = getDb().exec(
+  const db = getDb();
+  let v: unknown[] | undefined = db.exec(
     'SELECT local_path, ref, confirmed_at, confirmed_by FROM linked_plans_folder WHERE project_root = ?', [projectRoot],
   )[0]?.values[0];
+  if (!v) {
+    // The same project spelled another way (a trusted root is canonical;
+    // a plan keeps the path it was opened by).
+    const want = canonical(projectRoot);
+    if (want) {
+      v = (db.exec('SELECT project_root, local_path, ref, confirmed_at, confirmed_by FROM linked_plans_folder')[0]?.values ?? [])
+        .find((r) => canonical(String(r[0])) === want)?.slice(1);
+    }
+  }
   return v ? { path: String(v[0]), ref: String(v[1]), confirmedAt: Number(v[2]), confirmedBy: String(v[3]) } : null;
 }
 

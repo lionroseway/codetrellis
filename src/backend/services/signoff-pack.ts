@@ -36,6 +36,7 @@ import { taskWorkstreamId } from './task-workstreams';
 import { otherWorkInFlight, type OtherWorkOutcome } from '../../shared/lib/other-work';
 import { briefLine } from '../../shared/lib/signal-words';
 import type { AwarenessSignal } from '../../shared/types';
+import { locateStored } from './material-place';
 
 export const PACK_FORMAT = 'codetrellis-signoff-pack';
 export const PACK_VERSION = 1;
@@ -222,7 +223,9 @@ export async function verifyPack(planUid: string, raw: unknown, now: Date = new 
   for (const f of files) {
     let current: string | null = null;
     try {
-      current = (await sha256FileWithin(root, f.path)).sha256;
+      const at = locateStored(f.path, root);
+      if (!at) throw new Error('not placed on this device');
+      current = (await sha256FileWithin(at.root, at.rel)).sha256;
     } catch {
       current = null; // gone, outside the project, or a link — none of which is the file judged
     }

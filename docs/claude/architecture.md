@@ -238,6 +238,21 @@ replace or remove what may be a teammate's newer copy in the cloud. The
 status counts placeholders under the folder (`notOnDevice`) and says how to
 keep it on the device.
 
+**Materials by their place (C3.4c).** `services/material-place.ts`. A
+material (a `file_ref` attachment with a role) is stored by its place, never
+a full path: relative to the project's root, as since Phase 31, or, for a
+file in the project's linked plans folder, as `plans://<path in the folder>`.
+`locateStored(value, projectRoot)` resolves either on this device (the
+plans form against `plansHome`, refusing anything that climbs) and every
+reader goes through it: recording, hash refresh, serving and the material
+reader, criterion checks, sign-off pack verification and the artefact
+watcher; `placeOf` turns a file back into its stored form. The stored value
+and its sha256 are what A6's material signals compare, so two machines
+whose copies of the folder sit at different paths read one material as
+one. A file reference's role now travels in the plan files (written and
+read; never its hash, size or time, which each device takes itself), and
+the artefacts of an imported plan are watched like ones recorded here.
+
 ## Approvals as signed statements (Phase 32 C2.5b)
 
 `services/signed-approvals.ts` over `signed-approval-record.ts` (pure). A

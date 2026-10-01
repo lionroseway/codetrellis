@@ -29,6 +29,7 @@ import { postCriterionNotice } from './sensor-bridge-service';
 import { getDb } from './database';
 import { resolveTrustedProjectRoot } from './trusted-roots';
 import * as awareness from './awareness-service';
+import { locateStored, placeOf } from './material-place';
 
 interface ProjectWatch {
   watcher: FSWatcher;
@@ -51,7 +52,8 @@ function projectPathOf(itemUid: string): string | null {
 }
 
 async function onArtefactChanged(w: ProjectWatch, absPath: string): Promise<void> {
-  const rel = path.relative(w.root, absPath).split(path.sep).join('/');
+  // Its stored form: project-relative, or its place in the plans folder (C3.4c).
+  const rel = placeOf(absPath, w.root) ?? path.relative(w.root, absPath).split(path.sep).join('/');
   let anyChanged = false;
   try {
     for (const itemUid of itemsWithArtefactAt(w.projectPath, rel)) {
@@ -128,7 +130,10 @@ export function startArtefactWatcherForProject(projectPath: string): void {
     void onArtefactChanged(w, file).catch((err) => console.warn('[Artefacts] Refresh failed:', err));
   });
   watcher.on('error', (err) => console.warn('[Artefacts] Watcher error:', err));
-  for (const rel of artefactPathsForProject(projectPath)) watcher.add(path.join(root, rel));
+  for (const rel of artefactPathsForProject(projectPath)) {
+    const at = locateStored(rel, root);
+    if (at) watcher.add(path.join(at.root, at.rel));
+  }
   watches.set(projectPath, w);
 }
 
@@ -140,8 +145,30 @@ export function startArtefactWatching(artefact: Artefact): void {
   const w = watches.get(projectPath);
   if (!w) return;
   try {
-    w.watcher.add(path.join(projectRootForItem(artefact.itemUid), artefact.path));
+    const at = locateStored(artefact.path, projectRootForItem(artefact.itemUid));
+    if (at) w.watcher.add(path.join(at.root, at.rel));
   } catch { /* project no longer open */ }
+}
+
+/**
+ * Watch the artefacts a plan brought in from its files (C3.4c): a teammate's
+ * material arrives with a pull or a sync, not through recording here, and
+ * must be watched like one recorded here. Adding a path already watched is
+ * harmless.
+ */
+export function watchPlanArtefacts(projectPath: string, planUid: string): void {
+  if (!watches.has(projectPath)) startArtefactWatcherForProject(projectPath);
+  const w = watches.get(projectPath);
+  if (!w) return;
+  const values = (getDb().exec(
+    `SELECT DISTINCT a.value FROM attachments a JOIN plan_items i ON i.uid = a.target_uid
+     WHERE i.plan_uid = ? AND a.target_type = 'item' AND a.kind = 'file_ref' AND a.role IS NOT NULL`,
+    [planUid],
+  )[0]?.values ?? []).map((r) => String(r[0]));
+  for (const v of values) {
+    const at = locateStored(v, w.root);
+    if (at) w.watcher.add(path.join(at.root, at.rel));
+  }
 }
 
 export function stopArtefactWatchers(): void {

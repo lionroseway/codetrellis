@@ -30,6 +30,7 @@ import { isPackagedElectron } from '../../mcp/connector/command';
 import { canonicalRoot } from '../confined-fs';
 import { TEXT_EXTS } from '../../../shared/lib/locator';
 import type { MaterialLocator, ReadReply, ReadRequest } from './read';
+import { NotOnDeviceError } from '../cloud-files';
 
 /** The most of each kind of file that is read at all. */
 const READ_CAPS: Record<string, number> = {
@@ -57,7 +58,7 @@ export const READER_HEAP_MB = 768;
 export type MaterialRead =
   | { ok: true; kind: 'text'; name: string; itemUid: string; reply: Extract<ReadReply, { ok: true }> }
   | { ok: true; kind: 'image'; name: string; itemUid: string; mimeType: string; base64: string; bytes: number }
-  | { ok: false; status: 404 | 413 | 415 | 422 | 504; reason: string; name?: string; itemUid?: string };
+  | { ok: false; status: 404 | 409 | 413 | 415 | 422 | 504; reason: string; name?: string; itemUid?: string };
 
 type RunReply = ReadReply | { ok: false; timedOut: true; reason: string };
 
@@ -177,11 +178,12 @@ export function runReader(
   });
 }
 
-async function readBytes(file: ServableFile, cap: number): Promise<Buffer | null | 'missing'> {
+async function readBytes(file: ServableFile, cap: number): Promise<Buffer | null | 'missing' | 'cloud'> {
   try {
     return await readServableCapped(file, cap);
-  } catch {
-    return 'missing';
+  } catch (err) {
+    // Still only in the cloud (C3.4b): not read, and said so.
+    return err instanceof NotOnDeviceError ? 'cloud' : 'missing';
   }
 }
 
@@ -208,6 +210,7 @@ export async function readMaterial(
   if (image) {
     if (hasLocator) return { ok: false, status: 422, reason: `${name} is an image; it is read whole, without a locator`, ...base };
     const bytes = await readBytes(file, IMAGE_CAP);
+    if (bytes === 'cloud') return { ok: false, status: 409, reason: `${name} is not on this device yet: it is still only in the cloud`, ...base };
     if (bytes === 'missing') return { ok: false, status: 404, reason: `${name} is not there, or is not a regular file in the project`, ...base };
     if (!bytes) return { ok: false, status: 413, reason: `${name} is larger than the ${IMAGE_CAP / 1024 / 1024} MB an image read returns`, ...base };
     if (!image.magic(bytes)) return { ok: false, status: 422, reason: `${name} is named .${ext} but is not that kind of image`, ...base };
@@ -217,7 +220,8 @@ export async function readMaterial(
   const cap = READ_CAPS[ext] ?? (TEXT_EXTS.has(ext) ? TEXT_CAP : 0);
   if (!cap) return { ok: false, status: 415, reason: `.${ext} files are not read as text`, ...base };
   const bytes = await readBytes(file, cap);
-  if (bytes === 'missing') return { ok: false, status: 404, reason: `${name} is not there, or is not a regular file in the project`, ...base };
+  if (bytes === 'cloud') return { ok: false, status: 409, reason: `${name} is not on this device yet: it is still only in the cloud`, ...base };
+    if (bytes === 'missing') return { ok: false, status: 404, reason: `${name} is not there, or is not a regular file in the project`, ...base };
   if (!bytes) return { ok: false, status: 413, reason: `${name} is larger than the ${Math.round(cap / 1024 / 1024)} MB CodeTrellis reads of a .${ext} file`, ...base };
 
   // §5.1: a Word document or deck the viewer has already rendered is read

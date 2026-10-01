@@ -5900,7 +5900,11 @@ export async function initializeBackend(): Promise<void> {
   setRecordAppliedListener((item) => {
     broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { status: item.status, fromRecord: true } });
   });
-  setPlanImportedListener((planUid, projectRoot) => { readAndTell(projectRoot, planUid); });
+  setPlanImportedListener((planUid, projectRoot) => {
+    readAndTell(projectRoot, planUid);
+    // A teammate's materials arrive with the plan's files (C3.4c).
+    try { _lazy___services_artefact_watcher.watchPlanArtefacts(projectRoot, planUid); } catch (err) { console.warn('[Artefacts] Could not watch an imported plan\'s files:', err); }
+  });
   // C3.2: people setting a task two ways at once is a signal; it starts and
   // ends with the records, so the project's signals are refreshed then.
   setSplitChangedListener((projectRoot) => { refreshSignals(projectRoot); });
