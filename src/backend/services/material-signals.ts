@@ -62,11 +62,19 @@ export function computeMaterialSignals(tasks: readonly MaterialTaskInput[], curr
   const labelsOf = (ids: Iterable<string>) => Object.fromEntries([...ids].sort().map((id) => [id, title.get(id) ?? id]));
   const named = (ids: string[]) => listed(ids.map((id) => `“${title.get(id) ?? id}”`));
   const withoutLabels = (subject: SignalDraft['subject']) => {
-    const { labels: _labels, ...rest } = subject;
+    const { labels: _labels, readBy: _readBy, ...rest } = subject;
     return rest;
   };
   const emit = (kind: SignalDraft['kind'], severity: SignalDraft['severity'], key: string, subject: SignalDraft['subject'], ids: string[], summary: string) =>
     out.push(draft(kind, severity, key, { ...subject, labels: labelsOf(ids) }, ids, summary, withoutLabels(subject)));
+  /** Whose read each task's latest was, when a teammate's (C3.5); undefined when none was. */
+  const readByOf = (m: string, ids: string[]) => {
+    const by = Object.fromEntries(ids.flatMap((id) => {
+      const who = ordered.find((t) => t.id === id)?.reads.find((r) => r.path === m)?.by;
+      return who ? [[id, who] as const] : [];
+    }));
+    return Object.keys(by).length ? { readBy: by } : {};
+  };
 
   const materials = new Set<string>();
   for (const t of ordered) {
@@ -112,7 +120,7 @@ export function computeMaterialSignals(tasks: readonly MaterialTaskInput[], curr
       const tail = onCurrent.length === 0
         ? `; ${readers.length === 2 ? 'neither' : 'none'} has the current one`
         : `; ${named(onCurrent)} ${onCurrent.length === 1 ? 'has' : 'have'} the current one`;
-      emit('version-split', 'medium', `material:${m}`, { material: m, readVersions }, ids,
+      emit('version-split', 'medium', `material:${m}`, { material: m, readVersions, ...readByOf(m, ids) }, ids,
         `${readersNamed(ids)} read different versions of \`${m}\`${tail}`);
       continue;
     }
@@ -120,7 +128,7 @@ export function computeMaterialSignals(tasks: readonly MaterialTaskInput[], curr
     // ── stale-base ────────────────────────────────────────────────────
     if (now !== null && readers.length >= 2 && readers.every((t) => lastHash(t) !== null && lastHash(t) !== now)) {
       const ids = readers.map((t) => t.id);
-      emit('stale-base', 'low', `material:${m}`, { material: m }, ids,
+      emit('stale-base', 'low', `material:${m}`, { material: m, ...readByOf(m, ids) }, ids,
         `\`${m}\` changed after ${readersNamed(ids)} read it, and ${ids.length === 2 ? 'neither' : 'none'} has read it since`);
     }
   }

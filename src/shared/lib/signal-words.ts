@@ -102,8 +102,11 @@ export function sideWords(s: Pick<AwarenessSignal, 'kind' | 'workstreams' | 'sub
 }
 
 /** What one task is doing with a material (A6.3), in one sentence. */
-function materialWords(s: Pick<AwarenessSignal, 'kind' | 'subject'>, root: string, name: string): string {
+function materialWords(s: Pick<AwarenessSignal, 'kind' | 'subject'>, root: string, task: string): string {
   const m = s.subject.material!;
+  // A teammate's read is named with whose it was (C3.5): “Check the figures” (Sam Lee).
+  const who = s.subject.readBy?.[root];
+  const name = who ? `${task} (${who})` : task;
   switch (s.kind) {
     case 'contract': {
       if (!s.subject.citedBy?.includes(root)) return `${name} uses ${m}.`;
@@ -129,7 +132,7 @@ function materialWords(s: Pick<AwarenessSignal, 'kind' | 'subject'>, root: strin
 }
 
 const namesOf = (s: Pick<AwarenessSignal, 'subject'>, ids: readonly string[]) => {
-  const names = ids.map((id) => `“${s.subject.labels?.[id] ?? id}”`);
+  const names = ids.map((id) => `“${s.subject.labels?.[id] ?? id}”${s.subject.readBy?.[id] ? ` (${s.subject.readBy[id]})` : ''}`);
   return names.length <= 2 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 };
 

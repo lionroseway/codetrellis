@@ -166,13 +166,18 @@ function rowToKey(v: unknown[], trustedWriters: Set<string>): TeammateKey {
   };
 }
 
-/** Every teammate key introduced in this project: new ones first, then by name. */
-export function listTeammateKeys(projectRoot: string): TeammateKey[] {
+/**
+ * Every teammate key introduced in this project: new ones first, then by
+ * name. `roots` are where its introductions are read: the project, and its
+ * linked plans folder (C3.4a), under whose path they are kept.
+ */
+export function listTeammateKeys(roots: string[]): TeammateKey[] {
+  const marks = roots.map(() => '?').join(', ');
   const rows = getDb().exec(
     `SELECT writer, name, fingerprint, state, first_seen, decided_at, decided_by FROM task_record_keys
-     WHERE project_root = ? OR writer IN (SELECT writer FROM task_record_keys WHERE project_root = ?)
+     WHERE project_root IN (${marks}) OR writer IN (SELECT writer FROM task_record_keys WHERE project_root IN (${marks}))
      ORDER BY CASE state WHEN 'new' THEN 0 WHEN 'trusted' THEN 1 ELSE 2 END, name, writer`,
-    [projectRoot, projectRoot],
+    [...roots, ...roots],
   )[0]?.values ?? [];
   const trusted = new Set(rows.filter((r) => r[3] === 'trusted').map((r) => String(r[0])));
   return rows.map((r) => rowToKey(r, trusted));

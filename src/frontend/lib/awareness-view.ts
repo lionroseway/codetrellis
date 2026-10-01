@@ -80,7 +80,11 @@ export { sideLabel, kindWords, sideRootsOf };
  * side whose work imports it.
  */
 export function sidesOf(s: Pick<AwarenessSignal, 'kind' | 'workstreams' | 'subject'>, workstreams: readonly Workstream[]): string[] {
-  const names = sideRootsOf(s).map((r) => s.subject.labels?.[r] ?? sideLabel(r, workstreams));
+  // A teammate's read is named with whose it was (C3.5): "Check the figures (Sam Lee)".
+  const names = sideRootsOf(s).map((r) => {
+    const name = s.subject.labels?.[r] ?? sideLabel(r, workstreams);
+    return s.subject.readBy?.[r] ? `${name} (${s.subject.readBy[r]})` : name;
+  });
   // A material's stale-base is tasks against the file, not a branch against main (A6.3).
   if (s.kind !== 'stale-base' || s.subject.material) return names;
   const main = workstreams.find((w) => w.main);

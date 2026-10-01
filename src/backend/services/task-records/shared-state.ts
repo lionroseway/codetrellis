@@ -166,7 +166,8 @@ export function getSharedTaskState(projectRoot: string): SharedTaskStateStatus {
       ? `On: each change to a task's state here is written to ${RECORDS_DIR} as ${name}, and teammates' records are read.${found}`
       : `Off. Task state stays on this device; teammates who pull see the plan, not who is doing what.${found}`,
     signing: signingWay(projectRoot),
-    keys: listTeammateKeys(projectRoot),
+    // Introduced where the records go: the project, or its linked plans folder.
+    keys: listTeammateKeys(home && home !== projectRoot ? [projectRoot, home] : [projectRoot]),
     checked: checkedCounts(projectRoot),
     materialReads: materialReadsStatus(projectRoot, enabled, home),
   };
