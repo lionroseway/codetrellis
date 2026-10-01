@@ -3,10 +3,9 @@
  * doc C-2 §5).
  *
  * Read from the project's `origin` remote, as git has it: nothing is asked
- * of the host to find out. GitHub is the first adapter (C2.2b); GitLab and
- * Bitbucket are recognised now so Settings can say what is coming for them
- * (C2.3), and any other host, or a self-hosted one, is named as it is and
- * left to git alone.
+ * of the host to find out. GitHub (C2.2b), GitLab and Bitbucket (C2.3) have
+ * adapters; any other host, or a self-hosted one, is named as it is and left
+ * to git alone.
  *
  * Pure except `detectProjectHost`, which reads the remote.
  */
@@ -33,6 +32,13 @@ export interface DetectedHost {
 }
 
 const NAMES: Record<ReviewHostKind, string> = { github: 'GitHub', gitlab: 'GitLab', bitbucket: 'Bitbucket' };
+
+/** What each adapter reads, in words, said before anything is asked. */
+const ASKS: Record<ReviewHostKind, (where: string) => string> = {
+  github: (w) => `Reads the pull requests for this project's branches on ${w}: whether each is open, merged or closed, its checks and its reviews. It changes nothing on GitHub.`,
+  gitlab: (w) => `Reads the merge requests for this project's branches on ${w}: whether each is open, merged or closed, its pipeline and its approvals. It changes nothing on GitLab.`,
+  bitbucket: (w) => `Reads the pull requests for this project's branches on ${w}: whether each is open, merged or declined, its build statuses and its approvals. It changes nothing on Bitbucket.`,
+};
 
 export function hostName(kind: ReviewHostKind): string {
   return NAMES[kind];
@@ -64,15 +70,13 @@ export function detectHost(remote: string | null | undefined): DetectedHost | nu
   const safe = /^[A-Za-z0-9_.-]+$/;
   if (!safe.test(owner) || !rest.every((p) => safe.test(p))) return null;
   const kind = kindOf(hostname);
-  const supported = kind === 'github';
+  const supported = kind !== null;
   const slug = `${owner}/${repo}`;
   return {
     kind, hostname, owner, repo, slug,
     webUrl: `https://${hostname}/${slug}`,
     supported,
-    asks: supported
-      ? `Reads the pull requests for this project's branches on ${hostname}/${slug}: whether each is open, merged or closed, its checks and its reviews. It changes nothing on ${hostName(kind!)}.`
-      : null,
+    asks: kind ? ASKS[kind](`${hostname}/${slug}`) : null,
   };
 }
 

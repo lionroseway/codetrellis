@@ -17,8 +17,12 @@
  * `summarisePull` is pure, for the unit tests on recorded answers.
  */
 
+import { hostGet, PART, unreachable } from './http';
+
 export interface HostReview {
   number: number;
+  /** How the host writes it: `#118` on GitHub and Bitbucket, `!42` on GitLab. */
+  ref: string;
   url: string;
   state: 'open' | 'merged' | 'closed';
   /** When it merged or closed, epoch seconds. */
@@ -35,37 +39,15 @@ export type HostRead =
   | { ok: true; review: HostReview | null }
   | { ok: false; error: string };
 
-export class HostReadError extends Error {}
-
-const TIMEOUT_MS = 8000;
-
 export function githubApiBase(): string {
   return (process.env.CODETRELLIS_GITHUB_API || 'https://api.github.com').replace(/\/+$/, '');
 }
 
-const PART = /^[A-Za-z0-9_.-]+$/;
-
-async function getJson(path: string, token: string | null): Promise<unknown> {
-  const res = await fetch(`${githubApiBase()}${path}`, {
-    method: 'GET',
-    redirect: 'error',
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-    headers: {
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      'User-Agent': 'CodeTrellis',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+function getJson(path: string, token: string | null): Promise<unknown> {
+  return hostGet('GitHub', `${githubApiBase()}${path}`, token ? { Authorization: `Bearer ${token}` } : {}, {
+    hasToken: !!token,
+    extraHeaders: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
   });
-  if (res.ok) return res.json();
-  if (res.status === 401) throw new HostReadError('GitHub refused the token (401). Save a new one in Settings → Review hosts.');
-  if (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0') {
-    const reset = Number(res.headers.get('x-ratelimit-reset'));
-    const when = reset ? new Date(reset * 1000).toISOString().slice(11, 16) : 'later';
-    throw new HostReadError(`GitHub's rate limit is used up until ${when} UTC${token ? '' : '; a token raises it'}.`);
-  }
-  if (res.status === 404) throw new HostReadError(`GitHub has no such repository${token ? ' that this token can see' : ' (a private one needs a token)'} (404).`);
-  throw new HostReadError(`GitHub answered ${res.status}.`);
 }
 
 interface PullAnswer {
@@ -112,6 +94,7 @@ export function summarisePull(pull: PullAnswer | null, runs: CheckRunsAnswer | n
   const r = open ? summariseReviews(reviews) : { approvals: 0, changesRequested: false };
   return {
     number: pull.number,
+    ref: `#${pull.number}`,
     url: pull.html_url,
     state,
     at: state === 'merged' ? secs(pull.merged_at) : state === 'closed' ? secs(pull.closed_at) : null,
@@ -138,8 +121,6 @@ export async function readGithubBranch(owner: string, repo: string, branch: stri
     ]);
     return { ok: true, review: summarisePull(pull, runs, status, Array.isArray(reviews) ? reviews : []) };
   } catch (err) {
-    if (err instanceof HostReadError) return { ok: false, error: err.message };
-    const name = (err as Error)?.name;
-    return { ok: false, error: name === 'TimeoutError' ? 'GitHub did not answer in time.' : 'GitHub could not be reached.' };
+    return { ok: false, error: unreachable('GitHub', err) };
   }
 }

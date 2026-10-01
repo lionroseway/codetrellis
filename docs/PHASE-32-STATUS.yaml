@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — C2.2b: GitHub behind the review host"
-  status: "C2.2a merged (#263). C2.2b built: for a project whose host the person turned on, each branch's pull request is read from GitHub (open with its checks and reviews, merged, closed), kept two minutes, the token only in that request; tasks say in review, merged by #N or closed without merging, with source github; no pull request or a failed read keeps git's answer with a note; git's proof of a merge stands over the host. The tree, the task line, get_plan (asks first) and get_brief (from what is kept) say it. Unit (1728), harness (review-host-github 7 against a stand-in, and the C2.1/C2.2a/brief specs), browser (review-host-states, 2 shots) green locally"
-  next: "Merge C2.2b when CI is green (C2.2 done); then C2.3 on feat/phase-32-c2-3-gitlab-bitbucket (GitLab merge requests and pipelines, Bitbucket pull requests and build statuses, on the same interface)"
+  step: "Wave 2 — C2.3: GitLab and Bitbucket behind the review host"
+  status: "C2.2 done (#263, #264). C2.3 built: GitLab (merge requests !N with their pipeline and approvals, subgroups, token as PRIVATE-TOKEN with read_api) and Bitbucket Cloud (pull requests with build statuses and approvals, declined or superseded read closed, token as a bearer) on the same switch, cache and overlay; one request helper for all three (GET only, redirects refused); each state says its host; Settings speaks each host's words; the harness points every host at nowhere by default. Unit (1735), harness (review-host-gitlab-bitbucket 4 against stand-ins, the GitHub and switch specs), browser (review-host-settings incl. GitLab) green locally"
+  next: "Merge C2.3 when CI is green; then C2.4 on feat/phase-32-c2-4-status-read (status read, not written: every item a state with its source, the plan itself for a task with no branch; no STATUS.md)"
   blockers: none
   updated: 2026-09-30
 sections:

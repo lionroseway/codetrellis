@@ -33,6 +33,13 @@ interface Status {
 
 const NAME: Record<string, string> = { github: 'GitHub', gitlab: 'GitLab', bitbucket: 'Bitbucket' };
 
+/** The least a token needs, per host (C2.2b, C2.3): read only. */
+const TOKEN_HINT: Record<string, string> = {
+  github: 'A fine-grained token with read access to pull requests, checks and commit statuses on this repository is enough.',
+  gitlab: 'A personal, project or group access token with the read_api scope is enough.',
+  bitbucket: 'A repository or workspace access token with read access to pull requests is enough.',
+};
+
 export function ReviewHostSection() {
   const root = useProjectStore((s) => s.root);
   const [status, setStatus] = useState<Status | null>(null);
@@ -121,9 +128,9 @@ export function ReviewHostSection() {
       {d?.supported && (
         <div className="space-y-2 text-[12px]">
           <div className="text-foreground">Token for {d.hostname} <span className="text-foreground-subtle">(optional for a public repository)</span></div>
-          <p className="text-[11px] text-foreground-muted leading-relaxed">
-            A fine-grained token with read access to pull requests, checks and commit statuses on this repository is enough.
-            It is used for {d.hostname} only, never shown again, and never written to your project or the database.
+          <p className="text-[11px] text-foreground-muted leading-relaxed" data-testid="review-host-token-hint">
+            {d.kind ? TOKEN_HINT[d.kind] : ''}
+            {' '}It is used for {d.hostname} only, never shown again, and never written to your project or the database.
           </p>
           {status?.token.saved ? (
             <div className="flex items-center gap-2">

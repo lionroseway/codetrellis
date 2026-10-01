@@ -14,12 +14,15 @@ test('GitHub in each of git\'s spellings, with what it would read', () => {
   }
 });
 
-test('GitLab and Bitbucket are recognised, not yet supported; others are named and left to git', () => {
-  assert.deepEqual([detectHost('git@gitlab.com:team/sub/app.git')!.kind, detectHost('git@gitlab.com:team/sub/app.git')!.slug], ['gitlab', 'team/sub/app']);
-  assert.equal(detectHost('https://bitbucket.org/acme/app.git')!.kind, 'bitbucket');
+test('GitLab (subgroups too) and Bitbucket are supported, each saying what it would read; others are named and left to git', () => {
+  const lab = detectHost('git@gitlab.com:team/sub/app.git')!;
+  assert.deepEqual([lab.kind, lab.owner, lab.repo, lab.slug, lab.supported], ['gitlab', 'team', 'sub/app', 'team/sub/app', true]);
+  assert.match(lab.asks!, /^Reads the merge requests for this project's branches on gitlab\.com\/team\/sub\/app: .*pipeline.* It changes nothing on GitLab\.$/);
+  const bucket = detectHost('https://bitbucket.org/acme/app.git')!;
+  assert.deepEqual([bucket.kind, bucket.supported], ['bitbucket', true]);
+  assert.match(bucket.asks!, /build statuses .* It changes nothing on Bitbucket\.$/);
   const own = detectHost('git@git.acme.internal:acme/app.git')!;
   assert.deepEqual([own.kind, own.hostname, own.supported, own.asks], [null, 'git.acme.internal', false, null]);
-  assert.equal(detectHost('git@gitlab.com:team/app.git')!.supported, false);
 });
 
 test('no host at all: none, a local path, a file URL, a name without an owner; credentials never kept', () => {

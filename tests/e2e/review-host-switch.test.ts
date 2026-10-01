@@ -5,8 +5,8 @@
  * what GitHub would be asked before anything is, and that it is off. He
  * turns it on and saves a token; the token is never shown again and never
  * leaves the secret store. When the remote is pointed at another repository
- * the switch no longer applies, and says why. A GitLab project has nothing
- * to turn on yet. Throughout, GitHub is not asked anything: reading it is
+ * the switch no longer applies, and says why. A host with no adapter has
+ * nothing to turn on. Throughout, GitHub is not asked anything: reading it is
  * C2.2b. And only the person turns it on: from plain HTTP it is refused,
  * while turning it off is anyone's.
  */
@@ -105,13 +105,13 @@ test.describe.serial('Turning a review host on', () => {
     expect(((await off.json()) as Status)).toMatchObject({ enabled: false, says: 'Off. Nothing is sent to GitHub; state comes from git.' });
   });
 
-  test('a GitLab project has nothing to turn on yet; a project never opened is refused', async () => {
-    git('remote', 'set-url', 'origin', 'git@gitlab.com:team/app.git');
+  test('a host with no adapter has nothing to turn on; a project never opened is refused', async () => {
+    git('remote', 'set-url', 'origin', 'git@git.acme.internal:team/app.git');
     const s = await status();
-    expect(s).toMatchObject({ enabled: false, says: 'GitLab is recognised; its adapter comes later. State comes from git alone.' });
+    expect(s).toMatchObject({ enabled: false, says: 'git.acme.internal has no adapter. State comes from git alone.' });
     const refused = await h.client.raw('PUT', `/api/review-host?project=${enc()}`, { enabled: true });
     expect(refused.status).toBe(400);
-    expect((await refused.json()).error).toBe('GitLab has no adapter yet; its state comes from git.');
+    expect((await refused.json()).error).toBe('git.acme.internal has no adapter yet; its state comes from git.');
     expect((await h.client.raw('PUT', `/api/review-host/token?project=${enc()}`, { token: TOKEN })).status).toBe(400);
     git('remote', 'set-url', 'origin', 'git@github.com:acme/app.git');
 

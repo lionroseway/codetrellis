@@ -104,6 +104,9 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
     ...process.env,
     CODETRELLIS_OTA_URL: NOWHERE,
     CODETRELLIS_GITHUB_API: NOWHERE,
+    // The review hosts (Phase 32 C2.3): a test that turns one on points it at its stand-in.
+    CODETRELLIS_GITLAB_API: NOWHERE,
+    CODETRELLIS_BITBUCKET_API: NOWHERE,
     // The harness has no app window, and granting is otherwise the app
     // window's alone (grant-guard.ts). A test of that rule turns this off.
     CODETRELLIS_ALLOW_HTTP_GRANTS: '1',
