@@ -8,7 +8,7 @@ export interface PlannedMark {
   /** Every planned overlap on it, one per line. */
   title: string;
   serious: boolean;
-  /** Every one is sequenced: drawn quieter. */
+  /** Every one is sequenced or left as it is by a person: drawn quieter. */
   sequenced: boolean;
   count: number;
 }
@@ -28,7 +28,7 @@ function markOf(list: PlannedOverlap[]): PlannedMark | undefined {
   return {
     title: list.map((o) => `${o.words}${o.serious ? ' (serious)' : ''}`).join('\n'),
     serious: list.some((o) => o.serious),
-    sequenced: list.every((o) => o.sequenced),
+    sequenced: list.every((o) => o.sequenced || o.left),
     count: list.length,
   };
 }

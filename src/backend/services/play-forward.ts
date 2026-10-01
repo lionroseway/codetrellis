@@ -23,7 +23,7 @@
  */
 import { createHash } from 'node:crypto';
 import type { PlanItem, ProjectionData } from '../../shared/types';
-import type { ForwardBy, ForwardFile, PlannedOverlap, PlayForward } from '../../shared/types/play-forward';
+import type { ForwardBy, ForwardFile, PlannedOverlap, PlannedOverlapDecision, PlayForward } from '../../shared/types/play-forward';
 import { isSettled } from './plan-dependencies';
 import { buildStack } from './stack-service';
 import { listAllItems } from './plan-item-service';
@@ -147,11 +147,13 @@ export function playForwardOf(
     }
     return [...out.values()];
   };
-  const finish = (o: Omit<PlannedOverlap, 'id' | 'sequenced' | 'words'>, words: string): PlannedOverlap => {
+  const finish = (o: Omit<PlannedOverlap, 'id' | 'sequenced' | 'words' | 'decisions' | 'left'>, words: string): PlannedOverlap => {
     const seq = sequencing(o.plans, itemOf);
     return {
       ...o,
       id: idOf(o.kind, o.subject, o.plans.map((p) => p.uid)),
+      decisions: [],
+      left: false,
       sequenced: seq.sequenced,
       words: `◇ planned overlap: ${words}${seq.words ? ` · sequenced: ${seq.words}` : ''}`,
     };
@@ -239,6 +241,19 @@ export function playForwardOf(
   return { project, plans: summary, files: fileList, projection, overlaps, words };
 }
 
+/** What people did about each planned overlap in the project (B9.3a), oldest first. */
+export function decisionsFor(projectRoot: string): Map<string, PlannedOverlapDecision[]> {
+  const out = new Map<string, PlannedOverlapDecision[]>();
+  for (const r of getDb().exec(
+    'SELECT overlap_id, action, words, by_name, by_type, at FROM planned_overlap_decisions WHERE project_root = ? ORDER BY at, id',
+    [projectRoot],
+  )[0]?.values ?? []) {
+    const id = String(r[0]);
+    out.set(id, [...(out.get(id) ?? []), { action: r[1] as PlannedOverlapDecision['action'], words: String(r[2]), by: String(r[3]), byType: String(r[4]), at: Number(r[5]) }]);
+  }
+  return out;
+}
+
 /** Each item's declared materials (`attachments` with role `material`), project-relative. */
 function materialsFromDb(itemUids: readonly string[]): Map<string, string[]> {
   const out = new Map<string, string[]>();
@@ -274,5 +289,11 @@ export function buildPlayForward(projectPath: string): PlayForward {
     ...(i.fileSpecs ?? []).flatMap((f) => [f.path, f.moveTo]),
     ...(i.symbolSpecs ?? []).map((s) => s.filePath),
   ])).filter((x): x is string => !!x);
-  return playForwardOf(projectPath, plans, existingOf(projectPath, new Set(planned)), materialsFromDb);
+  const forward = playForwardOf(projectPath, plans, existingOf(projectPath, new Set(planned)), materialsFromDb);
+  const decided = decisionsFor(projectPath);
+  for (const o of forward.overlaps) {
+    o.decisions = decided.get(o.id) ?? [];
+    o.left = o.decisions[o.decisions.length - 1]?.action === 'leave';
+  }
+  return forward;
 }

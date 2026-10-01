@@ -45,6 +45,22 @@ export interface PlannedOverlap {
   sequenced: boolean;
   /** "◇ planned overlap: JIRA-142 and JIRA-150 both plan to change src/billing/invoice.ts" */
   words: string;
+  /**
+   * What a person did about it (B9.3a), oldest first: re-sequenced the plans,
+   * told the agents, or left it. Kept by the overlap's id.
+   */
+  decisions: PlannedOverlapDecision[];
+  /** A person chose to leave it as it is (the latest decision): drawn quieter. */
+  left: boolean;
+}
+
+export interface PlannedOverlapDecision {
+  action: 'resequence' | 'tell' | 'leave';
+  /** "JIRA-142 goes first; JIRA-150 waits", "Told 2 agents", "Left as it is by Sam Lee" */
+  words: string;
+  by: string;
+  byType: string;
+  at: number;
 }
 
 export interface PlayForward {

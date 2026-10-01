@@ -296,6 +296,29 @@ export const SCHEMA_PLANS_CORE = `
     PRIMARY KEY (report_id, test_key)
   );
 
+  -- Phase 32 B9.3a: what a person did about a planned overlap (re-sequenced
+  -- the plans, told the agents, or left it), by its id (the subject and the
+  -- plans it is between), with who from the transport and when.
+  CREATE TABLE IF NOT EXISTS planned_overlap_decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    overlap_id TEXT NOT NULL,
+    project_root TEXT NOT NULL,
+    action TEXT NOT NULL,
+    words TEXT NOT NULL,
+    by_name TEXT NOT NULL,
+    by_type TEXT NOT NULL,
+    at INTEGER NOT NULL
+  );
+  -- Each session told of a planned overlap its task is in, read once.
+  CREATE TABLE IF NOT EXISTS planned_overlap_tells (
+    overlap_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    read_at INTEGER,
+    PRIMARY KEY (overlap_id, session_id)
+  );
+
   -- Phase 32 C3.1: task state shared as records in the project's files, per
   -- project, on this device only (never the committed config). Off until
   -- the person turns it on.

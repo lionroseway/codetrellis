@@ -9,7 +9,8 @@
  * dashed, nothing of which exists yet, with planned overlaps as dashed
  * zones. "Back to now" ends it.
  */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import type { PlannedOverlap } from '@shared/types/play-forward';
 import { Radio, FastForward } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
 import { useGraphStore } from '../../stores/graph-store';
@@ -76,9 +77,9 @@ export function PlayForwardBar() {
         </div>
       )}
       {overlaps.length > 0 && (
-        <ul className="space-y-0.5" data-testid="play-forward-overlaps">
+        <ul className="space-y-1.5" data-testid="play-forward-overlaps">
           {overlaps.map((o) => (
-            <li key={o.id}>
+            <li key={o.id} data-overlap-id={o.id} data-testid="play-forward-overlap-row">
               <button
                 type="button"
                 data-testid="play-forward-overlap"
@@ -88,16 +89,91 @@ export function PlayForwardBar() {
                 disabled={!o.file}
                 onClick={() => { if (o.file) useGraphStore.getState().focusNode(o.file, false); }}
                 className={`text-left text-[10.5px] leading-snug rounded px-1 -mx-1 ${o.file ? 'hover:bg-violet-500/10 cursor-pointer' : 'cursor-default'} ${
-                  o.sequenced ? 'text-violet-300/60' : o.serious ? 'text-violet-100 font-medium' : 'text-violet-200'
+                  o.sequenced || o.left ? 'text-violet-300/60' : o.serious ? 'text-violet-100 font-medium' : 'text-violet-200'
                 }`}
                 title={o.file ? 'Show it on the graph' : 'A material is not on the code graph: it is said here and in the Stack tab'}
               >
                 {o.words}{o.serious ? ' · serious' : ''}
               </button>
+              <OverlapActions overlap={o} root={forwardRoot} onDone={() => { void refresh(); }} />
             </li>
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+const hm = (at: number) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+/**
+ * B9.3a — what a person can do about a planned overlap (WIREFRAMES §7):
+ * re-sequence the plans (choosing which goes first), tell the agents on its
+ * tasks, or leave it. What was done is said under it, with who and when.
+ */
+function OverlapActions({ overlap: o, root, onDone }: { overlap: PlannedOverlap; root: string | null; onDone: () => void }) {
+  const [choosing, setChoosing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const act = async (action: 'resequence' | 'tell' | 'leave', body?: Record<string, unknown>) => {
+    if (!root) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/play-forward/overlaps/${encodeURIComponent(o.id)}/${action}?project=${encodeURIComponent(root)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body ?? {}),
+      });
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `Server returned ${res.status}`);
+      setChoosing(false);
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const last = o.decisions[o.decisions.length - 1];
+  const btn = 'px-1.5 py-0.5 rounded border border-violet-400/30 text-violet-200 hover:bg-violet-500/15 disabled:opacity-40 transition-colors';
+  return (
+    <div className="mt-0.5 ml-1 space-y-0.5 text-[10px]">
+      {last && (
+        <div className="text-violet-300/70" data-testid="play-forward-decision">
+          {last.words}{last.action !== 'leave' ? ` · ${last.by}` : ''} · {hm(last.at)}
+        </div>
+      )}
+      {!o.sequenced && (
+        choosing ? (
+          <div className="flex flex-wrap items-center gap-1.5" data-testid="play-forward-choose-first">
+            <span className="text-foreground-muted">Which goes first?</span>
+            {o.plans.map((p) => (
+              <button key={p.uid} type="button" disabled={busy} className={btn} data-testid="play-forward-first" onClick={() => { void act('resequence', { first: p.uid }); }}>
+                {p.label} first
+              </button>
+            ))}
+            <button type="button" className="text-foreground-subtle hover:text-foreground" onClick={() => setChoosing(false)}>Cancel</button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            <button type="button" disabled={busy} className={btn} data-testid="play-forward-resequence" onClick={() => setChoosing(true)}
+              title="Choose which plan goes first: the other plan's tasks in this overlap then wait on its tasks">
+              Re-sequence these plans
+            </button>
+            <button type="button" disabled={busy} className={btn} data-testid="play-forward-tell" onClick={() => { void act('tell'); }}
+              title="Each agent holding one of these tasks is told once, on its next step, what the other plan plans">
+              Tell both agents
+            </button>
+            {!o.left && (
+              <button type="button" disabled={busy} className={btn} data-testid="play-forward-leave" onClick={() => { void act('leave'); }}
+                title="Keep both plans as they are: the overlap stays, drawn quieter, with who chose that">
+                Fine, leave it
+              </button>
+            )}
+          </div>
+        )
+      )}
+      {error && <div className="text-danger" data-testid="play-forward-action-error">{error}</div>}
     </div>
   );
 }

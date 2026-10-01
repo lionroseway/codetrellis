@@ -7,6 +7,7 @@ const overlap = (id: string, kind: PlannedOverlap['kind'], subject: string, file
   id, kind, subject, file, serious, sequenced,
   plans: [{ uid: 'a', label: 'JIRA-142', tasks: [] }, { uid: 'b', label: 'JIRA-150', tasks: [] }],
   words: `◇ planned overlap: JIRA-142 and JIRA-150 both plan to change ${subject}`,
+  decisions: [], left: false,
 });
 const data = (overlaps: PlannedOverlap[]): PlayForward => ({
   project: '/p', plans: [], files: [], overlaps, words: '',
