@@ -15,6 +15,15 @@
  * theirs and the split ends on both machines. A second record forged in
  * Sam's name and number is named as such. Off, nothing is written. And only
  * the person turns it on: from plain HTTP it is refused.
+ *
+ * C3.3: every record is signed. Sam has no git signing key, so his device
+ * signs with its own key and introduces it once in `.codetrellis/keys`. On
+ * Dana's machine his records read "unverified" until she trusts that key in
+ * Settings, having checked its fingerprint with him; then they read as his,
+ * signed, without anyone changing a task. A record edited after it was signed,
+ * or one with no signature, stays unverified, saying why. Where git signing is
+ * set up, records are signed with git's key and checked against git's allowed
+ * signers instead; a key the team does not list does not verify.
  */
 
 import fs from 'node:fs';
@@ -25,9 +34,15 @@ import { setupHarness, pairPhone, type Harness } from '../harness';
 
 const ENV = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' };
 
-interface Shared { enabled: boolean; writer: string; name: string; records: number; writers: number; says: string; changedBy: string | null }
+interface Key { writer: string; name: string; fingerprint: string; short: string; state: string; replaces: boolean }
+interface Shared {
+  enabled: boolean; writer: string; name: string; records: number; writers: number; says: string; changedBy: string | null;
+  signing: { how: string; as: string; says: string }; keys: Key[];
+  checked: { verified: number; unverified: number; reasons: Array<{ why: string; records: number }> };
+}
+interface Check { verified: boolean; claimed: string; how?: string; who?: string; author?: string; why?: string }
 interface Item { uid: string; status: string; progressPercent: number | null; blockedReason: string | null; updatedAt: number }
-interface Status { items: Array<{ itemUid: string; words: string; recorded: { by: string; byType: string } | null; atOnce?: { words: string } }> }
+interface Status { items: Array<{ itemUid: string; words: string; recorded: { by: string; byType: string; check?: Check } | null; atOnce?: { words: string } }> }
 interface Signal { id: string; kind: string; severity: string; state: string; workstreams: string[]; summary: string; subject: Record<string, unknown> }
 
 test.describe.serial('Task state shared as records', () => {
@@ -110,8 +125,12 @@ test.describe.serial('Task state shared as records', () => {
     expect(text).toContain('name: Sam Lee');
     expect(text).toContain('status: in_progress');
     expect(text).toContain('progressPercent: 40');
-    // The only change in his checkout is the new record.
-    expect(git(samRepo, 'status', '--porcelain', '--untracked-files=all')).toBe(`?? .codetrellis/records/${plan}/${write}/${s.writer}-1.yaml`);
+    // The only changes in his checkout are the new record and, the first
+    // time, his device's key introduction (C3.3).
+    expect(git(samRepo, 'status', '--porcelain', '--untracked-files=all').split('\n').sort()).toEqual([
+      `?? .codetrellis/keys/${s.writer}.yaml`,
+      `?? .codetrellis/records/${plan}/${write}/${s.writer}-1.yaml`,
+    ]);
   });
 
   test('after a pull, Dana sees it as Sam\'s, in his record, unverified', async () => {
@@ -231,6 +250,84 @@ test.describe.serial('Task state shared as records', () => {
     fs.rmSync(path.join(folder, `${s_.writer}-1 (copy).yaml`));
   });
 
+  test('C3.3: Sam\'s records are signed with his device\'s key, introduced once in the project\'s files', async () => {
+    const s_ = await shared(sam, samRepo);
+    expect(s_.signing.how).toBe('device');
+    expect(s_.signing.as).toMatch(/^SHA256:[A-Za-z0-9+/]{43}$/);
+    expect(s_.signing.says).toBe(`Records written here are signed with this device's own key (${s_.signing.as.slice(0, 19)}…). Teammates trust it once, in their Settings, after checking that fingerprint with you.`);
+    const intro = fs.readFileSync(path.join(samRepo, '.codetrellis', 'keys', `${s_.writer}.yaml`), 'utf8');
+    expect(intro).toContain('kind: codetrellis-device-key');
+    expect(intro).toContain('name: Sam Lee');
+    expect(intro).toContain(`fingerprint: ${s_.signing.as}`);
+    const first = fs.readFileSync(path.join(samRepo, '.codetrellis', 'records', plan, write, `${s_.writer}-1.yaml`), 'utf8');
+    expect(first).toMatch(/\nsignature:\n {2}how: device\n {2}key: SHA256:/);
+    // The private half is nowhere in the project.
+    const files = (fs.readdirSync(path.join(samRepo, '.codetrellis'), { recursive: true }) as string[])
+      .map((f) => path.join(samRepo, '.codetrellis', f)).filter((f) => fs.statSync(f).isFile());
+    expect(files.filter((f) => /privateKey|PRIVATE KEY/.test(fs.readFileSync(f, 'utf8')))).toEqual([]);
+  });
+
+  test('C3.3: on Dana\'s machine his key is new, and his records read unverified, saying why', async () => {
+    const s_ = await shared(sam, samRepo);
+    await set(sam, write, { status: 'in_progress', progressPercent: 60 });
+    carry(samRepo, danaRepo, 'state: board report 60');
+    await expect.poll(async () => (await item(dana, write)).progressPercent, { timeout: 15_000 }).toBe(60);
+    const d = await shared(dana, danaRepo);
+    expect(d.keys).toEqual([expect.objectContaining({ writer: s_.writer, name: 'Sam Lee', fingerprint: s_.signing.as, state: 'new', replaces: false })]);
+    const line = await statusOf(dana, write);
+    expect(line.recorded).toMatchObject({
+      by: 'Sam Lee', byType: 'record',
+      check: { verified: false, claimed: 'Sam Lee', why: "it is signed with Sam Lee's device key, which you have not trusted yet" },
+    });
+    expect(d.checked.verified).toBe(0);
+    expect(d.checked.reasons[0]).toEqual({ why: "it is signed with Sam Lee's device key, which you have not trusted yet", records: expect.any(Number) });
+  });
+
+  test('C3.3: Dana trusts it, and his records read as his, signed, without anyone changing a task', async () => {
+    const s_ = await shared(sam, samRepo);
+    const before = await item(dana, write);
+    const res = await dana.client.raw('POST', '/api/shared-task-state/keys', { writer: s_.writer, fingerprint: s_.signing.as, trust: true });
+    expect(res.status, await res.clone().text()).toBe(200);
+    expect(((await res.json()) as { rechecked: string[] }).rechecked).toContain(write);
+    expect((await statusOf(dana, write)).recorded).toMatchObject({
+      by: 'Sam Lee', byType: 'record', check: { verified: true, how: 'device', who: 'Sam Lee', author: 'Sam Lee' },
+    });
+    expect((await item(dana, write)).updatedAt).toBe(before.updatedAt);
+    const d = await shared(dana, danaRepo);
+    expect(d.keys[0]).toMatchObject({ state: 'trusted' });
+    expect(d.checked.verified).toBeGreaterThan(0);
+    const agent = await dana.spawnAgent({ agentType: 'codex' });
+    const got = JSON.parse((await agent.callTool('get_plan', { plan_uid: plan })).text) as { state: { items: Array<{ item_uid: string; recorded_in?: string }> } };
+    expect(got.state.items.find((i) => i.item_uid === write)?.recorded_in).toBe("the teammate's record, signed with their trusted device key");
+    // A key nobody introduced cannot be trusted.
+    expect((await dana.client.raw('POST', '/api/shared-task-state/keys', { writer: s_.writer, fingerprint: 'SHA256:nope', trust: true })).status).toBe(404);
+    expect((await dana.client.raw('POST', '/api/shared-task-state/keys', { writer: s_.writer })).status).toBe(400);
+  });
+
+  test('C3.3: a record changed after it was signed, or never signed, stays unverified', async () => {
+    const s_ = await shared(sam, samRepo);
+    const folder = path.join(danaRepo, '.codetrellis', 'records', plan, write);
+    const top = Math.max(...fs.readdirSync(folder).filter((f) => f.startsWith(`${s_.writer}-`)).map((f) => parseInt(f.slice(s_.writer.length + 1), 10)));
+    const real = fs.readFileSync(path.join(folder, `${s_.writer}-${top}.yaml`), 'utf8');
+    // Someone with the folder copies Sam's signed record forward and raises the number.
+    const edited = real.replace(`counter: ${top}`, `counter: ${top + 1}`).replace('progressPercent: 60', 'progressPercent: 90');
+    fs.writeFileSync(path.join(folder, `${s_.writer}-${top + 1}.yaml`), edited);
+    await expect.poll(async () => (await item(dana, write)).progressPercent, { timeout: 15_000 }).toBe(90);
+    expect((await statusOf(dana, write)).recorded?.check).toMatchObject({
+      verified: false, why: "its signature does not match Sam Lee's device key: it was changed after it was signed",
+    });
+    const unsigned = edited.replace(`counter: ${top + 1}`, `counter: ${top + 2}`).replace('progressPercent: 90', 'progressPercent: 95').replace(/\nsignature:\n[\s\S]*$/, '\n');
+    fs.writeFileSync(path.join(folder, `${s_.writer}-${top + 2}.yaml`), unsigned);
+    await expect.poll(async () => (await item(dana, write)).progressPercent, { timeout: 15_000 }).toBe(95);
+    expect((await statusOf(dana, write)).recorded?.check).toMatchObject({ verified: false, why: 'it is not signed' });
+    // Refusing the key is anyone's; it turns his signed records unverified again.
+    const refused = await dana.client.raw('POST', '/api/shared-task-state/keys', { writer: s_.writer, fingerprint: s_.signing.as, trust: false });
+    expect(refused.status).toBe(200);
+    expect(((await shared(dana, danaRepo)).keys[0])).toMatchObject({ state: 'refused' });
+    fs.rmSync(path.join(folder, `${s_.writer}-${top + 1}.yaml`));
+    fs.rmSync(path.join(folder, `${s_.writer}-${top + 2}.yaml`));
+  });
+
   test('turned off, a change writes nothing more', async () => {
     const off = await turn(sam, samRepo, false);
     expect(off.status).toBe(200);
@@ -259,5 +356,98 @@ test.describe.serial('Only the person shares task state', () => {
     expect(off.status).toBe(200);
     expect(((await off.json()) as Shared).changedBy).toMatch(/\(unverified\)$/);
     expect((await h.client.raw('PUT', `/api/shared-task-state?project=${root}`, { enabled: 'yes' })).status).toBe(400);
+  });
+
+  test('C3.3: from plain HTTP, trusting a teammate\'s key is refused; refusing one is not', async () => {
+    const body = { writer: 'aaaaaaaa11112222', fingerprint: 'SHA256:x' };
+    const trust = await h.client.raw('POST', '/api/shared-task-state/keys', { ...body, trust: true });
+    expect(trust.status).toBe(403);
+    expect((await trust.json()).error).toBe("Only you can trust a teammate's key — in the CodeTrellis app, Settings → Shared task state.");
+    expect((await h.client.raw('POST', '/api/shared-task-state/keys', { ...body, trust: false })).status).toBe(404);
+  });
+});
+
+test.describe.serial('Records signed with git\'s key', () => {
+  test.setTimeout(180_000);
+  let dana: Harness;
+  let sam: Harness;
+  let danaRepo: string;
+  let samRepo: string;
+  let plan: string;
+  let task: string;
+  let allowed: string;
+  let mallory: string;
+  const git = (repo: string, ...args: string[]) => String(execFileSync('git', ['-C', repo, ...args], { env: ENV, stdio: ['ignore', 'pipe', 'pipe'] })).trim();
+  const keygen = (dir: string, name: string) => {
+    const key = path.join(dir, name);
+    execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-C', name, '-f', key]);
+    return { key, pub: fs.readFileSync(`${key}.pub`, 'utf-8').trim() };
+  };
+  const carry = (from: string, to: string, message: string) => {
+    git(from, 'add', '-A', '.codetrellis');
+    try { git(from, 'commit', '-q', '-m', message); } catch { /* nothing new */ }
+    git(to, 'pull', '-q', '--no-rebase', '--no-edit', from, git(from, 'rev-parse', '--abbrev-ref', 'HEAD'));
+  };
+  const recorded = async () => ((await (await dana.client.raw('GET', `/api/plans/${plan}/status`)).json()) as Status).items.find((i) => i.itemUid === task)!.recorded;
+  const progress = async () => ((await (await dana.client.raw('GET', `/api/items/${task}`)).json()) as Item).progressPercent;
+
+  test.beforeAll(async () => {
+    const env = { CODETRELLIS_GIT_SIGN_RECORDS: '1' };
+    dana = await setupHarness('task-records-git-dana', { env, settings: { identity: { displayName: 'Dana Ortiz', email: 'dana@acme.test' } } });
+    sam = await setupHarness('task-records-git-sam', { env, settings: { identity: { displayName: 'Sam Lee', email: 'sam@acme.test' } } });
+    danaRepo = dana.fixture.projectPath;
+    await dana.client.scanProject(danaRepo);
+    plan = (await dana.client.createPlan({ title: 'Q4 board pack', projectPath: danaRepo })).uid;
+    task = ((await (await dana.client.raw('POST', `/api/plans/${plan}/items`, { kind: 'action', title: 'Write the board report' })).json()) as { uid: string }).uid;
+    const planDir = (await dana.client.exportPlan(plan, danaRepo)).planDir;
+    git(danaRepo, 'add', '-A', '.codetrellis');
+    git(danaRepo, 'commit', '-q', '-m', 'plan: Q4 board pack');
+    samRepo = path.join(sam.fixture.tmpDir, 'board-pack');
+    execFileSync('git', ['clone', '-q', danaRepo, samRepo], { env: ENV, stdio: 'ignore' });
+    await sam.client.scanProject(samRepo);
+    expect((await sam.client.raw('POST', '/api/plans/import', { planDir: path.join(samRepo, path.relative(danaRepo, planDir)) })).ok).toBe(true);
+
+    // The team signs commits with SSH keys and keeps an allowed-signers list; Sam's is on it.
+    const keys = fs.mkdtempSync(path.join(sam.fixture.tmpDir, 'keys-'));
+    const s = keygen(keys, 'sam');
+    mallory = keygen(keys, 'mallory').key;
+    allowed = path.join(keys, 'allowed_signers');
+    fs.writeFileSync(allowed, `sam@acme.test ${s.pub}\n`);
+    git(samRepo, 'config', 'gpg.format', 'ssh');
+    git(samRepo, 'config', 'user.signingkey', s.key);
+    git(samRepo, 'config', 'user.email', 'sam@acme.test');
+    git(danaRepo, 'config', 'gpg.ssh.allowedSignersFile', allowed);
+    for (const [h, repo] of [[dana, danaRepo], [sam, samRepo]] as const) {
+      expect((await h.client.raw('PUT', `/api/shared-task-state?project=${encodeURIComponent(repo)}`, { enabled: true })).status).toBe(200);
+    }
+  });
+  test.afterAll(async () => {
+    await dana?.teardown();
+    await sam?.teardown();
+  });
+
+  test('Sam\'s record is signed with his git key, and verifies on Dana\'s machine against git\'s allowed signers', async () => {
+    const s = (await (await sam.client.raw('GET', `/api/shared-task-state?project=${encodeURIComponent(samRepo)}`)).json()) as Shared;
+    expect(s.signing).toMatchObject({ how: 'git', as: 'sam@acme.test' });
+    expect(s.signing.says).toBe("Records written here are signed with your git SSH key, as sam@acme.test. Teammates check them against git's allowed signers, as they do signed commits.");
+    const res = await sam.client.raw('PUT', `/api/items/${task}`, { status: 'in_progress', progressPercent: 30 });
+    expect(res.ok).toBe(true);
+    const text = fs.readFileSync(path.join(samRepo, '.codetrellis', 'records', plan, task, `${s.writer}-1.yaml`), 'utf8');
+    expect(text).toMatch(/\nsignature:\n {2}how: git\n {2}signer: sam@acme.test\n {2}value: \|-?\n {4}-----BEGIN SSH SIGNATURE-----/);
+    // No device key is introduced: git's key is enough.
+    expect(fs.existsSync(path.join(samRepo, '.codetrellis', 'keys'))).toBe(false);
+    carry(samRepo, danaRepo, 'state: sam 30');
+    await expect.poll(progress, { timeout: 15_000 }).toBe(30);
+    expect(await recorded()).toMatchObject({ by: 'sam@acme.test', byType: 'record', check: { verified: true, how: 'git', who: 'sam@acme.test', claimed: 'Sam Lee' } });
+  });
+
+  test('signed with a key the team does not list, it does not verify, and says why', async () => {
+    git(samRepo, 'config', 'user.signingkey', mallory);
+    expect((await sam.client.raw('PUT', `/api/items/${task}`, { progressPercent: 50 })).ok).toBe(true);
+    carry(samRepo, danaRepo, 'state: sam 50');
+    await expect.poll(progress, { timeout: 15_000 }).toBe(50);
+    const r = await recorded();
+    expect(r).toMatchObject({ by: 'Sam Lee', check: { verified: false } });
+    expect(r?.check?.why).toMatch(/^the signature does not verify for sam@acme\.test/);
   });
 });

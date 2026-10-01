@@ -17,7 +17,7 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 264 | 262 | 0 | 0 | 217 | 0 |
+| REST routes | 265 | 263 | 0 | 0 | 217 | 0 |
 | MCP tools | 204 | 204 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 90 | 79 | 0 | 0 | 78 | 0 |
 | Frontend components | 120 | n/a | n/a | n/a | 0 | 23 |
@@ -38,7 +38,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4h Drift, governance, review | 11 | 25 | 9 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 37 | 0 |
-| 0.4k Settings, updates, privacy | 17 | 0 | 3 | 8 | 0 | 14 |
+| 0.4k Settings, updates, privacy | 18 | 0 | 3 | 8 | 0 | 14 |
 | 0.4l System docs and intake | 7 | 11 | 6 | 1 | 0 | 0 |
 
 ## MCP tools: registry vs capability matrix
@@ -48,7 +48,7 @@ records that — but "✗ none" is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (264)
+## REST routes (265)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -302,6 +302,7 @@ records that — but "✗ none" is proof of a gap.
 | k | `GET /api/shared-task-state` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/updates/download/status` |  | ✗ none | 1 | ✓ 0.4k: idle and complete before anything is downloaded (update-download) |  |  |
 | k | `GET /api/updates/status` |  | ✗ none | 2 | ✓ 0.4k: idle when the check is off; available / up-to-date / error after a check, platform and version named (updates) |  |  |
+| k | `POST /api/shared-task-state/keys` |  | ✗ none | 1 |  |  |  |
 | k | `POST /api/updates/check` |  | ✗ none | 1 | ✓ 0.4k: a person's check goes out even with the automatic one off; no asset for this platform is not offered; website down falls back to GitHub; both down an error with the last good answer kept (updates) |  |  |
 | k | `POST /api/updates/download` |  | ✗ none | 2 | ✓ 0.4k: refused with nothing fetched unless https on the releases repo; a refusal no longer blocks later downloads (updates; bug 44), update-download |  |  |
 | k | `POST /api/updates/download/cancel` |  | ✗ none | 1 | ✓ 0.4k: answers cleanly with nothing running (update-download) |  |  |

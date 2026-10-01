@@ -85,7 +85,7 @@ import { forgetHostReads } from './services/review-host/host-state';
 import { forgetReviewHostToken, getReviewHost, ReviewHostError, saveReviewHostToken, setReviewHost } from './services/review-host/switch';
 import { listTestReports, listTestResults, testsSummary } from './services/tests/test-results';
 import { groundingMap, groundingOf, NotAFileError } from './services/tests/grounding';
-import { getSharedTaskState, keepMyState, readAndTell, setRecordAppliedListener, setSharedTaskState, setSplitChangedListener, startRecordWatcher, writeRecordFor } from './services/task-records/shared-state';
+import { getSharedTaskState, keepMyState, readAndTell, setRecordAppliedListener, setSharedTaskState, setSplitChangedListener, startRecordWatcher, trustTeammateKey, writeRecordFor } from './services/task-records/shared-state';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
 import { buildPlaybackSequence } from './services/playback-service';
 import * as commentService from './services/comment-service';
@@ -2516,6 +2516,27 @@ app.put('/api/shared-task-state', (req, res) => {
   const status = setSharedTaskState(projectRoot, enabled, changedBy(req));
   broadcast('shared-task-state-changed', { project: projectRoot });
   res.json(status);
+});
+
+// C3.3 — trust a teammate's device key, introduced in the project's files,
+// so the records it signs verify here. Trusting is the person's, as a grant;
+// refusing one is anyone's. Keys are by device, so one decision covers every
+// project that device shares into.
+app.post('/api/shared-task-state/keys', (req, res) => {
+  const { writer, fingerprint, trust } = req.body ?? {};
+  if (typeof writer !== 'string' || typeof fingerprint !== 'string' || typeof trust !== 'boolean') {
+    res.status(400).json({ error: 'writer, fingerprint and trust (true or false) are required' });
+    return;
+  }
+  if (trust && !mayGrant(req)) { res.status(403).json({ error: `Only you can trust a teammate's key — in the CodeTrellis app, ${SHARED_STATE_WHERE}.` }); return; }
+  const out = trustTeammateKey(writer, fingerprint, trust, changedBy(req));
+  if (!out) { res.status(404).json({ error: 'No device has introduced that key in a project here.' }); return; }
+  broadcast('shared-task-state-changed', { writer });
+  for (const itemUid of out.rechecked) {
+    const item = planItemService.getItem(itemUid);
+    if (item) broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { rechecked: true } });
+  }
+  res.json(out);
 });
 
 // C3.2 — keep this machine's state of a task people set two ways at once.

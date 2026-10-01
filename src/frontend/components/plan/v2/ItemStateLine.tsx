@@ -9,12 +9,8 @@
 
 import { useMemo } from 'react';
 import type { PlanItem } from '@shared/types';
-import { recordedWords } from '@shared/lib/item-status';
+import { recordCheckWords, recordedWords } from '@shared/lib/item-status';
 import { SOURCE_TONE, usePlanStatus } from '../../../lib/plan-status';
-
-/** Why a teammate's record is "unverified" (C3.1), on hover. */
-const RECORD_EXPLAINER = 'Read from a record in the project\'s files, which git or a synced folder brought here. '
-  + 'Anyone who can write to those files could write one in another person\'s name, so it is not proven until records are signed.';
 
 /** Keep this machine's state of a task set two ways at once (C3.2): a new record, made having seen the others. */
 async function keep(itemUid: string): Promise<void> {
@@ -37,7 +33,8 @@ export function ItemStateLine({ item }: { item: PlanItem }) {
           className="text-foreground-subtle"
           data-testid="item-state-recorded"
           data-recorded-type={s.recorded?.byType}
-          title={s.recorded?.byType === 'record' ? RECORD_EXPLAINER : undefined}
+          data-verified={s.recorded?.byType === 'record' ? String(!!s.recorded.check?.verified) : undefined}
+          title={recordCheckWords(s.recorded) ?? undefined}
         >
           {recorded}
         </span>

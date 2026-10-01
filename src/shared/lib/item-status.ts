@@ -28,8 +28,23 @@ export type ItemStateName = GitStateName | PlanStateName;
 /** Where a state came from: git, the review host, or the plan itself. */
 export type ItemStateSource = GitStateSource | 'plan';
 
-/** Who recorded the plan's state, and when (ms). */
-export interface StateRecord { by: string; byType: string; at: number }
+/**
+ * Whether a teammate's record a state was taken from verified (C3.3).
+ * `claimed`: who the record says made the change, as words. Verified, `who`
+ * is whose key signed it (git's user.email, or the name a trusted device
+ * key was introduced with), `author` the words for it; else `why` not.
+ */
+export interface RecordCheck {
+  verified: boolean;
+  claimed: string;
+  how?: 'git' | 'device';
+  who?: string;
+  author?: string;
+  why?: string;
+}
+
+/** Who recorded the plan's state, and when (ms); `check` for one taken from a teammate's record. */
+export interface StateRecord { by: string; byType: string; at: number; check?: RecordCheck | null }
 
 /** An item's acceptance criteria, summed up. */
 export interface CriteriaTally {
@@ -162,13 +177,29 @@ export function stateFromWords(source: ItemStateSource): string {
 
 /**
  * "recorded by Sam, 26 Sep". A state taken from a teammate's record in the
- * project's files (C3.1) says so: anyone who can write to the folder could
- * have written it, until records are signed.
+ * project's files (C3.1) says so: "in their signed record" when its
+ * signature verified (C3.3), else "unverified", since anyone who can write to
+ * the folder could have written it.
  */
 export function recordedWords(r: StateRecord | null | undefined): string | null {
   if (!r) return null;
   const when = shortDate(Math.floor(r.at / 1000));
-  return r.byType === 'record' ? `recorded by ${r.by} in their record, unverified, ${when}` : `recorded by ${r.by}, ${when}`;
+  if (r.byType !== 'record') return `recorded by ${r.by}, ${when}`;
+  return r.check?.verified ? `recorded by ${r.by} in their signed record, ${when}` : `recorded by ${r.by} in their record, unverified, ${when}`;
+}
+
+/** Why a teammate's record is or is not proven, for its hover (C3.1, C3.3). */
+export function recordCheckWords(r: StateRecord | null | undefined): string | null {
+  if (!r || r.byType !== 'record') return null;
+  const c = r.check;
+  if (c?.verified) {
+    return c.how === 'git'
+      ? `Signed with ${c.who}'s git SSH key, checked against git's allowed signers, as signed commits are.`
+      : `Signed with ${c.who}'s device key, which you trusted in Settings → Shared task state.`;
+  }
+  const why = c?.why ? `Not proven: ${c.why}. ` : '';
+  return `Read from a record in the project's files, which git or a synced folder brought here. ${why}`
+    + 'Anyone who can write to those files could write one in another person\'s name, so it is shown as unverified.';
 }
 
 /** The line an item's page and a row's hover say: "in progress, 40% — from the plan, recorded by Sam, 26 Sep". */

@@ -18,7 +18,7 @@ import { listCriteria } from './criteria-service';
 import { getExternalRefsByPlan } from './external-refs-service';
 import { getPlanExternalRefs } from './external-intake-service';
 import { planGitStates, planGitStatesFresh, type PlanItemGitState } from './item-git-state';
-import { allSplits } from './task-records/heads';
+import { allHeadChecks, allSplits } from './task-records/heads';
 import {
   itemStatuses, planStatusView,
   type CriteriaTally, type ItemStatus, type PlanItemFacts, type PlanStatusView, type StateRecord,
@@ -32,11 +32,19 @@ export interface PlanStatus extends PlanStatusView {
   items: ItemStatus[];
 }
 
-/** The newest status change of each item, from the plan's own events. */
+/**
+ * The newest status change of each item, from the plan's own events. One
+ * taken from a teammate's record carries whether that record verified, as
+ * checked now (C3.3): trusting a key later changes what it says.
+ */
 function statusRecords(planUid: string): Map<string, StateRecord> {
   const out = new Map<string, StateRecord>();
+  const checks = allHeadChecks();
   for (const e of listPlanEvents(planUid, { eventTypes: ['status_changed'], limit: 10_000 })) {
-    if (e.itemUid && !out.has(e.itemUid)) out.set(e.itemUid, { by: e.author, byType: e.authorType, at: e.createdAt });
+    if (!e.itemUid || out.has(e.itemUid)) continue;
+    const check = e.authorType === 'record' ? checks.get(e.itemUid) ?? null : null;
+    const by = check ? (check.verified && check.author ? check.author : check.claimed) : e.author;
+    out.set(e.itemUid, { by, byType: e.authorType, at: e.createdAt, ...(check ? { check } : {}) });
   }
   return out;
 }

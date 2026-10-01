@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  atOnceWords, branchLineageWords, isStateOnly, itemStatuses, planStatusView, sectionStateWords, statusLine, taskStateWords,
+  atOnceWords, branchLineageWords, isStateOnly, itemStatuses, planStatusView, recordCheckWords, recordedWords, sectionStateWords, statusLine, taskStateWords,
   type PlanItemFacts,
 } from './item-status';
 import type { ItemGitState } from './git-state-words';
@@ -67,6 +67,20 @@ test('a state taken from a teammate\'s record says so, and that it is unverified
   const at = Date.UTC(2026, 9, 1, 9, 30);
   const [s] = itemStatuses([task('Write the board report', { status: 'in_progress', recorded: { by: 'Sam Lee', byType: 'record', at } })], new Map());
   assert.equal(statusLine(s), 'in progress — from the plan, recorded by Sam Lee in their record, unverified, 1 Oct');
+});
+
+test('a teammate\'s record that verified says "signed", and its hover says whose key (C3.3)', () => {
+  const at = Date.UTC(2026, 9, 1, 9, 30);
+  const signed = { by: 'Sam Lee', byType: 'record', at, check: { verified: true, claimed: 'Sam Lee', how: 'device' as const, who: 'Sam Lee', author: 'Sam Lee' } };
+  const [s] = itemStatuses([task('Write the board report', { status: 'in_progress', recorded: signed })], new Map());
+  assert.equal(statusLine(s), 'in progress — from the plan, recorded by Sam Lee in their signed record, 1 Oct');
+  assert.equal(recordCheckWords(signed), 'Signed with Sam Lee\'s device key, which you trusted in Settings → Shared task state.');
+  const git = { ...signed, by: 'sam@acme.test', check: { verified: true, claimed: 'Sam Lee', how: 'git' as const, who: 'sam@acme.test', author: 'sam@acme.test' } };
+  assert.equal(recordCheckWords(git), 'Signed with sam@acme.test\'s git SSH key, checked against git\'s allowed signers, as signed commits are.');
+  const not = { by: 'Sam Lee', byType: 'record', at, check: { verified: false, claimed: 'Sam Lee', why: 'it is not signed' } };
+  assert.equal(recordedWords(not), 'recorded by Sam Lee in their record, unverified, 1 Oct');
+  assert.match(recordCheckWords(not)!, /^Read from a record in the project's files, .* Not proven: it is not signed\. Anyone who can write/);
+  assert.equal(recordCheckWords({ by: 'Dana', byType: 'human', at }), null);
 });
 
 test('a task set two ways at once names both, waits on them, and picks neither (C3.2)', () => {

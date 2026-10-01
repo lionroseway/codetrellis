@@ -22,7 +22,10 @@ test('a record round-trips through its file, with a note for whoever opens it', 
   r.state.progressPercent = 40;
   const text = serializeRecord(r);
   assert.match(text, /^# CodeTrellis task state, written once/);
-  assert.deepEqual(parseRecord(text, where), { record: r });
+  const parsed = parseRecord(text, where);
+  assert.ok('record' in parsed);
+  assert.deepEqual(parsed.record, r);
+  assert.equal(parsed.signed.signature, null);
   assert.equal(recordFileName(SAM, 3), `${SAM}-3.yaml`);
 });
 
