@@ -84,7 +84,7 @@ import { allPlanArrivals } from './services/plan-arrivals';
 import { forgetHostReads } from './services/review-host/host-state';
 import { forgetReviewHostToken, getReviewHost, ReviewHostError, saveReviewHostToken, setReviewHost } from './services/review-host/switch';
 import { listTestReports, listTestResults, testsSummary } from './services/tests/test-results';
-import { groundingOf, NotAFileError } from './services/tests/grounding';
+import { groundingMap, groundingOf, NotAFileError } from './services/tests/grounding';
 import { getSharedTaskState, keepMyState, readAndTell, setRecordAppliedListener, setSharedTaskState, setSplitChangedListener, startRecordWatcher, writeRecordFor } from './services/task-records/shared-state';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
 import { buildPlaybackSequence } from './services/playback-service';
@@ -2471,6 +2471,14 @@ app.get('/api/tests', (req, res) => {
     reports: listTestReports(projectRoot, 10),
     tests: listTestResults(projectRoot, { match, limit: 500 }),
   });
+});
+
+// Phase 32 B8.3a — every file's grounding at once, for the graph's overlay.
+// The same answer per file as /api/tests/grounding.
+app.get('/api/tests/grounding/map', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(groundingMap(projectRoot));
 });
 
 // Phase 32 B8.2 — one file's tests: those whose file imports it, and whether

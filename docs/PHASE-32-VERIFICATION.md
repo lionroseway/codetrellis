@@ -17,10 +17,10 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 263 | 261 | 0 | 0 | 217 | 0 |
+| REST routes | 264 | 262 | 0 | 0 | 217 | 0 |
 | MCP tools | 204 | 204 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 90 | 79 | 0 | 0 | 78 | 0 |
-| Frontend components | 119 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 120 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 37 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 14 | n/a | n/a | n/a | 11 | 13 |
 
@@ -29,9 +29,9 @@ records that — but "✗ none" is proof of a gap.
 | Domain | REST | MCP | RPC | Components | Mobile | Settings |
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 19 | 12 | 10 | 0 | 0 | 0 |
-| 0.4b Graph | 19 | 15 | 8 | 13 | 0 | 0 |
+| 0.4b Graph | 19 | 15 | 8 | 14 | 0 | 0 |
 | 0.4c Plans and items | 107 | 58 | 25 | 60 | 0 | 0 |
-| 0.4d Criteria and sign-off | 11 | 9 | 3 | 0 | 0 | 0 |
+| 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 12 | 7 | 1 | 0 | 0 |
 | 0.4g Agents and MCP | 26 | 32 | 10 | 28 | 0 | 0 |
@@ -48,7 +48,7 @@ records that — but "✗ none" is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (263)
+## REST routes (264)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -204,6 +204,7 @@ records that — but "✗ none" is proof of a gap.
 | d | `GET /api/plans/:uid/worklist` |  | ✗ none | 1 | ✓ 0.4d: sent back first with note, then open; met/waiting counted; stale after source moves (signoff-surface) |  |  |
 | d | `GET /api/tests` |  | ✗ none | 1 |  |  |  |
 | d | `GET /api/tests/grounding` |  | ✗ none | 1 |  |  |  |
+| d | `GET /api/tests/grounding/map` |  | ✗ none | 1 |  |  |  |
 | d | `POST /api/criteria/:uid/check` |  | ✗ none | 1 | ✓ 0.4d: holds while cited cell exists, fails with the reason once it is gone; 404 (signoff-surface) |  |  |
 | d | `POST /api/criteria/:uid/decide` |  | ✗ none | 6 | ✓ 0.4d: approve / send back (note required); HTTP records unverified, app window records human (criteria-signoff, ipc-dispatcher unit) |  |  |
 | d | `POST /api/plans/:uid/signoff-pack/verify` |  | ✗ none | 1 | ✓ 0.4d: matches, then changed after edit; empty, non-pack and other plan's pack refused (signoff-surface) |  |  |
@@ -620,7 +621,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (119)
+## Frontend components (120)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -628,6 +629,7 @@ records that — but "✗ none" is proof of a gap.
 | b | `graph/nodes/BreakpointBadge.tsx` |  | n/a | n/a |  |  |  |
 | b | `graph/nodes/DirectoryNode.tsx` |  | n/a | n/a |  |  |  |
 | b | `graph/nodes/FileNode.tsx` |  | n/a | n/a |  |  |  |
+| b | `graph/nodes/GroundingMark.tsx` |  | n/a | n/a |  |  |  |
 | b | `graph/nodes/PackageNode.tsx` |  | n/a | n/a |  |  |  |
 | b | `graph/nodes/SymbolNode.tsx` |  | n/a | n/a |  |  |  |
 | b | `graph/nodes/WorkOverlayMarks.tsx` |  | n/a | n/a |  |  |  |

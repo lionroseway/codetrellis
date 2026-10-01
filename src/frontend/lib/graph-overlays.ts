@@ -12,13 +12,14 @@
 import type { AwarenessSignal, Workstream } from '@shared/types';
 import { lineCounts } from '../../shared/lib/line-changes';
 
-export type OverlayId = 'plan' | 'workstreams' | 'collisions' | 'breakpoints';
+export type OverlayId = 'plan' | 'workstreams' | 'collisions' | 'breakpoints' | 'tests';
 
 export const OVERLAYS: ReadonlyArray<{ id: OverlayId; label: string; hint: string }> = [
   { id: 'plan', label: 'Plan intent', hint: 'Files and edges the active plan means to change' },
   { id: 'workstreams', label: 'Workstreams', hint: 'Lines each other workstream changes in a file' },
   { id: 'collisions', label: 'Collision zones', hint: 'Files two workstreams both change, while the overlap is open' },
   { id: 'breakpoints', label: 'Breakpoints', hint: 'Files and folders a person asked to be asked about first' },
+  { id: 'tests', label: 'Test grounding', hint: '✓ passing · ✗ failing · ⚠ tests older than the code · ○ no tests, from the reports agents handed over' },
 ];
 
 export const ALL_OVERLAYS: readonly OverlayId[] = OVERLAYS.map((o) => o.id);
@@ -114,4 +115,47 @@ export function collisionFiles(
     }
   }
   return out;
+}
+
+// ── Test grounding (Phase 32 B8.3a) ───────────────────────────────────
+
+export type GroundingState = 'failing' | 'stale' | 'passing' | 'untested';
+
+/** What GET /api/tests/grounding/map answers: each file some test reaches; any other has none. */
+export interface GroundingMapView {
+  files: Record<string, { state: GroundingState; words: string }>;
+  hasResults: boolean;
+}
+
+export const GROUNDING_MARK: Record<GroundingState, string> = { failing: '✗', stale: '⚠', passing: '✓', untested: '○' };
+
+/**
+ * A file node's mark: its state and words, or "○ no tests" when the project
+ * has results and none reach it. Nothing at all before any results: "no
+ * tests" on every node would say nothing.
+ */
+export function fileGrounding(map: GroundingMapView | null, filePath: string): { state: GroundingState; mark: string; title: string } | undefined {
+  if (!map?.hasResults) return undefined;
+  const g = map.files[filePath];
+  const state = g?.state ?? 'untested';
+  return { state, mark: GROUNDING_MARK[state], title: g?.words ?? '○ no tests: no test with a reported result imports it' };
+}
+
+/**
+ * A cluster's marks, summed over its files, worst first: "✗ 2 · ⚠ 1 · ✓ 9",
+ * with how many have no tests on hover. Undefined before any results.
+ */
+export function clusterGrounding(map: GroundingMapView | null, files: readonly string[]): { state: GroundingState; short: string; title: string } | undefined {
+  if (!map?.hasResults || files.length === 0) return undefined;
+  const n: Record<GroundingState, number> = { failing: 0, stale: 0, passing: 0, untested: 0 };
+  for (const f of files) n[map.files[f]?.state ?? 'untested']++;
+  const order: GroundingState[] = ['failing', 'stale', 'passing'];
+  const parts = order.filter((s) => n[s] > 0).map((s) => `${GROUNDING_MARK[s]} ${n[s]}`);
+  const state = order.find((s) => n[s] > 0) ?? 'untested';
+  const words: Record<GroundingState, string> = { failing: 'failing', stale: 'with tests older than the code', passing: 'passing', untested: 'with no tests' };
+  const title = (['failing', 'stale', 'passing', 'untested'] as GroundingState[])
+    .filter((s) => n[s] > 0)
+    .map((s) => `${n[s]} file${n[s] === 1 ? '' : 's'} ${words[s]}`)
+    .join('\n');
+  return { state, short: parts.length ? parts.join(' · ') : `○ ${n.untested}`, title };
 }

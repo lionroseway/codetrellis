@@ -19,6 +19,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { importersOf } from '../importers';
+import { getDb } from '../database';
 import { resolveWithin } from '../confined-fs';
 import { listTestResults, type TestResultRow } from './test-results';
 
@@ -72,12 +73,12 @@ export function groundingWords(tests: ReadonlyArray<Pick<TestResultRow, 'result'
 }
 
 /** One file's grounding. `candidate` is absolute or relative to the project. */
-export function groundingOf(projectRoot: string, candidate: string): FileGrounding {
+export function groundingOf(projectRoot: string, candidate: string, known?: TestResultRow[]): FileGrounding {
   const abs = resolveWithin(projectRoot, path.isAbsolute(candidate) ? candidate : path.join(projectRoot, candidate), 'file');
   const rel = path.relative(projectRoot, abs).split(path.sep).join('/');
   // A folder has no tests of its own; saying "no tests" of one would mislead.
   try { if (fs.lstatSync(abs).isDirectory()) throw new NotAFileError(`${rel || '.'} is a folder, not a file.`); } catch (err) { if (err instanceof NotAFileError) throw err; }
-  const results = listTestResults(projectRoot, { limit: 100_000 });
+  const results = known ?? listTestResults(projectRoot, { limit: 100_000 });
   const withFile = results.map((t) => ({ t, testFile: testFileOf(projectRoot, t) }));
   const own = withFile.filter((x) => x.testFile === rel);
   let covering: typeof withFile;
@@ -99,4 +100,63 @@ export function groundingOf(projectRoot: string, candidate: string): FileGroundi
     tests: covering.map((x) => ({ label: x.t.label, result: x.t.result, message: x.t.message, ranAt: x.t.ranAt, testFile: x.testFile! })),
     lastRunAt, changedAt, isTest: own.length > 0,
   };
+}
+
+export interface GroundingMap {
+  /** Each file some test reaches, project-relative, with its state and words. Any other file has no tests. */
+  files: Record<string, Pick<FileGrounding, 'state' | 'words'>>;
+  /** Whether the project has any reported results at all: without any, "no tests" says nothing. */
+  hasResults: boolean;
+  counts: Record<GroundingState, number>;
+}
+
+/** How deep a chain of barrels is followed from a test file. */
+const MAX_BARRELS = 5;
+
+/**
+ * Every file's grounding at once, for the graph's overlay (B8.3a). The files
+ * a test can reach are found forward, from each test file through what it
+ * imports and on through barrels' re-exports; each of those is then asked
+ * exactly as one file is (`groundingOf`), so the overlay and the Inspector
+ * never disagree. A file no test can reach has none.
+ */
+export function groundingMap(projectRoot: string): GroundingMap {
+  const results = listTestResults(projectRoot, { limit: 100_000 });
+  const counts: Record<GroundingState, number> = { failing: 0, stale: 0, passing: 0, untested: 0 };
+  const files: GroundingMap['files'] = {};
+  if (results.length === 0) return { files, hasResults: false, counts };
+  const testFiles = new Set(results.map((t) => testFileOf(projectRoot, t)).filter((f): f is string => !!f));
+  const importsOf = (absFile: string): Array<{ path: string; reexport: boolean }> =>
+    (getDb().exec(
+      `SELECT i.resolved_path, i.is_reexport FROM imports i JOIN files f ON i.file_id = f.id
+        WHERE f.path = ? AND i.resolved_path IS NOT NULL`,
+      [absFile],
+    )[0]?.values ?? []).map((r) => ({ path: String(r[0]), reexport: r[1] === 1 }));
+  const candidates = new Set<string>(testFiles);
+  for (const tf of testFiles) {
+    const start = path.join(projectRoot, tf);
+    const seen = new Set<string>([start]);
+    let frontier = importsOf(start).map((i) => i.path);
+    for (let depth = 0; depth <= MAX_BARRELS && frontier.length; depth++) {
+      const next: string[] = [];
+      for (const abs of frontier) {
+        if (seen.has(abs)) continue;
+        seen.add(abs);
+        const rel = path.relative(projectRoot, abs);
+        if (rel.startsWith('..') || path.isAbsolute(rel)) continue;
+        candidates.add(rel.split(path.sep).join('/'));
+        // A barrel passes on what it re-exports: follow those, not its own imports.
+        next.push(...importsOf(abs).filter((i) => i.reexport).map((i) => i.path));
+      }
+      frontier = next;
+    }
+  }
+  for (const rel of candidates) {
+    let g: FileGrounding;
+    try { g = groundingOf(projectRoot, rel, results); } catch { continue; }
+    if (g.state === 'untested' && g.tests.length === 0) continue;
+    files[rel] = { state: g.state, words: g.words };
+    counts[g.state]++;
+  }
+  return { files, hasResults: true, counts };
 }

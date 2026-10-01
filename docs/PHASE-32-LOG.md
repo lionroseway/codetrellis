@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B8.2: tests mapped to code |
-| **Status** | B8.1 merged (#273). B8.2 built: a file's tests are those whose test file imports it, directly or through a barrel; it reads ✗ failing, ⚠ tests older than the code, ✓ passing or ○ no tests, for an agent (get_test_results for_file), the window (GET /api/tests/grounding) and in the Inspector's Tests line. Unit (grounding 3), harness (test-grounding 7), browser (inspector tests-line) green locally |
-| **In flight** | B8.2 building on `feat/phase-32-b8-2-tests-to-code` |
-| **Last merged** | B8.1 (#273, `831a22c`) |
-| **Next action** | Open B8.2's PR and merge when green; then B8.3 (the grounding overlay on the graph and a grounding line on each task) |
+| **Stage / step** | Wave 2 — B8.3a: the grounding overlay on the graph |
+| **Status** | B8.2 merged (#274). B8.3 split into a (the overlay) and b (the task line). B8.3a built: Overlays → Test grounding draws ✗ failing, ⚠ tests older than the code, ✓ passing or ○ no tests on each file, words on hover, and sums clusters; nothing before any report; GET /api/tests/grounding/map gives the same answer per file as the Inspector. Unit (graph-overlays 10), harness (test-grounding 8), browser (grounding-overlay, graph-overlays) green locally |
+| **In flight** | B8.3 building on `feat/phase-32-b8-3-grounding-overlay` |
+| **Last merged** | B8.2 (#274, `deee2c9`) |
+| **Next action** | Open B8.3a's PR and merge when green; then B8.3b (a grounding line on each task) |
 | **Blockers** | C2.6b waits on the owner's choice; C3.3–C3.5 wait on the owner's answers (which key signs records; which providers first; what people without the app see; whether material reads are shared by default) |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `831a22c`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `deee2c9`, with open PRs from GitHub.
 
 ---
 
@@ -201,8 +201,10 @@
   - [x] B7.7 I1 done-when and docs (#250)
 - [ ] B8 Grounding, refined in EXECUTION §5: — building
   - [x] B8.1 Per-test results: JUnit read test by test, each test's last result kept; report_tests, get_test_results, GET /api/tests; a test criterion names its failing tests (#273)
-  - [ ] B8.2 Tests mapped to code through imports: ✓ passing, ✗ failing, ○ no tests, ⚠ tests older than the code, per file — building
-  - [ ] B8.3 The grounding overlay on the graph and a grounding line on each task (window, phone, get_brief)
+  - [x] B8.2 Tests mapped to code through imports: ✓ passing, ✗ failing, ○ no tests, ⚠ tests older than the code, per file (#274)
+  - [ ] B8.3 Where it shows, split in two: — building
+    - [ ] B8.3a The grounding overlay on the graph: ✗ ⚠ ✓ ○ on files, summed on clusters, the same answer as the Inspector
+    - [ ] B8.3b A grounding line on each task: "3 criteria · 2 grounded · 1 waiting on a person" (window, phone, get_brief)
   - [ ] B8.4 Replay of grounding, and the J1 done-when: done on stale tests is refused and says so
 - [ ] B9 Play-forward (code, and the materials tasks rely on)
 - [ ] B10 The record
@@ -362,6 +364,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | A plan file's refs are added on import, never removed, and only http(s) links are read | A file is anyone's text. Adding is what a pull should do; removing on a file's word would let an edit take a ticket away silently, and a `javascript:` or `file:` link would be one click from harm |
 | 2026-10-01 | C2.6 is refined into C2.6a (teammates' plans after a pull) and C2.6b (Phase 32's own plan in CodeTrellis). C2.6b waits on the owner: keep `PHASE-32-STATUS.yaml` as intent and import it as a plan, or replace it with the plan's files | Moving the phase's own tracker changes how every session reads the work, so it is the owner's choice, not a build step. C2.6a stands alone and needs no such choice |
 | 2026-10-01 | A pulled plan's author is who committed its `plan.yaml`, as `git log` says, never the file's own `author` field | A plan file is anyone's text; the commit is how it arrived (the authorship rule). The same reading as C1.4's skill arrivals |
+| 2026-10-01 | B8.3 is split into B8.3a (the overlay on the graph) and B8.3b (the grounding line on each task) | They are different surfaces with different tests (the graph's nodes; the task's criteria on window, phone and get_brief); one PR each keeps both reviewable |
 | 2026-10-01 | B8 is refined into four parts (EXECUTION §5). CodeTrellis never runs tests, as observability §9 says; JOURNEYS J1's open question is settled by that principle | Running an agent's tests would make the app an executor with the project's full reach; checking what the run reported keeps provenance with the agent and judgement with the person (the Phase 31 rule) |
 | 2026-10-01 | C3 is refined into six parts (EXECUTION §6). C3.1 and C3.2 need no answer; C3.3 (which key signs records), C3.4 (which providers first; what people without the app see) and C3.5 (whether material reads are shared by default) wait on the owner | Records, their order and their disagreements are the same whichever key, provider or default is chosen, so building them first loses nothing |
 | 2026-10-01 | Task-state records are turned on per project, on this device, by the person; off writes and reads none | They add files to the team's repository or folder, which is sharing; the same rule as a review host. Reading teammates' records only when sharing is on keeps one switch with one meaning |
@@ -370,6 +373,32 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-01: B8.3a — the grounding overlay on the graph
+
+B8.2 merged (#274). B8.3 is split in two (decision row): the overlay on the
+graph (a) and the line on each task (b), which touch different surfaces.
+
+- **Overlays → Test grounding** (`lib/graph-overlays.ts`, `GroundingMark`).
+  A file node reads ✗, ⚠, ✓ or ○ with its words on hover ("⚠ tests older
+  than the code: it changed after its 2 tests last ran"); a cluster sums
+  its files worst first ("✗ 1 · ⚠ 1 · ✓ 9") with how many have no tests on
+  hover. Before any report nothing is drawn: "no tests" on every node would
+  say nothing. A glyph and words, never colour alone.
+- **One answer** (`GET /api/tests/grounding/map`, `groundingMap`). The
+  files a test can reach are found forward, from each test file through
+  its imports and on through barrels' re-exports; each is then asked
+  exactly as the Inspector asks one file, so the two never disagree. A
+  file no test reaches is left out, and reads ○.
+- **Live.** `report_tests` broadcasts `tests-reported`, and the overlay
+  reads again; nothing is fetched while it is off.
+
+Tests: unit `graph-overlays.test.ts` (file, cluster, nothing before
+results); harness `test-grounding.test.ts` (8: the map agrees with every
+file's own answer and leaves out what no test reaches); browser
+`graph/grounding-overlay.spec.ts` (✗ ⚠ ○ on files with words, clusters
+summed, nothing before a report, off again; shots `graph-grounding-node`,
+`graph-grounding-clusters`), `graph-overlays.spec.ts` (five overlays).
 
 ### 2026-10-01: B8.2 — tests mapped to code
 

@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — B8.2: tests mapped to code"
-  status: "B8.1 merged (#273). B8.2 built: a file's tests are those whose test file imports it, directly or through a barrel; it reads ✗ failing, ⚠ tests older than the code, ✓ passing or ○ no tests, for an agent (get_test_results for_file), the window (GET /api/tests/grounding) and in the Inspector's Tests line. Unit (grounding 3), harness (test-grounding 7), browser (inspector tests-line) green locally"
-  next: "Open B8.2's PR and merge when green; then B8.3 (the grounding overlay on the graph and a grounding line on each task)"
+  step: "Wave 2 — B8.3a: the grounding overlay on the graph"
+  status: "B8.2 merged (#274). B8.3 split into a (the overlay) and b (the task line). B8.3a built: Overlays → Test grounding draws ✗ failing, ⚠ tests older than the code, ✓ passing or ○ no tests on each file, words on hover, and sums clusters; nothing before any report; GET /api/tests/grounding/map gives the same answer per file as the Inspector. Unit (graph-overlays 10), harness (test-grounding 8), browser (grounding-overlay, graph-overlays) green locally"
+  next: "Open B8.3a's PR and merge when green; then B8.3b (a grounding line on each task)"
   blockers: "C2.6b waits on the owner's choice; C3.3–C3.5 wait on the owner's answers (which key signs records; which providers first; what people without the app see; whether material reads are shared by default)"
   updated: 2026-10-01
 sections:
@@ -475,7 +475,12 @@ sections:
           - id: B8.2
             title: "Tests mapped to code through imports: ✓ passing, ✗ failing, ○ no tests, ⚠ tests older than the code, per file"
           - id: B8.3
-            title: "The grounding overlay on the graph and a grounding line on each task (window, phone, get_brief)"
+            title: "Where it shows, split in two:"
+            items:
+              - id: B8.3a
+                title: "The grounding overlay on the graph: ✗ ⚠ ✓ ○ on files, summed on clusters, the same answer as the Inspector"
+              - id: B8.3b
+                title: "A grounding line on each task: \"3 criteria · 2 grounded · 1 waiting on a person\" (window, phone, get_brief)"
           - id: B8.4
             title: "Replay of grounding, and the J1 done-when: done on stale tests is refused and says so"
       - id: B9

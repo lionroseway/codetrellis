@@ -5,6 +5,7 @@ import { ArrowDownLeft, ArrowUpRight, Check, FileCode, FileJson, FileText, Focus
 import { getChangeVisual, getLanguageLabel, getLanguageVisual, farStatusStyle, LOD_ZOOM, statusOutline, type GraphNodeVisualData } from '../../../lib/graph-visuals';
 import { useUiStore } from '../../../stores/ui-store';
 import { BreakpointBadge } from './BreakpointBadge';
+import { GroundingMark } from './GroundingMark';
 import { WorkOverlayMarks } from './WorkOverlayMarks';
 
 interface FileNodeData extends GraphNodeVisualData {
@@ -89,6 +90,7 @@ function FileNodeComponent({ data }: NodeProps) {
     >
       <Handle type="target" position={Position.Top} className="!h-2.5 !w-2.5 !border-0 !bg-white/70 !shadow-[0_0_10px_rgba(255,255,255,0.4)]" />
       <BreakpointBadge title={(data as Record<string, unknown>).breakpointTitle} />
+      <GroundingMark grounding={(data as Record<string, unknown>).grounding} />
       <WorkOverlayMarks workCount={(data as Record<string, unknown>).workCount} collisionTitle={(data as Record<string, unknown>).collisionTitle} />
       <div className="pointer-events-none absolute inset-0 rounded-[22px] bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.18),transparent_38%),radial-gradient(circle_at_bottom_right,var(--node-glow),transparent_44%)] opacity-90" style={{ ['--node-glow' as string]: change?.glow || language.glow }} />
       <div className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-80" />

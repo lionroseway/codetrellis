@@ -5,7 +5,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseOverlays, projectPrefix, toProjectPath, workCountsByFile, workCountLabel, collisionFiles } from './graph-overlays';
+import { parseOverlays, projectPrefix, toProjectPath, workCountsByFile, workCountLabel, collisionFiles, fileGrounding, clusterGrounding, type GroundingMapView } from './graph-overlays';
 import type { AwarenessSignal, Workstream } from '@shared/types';
 
 const ws = (root: string, branch: string | null, files: Array<[string, number?, number?]>, main = false): Workstream => ({
@@ -22,7 +22,7 @@ const ROOM = [
 
 describe('which overlays are on', () => {
   test('nothing saved means all; unknown ids are dropped; order is the list\'s', () => {
-    assert.deepEqual(parseOverlays(undefined), ['plan', 'workstreams', 'collisions', 'breakpoints']);
+    assert.deepEqual(parseOverlays(undefined), ['plan', 'workstreams', 'collisions', 'breakpoints', 'tests']);
     assert.deepEqual(parseOverlays(['breakpoints', 'nope', 'plan']), ['plan', 'breakpoints']);
     assert.deepEqual(parseOverlays([]), []);
   });
@@ -76,5 +76,36 @@ describe('collision zones', () => {
   test('outside the project, or with no place in the repository, nothing', () => {
     assert.equal(collisionFiles([sig('a', 'open', { file: 'src/x.ts' })], 'packages/web/').size, 0);
     assert.equal(collisionFiles([sig('a', 'open', { file: 'src/x.ts' })], null).size, 0);
+  });
+});
+
+describe('test grounding on the graph (B8.3a)', () => {
+  const map: GroundingMapView = {
+    hasResults: true,
+    files: {
+      'src/billing/invoice.ts': { state: 'failing', words: '✗ 1 of 3 tests failing' },
+      'src/billing/tax.ts': { state: 'stale', words: '⚠ tests older than the code: it changed after its 2 tests last ran' },
+      'src/billing/money.ts': { state: 'passing', words: '✓ 4 tests passing' },
+    },
+  };
+
+  test('a file: its state as a glyph and in words; "no tests" when results exist and none reach it', () => {
+    assert.deepEqual(fileGrounding(map, 'src/billing/invoice.ts'), { state: 'failing', mark: '✗', title: '✗ 1 of 3 tests failing' });
+    assert.deepEqual(fileGrounding(map, 'src/billing/readme.ts'), { state: 'untested', mark: '○', title: '○ no tests: no test with a reported result imports it' });
+  });
+
+  test('nothing at all before any results, or with the overlay off', () => {
+    assert.equal(fileGrounding({ hasResults: false, files: {} }, 'src/a.ts'), undefined);
+    assert.equal(fileGrounding(null, 'src/a.ts'), undefined);
+    assert.equal(clusterGrounding({ hasResults: false, files: {} }, ['src/a.ts']), undefined);
+  });
+
+  test('a cluster sums its files, worst first, with the untested counted on hover', () => {
+    assert.deepEqual(clusterGrounding(map, ['src/billing/invoice.ts', 'src/billing/tax.ts', 'src/billing/money.ts', 'src/billing/readme.ts']), {
+      state: 'failing',
+      short: '✗ 1 · ⚠ 1 · ✓ 1',
+      title: '1 file failing\n1 file with tests older than the code\n1 file passing\n1 file with no tests',
+    });
+    assert.deepEqual(clusterGrounding(map, ['src/other/a.ts', 'src/other/b.ts']), { state: 'untested', short: '○ 2', title: '2 files with no tests' });
   });
 });
