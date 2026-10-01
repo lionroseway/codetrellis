@@ -69,7 +69,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 181 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 182 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -202,8 +202,8 @@ records that — but "✗ none" is proof of a gap.
 | d | `GET /api/plans/:uid/signoff-pack` |  | ✗ none | 4 | ✓ 0.4d: every criterion, unverified approval tagged, file with hash at approval; unknown plan 404 (signoff-surface) |  |  |
 | d | `GET /api/plans/:uid/signoff-pack.html` |  | ✗ none | 4 | ✓ 0.4d: attachment download, CSP sandbox, nosniff; unverified approvals listed apart (signoff-surface) |  |  |
 | d | `GET /api/plans/:uid/worklist` |  | ✗ none | 1 | ✓ 0.4d: sent back first with note, then open; met/waiting counted; stale after source moves (signoff-surface) |  |  |
-| d | `GET /api/tests` |  | ✗ none | 1 |  |  |  |
-| d | `GET /api/tests/grounding` |  | ✗ none | 1 |  |  |  |
+| d | `GET /api/tests` |  | ✗ none | 2 |  |  |  |
+| d | `GET /api/tests/grounding` |  | ✗ none | 2 |  |  |  |
 | d | `GET /api/tests/grounding/map` |  | ✗ none | 1 |  |  |  |
 | d | `POST /api/criteria/:uid/check` |  | ✗ none | 2 | ✓ 0.4d: holds while cited cell exists, fails with the reason once it is gone; 404 (signoff-surface) |  |  |
 | d | `POST /api/criteria/:uid/decide` |  | ✗ none | 6 | ✓ 0.4d: approve / send back (note required); HTTP records unverified, app window records human (criteria-signoff, ipc-dispatcher unit) |  |  |
@@ -301,7 +301,7 @@ records that — but "✗ none" is proof of a gap.
 | k | `GET /api/review-host` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/settings` |  | ✗ none | 11 | ✓ 0.4k: every section; what was saved comes back after a restart (settings-surface) |  |  |
 | k | `GET /api/settings/first-run-check` |  | ✗ none | 3 | ✓ 0.4k: incomplete, then complete once saved, with the identity (settings-surface) |  |  |
-| k | `GET /api/shared-task-state` |  | ✗ none | 2 |  |  |  |
+| k | `GET /api/shared-task-state` |  | ✗ none | 3 |  |  |  |
 | k | `GET /api/updates/download/status` |  | ✗ none | 1 | ✓ 0.4k: idle and complete before anything is downloaded (update-download) |  |  |
 | k | `GET /api/updates/status` |  | ✗ none | 2 | ✓ 0.4k: idle when the check is off; available / up-to-date / error after a check, platform and version named (updates) |  |  |
 | k | `POST /api/plans-folder/link` |  | ✗ none | 1 |  |  |  |
@@ -313,7 +313,7 @@ records that — but "✗ none" is proof of a gap.
 | k | `PUT /api/review-host` |  | ✗ none | 2 |  |  |  |
 | k | `PUT /api/review-host/token` |  | ✗ none | 2 |  |  |  |
 | k | `PUT /api/settings` |  | 1 | 24 | ✓ 0.4k: partial saves keep siblings (nested too), hosts normalised, windows told; every field checked, a bad value 400 with the reason and nothing stored (settings-surface); phone-safe subset from the phone (phone-channels-projects) |  |  |
-| k | `PUT /api/shared-task-state` |  | ✗ none | 2 |  |  |  |
+| k | `PUT /api/shared-task-state` |  | ✗ none | 3 |  |  |  |
 | l | `DELETE /api/system-docs/:uid` |  | ✗ none | 2 | ✓ 0.4j: removed, desktop told; unknown 404 not ok:false (phone-terminals-sysdocs) |  |  |
 | l | `GET /api/system-docs` |  | ✗ none | 4 | ✓ 0.4l: same as list_system_docs; outside a project refused (sysdocs-intake, phone-terminals-sysdocs) |  |  |
 | l | `GET /api/system-docs/:uid` |  | ✗ none | 2 | ✓ 0.4j: the doc; unknown 404 (phone-terminals-sysdocs) — rest of system docs in 0.4l |  |  |
@@ -414,7 +414,7 @@ records that — but "✗ none" is proof of a gap.
 | d | `add_criterion` | plan-item · write | ✗ none | 3 | ✓ 0.4d: kept at propose, tagged with the agent's name in the app (criteria-signoff, criteria.spec) |  |  |
 | d | `approve_gate` | plan-item · read | ✗ none | 1 | ✓ 0.4d: retired — refuses and points at submit_criterion (criteria-signoff) |  |  |
 | d | `check_criterion` | plan-item · read | ✗ none | 3 | ✓ 0.4d: refuses a cell outside the file, passes once fixed (criteria-loops) |  |  |
-| d | `get_test_results` | test · read | ✗ none | 2 |  |  |  |
+| d | `get_test_results` | test · read | ✗ none | 3 |  |  |  |
 | d | `get_worklist` | plan-item · read | ✗ none | 1 | ✓ 0.4d: hands back the send-back note and where it points (criteria-loops) |  |  |
 | d | `list_criteria` | plan-item · read | ✗ none | 4 | ✓ 0.4d: migrated line verbatim plus the gate, with decided_by (criteria-signoff) |  |  |
 | d | `report_tests` | test · write | ✗ none | 3 |  |  |  |

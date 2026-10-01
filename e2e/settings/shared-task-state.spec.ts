@@ -62,6 +62,13 @@ const state = (enabled: boolean, trusted = false, readsOn: boolean | null = null
     ? (trusted ? { verified: 2, unverified: 0, reasons: [] } : { verified: 0, unverified: 2, reasons: [{ why: NOT_TRUSTED, records: 2 }] })
     : { verified: 0, unverified: 0, reasons: [] },
   materialReads: reads(enabled, readsOn),
+  runs: {
+    mine: enabled ? 1 : 0,
+    teammates: enabled ? [{ who: 'ci for Build bot', verified: false, at: Date.UTC(2026, 9, 1, 13, 40), commit: 'b7e41c09d2f5a8836c1e0f4a9b2d7c5e8a1f3d60', tests: 1636, failing: 0 }] : [],
+    says: enabled
+      ? 'On with task state: each test run reported here is written to .codetrellis/runs, and teammates\' runs ground your files by the commit they ran on. Runs from ci for Build bot are here.'
+      : 'Shared with task state: turn that on first.',
+  },
 });
 
 async function serve(page: Page, start = { enabled: false }) {
@@ -96,6 +103,25 @@ async function openSection(page: Page) {
 
 test.describe('Shared task state', () => {
   test.afterEach(async ({ request }) => { await cleanupPlans(request, PLAN); });
+
+  test('test runs travel with task state: a CI job\'s run, its commit and how it went (D1.5a)', async ({ page }) => {
+    await serve(page);
+    await gotoWithProject(page);
+    const { section } = await openSection(page);
+    const box = section.getByTestId('shared-runs');
+    await expect(box.getByTestId('shared-runs-says')).toHaveText('Shared with task state: turn that on first.');
+    await expect(box.getByTestId('shared-runs-list')).toHaveCount(0);
+    await section.getByTestId('shared-state-toggle').click();
+    await expect(box.getByTestId('shared-runs-says')).toContainText('teammates\' runs ground your files by the commit they ran on. Runs from ci for Build bot are here.');
+    const row = box.getByTestId('shared-runs-list').locator('li');
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText('ci for Build bot');
+    await expect(row).toContainText('b7e41c0');
+    await expect(row).toContainText('✓ 1636 passing · unverified');
+    await box.scrollIntoViewIfNeeded();
+    fs.mkdirSync(OUT, { recursive: true });
+    await box.screenshot({ path: path.join(OUT, 'shared-task-state-runs.png') });
+  });
 
   test('Settings says what stays on this device and why a teammate\'s record is unverified; shared, where records go', async ({ page }) => {
     const sent = await serve(page);

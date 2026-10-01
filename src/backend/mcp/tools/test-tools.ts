@@ -14,6 +14,7 @@ import type { ToolDeps } from '../types';
 import { authorFromExtra } from '../helpers';
 import { ingestTestReport, listTestReports, listTestResults, testsSummary, TestReportError } from '../../services/tests/test-results';
 import { groundingOf, NotAFileError } from '../../services/tests/grounding';
+import { teammateRunSummaries } from '../../services/tests/teammate-runs';
 import { ConfinementError } from '../../services/confined-fs';
 
 const noProject = { isError: true, content: [{ type: 'text' as const, text: 'No project is open, and none was named.' }] };
@@ -66,7 +67,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         'class or suite contains it (e.g. "billing/invoice"), or failing_only. Pass for_file to ask about a source file ' +
         'instead: its tests are those whose test file imports it (directly or through a barrel), and it reads passing, ' +
         'failing, "tests older than the code" (it changed after they last ran — run them again before claiming done) or ' +
-        'no tests. CodeTrellis never runs tests itself.',
+        'no tests. A teammate\'s run read from the plans folder (shared task state) counts too, judged by the commit it ran on, and ' +
+        'is named in `from` and `teammates`. CodeTrellis never runs tests itself.',
       inputSchema: {
         match: z.string().max(300).optional(),
         failing_only: z.boolean().optional(),
@@ -82,6 +84,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
           const g = groundingOf(root, for_file);
           return text({
             file: g.path, state: g.state, says: g.words, test_files: g.testFiles,
+            ...(g.from ? { from: { who: g.from.who, verified: g.from.verified, commit: g.from.commit, ran_at: new Date(g.from.at).toISOString() } } : {}),
             ...(g.lastRunAt ? { last_run_at: new Date(g.lastRunAt).toISOString() } : {}),
             ...(g.changedAt ? { changed_at: new Date(g.changedAt).toISOString() } : {}),
             tests: g.tests.filter((t) => !failing_only || t.result === 'failed' || t.result === 'error')
@@ -102,6 +105,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
           ran_at: new Date(t.ranAt).toISOString(), report: t.reportPath,
         })),
         reports: listTestReports(root, 5).map((r) => ({ report: r.path, ran_at: new Date(r.ranAt).toISOString(), tests: r.tests, failing: r.failed + r.errors, by: r.reportedBy })),
+        // D1.5a: teammates' latest runs, from the plans folder.
+        teammates: teammateRunSummaries(root).map((r) => ({ who: r.who, verified: r.verified, commit: r.commit, ran_at: new Date(r.at).toISOString(), says: r.says })),
       });
     },
   );

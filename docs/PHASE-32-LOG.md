@@ -17,11 +17,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track D — D1.4: sessions and pipelines |
-| **Status** | D1.3 merged (#287). D1.4 built: start/stop (serve in the background once per folder, ready after its scan), the conformity gate (check with no path and status exit 3 on a breakpoint on a changed file, its tests failing or older than the code, a done task failing its criterion check, a stale system doc; check_changes, read only), recipes (SessionStart hook, .mcp.json, GitHub Actions) and this repository's CI runs it on its own unit run. Harness cli-gate 7, unit conformity 3 |
-| **In flight** | D1.4 building on `feat/phase-32-d1-4-sessions-and-pipelines` |
+| **Stage / step** | Track D — D1.5a: test runs travel; headless sharing |
+| **Status** | D1.4 in review (#288). D1.5 refined into D1.5a and D1.5b. D1.5a built: run records in .codetrellis/runs (signed, each device's latest, the commit it ran on), teammates' runs read after a pull and grounding a file by commit; serve/start --share-task-state for a headless backend; Settings → Shared task state lists teammates' runs, the Inspector says whose run a file rests on. Harness shared-test-runs 4, unit run-record 3, browser 2 shots |
+| **In flight** | D1.4 in review (#288) on `feat/phase-32-d1-4-sessions-and-pipelines`; D1.5a building on `feat/phase-32-d1-5a-shared-runs` |
 | **Last merged** | C3.6 (#284, `8300675`) |
-| **Next action** | Merge D1.4 when green; then D1.5 (the D done-when: a CI job claims, reports, edits the plan and commits; the desktop shows it after a pull) |
+| **Next action** | Merge D1.4, then D1.5a, when green; then D1.5b (the done-when: a CI job claims, reports, edits the plan and commits; the desktop shows it after a pull) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
@@ -253,8 +253,10 @@
   - [ ] D1.1 `codetrellis serve` (headless backend, loopback, token on every transport) and `scan`
   - [ ] D1.2 Keep-on-track verbs as an agent: next, claim, update, stuck, done, request, brief, awareness, check, report-tests; text or --json
   - [ ] D1.3 Changing the plan (show, add, edit, move) and `commit`, which commits only CodeTrellis's own files; `status`
-  - [ ] D1.4 A SessionStart hook recipe, a CI/CD recipe, and exit codes on status and check for gating (breakpoints, tests older than the code, failing criteria, stale system docs); this repository uses it — building
-  - [ ] D1.5 The D done-when: a cloud session or CI job claims, reports, edits the plan and commits; the desktop shows it after a pull
+  - [ ] D1.4 A SessionStart hook recipe, a CI/CD recipe, and exit codes on status and check for gating (breakpoints, tests older than the code, failing criteria, stale system docs); this repository uses it (#288) — in review
+  - [ ] D1.5 The D done-when, refined into two parts (2026-10-01): — building
+    - [ ] D1.5a Test runs travel as signed run records, grounding a teammate's run by commit; `--share-task-state` for a headless backend — building
+    - [ ] D1.5b The done-when: a cloud session or CI job claims, reports, edits the plan and commits; the desktop shows it after a pull
   - [ ] Follow-up: Declared product flows checked hop by hop against the cross-system map in CI (owner's point, 2026-10-01): after Phase 32 unless pulled in
 
 ### Phase end
@@ -403,9 +405,38 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | D1.2: `request` asks through a channel event and waits for a steer in reply, not `await_user_input`; `done` runs each criterion's check first and refuses on a failure, in the CLI | `await_user_input` answers only from a window connected to the same backend, so a cloud session's question would reach nobody; a channel event travels with the plan and is answered in the app. Gating `update_item` itself would change every agent's behaviour, which is a separate decision |
 | 2026-10-01 | D1.3: `commit` commits only the changed paths under `.codetrellis/`, through `commit_manifest_changes`, and never stages the agent's code; nothing to commit is exit 0 | The agent's code is its own to commit, with its own message; mixing the plan into it hides the plan's change in a code review. One commit tool keeps the author the person and the agent a co-author, as every other agent commit is. A hook that runs `commit` on every stop must not fail when the plan did not change |
 | 2026-10-01 | D1.4: the gate is one read-only tool, `check_changes`, over the files this work changed (since its base, plus what is not committed); `check` with no path and `status` exit 3 on it. A runner sees no breakpoints, by design | One tool keeps the four findings' words the same for an agent, the CLI and a later UI, and needs no new rule for a CI job. Read only, because a gate that raised a breakpoint decision on every CI run would page the person for a job. Breakpoints are "ask me first" and live in the person's app; nobody can be asked from a runner |
+| 2026-10-01 | D1.5 is refined into D1.5a (test runs travel; headless sharing) and D1.5b (the done-when). Test results never left the machine they were reported on, and records carry only task state, so "the desktop shows the tests after a pull" had nothing to show | The done-when names tests; building the missing piece inside the done-when step would hide a design change in a test |
+| 2026-10-01 | D1.5a: a test run travels as one signed record per device, its latest (older ones removed by their writer), naming the commit it ran on; a teammate's run is judged by commit, never by the file's time | Write-once files per writer, as C3.1's, so branches never edit the same file; keeping only the latest stops the folder growing with every CI run. A pull rewrites the files it brings, so by time every run made elsewhere would read "older than the code" |
+| 2026-10-01 | D1.5a: `--share-task-state` turns sharing on for a headless backend from the command line, refused for the desktop app's own data dir | In the app only the window may turn it on (the grant rule). A headless backend has no window: the person who wrote the hook or the pipeline is choosing, and an agent that could run the command can already write the project's files. The app's own switch stays the window's |
 ---
 
 ## Entries
+
+### 2026-10-01: D1.5a — test runs travel with the plan; headless sharing
+- **Journey.** Sam shares task state on his desktop. A CI job clones the
+  repository, starts CodeTrellis headless with `--share-task-state`, changes
+  `validators.ts` and commits it, runs the tests and hands the report over:
+  the run is written once to `.codetrellis/runs/`, naming its commit, and a
+  newer run replaces the job's older one. `codetrellis commit` commits it
+  with the plan's files. Sam pulls. The pull rewrote `validators.ts`, so by
+  the file's time any run would read older than the code, but the job's run
+  was on exactly that commit: the Inspector says "✓ 2 tests passing, in ci
+  for Build bot's run at b7e41c0, unverified", and Settings → Shared task
+  state lists the run. Sam edits the file: older than the code. Turned off,
+  the job's run is forgotten. `--share-task-state` on the app's own data dir
+  is refused before anything starts.
+- **Built.** `task-records/run-record.ts` (the record, pure),
+  `task-records/test-runs.ts` (write on a new report, keep the latest, read
+  teammates'), `tests/teammate-runs.ts` (one per device; changed since a
+  commit), grounding taking each test file's newest run, `GET /api/tests`
+  and `get_test_results` naming teammates' runs, `--share-task-state`, the
+  Settings box.
+- **Decided.** Three rows above: the refinement, the record and judging by
+  commit, and the headless switch.
+- **Tests.** Unit `run-record.test.ts` (3), `args.test.ts` (switches).
+  Harness `shared-test-runs.test.ts` (4). Browser `shared-task-state.spec.ts`
+  and `tests-line.spec.ts` (one test each, shots
+  `shared-task-state-runs.png`, `inspector-tests-teammate.png`).
 
 ### 2026-10-01: D1.4 — sessions and pipelines
 - **Journey.** Sam's cloud session runs the SessionStart hook from
