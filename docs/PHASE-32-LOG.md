@@ -17,11 +17,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track D — D1.1: `codetrellis serve` and `scan` |
-| **Status** | C3 done (#271–#284). D1.1 built: `codetrellis serve` runs the backend headless (loopback, the token on every transport, no update check or peers, data in the user's cache) and prints the connector line; `codetrellis mcp` finds it from the project folder; `scan` scans once. Unit (args 3), harness (cli-serve 6) green locally |
-| **In flight** | D1.1 building on `feat/phase-32-d1-1-serve-and-scan` |
+| **Stage / step** | Track D — D1.2: the keep-on-track verbs |
+| **Status** | D1.1 in review (#285). D1.2 built: next, claim, update, stuck, done (refused while a criterion's check fails), request (asks on the plan, waits for the person's steer), brief, awareness, check (exit 3 when held) and report-tests, each an agent's MCP call, words or --json. Unit (agent 2), harness (cli-verbs 10) green locally |
+| **In flight** | D1.1 in review (#285) on `feat/phase-32-d1-1-serve-and-scan`; D1.2 building on `feat/phase-32-d1-2-keep-on-track` |
 | **Last merged** | C3.6 (#284, `8300675`) |
-| **Next action** | Merge D1.1 when green; then D1.2 (the keep-on-track verbs) |
+| **Next action** | Merge D1.1, then D1.2 when green; then D1.3 (plan show/add/edit/move, commit, status) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
@@ -250,8 +250,8 @@
 
 ### Track D: agents on demand
 - [ ] D1 The `codetrellis` CLI (owner's decision, 2026-10-01), refined in EXECUTION §6b: — building
-  - [ ] D1.1 `codetrellis serve` (headless backend, loopback, token on every transport) and `scan` — building
-  - [ ] D1.2 Keep-on-track verbs as an agent: next, claim, update, stuck, done, request, brief, awareness, check, report-tests; text or --json
+  - [ ] D1.1 `codetrellis serve` (headless backend, loopback, token on every transport) and `scan` (#285) — in review
+  - [ ] D1.2 Keep-on-track verbs as an agent: next, claim, update, stuck, done, request, brief, awareness, check, report-tests; text or --json — building
   - [ ] D1.3 Changing the plan (show, add, edit, move) and `commit`, which commits only CodeTrellis's own files; `status`
   - [ ] D1.4 A SessionStart hook recipe, a CI/CD recipe, and exit codes on status and check for gating (breakpoints, tests older than the code, failing criteria, stale system docs); this repository uses it
   - [ ] D1.5 The D done-when: a cloud session or CI job claims, reports, edits the plan and commits; the desktop shows it after a pull
@@ -400,9 +400,29 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | C3.5: a read record is written per version a task read, not per read; teammates' reads are forgotten here when either switch is off, and their names are in a signal's words, never its shape | Teammates need which version each task worked from; every read would be noise in the folder. A signal resting on reads the person chose not to use would be wrong. Naming who in the shape would reopen a signal when a key is trusted |
 | 2026-10-01 | C3.6: the done-when runs over a synced folder, not git: the sync is a copy of what each device wrote, and one record arrives as a placeholder first | git was C3.1's test; the folder is what business teams use and what C3.4 added, and partial arrival is the case only a synced folder has |
 | 2026-10-01 | D1.1: `serve` runs the backend in its own process with the existing token and loopback rules, adding only a headless switch that starts no update poller and no peer manager; its data is in the user's cache, one folder per project | A runner has nobody to offer an update to and no phone to pair; a second set of security rules for the CLI would be a second thing to get wrong. Data in the checkout would be committed by accident |
+| 2026-10-01 | D1.2: `request` asks through a channel event and waits for a steer in reply, not `await_user_input`; `done` runs each criterion's check first and refuses on a failure, in the CLI | `await_user_input` answers only from a window connected to the same backend, so a cloud session's question would reach nobody; a channel event travels with the plan and is answered in the app. Gating `update_item` itself would change every agent's behaviour, which is a separate decision |
 ---
 
 ## Entries
+
+### 2026-10-01: D1.2 — the keep-on-track verbs
+- **Journey.** Sam's agent runs only `codetrellis`. `next` names "Write the
+  export endpoint"; it claims it, reports 40% with a note, and checks
+  `validators.ts` before editing: clear, then held once Sam sets a
+  breakpoint there. It asks which currency to use and waits; Sam answers in
+  the app and the answer comes back. "Check the totals" is blocked, with
+  why. `done` is refused while the export criterion's check fails and goes
+  through on a task with none failing. It reports its JUnit file and reads
+  its brief and awareness. The Timeline names claude-code for every call.
+- **Built.** `src/cli/agent.ts` (one MCP connection as the agent, its name
+  and backend), `src/cli/verbs.ts` (ten verbs, words or `--json`, exit
+  codes), usage text.
+- **Decided.** `done` checks criteria in the CLI, the server's
+  `update_item` being unchanged for every other agent; `request` is a
+  channel event and a steer rather than `await_user_input` (see the
+  decision row).
+- **Tests.** Unit `src/cli/agent.test.ts` (2). Harness `cli-verbs.test.ts`
+  (10, the journey above, plus a usage error and no backend running).
 
 ### 2026-10-01: D1.1 — `codetrellis serve` and `scan`
 - **Journey.** Sam's cloud session has the repository and Node, nothing else.
