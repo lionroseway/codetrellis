@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B9.3b: a new planned overlap said on approval; the phone decides |
-| **Status** | B9.1–B9.3a merged (#294–#296). B9.3b built: approving a plan into a planned overlap says it in the approval's answer (REST and the phone) and once in the Awareness inbox, with Play forward and Seen; a left or sequenced overlap is not said again. The phone reads play-forward and decides an overlap as the person (playForward.summary, playForward.decide). Harness play-forward-approval 4, browser play-forward.spec 3 (shot) |
-| **In flight** | B9.3b building on `feat/phase-32-b9-3b-approval-and-phone` |
-| **Last merged** | B9.3a (#296, `e2dd422`) |
-| **Next action** | Merge B9.3b when green; then B9.4 (the phone's planned overlaps screen, and the G3 done-when end to end) |
+| **Stage / step** | Track B — B9.4: the phone and the G3 done-when |
+| **Status** | B9.3b merged (#297). B9.4 built: the phone's Stack screen opens with Played forward (each planned overlap, what was decided, and re-sequence, tell or leave from the phone), each plan says where it will meet another. G3 end to end: window, MCP client and phone agree on play-forward and the stack through approval, re-sequence and tell. Harness play-forward-g3 4, phone stack.spec 6 (shots); awareness.md has a play-forward section |
+| **In flight** | B9.4 in review (#298) on `feat/phase-32-b9-4-phone-and-g3` |
+| **Last merged** | B9.3b (#297, `1abcb2a`) |
+| **Next action** | Merge B9.4 when green: B9 done. Then C4 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `e2dd422`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `1abcb2a`, with open PRs from GitHub.
 
 ---
 
@@ -211,10 +211,10 @@
 - [ ] B9 Play-forward (code, and the materials tasks rely on) — building
   - [x] B9.1 The data: every active plan projected, planned overlaps (file, function, material), REST and get_play_forward (#294)
   - [x] B9.2 The window plays forward: dashed planned changes and ◇ planned overlaps on the graph, in the Stack tab (#295)
-  - [ ] B9.3 Acting on a planned overlap, split in two: — building
+  - [x] B9.3 Acting on a planned overlap, split in two:
     - [x] B9.3a Re-sequence, tell both agents, or leave it: by a person, kept with who and when (#296)
-    - [ ] B9.3b A new planned overlap said on approval; deciding one from the phone — building
-  - [ ] B9.4 The phone and the G3 done-when
+    - [x] B9.3b A new planned overlap said on approval; deciding one from the phone (#297)
+  - [ ] B9.4 The phone and the G3 done-when (#298) — in review
 - [ ] B10 The record
 
 ### Track C: shared ways of working
@@ -421,6 +421,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | B9 is refined into four parts (EXECUTION §5): the data, the window, acting on a planned overlap, the phone and G3. G3's question (run on approval?) is answered by computing play-forward on read, and B9.3 says a new planned overlap when an approval forms one | Computed on read it is never out of date and costs nothing until asked; saying a new one at approval is the moment G3 cares about, without a job that runs |
 | 2026-10-01 | B9.1: only unfinished tasks are projected, and which planned files exist is read from the project's folder through confined-fs, not the held graph | A done task's change is the code now, not the future. The server's graph is the last project scanned (HD1), so it cannot say whether another project's file exists; a planned path is agent-written and is confined like any other |
 | 2026-10-01 | B9.3 is split into B9.3a (the three actions, in the window) and B9.3b (said on approval; the phone) | The actions are one service and one surface; the approval notice and the phone's RPCs each touch another door with its own tests |
+| 2026-10-01 | B9.4: the phone shows play-forward on its Stack screen, not a screen of its own, and asks for it separately so a desktop without it still shows the stack | Planned overlaps are about the same plans the stack lists, so they belong beside them; a separate call keeps an older desktop's stack working |
 | 2026-10-01 | B9.3b: an approval says only the planned overlaps it put the plan in that no one has answered (not sequenced, not left), in its answer and once in the inbox until seen; approving again says nothing more | The moment G3 cares about is the approval; an overlap a person already sequenced or chose to leave is answered, and saying it again teaches people to ignore the notice |
 | 2026-10-01 | B9.3a: what a person does about a planned overlap is kept by the overlap's id (its subject and its plans), and re-sequencing writes ordinary task dependencies rather than a new kind of order | The same plans meeting on the same thing is the same question, so the answer carries over; a dependency is what every "what is next" door (B6.1) already honours, so a re-sequenced plan holds its work back without anything new |
 | 2026-10-01 | B9.2: replay and play-forward are one clock with two directions; entering one leaves the other, and the canvas's views wait while either is on. The Stack tab shows each plan's "◇ will overlap" lines only while playing forward | Two clocks at once would draw two moments on one graph. The declared overlap band (B6.3) is today's; the ◇ lines are what the plans will do, so they belong to the forward clock, not beside today's |
@@ -430,6 +431,21 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-01: B9.4 — the phone, and the G3 done-when
+- **Journey.** JIRA-142 and JIRA-150 both plan to change validators.ts, and
+  an agent holds each task. Both are approved, and each approval says the
+  overlap. On the phone's Stack screen, "Played forward" shows it with
+  Re-sequence, Tell both agents and Fine, leave it, and each plan says
+  "◇ will overlap …". Sam re-sequences from the window, JIRA-142 first:
+  JIRA-150's task waits, in the stack and in play-forward, the same in the
+  window, for an agent and on the phone. From the phone he tells both
+  agents: each is told once on its next step.
+- **Built.** `mobile/lib/play-forward.ts` and the Played forward section in
+  `mobile/app/stack.tsx` (a decision reloads the stack); a play-forward
+  section, a rule and tests in `docs/claude/awareness.md`; the phone doc.
+- **Tests.** Harness `play-forward-g3.test.ts` (4). Phone `stack.spec.ts`
+  (6; shots).
 
 ### 2026-10-01: B9.3b — said on approval; the phone decides
 - **Journey.** JIRA-142 and JIRA-150 both plan to change validators.ts. Sam

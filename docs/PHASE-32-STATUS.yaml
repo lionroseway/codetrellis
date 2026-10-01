@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track B — B9.3b: a new planned overlap said on approval; the phone decides"
-  status: "B9.1–B9.3a merged (#294–#296). B9.3b built: approving a plan into a planned overlap says it in the approval's answer (REST and the phone) and once in the Awareness inbox, with Play forward and Seen; a left or sequenced overlap is not said again. The phone reads play-forward and decides an overlap as the person (playForward.summary, playForward.decide). Harness play-forward-approval 4, browser play-forward.spec 3 (shot)"
-  next: "Merge B9.3b when green; then B9.4 (the phone's planned overlaps screen, and the G3 done-when end to end)"
+  step: "Track B — B9.4: the phone and the G3 done-when"
+  status: "B9.3b merged (#297). B9.4 built: the phone's Stack screen opens with Played forward (each planned overlap, what was decided, and re-sequence, tell or leave from the phone), each plan says where it will meet another. G3 end to end: window, MCP client and phone agree on play-forward and the stack through approval, re-sequence and tell. Harness play-forward-g3 4, phone stack.spec 6 (shots); awareness.md has a play-forward section"
+  next: "Merge B9.4 when green: B9 done. Then C4"
   blockers: "None"
   updated: 2026-10-01
 sections:

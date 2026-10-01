@@ -11,7 +11,7 @@
  * tests/e2e/stack.test.ts checks it against a real backend and a paired phone.
  */
 import { test, expect } from '@playwright/test';
-import { openScreen, navigations, shot } from './helpers';
+import { openScreen, navigations, shot, calls } from './helpers';
 
 const task = (over: Record<string, unknown>) => ({
   parentUid: null, kind: 'action', status: 'pending', assignee: null, workstream: null, ticketKey: null,
@@ -47,6 +47,33 @@ const STACK = {
       ],
     },
   ],
+};
+
+// Played forward (B9.4, JOURNEYS G3): Billing v2 and JIRA-150 both plan to change charge.ts.
+const WORDS = '◇ planned overlap: Billing v2 and JIRA-150 both plan to change src/billing/charge.ts';
+const PLANNED = {
+  id: 'po-1', kind: 'file', subject: 'src/billing/charge.ts', file: 'src/billing/charge.ts',
+  plans: [
+    { uid: 'p-billing', label: 'Billing v2', tasks: [{ uid: 'i3', title: 'Remove old table', change: 'modify' }] },
+    { uid: 'p-exports', label: 'JIRA-150', tasks: [{ uid: 'i4', title: 'Deploy exports', change: 'modify' }] },
+  ],
+  serious: false, sequenced: false, words: WORDS, decisions: [] as unknown[], left: false,
+};
+const at = new Date(2026, 9, 1, 18, 57).getTime();
+const FORWARD = {
+  project: '/work/acme',
+  plans: [{ uid: 'p-billing', label: 'Billing v2', ahead: 2 }, { uid: 'p-exports', label: 'JIRA-150', ahead: 1 }],
+  overlaps: [PLANNED],
+  words: 'Planned by 2 active plans · 1 file to change · 1 planned overlap',
+  notices: [{ id: 7, planUid: 'p-exports', planLabel: 'JIRA-150', title: 'Approving JIRA-150 puts it in a planned overlap', overlaps: [WORDS], at }],
+};
+const RESEQUENCED = {
+  ...FORWARD,
+  overlaps: [{
+    ...PLANNED, sequenced: true, words: `${WORDS} · sequenced: JIRA-150 waits on Billing v2`,
+    decisions: [{ action: 'resequence', words: 'Billing v2 goes first; JIRA-150 waits', by: 'Sam', byType: 'human', at }],
+  }],
+  words: 'Planned by 2 active plans · 1 file to change · 1 planned overlap (1 sequenced)',
 };
 
 test.describe('The stack', () => {
@@ -87,5 +114,57 @@ test.describe('The stack', () => {
   test('an error is shown, not a blank', async ({ page }) => {
     await openScreen(page, 'stack', { rpc: { 'stack.summary': { __error: 'No active project on the desktop' } } });
     await expect(page.getByText('No active project on the desktop')).toBeVisible();
+  });
+
+  test('B9.4: played forward, where the plans will meet, and Sam re-sequences them from the phone', async ({ page }) => {
+    await openScreen(page, 'stack', { rpc: { 'stack.summary': STACK, 'playForward.summary': FORWARD, 'playForward.decide': { playForward: RESEQUENCED } } });
+    const planned = page.getByTestId('planned-overlaps');
+    await expect(planned.getByTestId('planned-words')).toHaveText('Planned by 2 active plans · 1 file to change · 1 planned overlap');
+    // The approval that formed it, said once until it is seen on the desktop.
+    await expect(planned.getByTestId('planned-notice')).toHaveText('Approving JIRA-150 puts it in a planned overlap');
+    await expect(planned.getByTestId('planned-overlap-words')).toHaveText(WORDS);
+    await expect(planned.getByTestId('planned-overlap-decision')).toHaveCount(0);
+    // Each plan says where it will meet the other, as the desktop's stack does.
+    await expect(page.getByTestId('stack-plan').first().getByTestId('stack-plan-planned')).toHaveText('◇ will overlap JIRA-150: charge.ts');
+    await expect(page.getByTestId('stack-plan').nth(1).getByTestId('stack-plan-planned')).toHaveText('◇ will overlap Billing v2: charge.ts');
+    await shot(page, 'stack-planned-overlap');
+
+    await planned.getByTestId('planned-resequence').click();
+    await expect(planned.getByTestId('planned-choose-first')).toContainText('Which goes first?');
+    await shot(page, 'stack-planned-choose-first');
+    const asked = (await calls(page)).filter((c) => c.method === 'stack.summary').length;
+    await planned.getByTestId('planned-first').filter({ hasText: 'Billing v2 first' }).click();
+    expect((await calls(page)).filter((c) => c.method === 'playForward.decide').map((c) => c.params))
+      .toEqual([{ overlapId: 'po-1', action: 'resequence', first: 'p-billing' }]);
+    // The stack is asked again: re-sequencing changes what waits on what.
+    await expect.poll(async () => (await calls(page)).filter((c) => c.method === 'stack.summary').length).toBe(asked + 1);
+
+    await expect(planned.getByTestId('planned-overlap-words')).toHaveText(`${WORDS} · sequenced: JIRA-150 waits on Billing v2`);
+    await expect(planned.getByTestId('planned-overlap-decision')).toHaveText('Billing v2 goes first; JIRA-150 waits · Sam · 18:57');
+    // Sequenced, there is nothing left to decide.
+    await expect(planned.getByTestId('planned-resequence')).toHaveCount(0);
+    await expect(page.getByTestId('stack-plan').first().getByTestId('stack-plan-planned')).toHaveText('◇ will overlap JIRA-150: charge.ts (sequenced)');
+    await shot(page, 'stack-planned-resequenced');
+  });
+
+  test('B9.4: leave it from the phone; a refusal is said where it was asked', async ({ page }) => {
+    const LEFT = { ...FORWARD, overlaps: [{ ...PLANNED, left: true, decisions: [{ action: 'leave', words: 'Left as it is by Sam', by: 'Sam', byType: 'human', at }] }] };
+    await openScreen(page, 'stack', { rpc: { 'stack.summary': STACK, 'playForward.summary': FORWARD, 'playForward.decide': { playForward: LEFT } } });
+    const planned = page.getByTestId('planned-overlaps');
+    await planned.getByTestId('planned-leave').click();
+    await expect(planned.getByTestId('planned-overlap-decision')).toHaveText('Left as it is by Sam · 18:57');
+    await expect(planned.getByTestId('planned-leave')).toHaveCount(0);
+    expect((await calls(page)).filter((c) => c.method === 'playForward.decide').map((c) => c.params)).toEqual([{ overlapId: 'po-1', action: 'leave' }]);
+
+    await openScreen(page, 'stack', { rpc: { 'stack.summary': STACK, 'playForward.summary': FORWARD, 'playForward.decide': { __error: 'No such planned overlap: the plans changed since.' } } });
+    await page.getByTestId('planned-tell').click();
+    await expect(page.getByTestId('planned-error')).toHaveText('No such planned overlap: the plans changed since.');
+  });
+
+  test('B9.4: a desktop without play-forward still shows the stack, and nothing planned', async ({ page }) => {
+    await openScreen(page, 'stack', { rpc: { 'stack.summary': STACK } });
+    await expect(page.getByTestId('stack-plan')).toHaveCount(2);
+    await expect(page.getByTestId('planned-overlaps')).toHaveCount(0);
+    await expect(page.getByTestId('stack-plan-planned')).toHaveCount(0);
   });
 });

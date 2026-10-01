@@ -5,18 +5,25 @@
  * where it meets another plan in words, who is on what, and what is waiting
  * on another plan. A plan opens to its detail. The same stack the desktop's
  * Stack tab and any agent's `get_stack` read.
+ *
+ * Played forward (B9.4, JOURNEYS G3): where the plans will meet if they go
+ * ahead, "◇ planned overlap", in the desktop's words with what was decided,
+ * and the same three choices as the window's bar: re-sequence the plans, tell
+ * the agents, or leave it. Each plan says where it will meet another.
  */
 
 import { useCallback, useState } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { getStack, waitsIn, whoIsOn, type Stack, type StackPlan } from '../lib/stack';
+import { decideOverlap, decisionLine, getPlayForward, planOverlapLines, type PlannedOverlap, type PlayForward } from '../lib/play-forward';
 
 export default function StackScreen() {
   const router = useRouter();
   const [stack, setStack] = useState<Stack | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [forward, setForward] = useState<PlayForward | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -25,6 +32,8 @@ export default function StackScreen() {
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     }
+    // Play-forward is its own answer: a desktop without it still shows the stack.
+    try { setForward(await getPlayForward()); } catch { setForward(null); }
   }, []);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
@@ -46,6 +55,16 @@ export default function StackScreen() {
               {count} {count === 1 ? 'plan' : 'plans'} under way, with who is on what and where they meet.
             </Text>
           )}
+          {forward && forward.overlaps.length > 0 && (
+            <PlannedOverlaps
+              forward={forward}
+              onDecided={(pf) => {
+                setForward((was) => (was ? { ...was, ...pf } : was));
+                // Re-sequencing makes tasks wait on others: the stack's waits change too.
+                void getStack().then(setStack, () => {});
+              }}
+            />
+          )}
         </>
       }
       ListEmptyComponent={error ? null : (
@@ -54,13 +73,84 @@ export default function StackScreen() {
           <Text style={styles.emptyBody}>A plan shows here from when it is created until it is completed or archived.</Text>
         </View>
       )}
-      renderItem={({ item }) => <PlanCard plan={item} onOpen={() => router.push(`/plan-detail?uid=${item.uid}`)} />}
+      renderItem={({ item }) => <PlanCard plan={item} forward={forward} onOpen={() => router.push(`/plan-detail?uid=${item.uid}`)} />}
     />
   );
 }
 
-function PlanCard({ plan, onOpen }: { plan: StackPlan; onOpen: () => void }) {
+/**
+ * Where the plans will meet, before anyone starts: each planned overlap in the
+ * desktop's words, what was last decided, and the window's three choices.
+ */
+function PlannedOverlaps({ forward, onDecided }: { forward: PlayForward; onDecided: (pf: Omit<PlayForward, 'notices'>) => void }) {
+  return (
+    <View style={styles.planned} testID="planned-overlaps">
+      <Text style={styles.sectionTitle}>PLAYED FORWARD</Text>
+      <Text style={styles.plannedWords} testID="planned-words">{forward.words}</Text>
+      {forward.notices.map((n) => (
+        <Text key={n.id} style={styles.notice} testID="planned-notice">{n.title}</Text>
+      ))}
+      {forward.overlaps.map((o) => <PlannedOverlapCard key={o.id} overlap={o} onDecided={onDecided} />)}
+    </View>
+  );
+}
+
+function PlannedOverlapCard({ overlap: o, onDecided }: { overlap: PlannedOverlap; onDecided: (pf: Omit<PlayForward, 'notices'>) => void }) {
+  const [choosing, setChoosing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const decided = decisionLine(o);
+  const act = async (action: 'resequence' | 'tell' | 'leave', first?: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await decideOverlap(o.id, action, first);
+      setChoosing(false);
+      onDecided(r.playForward);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const tone = o.sequenced || o.left ? '#a1a1aa' : o.serious ? '#fca5a5' : '#c4b5fd';
+  return (
+    <View style={[styles.plannedCard, o.sequenced || o.left ? styles.quiet : null]} testID="planned-overlap">
+      <Text style={[styles.plannedOverlapWords, { color: tone }]} testID="planned-overlap-words">{o.words}</Text>
+      {decided && <Text style={styles.decision} testID="planned-overlap-decision">{decided}</Text>}
+      {!o.sequenced && (choosing ? (
+        <View style={styles.actions} testID="planned-choose-first">
+          <Text style={styles.choose}>Which goes first?</Text>
+          {o.plans.map((p) => (
+            <TouchableOpacity key={p.uid} style={styles.action} disabled={busy} onPress={() => { void act('resequence', p.uid); }} accessibilityRole="button" testID="planned-first">
+              <Text style={styles.actionText}>{p.label} first</Text>
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity onPress={() => setChoosing(false)} accessibilityRole="button"><Text style={styles.cancel}>Cancel</Text></TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.actions}>
+          <TouchableOpacity style={styles.action} disabled={busy} onPress={() => setChoosing(true)} accessibilityRole="button" testID="planned-resequence">
+            <Text style={styles.actionText}>Re-sequence</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.action} disabled={busy} onPress={() => { void act('tell'); }} accessibilityRole="button" testID="planned-tell">
+            <Text style={styles.actionText}>Tell both agents</Text>
+          </TouchableOpacity>
+          {!o.left && (
+            <TouchableOpacity style={styles.action} disabled={busy} onPress={() => { void act('leave'); }} accessibilityRole="button" testID="planned-leave">
+              <Text style={styles.actionText}>Fine, leave it</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ))}
+      {error && <Text style={styles.error} testID="planned-error">{error}</Text>}
+    </View>
+  );
+}
+
+function PlanCard({ plan, forward, onOpen }: { plan: StackPlan; forward: PlayForward | null; onOpen: () => void }) {
   const { done, total } = plan.progress;
+  const planned = planOverlapLines(forward, plan.uid);
   const pct = total ? Math.round((done / total) * 100) : 0;
   const onIt = whoIsOn(plan);
   const waits = waitsIn(plan);
@@ -89,6 +179,10 @@ function PlanCard({ plan, onOpen }: { plan: StackPlan; onOpen: () => void }) {
           <Text style={[styles.overlapWords, { color: o.high ? '#fca5a5' : '#fcd34d' }]}>{o.words}</Text>
           <Text style={styles.overlapDetail}>{o.detail}</Text>
         </View>
+      ))}
+
+      {planned.map((l) => (
+        <Text key={l.id} style={[styles.willOverlap, { color: l.quiet ? '#a1a1aa' : l.serious ? '#fca5a5' : '#c4b5fd' }]} testID="stack-plan-planned">{l.words}</Text>
       ))}
 
       {onIt.length > 0 && (
@@ -130,6 +224,19 @@ const styles = StyleSheet.create({
   sectionTitle: { color: '#71717a', fontSize: 10, fontWeight: '700', letterSpacing: 0.8, marginBottom: 3 },
   line: { color: '#e4e4e7', fontSize: 13, lineHeight: 19 },
   wait: { color: '#fcd34d', fontSize: 13, lineHeight: 19 },
+  planned: { backgroundColor: '#8b5cf60d', borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#8b5cf633', borderStyle: 'dashed' },
+  plannedWords: { color: '#d4d4d8', fontSize: 12, lineHeight: 17, marginBottom: 6 },
+  notice: { color: '#fcd34d', fontSize: 12, fontWeight: '600', marginBottom: 6 },
+  plannedCard: { marginTop: 6, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#27272a' },
+  quiet: { opacity: 0.75 },
+  plannedOverlapWords: { fontSize: 13, fontWeight: '600', lineHeight: 18 },
+  decision: { color: '#a78bfa', fontSize: 12, marginTop: 3 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 8 },
+  action: { borderWidth: 1, borderColor: '#8b5cf666', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 },
+  actionText: { color: '#ddd6fe', fontSize: 12, fontWeight: '600' },
+  choose: { color: '#a1a1aa', fontSize: 12 },
+  cancel: { color: '#71717a', fontSize: 12, paddingHorizontal: 4 },
+  willOverlap: { fontSize: 12, marginTop: 6 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, paddingTop: 80 },
   emptyTitle: { color: '#d4d4d8', fontSize: 16, fontWeight: '600', marginBottom: 8 },
   emptyBody: { color: '#71717a', fontSize: 13, textAlign: 'center', lineHeight: 20 },
