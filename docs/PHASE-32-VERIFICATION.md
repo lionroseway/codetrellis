@@ -185,7 +185,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/plans/:uid/unlink` |  | ✗ none | 4 | ✓ 0.4c: exercised by next-up-and-sync, plan-export, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/bulk-delete` |  | ✗ none | 1 | ✓ 0.4c-1: exactly the named plans; empty list 400 (plan-rest) |  |  |
 | c | `POST /api/plans/from-template` |  | ✗ none | 3 | ✓ 0.4c: exercised by filesystem-sinks, plan-templates (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `POST /api/plans/import` |  | ✗ none | 8 | ✓ 0.4c: exercised by plan-export, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/import` |  | ✗ none | 9 | ✓ 0.4c: exercised by plan-export, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/import-external` |  | ✗ none | 1 | ✓ 0.4c-1: issue checklist becomes Actions; unknown source 400 (plan-rest) |  |  |
 | c | `POST /api/plans/prune-orphans` |  | ✗ none | 1 | ✓ 0.4c-1: removes only the opened project's current orphans; everything else skipped (plan-rest) |  |  |
 | c | `POST /api/spec-proposals/:uid/decision` |  | ✗ none | 2 |  |  |  |
@@ -213,7 +213,7 @@ records that — but "✗ none" is proof of a gap.
 | e | `GET /api/artefacts/:uid/content` |  | ✗ none | 1 | ✓ 0.4e: bytes with nosniff/no-store/sandbox CSP; 206 range; 416; image type; 404 (brief-surface, artefact-viewer) |  |  |
 | e | `GET /api/artefacts/:uid/rendition` |  | ✗ none | 1 | ✓ 0.4e: 415 for a type it does not convert; 503 with a sentence and fallback without an engine; 404 (brief-surface) |  |  |
 | e | `GET /api/items/:uid/artefacts` |  | ✗ none | 1 | ✓ 0.4e: the item's files, re-hashed after an edit; 404 (brief-surface) |  |  |
-| e | `POST /api/items/:uid/artefacts` |  | ✗ none | 4 | ✓ 0.4e: hashed, stored relative, re-record in place; bad role, type, missing, outside, link, unknown item refused (brief-surface) |  |  |
+| e | `POST /api/items/:uid/artefacts` |  | ✗ none | 5 | ✓ 0.4e: hashed, stored relative, re-record in place; bad role, type, missing, outside, link, unknown item refused (brief-surface) |  |  |
 | f | `GET /api/channels/:eventUid/thread` |  | ✗ none | 1 | ✓ 0.4f: root then replies in order, human and agent posts; unknown root → [] (presence-channels, cdev-channels) |  |  |
 | f | `GET /api/presence/cards` |  | ✗ none | 2 | ✓ 0.4f: posted card listed with its agent; empty after dismiss (presence-channels) |  |  |
 | f | `POST /api/channels/:eventUid/status` |  | ✗ none | 1 | ✓ 0.4f: resolve, reopen; broadcast; missing/unknown status 400; unknown event 404 (presence-channels) |  |  |

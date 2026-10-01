@@ -16,10 +16,12 @@
  */
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { test, expect } from '@playwright/test';
 import { setupHarness, type Harness } from '../harness';
+import { tmpDirFor } from '../harness/paths';
 
 const ENV = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' };
 const git = (repo: string, ...args: string[]) => String(execFileSync('git', ['-C', repo, ...args], { env: ENV, stdio: ['ignore', 'pipe', 'pipe'] })).trim();
@@ -206,5 +208,135 @@ test.describe.serial('Only the person chooses where plans live', () => {
     expect(linked.status).toBe(403);
     expect(((await linked.json()) as { error: string }).error).toBe('Only you can link a plans folder on this device — in the CodeTrellis app, Settings → Plans folder.');
     expect((await h.client.raw('DELETE', `/api/plans-folder/link?project=${root}`)).status).toBe(200);
+  });
+});
+
+/**
+ * C3.4b — OneDrive and SharePoint, and files still in the cloud.
+ *
+ * Dana's team keeps its plans in OneDrive, under "Acme/Board pack". Her app
+ * finds her OneDrive folder where the client put it and offers her copy of
+ * the place to link. Files the client has not brought down (placeholders: a
+ * file with a size and nothing on disk) are never opened: a task file is
+ * skipped and its task kept as it was, a teammate's record waits, and a
+ * material is not hashed, each saying it is not on this device. Settings
+ * counts them and says how to keep the folder on this device.
+ */
+test.describe.serial('OneDrive and files still in the cloud', () => {
+  test.setTimeout(120_000);
+  let h: Harness;
+  let code: string;
+  let oneDrive: string;
+  let place: string;
+  let plan: string;
+  let items: string[];
+  const q = () => `?project=${encodeURIComponent(code)}`;
+  /** What a sync client leaves for a file it has not downloaded: its size, and no blocks on disk. */
+  const toPlaceholder = (file: string) => {
+    const size = Math.max(fs.statSync(file).size, 1);
+    fs.rmSync(file);
+    const fd = fs.openSync(file, 'w');
+    fs.ftruncateSync(fd, size);
+    fs.closeSync(fd);
+    const st = fs.statSync(file);
+    expect({ size: st.size > 0, blocks: st.blocks }).toEqual({ size: true, blocks: 0 });
+  };
+
+  test.beforeAll(async () => {
+    oneDrive = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'OneDrive - Acme '));
+    place = path.join(oneDrive, 'Acme', 'Board pack');
+    fs.mkdirSync(place, { recursive: true });
+    // The project itself is kept in SharePoint too, as a business team's is:
+    // its materials can be placeholders.
+    const sharePoint = tmpDirFor('plans-folder-onedrive');
+    h = await setupHarness('plans-folder-onedrive', {
+      env: { CODETRELLIS_CLOUD_ROOTS: JSON.stringify([{ provider: 'onedrive', path: oneDrive, account: 'Acme' }, { provider: 'sharepoint', path: sharePoint, account: 'Acme' }]) },
+      settings: { identity: { displayName: 'Dana Ortiz', email: 'dana@acme.test' } },
+    });
+    code = h.fixture.projectPath;
+    await h.client.scanProject(code);
+  });
+  test.afterAll(async () => {
+    await h?.teardown();
+    fs.rmSync(oneDrive, { recursive: true, force: true });
+  });
+
+  test('her OneDrive folder is found where the client put it, and her copy of the place offered', async () => {
+    const res = await h.client.raw('PUT', `/api/plans-folder${q()}`, { folder: { kind: 'synced', provider: 'onedrive', place: 'Acme/Board pack' } });
+    expect(res.status, await res.clone().text()).toBe(200);
+    const f = (await res.json()) as { state: string; roots: Array<{ provider: string; path: string; account: string }>; found: string | null };
+    expect(f.state).toBe('unlinked');
+    expect(f.roots[0]).toEqual({ provider: 'onedrive', path: oneDrive, account: 'Acme' });
+    expect(f.roots.map((r) => r.provider)).toEqual(['onedrive', 'sharepoint']);
+    expect(f.found).toBe(place);
+    const linked = await h.client.raw('POST', `/api/plans-folder/link${q()}`, { path: f.found });
+    expect(((await linked.json()) as { state: string }).state).toBe('linked');
+  });
+
+  test('a task file still in the cloud is skipped, never opened, and its task kept as it was', async () => {
+    plan = (await h.client.createPlan({ title: 'Q4 board pack', projectPath: code })).uid;
+    items = [];
+    for (const title of ['Write the board report', 'Check the figures']) {
+      items.push(((await (await h.client.raw('POST', `/api/plans/${plan}/items`, { kind: 'action', title })).json()) as { uid: string }).uid);
+    }
+    const planDir = (await h.client.exportPlan(plan, code)).planDir;
+    expect(planDir.startsWith(place)).toBe(true);
+    const itemFile = (fs.readdirSync(path.join(planDir, 'items'), { recursive: true }) as string[])
+      .map((f) => path.join(planDir, 'items', f))
+      .find((f) => f.endsWith('.yaml') && fs.readFileSync(f, 'utf8').includes(items[1]))!;
+    toPlaceholder(itemFile);
+
+    const res = await h.client.raw('POST', '/api/plans/import', { planDir });
+    expect(res.status, await res.clone().text()).toBe(200);
+    const { warnings } = (await res.json()) as { warnings: string[] };
+    expect(warnings).toContain(`${path.relative(planDir, itemFile)} is not on this device`);
+    const kept = (await (await h.client.raw('GET', `/api/items/${items[1]}`)).json()) as { title: string };
+    expect(kept.title).toBe('Check the figures');
+    // Nor is it written over or deleted, even when the task is renamed and
+    // its file would move: the copy in the cloud may be a teammate's newer one.
+    expect((await h.client.raw('PUT', `/api/items/${items[1]}`, { body: 'Tie each figure to the ledger.' })).ok).toBe(true);
+    expect((await h.client.raw('POST', `/api/plans/${plan}/export?path=${encodeURIComponent(code)}`)).status).toBe(200);
+    expect(fs.statSync(itemFile).blocks).toBe(0);
+    expect((await h.client.raw('PUT', `/api/items/${items[1]}`, { title: 'Check the figures twice' })).ok).toBe(true);
+    expect((await h.client.raw('POST', `/api/plans/${plan}/export?path=${encodeURIComponent(code)}`)).status).toBe(200);
+    expect(fs.statSync(itemFile).blocks).toBe(0);
+  });
+
+  test('a plan whose plan.yaml is still in the cloud is not found, and an import of it says why', async () => {
+    const other = (await h.client.createPlan({ title: 'Q1 planning', projectPath: code })).uid;
+    const dir = (await h.client.exportPlan(other, code)).planDir;
+    toPlaceholder(path.join(dir, 'plan.yaml'));
+    const found = (await (await h.client.raw('GET', `/api/plans/discover${q()}`)).json()) as string[];
+    expect(found.map((d) => path.basename(d))).not.toContain(path.basename(dir));
+    const res = await h.client.raw('POST', '/api/plans/import', { planDir: dir });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe('plan.yaml is not on this device: it is still only in the cloud');
+  });
+
+  test('a teammate\'s record still in the cloud waits; Settings counts what is not on this device', async () => {
+    expect((await h.client.raw('PUT', `/api/shared-task-state${q()}`, { enabled: true })).status).toBe(200);
+    expect((await h.client.raw('PUT', `/api/items/${items[0]}`, { status: 'in_progress' })).ok).toBe(true);
+    const folder = path.join(place, '.codetrellis', 'records', plan, items[0]);
+    const mine = fs.readdirSync(folder)[0];
+    const theirs = path.join(folder, `aaaaaaaa11112222-1.yaml`);
+    fs.writeFileSync(theirs, fs.readFileSync(path.join(folder, mine), 'utf8').replace(/writer: \w+/, 'writer: aaaaaaaa11112222').replace('status: in_progress', 'status: done'));
+    toPlaceholder(theirs);
+    await new Promise((r) => setTimeout(r, 1_000));
+    expect(((await (await h.client.raw('GET', `/api/items/${items[0]}`)).json()) as { status: string }).status).toBe('in_progress');
+
+    const f = (await (await h.client.raw('GET', `/api/plans-folder?project=${encodeURIComponent(code)}`)).json()) as { notOnDevice: number; says: string };
+    expect(f.notOnDevice).toBe(3);
+    expect(f.says).toBe(`This project's plans live in OneDrive: Acme/Board pack. On this device that is ${place}. 3 files in it are not on this device yet and are not read until they are: set the folder to "Always keep on this device" in OneDrive.`);
+  });
+
+  test('a material still in the cloud is not hashed: recording it says why', async () => {
+    const pdf = path.join(code, 'docs', 'sales-2026.pdf');
+    fs.mkdirSync(path.dirname(pdf), { recursive: true });
+    fs.writeFileSync(pdf, '%PDF-1.4 sales');
+    toPlaceholder(pdf);
+    const res = await h.client.raw('POST', `/api/items/${items[0]}/artefacts`, { path: 'docs/sales-2026.pdf', role: 'material' });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toBe('docs/sales-2026.pdf is not on this device: it is still only in the cloud. Make it available on this device, then record it.');
+    fs.rmSync(pdf);
   });
 });

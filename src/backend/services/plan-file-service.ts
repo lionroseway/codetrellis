@@ -73,6 +73,7 @@ import { onHitAnswered } from './breakpoint-service';
 import { importItemRefs, importPlanRefs, refsForItem, refsForPlan } from './plan-file-refs';
 import { importApprovals } from './signed-approvals';
 import { completePlanArrival, recordPlanArrival } from './plan-arrivals';
+import { isPlaceholder, NotOnDeviceError } from './cloud-files';
 
 // --- Public surface ---
 
@@ -324,6 +325,11 @@ function exportPlanV2(plan: Plan, planDir: string, _allItems: PlanItem[], projec
   const writtenSet = new Set(files);
   for (const stale of preExisting) {
     if (writtenSet.has(stale)) continue;
+    // Still only in the cloud (C3.4b): deleting it would delete it there
+    // too, and it may hold a teammate's newer copy. Kept until the client
+    // brings it down; the watcher then imports it before a later export
+    // prunes it.
+    if (isPlaceholder(stale)) continue;
     stampSelfWrite(stale);
     try { fs.unlinkSync(stale); } catch { /* best-effort */ }
   }
@@ -411,6 +417,9 @@ function writeItemChildren(
  * refuses any symlinked component and anything outside the root.
  */
 function readPlanFile(planDir: string, file: string): string {
+  // A file a sync client has not brought down is never opened (C3.4b):
+  // opening it would download it.
+  if (isPlaceholder(path.resolve(file))) throw new NotOnDeviceError(path.relative(planDir, file) || 'plan.yaml');
   // Relative, because the helper canonicalises the ROOT: an absolute path
   // spelled through a symlinked prefix (/tmp vs /private/tmp on macOS)
   // would otherwise read as outside it.
@@ -647,7 +656,9 @@ function importItemsFromDir(
       const stat = fs.lstatSync(fullPath);
 
       if (stat.isFile() && (entry.endsWith('.yaml') || entry.endsWith('.yml'))) {
-        // Leaf item
+        // Leaf item. One still only in the cloud is skipped, never deleted:
+        // the task this machine has stays as it was (C3.4b).
+        if (isPlaceholder(fullPath)) { warnings.push(`${path.relative(planDir, fullPath)} is not on this device`); continue; }
         const raw = parseYaml(readPlanFile(planDir, fullPath));
         if (!raw?.uid) { warnings.push(`Skipping ${fullPath} — missing uid`); continue; }
         const item = upsertItem(planUid, parentUid, raw, warnings, fullPath);
@@ -659,6 +670,7 @@ function importItemsFromDir(
           warnings.push(`Skipping directory ${fullPath} — no _self.yaml`);
           continue;
         }
+        if (isPlaceholder(selfPath)) { warnings.push(`${path.relative(planDir, selfPath)} is not on this device`); continue; }
         const raw = parseYaml(readPlanFile(planDir, selfPath));
         if (!raw?.uid) { warnings.push(`Skipping ${selfPath} — missing uid`); continue; }
         const item = upsertItem(planUid, parentUid, raw, warnings, selfPath);
@@ -860,7 +872,7 @@ export function discoverPlanDirs(projectRoot: string): string[] {
       try {
         // lstat: a link in the plans dir is not a plan directory, wherever
         // it points.
-        return fs.lstatSync(p).isDirectory() && fs.existsSync(path.join(p, 'plan.yaml'));
+        return fs.lstatSync(p).isDirectory() && fs.existsSync(path.join(p, 'plan.yaml')) && !isPlaceholder(path.join(p, 'plan.yaml'));
       } catch {
         return false;
       }
@@ -1950,6 +1962,14 @@ function ensureDir(dir: string): void {
 }
 
 function writeFileAtomic(filePath: string, content: string): void {
+  // A file still only in the cloud is neither read nor written (C3.4b):
+  // reading it would download it, and writing over it would replace what
+  // may be a teammate's newer copy with this machine's. It is written on a
+  // later export, once the client has brought it down.
+  if (isPlaceholder(filePath)) {
+    console.warn(`[Plans] ${filePath} is not on this device yet; not written, so a newer copy in the cloud is kept.`);
+    return;
+  }
   // Unchanged content is not rewritten (C2.4b): a write-through re-exports
   // the whole plan, and a file touched for nothing is noise to a sync client.
   try { if (fs.readFileSync(filePath, 'utf-8') === content) return; } catch { /* not there yet */ }

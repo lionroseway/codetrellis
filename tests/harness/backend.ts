@@ -112,6 +112,8 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
     CODETRELLIS_SIGN_APPROVALS: '0',
     // Nor records with git's key: they are signed with the device's key (C3.3).
     CODETRELLIS_GIT_SIGN_RECORDS: '0',
+    // No machine's own OneDrive or SharePoint folders (C3.4b): a test names its own.
+    CODETRELLIS_CLOUD_ROOTS: '[]',
     // The harness has no app window, and granting is otherwise the app
     // window's alone (grant-guard.ts). A test of that rule turns this off.
     CODETRELLIS_ALLOW_HTTP_GRANTS: '1',

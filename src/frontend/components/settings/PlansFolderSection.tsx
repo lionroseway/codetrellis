@@ -20,6 +20,11 @@ interface Status {
   state: 'here' | 'linked' | 'unlinked' | 'changed' | 'missing';
   linked: { path: string; confirmedAt: number; confirmedBy: string } | null;
   says: string;
+  /** OneDrive and SharePoint folders found on this device (C3.4b). */
+  roots?: Array<{ provider: 'onedrive' | 'sharepoint'; path: string; account: string | null }>;
+  /** This device's copy of a named synced folder, where the client keeps it. */
+  found?: string | null;
+  notOnDevice?: number;
 }
 
 type Choice = 'here' | 'git' | 'synced';
@@ -100,7 +105,7 @@ export function PlansFolderSection() {
   const unchanged = choice === (named?.kind ?? 'here')
     && (choice !== 'git' || (named?.kind === 'git' && named.remote === remote.trim()))
     && (choice !== 'synced' || (named?.kind === 'synced' && named.provider === provider && named.place === place.trim()));
-  const tone = status?.state === 'linked' || status?.state === 'here' ? 'text-emerald-300' : 'text-amber-200';
+  const tone = (status?.state === 'linked' || status?.state === 'here') && !status?.notOnDevice ? 'text-emerald-300' : 'text-amber-200';
 
   return (
     <div className="space-y-4" data-testid="plans-folder-section">
@@ -130,6 +135,13 @@ export function PlansFolderSection() {
         )}
         {choice === 'synced' && (
           <div className="space-y-2">
+            <p className="text-foreground-muted" data-testid="plans-folder-roots">
+              {status?.roots?.length
+                ? <>Found on this device: {status.roots.map((r, i) => (
+                  <span key={r.path}>{i > 0 && ', '}<span className="text-foreground">{r.provider === 'onedrive' ? 'OneDrive' : 'SharePoint'}{r.account ? ` (${r.account})` : ''}</span></span>
+                ))}.</>
+                : 'No OneDrive or SharePoint folder was found on this device. You can still name the folder for your team, and link it where your sync client keeps it.'}
+            </p>
             <label className="block space-y-1">
               <span className="text-foreground-muted">Kept in sync by</span>
               <select className={inputCls} value={provider} onChange={(e) => setProvider(e.target.value as typeof provider)} data-testid="plans-folder-provider">
@@ -166,6 +178,15 @@ export function PlansFolderSection() {
             </div>
           ) : (
             <>
+              {status?.found && (
+                <div className="flex items-baseline justify-between gap-3 rounded bg-emerald-400/[0.06] border border-emerald-400/20 px-2 py-1.5" data-testid="plans-folder-found">
+                  <span className="text-foreground">Found where your sync client keeps it: <code className="font-mono text-[11px] break-all">{status.found}</code></span>
+                  <button type="button" onClick={() => { void call('POST', '/api/plans-folder/link', { path: status.found }); }} disabled={busy} data-testid="plans-folder-link-found"
+                    className="shrink-0 px-3 py-1 rounded text-[12px] bg-accent text-white hover:bg-accent-hover disabled:opacity-40">
+                    Link this folder
+                  </button>
+                </div>
+              )}
               <p className="text-foreground-muted">
                 {named.kind === 'git' ? 'Clone the planning repository if you have not, then give the folder it is in.' : 'Give the folder where your sync client keeps it.'}
                 {' '}It is checked to be a copy of the folder named above before anything in it is read.

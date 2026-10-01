@@ -112,4 +112,48 @@ test.describe('Plans folder', () => {
     await expect(section.getByTestId('plans-folder-device')).toContainText('Give the folder where your sync client keeps it.');
     expect(sent.find((s) => s.method === 'PUT')?.body).toEqual({ folder: { kind: 'synced', provider: 'sharepoint', place: 'Acme/Board pack' } });
   });
+
+  test('C3.4b: OneDrive is found where its client put it; the copy is offered, and files still in the cloud are counted', async ({ page }) => {
+    const ROOT = '/Users/dana/Library/CloudStorage/OneDrive-Acme Ltd';
+    const FOUND = `${ROOT}/Acme/Board pack`;
+    const WHERE = "This project's plans live in OneDrive: Acme/Board pack.";
+    let named: unknown = null;
+    let linked = false;
+    await page.route('**/api/plans-folder**', async (route) => {
+      const req = route.request();
+      if (req.method() === 'PUT') named = (req.postDataJSON() as { folder: unknown }).folder;
+      if (req.method() === 'POST') linked = (req.postDataJSON() as { path: string }).path === FOUND;
+      const state = !named ? 'here' : linked ? 'linked' : 'unlinked';
+      const says = !named ? HERE
+        : linked ? `${WHERE} On this device that is ${FOUND}. 2 files in it are not on this device yet and are not read until they are: set the folder to "Always keep on this device" in OneDrive.`
+          : `${WHERE} Link your copy of it on this device to see them; until then nothing there is read.`;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        project: '/work/board-pack', named, state, says,
+        linked: linked ? { path: FOUND, confirmedAt: Date.UTC(2026, 9, 1, 10), confirmedBy: 'dana@acme.test' } : null,
+        roots: [{ provider: 'onedrive', path: ROOT, account: 'Acme Ltd' }, { provider: 'sharepoint', path: '/Users/dana/Library/CloudStorage/OneDrive-SharedLibraries-Acme Ltd', account: 'Acme Ltd' }],
+        found: named && !linked ? FOUND : null,
+        notOnDevice: linked ? 2 : 0,
+      }) });
+    });
+    await page.setViewportSize({ width: 1280, height: 1000 });
+    await gotoWithProject(page);
+    await page.locator('button[title*="Settings"]').click();
+    const dialog = page.getByRole('dialog', { name: 'Settings' });
+    await dialog.getByRole('button', { name: 'Plans folder', exact: true }).click();
+    const section = dialog.getByTestId('plans-folder-section');
+    await section.getByTestId('plans-folder-kind-synced').check();
+    await expect(section.getByTestId('plans-folder-roots')).toHaveText('Found on this device: OneDrive (Acme Ltd), SharePoint (Acme Ltd).');
+    await section.getByTestId('plans-folder-place').fill('Acme/Board pack');
+    await section.getByTestId('plans-folder-save').click();
+    const found = section.getByTestId('plans-folder-found');
+    await expect(found).toContainText(`Found where your sync client keeps it: ${FOUND}`);
+    fs.mkdirSync(OUT, { recursive: true });
+    await dialog.screenshot({ path: path.join(OUT, 'plans-folder-onedrive-found.png') });
+
+    await found.getByTestId('plans-folder-link-found').click();
+    await expect(section.getByTestId('plans-folder-says')).toContainText('2 files in it are not on this device yet');
+    await expect(section.getByTestId('plans-folder-says')).toHaveClass(/text-amber-200/);
+    await expect(section.getByTestId('plans-folder-linked')).toHaveText(FOUND);
+    await dialog.screenshot({ path: path.join(OUT, 'plans-folder-not-on-device.png') });
+  });
 });
