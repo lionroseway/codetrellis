@@ -107,6 +107,9 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
     // The review hosts (Phase 32 C2.3): a test that turns one on points it at its stand-in.
     CODETRELLIS_GITLAB_API: NOWHERE,
     CODETRELLIS_BITBUCKET_API: NOWHERE,
+    // Phase 32 C2.5b: approvals are not signed with the machine's own git key,
+    // which may sit behind an agent that prompts; the signing spec turns it on.
+    CODETRELLIS_SIGN_APPROVALS: '0',
     // The harness has no app window, and granting is otherwise the app
     // window's alone (grant-guard.ts). A test of that rule turns this off.
     CODETRELLIS_ALLOW_HTTP_GRANTS: '1',

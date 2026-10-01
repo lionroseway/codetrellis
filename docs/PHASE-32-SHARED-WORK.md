@@ -195,7 +195,11 @@ approval is exported as a small signed record: criterion, evidence
 hashes, who, when, signature. A plain edit to a file can't forge it, and
 the app verifies it on import and shows "✓ verified" or
 "⚠ can't verify". Signing uses the approver's git signing key when one
-is set up. Without one, approvals stay local, as today.
+is set up. Without one, approvals stay local, as today. (Built in C2.5b
+with git's SSH signing: `ssh-keygen -Y sign`, verified against git's
+`gpg.ssh.allowedSignersFile`. There is no device signing key to reuse:
+pairing proves a shared secret, so C-3's signed records will need one of
+their own or the same git key.)
 
 **4. Seeing teammates' plans.** After a pull, plans authored elsewhere
 appear with their author, and the stack view (B6) shows them like any

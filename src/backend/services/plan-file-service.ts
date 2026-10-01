@@ -70,6 +70,7 @@ import { cleanBranch } from './section-workstreams';
 import { guardDiskEdit, settleDiskHold } from './plan-doc-guard';
 import { onHitAnswered } from './breakpoint-service';
 import { importItemRefs, importPlanRefs, refsForItem, refsForPlan } from './plan-file-refs';
+import { importApprovals } from './signed-approvals';
 
 // --- Public surface ---
 
@@ -484,6 +485,23 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
     }
   } catch {
     // Channel event service not available (test isolation) — skip.
+  }
+
+  // Phase 32 C2.5b — teammates' approvals, each checked against git's allowed
+  // signers. A verified one adds that person's sign-off; anything else is
+  // kept as "can't verify" and counts for nothing.
+  try {
+    const checked = importApprovals(planDir, planUid, projectPath, {
+      criterion: (uid) => {
+        const c = criteriaService.getCriterion(uid);
+        const item = c ? planItemService.getItem(c.itemUid) : null;
+        return c && item ? { text: c.text, itemUid: c.itemUid, planUid: item.planUid } : null;
+      },
+      addSignoff: (input) => criteriaService.addVerifiedSignoff(input),
+    });
+    if (checked.unverified) warnings.push(`${checked.unverified} approval record${checked.unverified === 1 ? '' : 's'} could not be verified and count for nothing.`);
+  } catch (err) {
+    warnings.push(`Approval records were not read: ${err instanceof Error ? err.message : err}`);
   }
 
   return result;

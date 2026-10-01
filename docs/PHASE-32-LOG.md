@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — C2.5a: ticket refs in the plan files |
-| **Status** | C2.4 done (#266, #267). C2.5 refined into a (refs) and b (signed approvals with the git SSH signing key; there is no device signing key to reuse). C2.5a built: plan.yaml and item files carry their refs; import adds them cleaned (http(s) only, bounded) and never removes one; a ref change writes the plan's files; after a pull the lineage names the ticket. Unit, harness (plan-file-refs 4 and the plan-file specs) green locally |
-| **In flight** | C2.5a building on `feat/phase-32-c2-5a-ticket-refs` |
-| **Last merged** | C2.4b (#267, `9466c1e`) |
-| **Next action** | Merge C2.5a when CI is green; then C2.5b on feat/phase-32-c2-5b-signed-approvals |
+| **Stage / step** | Wave 2 — C2.5b: approvals as signed statements |
+| **Status** | C2.5a merged (#268). C2.5b built: a person's approval (window or confirmed phone) is signed with their git SSH key into the plan's approvals/ folder where git signing is set up; import verifies each record with ssh-keygen against git's allowed signers; verified counts as that person's sign-off, anything else shows can't verify with why and counts for nothing; without signing it stays local and says why. Unit (record), harness (signed-approvals 6, across two machines with real keys), browser (signed-approvals, criteria) green locally |
+| **In flight** | C2.5b building on `feat/phase-32-c2-5b-signed-approvals` |
+| **Last merged** | C2.5a (#268, `92e8fed`) |
+| **Next action** | Merge C2.5b when CI is green; then C2.6 (teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when), refined first |
 | **Blockers** | none |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `9466c1e`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `92e8fed`, with open PRs from GitHub.
 
 ---
 
@@ -219,8 +219,8 @@
     - [x] C2.4a Every item a state with its source (git, a host, or the plan with who recorded it), and one status view: progress, waiting, in progress, lineage; window, phone and get_plan (#266)
     - [x] C2.4b No state change writes a file: state leaves the plan's files, a state-only change schedules no write-through, unchanged files are not rewritten (#267)
   - [ ] C2.5 Ticket refs in the plan files; approvals as signed statements — building
-    - [ ] C2.5a Ticket refs in the plan files: plan.yaml and item files name their tickets and links; import adds, cleans, never removes; lineage survives a pull — building
-    - [ ] C2.5b Approvals as signed statements: an SSH-signed record per approval when git signing is set up, verified on import against git's allowed signers
+    - [x] C2.5a Ticket refs in the plan files: plan.yaml and item files name their tickets and links; import adds, cleans, never removes; lineage survives a pull (#268)
+    - [ ] C2.5b Approvals as signed statements: an SSH-signed record per approval when git signing is set up, verified on import against git's allowed signers — building
   - [ ] C2.6 Teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when
 - [ ] C3 A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice)
 - [ ] C4 Recurring playbooks
@@ -351,6 +351,50 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-01: C2.5b — approvals as signed statements
+
+C2.5a merged (#268).
+
+- **Signed where it can be, and says so where it cannot**
+  (`signed-approvals.ts`). A person's approval of a criterion, from the
+  app window or a confirmed phone, is also signed with their git SSH key
+  (`ssh-keygen -Y sign`, namespace `codetrellis-approval`) into
+  `<plan>/approvals/<uid>.yaml`: one file per approval, only ever added. A
+  plain HTTP approval is never signed: it may be a script. Without git
+  signing, or with the plan not in a folder, the approval stays on the
+  machine and the criterion says why.
+- **The record** (`signed-approval-record.ts`, pure): canonical JSON of
+  the criterion, a sha256 of its wording, the evidence hashes, the signer
+  (`user.email`) and when; the signature over exactly those bytes. Parsing
+  refuses anything out of shape, and a statement not in its canonical form.
+- **Checked on import** with `ssh-keygen -Y verify` against git's
+  `gpg.ssh.allowedSignersFile`, the list a team keeps for signed commits.
+  A verified record for an unchanged criterion adds that person's sign-off
+  (channel `file`), so the criterion reads met, by them. A record that does
+  not verify, from a key the team does not list, for a criterion reworded
+  since, or for another plan, is kept as "can't verify" with why, counts
+  for nothing, and is checked again on the next import.
+- **In the window**, each criterion says what became of its approval:
+  "✓ verified, signed by …", "⚠ can't verify …: why. It counts for
+  nothing.", "✓ signed with your git key", or "kept on this machine: why".
+
+Found on the way: the machine's global git config here already turns on
+SSH signing, so a test that "unsets" signing in a repository still signed;
+the spec sets a non-SSH format instead, and the harness turns signing off
+by default (`CODETRELLIS_SIGN_APPROVALS=0`) so a developer's own key, which
+may sit behind an agent that prompts, is never used by a test. And the
+first draft put the criteria block's new hook after an early return,
+which React refuses; it is above it now.
+
+Tests: unit `signed-approval-record.test.ts` (3); harness
+`signed-approvals.test.ts` (6, two backends as two machines, real ed25519
+keys and an allowed-signers file: Dana's phone approval is signed; Priya's
+import verifies it and the criterion is met by Dana; a record edited to
+claim Priya does not verify; a key not listed and a criterion reworded
+since do not count; without signing it stays local with why; a plain HTTP
+approval is not signed); browser `signed-approvals.spec.ts` (shot
+`signed-approvals`) and the criteria specs.
 
 ### 2026-10-01: C2.5a — ticket refs in the plan files
 

@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — C2.5a: ticket refs in the plan files"
-  status: "C2.4 done (#266, #267). C2.5 refined into a (refs) and b (signed approvals with the git SSH signing key; there is no device signing key to reuse). C2.5a built: plan.yaml and item files carry their refs; import adds them cleaned (http(s) only, bounded) and never removes one; a ref change writes the plan's files; after a pull the lineage names the ticket. Unit, harness (plan-file-refs 4 and the plan-file specs) green locally"
-  next: "Merge C2.5a when CI is green; then C2.5b on feat/phase-32-c2-5b-signed-approvals"
+  step: "Wave 2 — C2.5b: approvals as signed statements"
+  status: "C2.5a merged (#268). C2.5b built: a person's approval (window or confirmed phone) is signed with their git SSH key into the plan's approvals/ folder where git signing is set up; import verifies each record with ssh-keygen against git's allowed signers; verified counts as that person's sign-off, anything else shows can't verify with why and counts for nothing; without signing it stays local and says why. Unit (record), harness (signed-approvals 6, across two machines with real keys), browser (signed-approvals, criteria) green locally"
+  next: "Merge C2.5b when CI is green; then C2.6 (teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when), refined first"
   blockers: none
   updated: 2026-10-01
 sections:

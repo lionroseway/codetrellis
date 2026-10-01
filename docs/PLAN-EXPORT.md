@@ -207,6 +207,13 @@ tickets and each item's file names its links, under `refs` (url, key,
 kind, title), so a plan's lineage survives a pull. Import adds a ref the
 machine lacks and never removes one; only http(s) links are read.
 
+**Approvals ride only as signed statements** (Phase 32 C2.5b). A sign-off
+in a plain field would let any edit say a person approved something, so the
+criteria are exported and their decisions are not. Where git signing is set
+up with an SSH key, a person's approval is also written as
+`approvals/<uid>.yaml`, signed with that key, and a teammate's import counts
+it only when it verifies against git's allowed signers.
+
 **To keep something off disk**, mark the item `local` (Phase 3.2). A
 local item — and so its comments and attachments — is filtered out of the
 export by `listItemsForExport`. Its children are local too, unless one

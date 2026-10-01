@@ -79,6 +79,7 @@ import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
 import { planGitStatesFresh } from './services/item-git-state';
 import { planStatusFresh } from './services/plan-status';
+import { listSignedApprovals } from './services/signed-approvals';
 import { forgetHostReads } from './services/review-host/host-state';
 import { forgetReviewHostToken, getReviewHost, ReviewHostError, saveReviewHostToken, setReviewHost } from './services/review-host/switch';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
@@ -4407,6 +4408,16 @@ app.delete('/api/comments/:uid', (req, res) => {
   broadcast('comment-deleted', { uid: req.params.uid });
   saveNow(() => exportDatabase());
   res.json({ ok: true });
+});
+
+/**
+ * Phase 32 C2.5b — an item's approvals as signed statements: each one this
+ * machine signed with git's SSH key (or kept local, and why), and each one
+ * read from the plan's approvals/ folder, verified or not, and why not.
+ */
+app.get('/api/items/:uid/signed-approvals', (req, res) => {
+  if (!planItemService.getItem(req.params.uid)) { res.status(404).json({ error: 'Item not found' }); return; }
+  res.json(listSignedApprovals(req.params.uid));
 });
 
 // --- External References API (Phase 17.R) ---
