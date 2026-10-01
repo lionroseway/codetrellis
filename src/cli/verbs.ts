@@ -162,7 +162,10 @@ export async function runVerb(verb: string, agent: Agent, p: Parsed, cwd: string
     case 'report-tests': {
       if (!first) throw new UsageError('Which report? codetrellis report-tests <junit.xml>');
       const a = await agent.call('report_tests', { path: first, project_path: projectRoot(cwd) });
-      return said(a, (j) => typeof j.summary === 'string' ? j.summary : JSON.stringify(j), ctx);
+      return said(a, (j) => {
+        const failing = (j.failing as Array<{ test: string; why?: string }> | undefined) ?? [];
+        return [typeof j.says === 'string' ? j.says : JSON.stringify(j), ...failing.map((f) => `  ✗ ${f.test}${f.why ? ` — ${f.why}` : ''}`)].join('\n');
+      }, ctx);
     }
     default: throw new UsageError(`unknown verb ${verb}`);
   }

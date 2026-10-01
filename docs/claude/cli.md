@@ -50,10 +50,13 @@ cloud session with none.
 the SessionStart hook.
 
 ```json
-"command": "codetrellis start --quiet && codetrellis status; exit 0"
+"command": "codetrellis start --share-task-state --quiet && codetrellis status; exit 0"
 ```
 
-It starts CodeTrellis once (a second session finds it running) and prints
+It starts CodeTrellis once (a second session finds it running), sharing
+task state so that what the agent claims, reports and runs reaches the
+person's desktop when the session pushes (a cloud session's container
+goes, and its database with it; drop the flag to keep it there), and prints
 `status`, which Claude Code adds to the session's context: the agent
 begins knowing what is in progress, what is blocked, what waits on the
 person, and whether the work so far conforms. `exit 0` because a hook

@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track D — D1.5a: test runs travel; headless sharing"
-  status: "D1.4 merged (#288). D1.5 refined into D1.5a and D1.5b. D1.5a built: run records in .codetrellis/runs (signed, each device's latest, the commit it ran on), teammates' runs read after a pull and grounding a file by commit; serve/start --share-task-state for a headless backend; Settings → Shared task state lists teammates' runs, the Inspector says whose run a file rests on. Harness shared-test-runs 4, unit run-record 3, browser 2 shots"
-  next: "Merge D1.5a when green; then D1.5b (the done-when: a CI job claims, reports, edits the plan and commits; the desktop shows it after a pull)"
+  step: "Track D — D1.5b: the done-when"
+  status: "D1.4 (#288) and D1.5a (#289) merged. D1.5b: a cloud session through the SessionStart hook (now with --share-task-state) and the CLI alone claims, reports 60%, commits its code, reports its tests, adds a task and commits the plan, and pushes; the CI recipe, its steps run as written, conforms; Sam's desktop after a pull shows the claim and progress as the session said them, the new task, the file grounded by the session's run, and the commit's author and co-author. Found: report-tests printed raw JSON; fixed. Harness done-when-d 3"
+  next: "Merge D1.5b when green; then B8.3b (a grounding line on each task)"
   blockers: "None"
   updated: 2026-10-01
 sections:
