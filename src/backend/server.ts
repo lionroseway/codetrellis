@@ -86,6 +86,7 @@ import { forgetReviewHostToken, getReviewHost, ReviewHostError, saveReviewHostTo
 import { listTestReports, listTestResults, testsSummary } from './services/tests/test-results';
 import { groundingMap, groundingOf, NotAFileError } from './services/tests/grounding';
 import { teammateRunSummaries } from './services/tests/teammate-runs';
+import { taskGrounding } from './services/task-grounding';
 import { getSharedTaskState, keepMyState, readAndTell, setRecordAppliedListener, setSharedMaterialReads, setSharedTaskState, setRunsChangedListener, setSplitChangedListener, startRecordWatcher, stopRecordWatcher, trustTeammateKey, writeRecordFor } from './services/task-records/shared-state';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
 import { buildPlaybackSequence } from './services/playback-service';
@@ -3282,6 +3283,14 @@ app.get('/api/items/:uid/criteria', async (req, res) => {
   // The authoritative check (§4.4): files change while the app is closed.
   await artefactService.refreshArtefactHashes(req.params.uid).catch(() => []);
   res.json(criteriaService.listCriteria(req.params.uid));
+});
+
+// Phase 32 B8.3b — how far an item's criteria rest on evidence: the line and
+// each criterion's grade, the same the phone and get_brief give.
+app.get('/api/items/:uid/grounding', async (req, res) => {
+  const g = await taskGrounding(req.params.uid);
+  if (!g) { res.status(404).json({ error: 'Item not found' }); return; }
+  res.json(g);
 });
 
 app.post('/api/items/:uid/criteria', (req, res) => {

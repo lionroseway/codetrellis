@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track D — D1.5b: the done-when"
-  status: "D1.4 (#288) and D1.5a (#289) merged. D1.5b: a cloud session through the SessionStart hook (now with --share-task-state) and the CLI alone claims, reports 60%, commits its code, reports its tests, adds a task and commits the plan, and pushes; the CI recipe, its steps run as written, conforms; Sam's desktop after a pull shows the claim and progress as the session said them, the new task, the file grounded by the session's run, and the commit's author and co-author. Found: report-tests printed raw JSON; fixed. Harness done-when-d 3"
-  next: "Merge D1.5b when green; then B8.3b (a grounding line on each task)"
+  step: "Track B — B8.3b: a grounding line on each task"
+  status: "B8.3b built: each criterion graded once (grounded, waiting on a person, sent back, changed since, failing, no evidence yet) into one line, served at GET /api/items/:uid/grounding, in get_brief and in the phone's criteria.list; the window's criteria block and the phone's task screen show it. Unit 2 files, harness task-grounding 5, browser criteria.spec 2, phone item-grounding 2"
+  next: "Merge B8.3b when green; then B8.4 (replay of the overlay, and J1 end to end)"
   blockers: "None"
   updated: 2026-10-01
 sections:

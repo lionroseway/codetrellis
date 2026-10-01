@@ -7,6 +7,7 @@ import { BRIEF_WORDS, briefState } from '../../../lib/brief-vocabulary';
 import { criterionOrigin } from '../../../lib/criterion-origin';
 import { UnverifiedIf } from '../../UnverifiedTag';
 import { SignedApprovalLines, useSignedApprovals } from './SignedApprovalLines';
+import { GroundingLine, useTaskGrounding } from './GroundingLine';
 
 /**
  * Phase 31 §4.1–4.3 — what this item is judged on, and where each
@@ -66,7 +67,10 @@ export function CriteriaBlock({
   const [error, setError] = useState<string | null>(null);
   // C2.5b — each approval signed, kept local, verified or not, read again when a decision changes.
   // Above the early return below: a hook must run on every render.
-  const signed = useSignedApprovals(itemUid, criteria.map((c) => `${c.uid}:${c.state}:${c.latestSignoff?.uid ?? ''}`).join('|'));
+  const nonce = criteria.map((c) => `${c.uid}:${c.state}:${c.latestSignoff?.uid ?? ''}:${c.latestSubmission[0]?.uid ?? ''}`).join('|');
+  const signed = useSignedApprovals(itemUid, nonce);
+  // B8.3b — how far they rest on evidence, asked again as they change.
+  const grounding = useTaskGrounding(itemUid, nonce);
 
   const met = criteria.filter((c) => c.state === 'met').length;
 
@@ -95,6 +99,7 @@ export function CriteriaBlock({
       <h3 className="text-[12px] uppercase tracking-[0.1em] text-foreground-subtle font-semibold mb-3">
         {vocabulary === 'brief' ? BRIEF_WORDS.criteria : 'Acceptance criteria'} <span className="opacity-60">· {met}/{criteria.length} met</span>
       </h3>
+      <GroundingLine grounding={grounding} />
       <ul className="space-y-2">
         {criteria.map((c) => <CriterionRow key={c.uid} itemUid={itemUid} criterion={c} attachments={attachments} vocabulary={vocabulary} you={you} signed={signed.filter((a) => a.criterionUid === c.uid)} />)}
       </ul>
