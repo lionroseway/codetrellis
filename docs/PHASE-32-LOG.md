@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Track D — D1.5b: the done-when |
-| **Status** | D1.4 in review (#288); D1.5a built (stacked). D1.5b: a cloud session through the SessionStart hook (now with --share-task-state) and the CLI alone claims, reports 60%, commits its code, reports its tests, adds a task and commits the plan, and pushes; the CI recipe, its steps run as written, conforms; Sam's desktop after a pull shows the claim and progress as the session said them, the new task, the file grounded by the session's run, and the commit's author and co-author. Found: report-tests printed raw JSON; fixed. Harness done-when-d 3 |
-| **In flight** | D1.4 in review (#288) on `feat/phase-32-d1-4-sessions-and-pipelines`; D1.5a building on `feat/phase-32-d1-5a-shared-runs`; D1.5b building on `feat/phase-32-d1-5b-done-when` |
+| **Status** | D1.4 (#288) and D1.5a (#289) merged. D1.5b: a cloud session through the SessionStart hook (now with --share-task-state) and the CLI alone claims, reports 60%, commits its code, reports its tests, adds a task and commits the plan, and pushes; the CI recipe, its steps run as written, conforms; Sam's desktop after a pull shows the claim and progress as the session said them, the new task, the file grounded by the session's run, and the commit's author and co-author. Found: report-tests printed raw JSON; fixed. Harness done-when-d 3 |
+| **In flight** | D1.5b building on `feat/phase-32-d1-5b-done-when` |
 | **Last merged** | C3.6 (#284, `8300675`) |
-| **Next action** | Merge D1.4, D1.5a, D1.5b in turn when green; then B8.3b (a grounding line on each task) |
+| **Next action** | Merge D1.5b when green; then B8.3b (a grounding line on each task) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `30cb422`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `b07c239`, with open PRs from GitHub.
 
 ---
 
@@ -253,9 +253,9 @@
   - [ ] D1.1 `codetrellis serve` (headless backend, loopback, token on every transport) and `scan`
   - [ ] D1.2 Keep-on-track verbs as an agent: next, claim, update, stuck, done, request, brief, awareness, check, report-tests; text or --json
   - [ ] D1.3 Changing the plan (show, add, edit, move) and `commit`, which commits only CodeTrellis's own files; `status`
-  - [ ] D1.4 A SessionStart hook recipe, a CI/CD recipe, and exit codes on status and check for gating (breakpoints, tests older than the code, failing criteria, stale system docs); this repository uses it (#288) — in review
+  - [ ] D1.4 A SessionStart hook recipe, a CI/CD recipe, and exit codes on status and check for gating (breakpoints, tests older than the code, failing criteria, stale system docs); this repository uses it
   - [ ] D1.5 The D done-when, refined into two parts (2026-10-01): — building
-    - [ ] D1.5a Test runs travel as signed run records, grounding a teammate's run by commit; `--share-task-state` for a headless backend — building
+    - [ ] D1.5a Test runs travel as signed run records, grounding a teammate's run by commit; `--share-task-state` for a headless backend
     - [ ] D1.5b The done-when: a cloud session or CI job claims, reports, edits the plan and commits; the desktop shows it after a pull — building
   - [ ] Follow-up: Declared product flows checked hop by hop against the cross-system map in CI (owner's point, 2026-10-01): after Phase 32 unless pulled in
 
