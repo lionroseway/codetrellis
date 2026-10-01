@@ -321,6 +321,20 @@ export const SCHEMA_PLANS_CORE = `
     seen_at INTEGER,
     seen_by TEXT
   );
+  -- Phase 32 C4.1: a recurring playbook's run, as started here: its series,
+  -- period, the run before it and the tasks carried from it. A run started on
+  -- another machine is found by its id (derived from rule and period), not here.
+  CREATE TABLE IF NOT EXISTS recurring_runs (
+    plan_uid TEXT PRIMARY KEY,
+    project_root TEXT NOT NULL,
+    rule_id TEXT NOT NULL,
+    period TEXT NOT NULL,
+    label TEXT NOT NULL,
+    previous_uid TEXT,
+    carried_json TEXT NOT NULL DEFAULT '[]',
+    started_at INTEGER NOT NULL,
+    started_by TEXT NOT NULL
+  );
   -- Each session told of a planned overlap its task is in, read once.
   CREATE TABLE IF NOT EXISTS planned_overlap_tells (
     overlap_id TEXT NOT NULL,

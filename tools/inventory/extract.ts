@@ -112,7 +112,7 @@ const REST_DOMAINS: Record<string, DomainKey> = {
   playback: 'b', 'cross-system': 'b', systems: 'b', coverage: 'b', diff: 'b',
   plans: 'c', items: 'c', tasks: 'c', 'plan-docs': 'c', 'plan-history': 'c', 'plan-phases': 'c',
   'plan-templates': 'c', comments: 'c', attachments: 'c', refs: 'c', 'team-activity': 'c',
-  contributions: 'c', 'contributor-branch': 'c', pantry: 'c', skills: 'c', stack: 'c', 'play-forward': 'c', 'spec-proposals': 'c',
+  contributions: 'c', 'contributor-branch': 'c', pantry: 'c', skills: 'c', stack: 'c', 'play-forward': 'c', recurring: 'c', 'spec-proposals': 'c',
   criteria: 'd', tests: 'd',
   artefacts: 'e',
   channels: 'f', presence: 'f', 'screenshot-response': 'f',

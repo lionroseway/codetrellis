@@ -61,7 +61,7 @@ export function createPlan(
   projectPath: string,
 ): Plan {
   const db = getDb();
-  const uid = randomUUID();
+  const uid = input.uid ?? randomUUID();
   const now = Date.now();
   const normalizedPath = normalizePath(projectPath);
 
