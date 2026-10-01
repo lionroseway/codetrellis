@@ -85,8 +85,15 @@ describe('material signals', () => {
     const pack = task('pack', 'Board pack', { reads: [read(V2)] });
     const [s] = computeMaterialSignals([report, pack], { [SALES]: V2 });
     assert.equal(s.summary, '“Board pack”, “Q3 report” (Alex Kim) read different versions of `data/sales-2026.xlsx`; “Board pack” has the current one');
+    assert.deepEqual(s.subject.readBy, { 'task:report': 'Alex Kim' });
+    assert.deepEqual(sideWords(s, label).map((x) => x.words), [
+      'Board pack read the current version of data/sales-2026.xlsx.',
+      'Q3 report (Alex Kim) read an earlier version of data/sales-2026.xlsx.',
+    ]);
+    assert.equal(briefLine(s, 'task:pack'), 'This task read the current data/sales-2026.xlsx; “Q3 report” (Alex Kim) worked from an earlier version.');
     const [plain] = computeMaterialSignals([task('report', 'Q3 report', { reads: [read(V1)] }), pack], { [SALES]: V2 });
     assert.equal(s.id, plain.id);
+    assert.equal(plain.subject.readBy, undefined);
     const stale = computeMaterialSignals([report, task('pack', 'Board pack', { reads: [{ ...read(V1), by: 'Sam Lee, unverified' }] })], { [SALES]: V2 })[0];
     assert.equal(stale.summary, '`data/sales-2026.xlsx` changed after “Board pack” (Sam Lee, unverified), “Q3 report” (Alex Kim) read it, and neither has read it since');
   });

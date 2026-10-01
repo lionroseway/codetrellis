@@ -348,6 +348,12 @@ export interface AwarenessSignal {
     material?: string;
     /** Each task workstream's title, by id, so every surface names it the same. */
     labels?: Record<string, string>;
+    /**
+     * Whose read it was, by task workstream, when a task's latest read of the
+     * material was a teammate's (C3.5): "Sam Lee", or "Sam Lee, unverified".
+     * Words, like `labels`: never part of what makes the signal the same one.
+     */
+    readBy?: Record<string, string>;
     /** Contract: the parts of the material the tasks cite, in words ("Summary!B2:F9"). */
     parts?: string[];
     /** Contract: the tasks that cite it. */

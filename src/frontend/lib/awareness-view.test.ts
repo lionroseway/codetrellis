@@ -95,6 +95,14 @@ describe('a signal in words', () => {
     assert.deepEqual(sidesOf(sig(), ROOM), ['auth-refresh', 'billing-v2']);
   });
 
+  test('a task whose latest read was a teammate\'s is named with whose it was (C3.5)', () => {
+    const v = sig({
+      kind: 'version-split', workstreams: ['task:f1', 'task:r1'],
+      subject: { material: 'plans://Materials/sales.csv', labels: { 'task:f1': 'Check the figures', 'task:r1': 'Write the board report' }, readBy: { 'task:f1': 'Sam Lee' } },
+    });
+    assert.deepEqual(sidesOf(v, ROOM), ['Check the figures (Sam Lee)', 'Write the board report']);
+  });
+
   test('a stale base is one workstream against main', () => {
     assert.deepEqual(sidesOf(sig({ kind: 'stale-base', workstreams: ['/r-auth'] }), ROOM), ['auth-refresh', 'main']);
   });

@@ -279,6 +279,10 @@ owner's choice); `PUT /api/shared-task-state {materialReads}` sets it, on
 being the person's (`mayGrant`), off anyone's. Off, or task state unshared,
 teammates' reads are forgotten here so no signal rests on them; trusting or
 refusing a key forgets that device's and reads them again, checked anew.
+Whose read it was also travels in the signal as `subject.readBy` (by task
+workstream), beside `labels` and like it left out of the shape, so the
+Awareness tab's sides ("Check the figures (Sam Lee)"), the side words and
+each task's Brief line name the teammate too, not only the summary (C3.6).
 
 ## Approvals as signed statements (Phase 32 C2.5b)
 
