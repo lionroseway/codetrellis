@@ -18,7 +18,7 @@ import type { ItemCriterion } from '../../shared/types';
 export interface GradedCriterion { uid: string; text: string; grade: CriterionGrade; why: string }
 export interface TaskGrounding extends GroundingLine { itemUid: string; criteria: GradedCriterion[] }
 
-type Check = { ok: boolean; findings: Array<{ status: string; message: string }> };
+type Check = { ok: boolean; findings: Array<{ status: string; message: string; reason?: string }> };
 
 /** One criterion's grade, from its state and its checks. Pure; exported for the unit tests. */
 export function gradeCriterion(c: Pick<ItemCriterion, 'kind' | 'policy' | 'state'> & { submitted: boolean }, check: Check | null): { grade: CriterionGrade; why: string } {
@@ -26,6 +26,9 @@ export function gradeCriterion(c: Pick<ItemCriterion, 'kind' | 'policy' | 'state
   if (c.state === 'sent_back') return { grade: 'sent_back', why: 'a person sent it back' };
   const failures = check ? check.findings.filter((f) => f.status === 'fail').map((f) => f.message) : [];
   if (check && !check.ok) {
+    // A report older than the code (B8.4a): its "passing" is about code no longer there.
+    const older = check.findings.find((f) => f.status === 'fail' && f.reason === 'tests_older');
+    if (older) return { grade: 'tests_older', why: older.message };
     if (!c.submitted && c.state === 'open') return { grade: 'no_evidence', why: failures[0] ?? 'nothing offered yet' };
     return { grade: 'failing', why: failures[0] ?? 'its checks fail' };
   }

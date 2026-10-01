@@ -75,7 +75,7 @@ export interface ToolDeps {
    */
   criterionLoop: Pick<
     typeof import('../services/criterion-loop-service'),
-    'checkCriterion' | 'submitChecked' | 'getWorklist' | 'runCheckRun'
+    'checkCriterion' | 'submitChecked' | 'getWorklist' | 'runCheckRun' | 'testsOlderThanCode'
   >;
   /** Phase 31 §4.2 — record a file that matters; hashes kept current. */
   artefactService: Pick<

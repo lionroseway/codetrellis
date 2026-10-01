@@ -217,6 +217,23 @@ export async function checkCriterion(uid: string, offered?: OfferedEvidence[]): 
 }
 
 /**
+ * What stops an agent's "done" (B8.4a, JOURNEYS J1): each test criterion on
+ * the item whose report ran before the item's files last changed, said as
+ * the check says it. Empty when nothing does. A person marking it done is
+ * their call and is not asked this.
+ */
+export async function testsOlderThanCode(itemUid: string): Promise<Array<{ criterionUid: string; text: string; why: string }>> {
+  const out: Array<{ criterionUid: string; text: string; why: string }> = [];
+  for (const c of criteria.listCriteria(itemUid)) {
+    if (c.kind !== 'test') continue;
+    const r = await checkCriterion(c.uid).catch(() => null);
+    const older = r?.findings.find((f) => f.status === 'fail' && f.reason === 'tests_older');
+    if (older) out.push({ criterionUid: c.uid, text: c.text, why: older.message });
+  }
+  return out;
+}
+
+/**
  * `submit_criterion`: the same checks, and a refusal that lists every
  * failure. What reaches a person has already passed them (§8.1).
  */

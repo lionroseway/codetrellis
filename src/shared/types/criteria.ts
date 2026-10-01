@@ -94,6 +94,12 @@ export interface CheckFinding {
   message: string;
   /** The attachment the finding is about, when there is one. */
   attachmentUid?: string | null;
+  /**
+   * What kind of failure, when something else acts on it: `tests_older` is
+   * a test report older than the item's code (B8.4a), which stops an
+   * agent's "done" and reads "⚠ tests older than the code" on the task.
+   */
+  reason?: 'tests_older';
 }
 
 export interface CriterionCheck {

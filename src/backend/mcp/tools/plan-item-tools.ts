@@ -320,7 +320,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       description:
         'Update any field on an Object or Action. Content edits (body, title, status, fileSpecs, …) write a row to plan_item_versions; ' +
         'structural edits (parent_uid, sort_order) emit plan_events but skip the version log. ' +
-        'Pass empty string for nullable fields (parent_uid, scope_path, blocked_reason) to clear.',
+        'Pass empty string for nullable fields (parent_uid, scope_path, blocked_reason) to clear. ' +
+        'status "done" is refused while a test criterion\'s report is older than the item\'s code: run the tests again first.',
       inputSchema: {
         uid: z.string(),
         title: z.string().optional(),
@@ -360,6 +361,21 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (depProblem) return { isError: true, content: [{ type: 'text' as const, text: depProblem }] };
       const refProblem = args.relies_on?.length ? specRefProblem(args.uid, args.relies_on) : null;
       if (refProblem) return { isError: true, content: [{ type: 'text' as const, text: refProblem }] };
+      // Phase 32 B8.4a (JOURNEYS J1) — "done" on a test report older than
+      // the code is refused: its "passing" is about code no longer there.
+      if (args.status === 'done' && deps.planItemService.getItem(args.uid)?.status !== 'done') {
+        const older = await deps.criterionLoop.testsOlderThanCode(args.uid);
+        if (older.length) {
+          return {
+            isError: true,
+            content: [{
+              type: 'text' as const,
+              text: `Not done: ${older.map((o) => `"${o.text}" — ${o.why}`).join('; ')}. ` +
+                'Hand over the new report (submit_criterion, or report_tests), then mark it done. Nothing was changed.',
+            }],
+          };
+        }
+      }
       const item = deps.planItemService.updateItem(args.uid, {
         title: args.title,
         body: args.body,

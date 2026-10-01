@@ -35,6 +35,7 @@ const TONE: Record<CriterionGrade, string> = {
   waiting: 'text-amber-300',
   sent_back: 'text-red-300',
   changed: 'text-amber-300',
+  tests_older: 'text-amber-300',
   failing: 'text-red-300',
   no_evidence: 'text-foreground-subtle',
 };
