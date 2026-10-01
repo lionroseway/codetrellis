@@ -210,6 +210,7 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   update_plan: 'write',
   list_plans: 'read',
   get_stack: 'read',
+  get_play_forward: 'read',
   get_spec_links: 'read',
   list_spec_proposals: 'read',
   reply_to_spec_proposal: 'write',

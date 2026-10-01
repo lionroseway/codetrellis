@@ -756,6 +756,33 @@ CodeTrellis checks the report is real, recent and about the right code.
 | B8.4a | J1 end to end: an agent's "done" (`update_item`) on a test report older than the item's code is refused with why and changes nothing; the task's line says "⚠ 1 with tests older than the code" (a grade of its own), and the window says why under the criterion; run again, "done" goes through. A person's "done" is never refused | unit; harness `stale-done.test.ts`; browser `plan/stale-done.spec.ts` (shot) |
 | B8.4b | J2: the overlay at a past moment in replay (`billing/` from "○ no tests" to "✓ 12 passing"): each report keeps its own cases (`test_report_cases`), and `GET /api/tests/grounding/map?at=` answers from the reports handed over by then, on the replay frame's graph; "older than the code" then is a file whose content differs from the first frame after its tests ran. While replaying, the overlay asks for the cursor's moment and the canvas says "tests as reported by then". A teammate's run is live only (only their latest is kept) | harness `grounding-replay.test.ts`; browser `graph/grounding-replay.spec.ts` (shots) |
 
+### B9: Play-forward
+
+Refined 2026-10-01 (observability doc §6.3 and §7, JOURNEYS G3, WIREFRAMES
+§7). The planned-state projection answers for one plan, the one selected,
+and projects done tasks too. The Stack (B6.3, HD3) already finds where two
+plans' unfinished tasks name the same file, function or material, but calls
+it "⚠ overlaps" beside actual clashes, never as something that has not
+happened yet, and never draws it. Play-forward is every active plan at once,
+from its unfinished tasks, with where they will meet: "◇ planned overlap",
+dashed, and materials in words. G3's question (run it when a plan is
+approved?) is answered by computing it on read: it is never out of date, and
+B9.3 says a new one when a plan forms it.
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| B9.1 | The data: `services/play-forward.ts` projects every active plan's unfinished tasks (file specs by verb, functions, and the materials their briefs list), each change tagged with its plan and task; planned overlaps where two or more plans meet on a file, a function or a material, by §7's rules (the same file or material mild, the same function or a delete against a change serious), sequenced when their tasks already wait on one another (B6.1), in words: "◇ planned overlap: JIRA-142 and JIRA-150 both plan to change invoice.ts". Which planned files exist is read from the project's folder through confined-fs (the held graph may be another project's). `GET /api/play-forward?project=` and `get_play_forward` (`read`) | unit `play-forward.test.ts`; harness `play-forward.test.ts` (four plans and a finished one, a file and a spreadsheet overlap, an agent's answer equal to REST, sequenced, a done task, a project never opened refused) |
+| B9.2 | The window plays forward: "Play forward" beside "Replay" and in the Stack tab; the canvas shows every active plan's planned files and edges (dashed ghosts, as the planned view draws them), with "◇ Playing forward · now → all plans done · planned by 4 active plans · nothing here exists yet"; planned overlaps drawn dashed on their files and clusters, words on hover; the Stack tab lists each plan's planned overlaps under it ("◇ will overlap JIRA-150: invoice.ts"); Back to now | browser with screenshots |
+| B9.3 | Acting on one, by a person: Re-sequence (the person picks which goes first; the other plan's tasks in it wait on its tasks, B6.1's dependencies), Tell both agents (each session holding a task in it is told once on its next call, as B7.3), Fine, leave it (kept with who and when; drawn quieter). Over REST (`personFrom`) and the phone; no MCP tool decides. A plan whose approval forms a new planned overlap says so in the approval's answer and once in the inbox | unit; harness (each action, the notice once, an agent cannot decide); browser |
+| B9.4 | The phone and the done-when: the phone's stack summary says planned overlaps; G3 end to end (two plans approved that both plan to change invoice.ts; Sam plays forward, sees the dashed zone, re-sequences; the later plan's task waits; both agents told) seen the same by the window, an MCP client and the phone; `docs/claude/awareness.md` and the guides | harness end to end; phone with screenshots |
+
+**Journey (G3).** Before starting, Sam plays forward: the graph shows what
+every active plan will change, nothing of which exists yet, and a dashed
+zone: "◇ planned overlap: JIRA-142 and JIRA-150 both plan to change
+`invoice.ts`". The board pack and the forecast refresh both rely on
+`sales-2026.xlsx`, said in words in the Stack. Sam re-sequences JIRA-150 to
+wait on JIRA-142, and the zone reads sequenced, before anyone writes code.
+
 ### C1: Skills on plans and tasks
 
 | Sub-step | Delivers | Tests |

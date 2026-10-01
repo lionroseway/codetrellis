@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B8.4b: the grounding overlay in replay (J2) |
-| **Status** | B8.4a in review (#292). B8.4b built: each report keeps its cases; GET /api/tests/grounding/map?at= answers from the reports handed over by then on the replay frame's graph (older than the code against the first frame after the run); the overlay follows the replay cursor and the canvas says tests as reported by then. Harness grounding-replay 5 (and 53 related), browser graph/grounding-replay.spec (shots) |
-| **In flight** | B8.4b in review (#293) on `feat/phase-32-b8-4b-grounding-replay` |
-| **Last merged** | B8.4a (#292, `fb3d64f`) |
-| **Next action** | Merge B8.4a, then B8.4b, when green; then B9 (play-forward) |
+| **Stage / step** | Track B — B9 refined, B9.1: playing the plans forward (the data) |
+| **Status** | B8 done (#292, #293). B9 refined into four parts; B9.1 built: services/play-forward.ts projects every active plan's unfinished tasks (files, functions, materials) with ◇ planned overlaps (mild or serious, sequenced when their tasks already wait), GET /api/play-forward and get_play_forward. Unit 5, harness play-forward 5 |
+| **In flight** | B9.1 building on `feat/phase-32-b9-1-play-forward` |
+| **Last merged** | B8.4b (#293, `655c925`) |
+| **Next action** | Merge B9.1 when green; then B9.2 (the window plays forward) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `fb3d64f`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `655c925`, with open PRs from GitHub.
 
 ---
 
@@ -199,16 +199,20 @@
   - [ ] Follow-up: Linking a plan schedules one more export ~200 ms later; an edit to its files in that window is overwritten, not imported (found building B7.5b)
   - [x] B7.6 The phone (#249)
   - [x] B7.7 I1 done-when and docs (#250)
-- [ ] B8 Grounding, refined in EXECUTION §5: — building
+- [x] B8 Grounding, refined in EXECUTION §5:
   - [x] B8.1 Per-test results: JUnit read test by test, each test's last result kept; report_tests, get_test_results, GET /api/tests; a test criterion names its failing tests (#273)
   - [x] B8.2 Tests mapped to code through imports: ✓ passing, ✗ failing, ○ no tests, ⚠ tests older than the code, per file (#274)
   - [x] B8.3 Where it shows, split in two:
     - [x] B8.3a The grounding overlay on the graph: ✗ ⚠ ✓ ○ on files, summed on clusters, the same answer as the Inspector (#275)
     - [x] B8.3b A grounding line on each task: "3 criteria · 2 grounded · 1 waiting on a person" (window, phone, get_brief) (#291)
-  - [ ] B8.4 The done-when, split in two: — building
+  - [x] B8.4 The done-when, split in two:
     - [x] B8.4a J1: an agent's "done" on a test report older than the code is refused, and the task says "⚠ tests older than the code" (#292)
-    - [ ] B8.4b J2: the grounding overlay at a past moment in replay (billing/ from "○ no tests" to "✓ 12 passing") (#293) — in review
-- [ ] B9 Play-forward (code, and the materials tasks rely on)
+    - [x] B8.4b J2: the grounding overlay at a past moment in replay (billing/ from "○ no tests" to "✓ 12 passing") (#293)
+- [ ] B9 Play-forward (code, and the materials tasks rely on) — building
+  - [ ] B9.1 The data: every active plan projected, planned overlaps (file, function, material), REST and get_play_forward — building
+  - [ ] B9.2 The window plays forward: dashed planned changes and ◇ planned overlaps on the graph, in the Stack tab
+  - [ ] B9.3 Acting on a planned overlap: re-sequence, tell both agents, leave it; a new one said on approval
+  - [ ] B9.4 The phone and the G3 done-when
 - [ ] B10 The record
 
 ### Track C: shared ways of working
@@ -412,12 +416,28 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | D1.5a: `--share-task-state` turns sharing on for a headless backend from the command line, refused for the desktop app's own data dir | In the app only the window may turn it on (the grant rule). A headless backend has no window: the person who wrote the hook or the pipeline is choosing, and an agent that could run the command can already write the project's files. The app's own switch stays the window's |
 | 2026-10-01 | B8.4 is split into B8.4a (J1, done on stale tests) and B8.4b (J2, the overlay in replay) | Different surfaces and different machinery (the criterion loop and update_item; replay frames and test history); one PR each |
 | 2026-10-01 | B8.4a: an agent's `update_item(status: done)` is refused only while a test criterion's report is older than the item's code; other failing checks still do not stop it there, and a person's "done" is never refused | J1 asks exactly this, and it is the one failure an agent cannot argue with: the report is about code that is gone. D1.2 left gating `update_item` on every check as a separate decision; that still stands. A person may close a task for reasons the checks cannot see |
+| 2026-10-01 | B9 is refined into four parts (EXECUTION §5): the data, the window, acting on a planned overlap, the phone and G3. G3's question (run on approval?) is answered by computing play-forward on read, and B9.3 says a new planned overlap when an approval forms one | Computed on read it is never out of date and costs nothing until asked; saying a new one at approval is the moment G3 cares about, without a job that runs |
+| 2026-10-01 | B9.1: only unfinished tasks are projected, and which planned files exist is read from the project's folder through confined-fs, not the held graph | A done task's change is the code now, not the future. The server's graph is the last project scanned (HD1), so it cannot say whether another project's file exists; a planned path is agent-written and is confined like any other |
 | 2026-10-01 | B8.4b: a past moment's overlay is rebuilt from what was kept (each report's cases, and the replay frame's files and imports), not recorded per frame; "older than the code" then compares a file's content with the first frame after its tests ran | Nothing new is taken at each frame, so replay costs nothing until it is used. The first frame after a run is the code the run was about (an agent edits, runs, and its turn ends); the frame before it would call every edit made just before the run stale. This can miss an edit between the run and that frame; it never invents one |
 | 2026-10-01 | B8.4b: a teammate's run is shown live only, and the answer says so | Only each device's latest run is kept (D1.5a) and nothing records when it arrived here, so it cannot be placed at a past moment honestly |
 | 2026-10-01 | B8.3b: one grade per criterion, from its state and the criterion loop's own checks, in a fixed order (changed since and sent back before what its checks say; a judgement waits on a person until approved); the line lists only the grades there are | One grader means the window, the phone and an agent's brief can never disagree about a task; reusing check_criterion's checks means \"grounded\" is exactly what an agent's own check would say. A line of zeroes is noise |
 ---
 
 ## Entries
+
+### 2026-10-01: B9 refined; B9.1 — playing the plans forward (the data)
+- **Journey.** Sam's project has four active plans and a finished one.
+  Asked to play forward, CodeTrellis says "Planned by 4 active plans · 1 file
+  to change, 1 to create · 2 planned overlaps": "◇ planned overlap: JIRA-142
+  and JIRA-150 both plan to change validators.ts", and the board pack and
+  the forecast refresh both rely on sales-2026.xlsx. The finished plan's
+  old work is not there. An agent asking gets the same. Once JIRA-150's task
+  waits on JIRA-142's, the overlap says "sequenced: JIRA-150 waits on
+  JIRA-142".
+- **Built.** `shared/types/play-forward.ts`, `services/play-forward.ts`
+  (`playForwardOf`, pure; `buildPlayForward`), `GET /api/play-forward`,
+  `get_play_forward` with its capability row and guide line.
+- **Tests.** Unit `play-forward.test.ts` (5). Harness `play-forward.test.ts` (5).
 
 ### 2026-10-01: B8.4b — the grounding overlay in replay (J2)
 - **Journey.** Sam replays the last hour with Overlays → Test grounding on.

@@ -75,6 +75,7 @@ import { compareSnapshots, listComparands, readFileAt } from './services/snapsho
 import { reviewPlan, renderReviewMarkdown } from './services/plan-review-service';
 import { reviewQueue } from './services/review-queue-service';
 import { buildStack } from './services/stack-service';
+import { buildPlayForward } from './services/play-forward';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
 import { planGitStatesFresh } from './services/item-git-state';
@@ -4169,6 +4170,16 @@ app.get('/api/stack', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   res.json(buildStack(projectRoot));
+});
+
+/**
+ * Phase 32 B9.1 — play-forward: every active plan's planned changes at once,
+ * and where they will meet ("◇ planned overlap"), code and materials.
+ */
+app.get('/api/play-forward', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(buildPlayForward(projectRoot));
 });
 
 app.get('/api/plans/:uid/review', (req, res) => {
