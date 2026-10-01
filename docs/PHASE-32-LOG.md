@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track D — D1.3: changing the plan and committing it |
-| **Status** | D1.2 merged (#286). D1.3 built: plan show/add/edit/move over the plan tools, commit (only CodeTrellis's own files, the message naming the tasks, the agent as co-author), status (in progress, blocked, waiting on the person, as get_plan says). Harness cli-plan 5 green locally |
-| **In flight** | D1.3 building on `feat/phase-32-d1-3-plan-and-commit` |
+| **Stage / step** | Track D — D1.4: sessions and pipelines |
+| **Status** | D1.3 merged (#287). D1.4 built: start/stop (serve in the background once per folder, ready after its scan), the conformity gate (check with no path and status exit 3 on a breakpoint on a changed file, its tests failing or older than the code, a done task failing its criterion check, a stale system doc; check_changes, read only), recipes (SessionStart hook, .mcp.json, GitHub Actions) and this repository's CI runs it on its own unit run. Harness cli-gate 7, unit conformity 3 |
+| **In flight** | D1.4 building on `feat/phase-32-d1-4-sessions-and-pipelines` |
 | **Last merged** | C3.6 (#284, `8300675`) |
-| **Next action** | Merge D1.3 when green; then D1.4 (SessionStart hook and CI recipes, gating exit codes, dogfood here) |
+| **Next action** | Merge D1.4 when green; then D1.5 (the D done-when: a CI job claims, reports, edits the plan and commits; the desktop shows it after a pull) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `04e4e49`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `30cb422`, with open PRs from GitHub.
 
 ---
 
@@ -252,8 +252,8 @@
 - [ ] D1 The `codetrellis` CLI (owner's decision, 2026-10-01), refined in EXECUTION §6b: — building
   - [ ] D1.1 `codetrellis serve` (headless backend, loopback, token on every transport) and `scan`
   - [ ] D1.2 Keep-on-track verbs as an agent: next, claim, update, stuck, done, request, brief, awareness, check, report-tests; text or --json
-  - [ ] D1.3 Changing the plan (show, add, edit, move) and `commit`, which commits only CodeTrellis's own files; `status` — building
-  - [ ] D1.4 A SessionStart hook recipe, a CI/CD recipe, and exit codes on status and check for gating (breakpoints, tests older than the code, failing criteria, stale system docs); this repository uses it
+  - [ ] D1.3 Changing the plan (show, add, edit, move) and `commit`, which commits only CodeTrellis's own files; `status`
+  - [ ] D1.4 A SessionStart hook recipe, a CI/CD recipe, and exit codes on status and check for gating (breakpoints, tests older than the code, failing criteria, stale system docs); this repository uses it — building
   - [ ] D1.5 The D done-when: a cloud session or CI job claims, reports, edits the plan and commits; the desktop shows it after a pull
   - [ ] Follow-up: Declared product flows checked hop by hop against the cross-system map in CI (owner's point, 2026-10-01): after Phase 32 unless pulled in
 
@@ -402,9 +402,37 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | D1.1: `serve` runs the backend in its own process with the existing token and loopback rules, adding only a headless switch that starts no update poller and no peer manager; its data is in the user's cache, one folder per project | A runner has nobody to offer an update to and no phone to pair; a second set of security rules for the CLI would be a second thing to get wrong. Data in the checkout would be committed by accident |
 | 2026-10-01 | D1.2: `request` asks through a channel event and waits for a steer in reply, not `await_user_input`; `done` runs each criterion's check first and refuses on a failure, in the CLI | `await_user_input` answers only from a window connected to the same backend, so a cloud session's question would reach nobody; a channel event travels with the plan and is answered in the app. Gating `update_item` itself would change every agent's behaviour, which is a separate decision |
 | 2026-10-01 | D1.3: `commit` commits only the changed paths under `.codetrellis/`, through `commit_manifest_changes`, and never stages the agent's code; nothing to commit is exit 0 | The agent's code is its own to commit, with its own message; mixing the plan into it hides the plan's change in a code review. One commit tool keeps the author the person and the agent a co-author, as every other agent commit is. A hook that runs `commit` on every stop must not fail when the plan did not change |
+| 2026-10-01 | D1.4: the gate is one read-only tool, `check_changes`, over the files this work changed (since its base, plus what is not committed); `check` with no path and `status` exit 3 on it. A runner sees no breakpoints, by design | One tool keeps the four findings' words the same for an agent, the CLI and a later UI, and needs no new rule for a CI job. Read only, because a gate that raised a breakpoint decision on every CI run would page the person for a job. Breakpoints are "ask me first" and live in the person's app; nobody can be asked from a runner |
 ---
 
 ## Entries
+
+### 2026-10-01: D1.4 — sessions and pipelines
+- **Journey.** Sam's cloud session runs the SessionStart hook from
+  `docs/recipes/claude-code-settings.json`: CodeTrellis starts headless for
+  the repository once (a second session finds it running), and the agent
+  begins with the plan's status in its context. `stop` ends it. Then the
+  gate a pipeline runs, `codetrellis check`, over Sam's branch: a plain
+  change conforms. It fails, naming why, on a breakpoint Sam set on
+  `validators.ts` (and holds nothing: no decision waits on Sam); on a
+  system doc describing the file that changed after it was verified; on
+  its tests failing, then older than the code; and on a task marked done
+  whose criterion check fails. Each, put right, passes. `status` gates the
+  same way.
+- **Built.** `start` / `stop` and a ready marker `serve` writes after its
+  scan (`src/cli/main.ts`); `src/cli/conformity.ts` (this work's changed
+  files and the gate's words); `check_changes` over
+  `services/conformity-gate.ts`, read capability, in the agents' guide;
+  recipes in `docs/recipes/`; `docs/claude/cli.md`. This repository's CI
+  writes JUnit from its unit run and gates each pull request on it
+  (Desktop job).
+- **Found on the way.** The MCP endpoint is published at boot, before the
+  scan, so `start` returned in under two seconds on this repository with
+  half a graph; it now waits for the scan. Run on this branch, the gate
+  caught the skill guide's own test failing for the new tool, before the
+  guide was updated.
+- **Tests.** Harness `cli-gate.test.ts` (7, the journey above, plus a
+  usage error). Unit `src/cli/conformity.test.ts` (3).
 
 ### 2026-10-01: D1.3 — changing the plan and committing it
 - **Journey.** Sam's agent runs only `codetrellis`. `plan show` reads

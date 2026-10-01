@@ -100,6 +100,7 @@ async function serve(p: Parsed): Promise<void> {
   const { base, scan, mcp } = await boot(p, project, dataDir);
   const line = connectorLine(process.execPath, binPath(), dataDir);
   const c = counts(scan);
+  markReady(dataDir, project);
   if (p.flags.json) {
     out(JSON.stringify({ project, dataDir, api: base, mcp, connector: { command: line.command, args: line.args }, counts: c }));
     return;
@@ -137,6 +138,93 @@ async function mcp(p: Parsed): Promise<void> {
     if (fs.existsSync(path.join(here, 'mcp-endpoint.json'))) process.argv.push('--data-dir', here);
   }
   await import('../backend/mcp/connector/main');
+}
+
+const READY_FILE = 'serve-ready.json';
+
+/**
+ * Say the backend has opened its project and finished scanning. The MCP
+ * endpoint is published at boot, before the scan, so `start` waits for this
+ * rather than for the endpoint: a gate run on half a graph would pass on
+ * files it had not read yet. Removed when this process exits.
+ */
+function markReady(dataDir: string, project: string): void {
+  const file = path.join(dataDir, READY_FILE);
+  fs.writeFileSync(file, JSON.stringify({ pid: process.pid, project }), { mode: 0o600 });
+  process.on('exit', () => {
+    try {
+      if ((JSON.parse(fs.readFileSync(file, 'utf8')) as { pid?: number }).pid === process.pid) fs.unlinkSync(file);
+    } catch { /* already gone */ }
+  });
+}
+
+/** The headless backend's process for a data dir, when one is up, scanned and answering. */
+async function runningIn(dataDir: string): Promise<{ pid: number; url: string } | null> {
+  const { readConnectTarget, readEndpoint } = await import('../backend/mcp/connector/files');
+  const endpoint = readEndpoint(dataDir);
+  const target = readConnectTarget(dataDir);
+  if (!endpoint || !target.ok) return null;
+  try { process.kill(endpoint.pid, 0); } catch { return null; } // left behind by a process that died
+  try {
+    if ((JSON.parse(fs.readFileSync(path.join(dataDir, READY_FILE), 'utf8')) as { pid?: number }).pid !== endpoint.pid) return null;
+  } catch { return null; } // still scanning, or not a headless backend
+  return { pid: endpoint.pid, url: target.url };
+}
+
+/**
+ * `start`: `serve` in the background unless one already answers for this
+ * folder (D1.4). A session-start hook runs it every time, so being up
+ * already is success. Its log is `serve.log` in the data dir.
+ */
+async function start(p: Parsed): Promise<void> {
+  const project = projectOf(p);
+  const dataDir = path.resolve(flag(p, 'data-dir') ?? headlessDataDir(project, process.env, os.homedir()));
+  const line = connectorLine(process.execPath, binPath(), dataDir);
+  const say = (state: 'running' | 'started', pid: number) => {
+    if (p.flags.quiet) return;
+    if (p.flags.json) out(JSON.stringify({ state, pid, project, dataDir, connector: { command: line.command, args: line.args } }));
+    else out(`CodeTrellis ${state === 'running' ? 'is already running' : 'started'} for ${project} (pid ${pid}).\nConnect an agent with:\n  ${line.claude}`);
+  };
+  const up = await runningIn(dataDir);
+  if (up) return say('running', up.pid);
+
+  fs.mkdirSync(dataDir, { recursive: true });
+  const log = fs.openSync(path.join(dataDir, 'serve.log'), 'a');
+  const args = [binPath(), 'serve', '--project', project, '--data-dir', dataDir];
+  for (const k of ['port', 'mcp-port']) { const v = portOf(p, k); if (v !== undefined) args.push(`--${k}`, v); }
+  const { spawn } = await import('node:child_process');
+  const child = spawn(process.execPath, args, { detached: true, stdio: ['ignore', log, log], cwd: project, env: process.env });
+  child.unref();
+  fs.closeSync(log);
+  let exited: number | null = null;
+  child.on('exit', (code) => { exited = code ?? 1; });
+
+  const limit = Number(flag(p, 'timeout') ?? 120) * 1000;
+  const until = Date.now() + (Number.isFinite(limit) && limit > 0 ? limit : 120_000);
+  while (Date.now() < until) {
+    // The launcher runs the CLI as its own child, so the backend's pid is not
+    // child.pid: any live endpoint now is the one just started.
+    const now = await runningIn(dataDir);
+    if (now) return say('started', now.pid);
+    if (exited !== null) fail(`codetrellis serve stopped (exit ${exited}); see ${path.join(dataDir, 'serve.log')}`, 1);
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  fail(`codetrellis serve did not come up in time; see ${path.join(dataDir, 'serve.log')}`, 1);
+}
+
+/** `stop`: end the headless backend `start` (or `serve`) began for this folder. */
+async function stop(p: Parsed): Promise<void> {
+  const project = projectOf(p);
+  const dataDir = path.resolve(flag(p, 'data-dir') ?? headlessDataDir(project, process.env, os.homedir()));
+  const up = await runningIn(dataDir);
+  if (!up) { out(`CodeTrellis is not running for ${project}.`); return; }
+  process.kill(up.pid, 'SIGTERM');
+  const until = Date.now() + 15_000;
+  while (Date.now() < until) {
+    try { process.kill(up.pid, 0); } catch { out(`Stopped CodeTrellis for ${project}.`); return; }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  fail(`CodeTrellis (pid ${up.pid}) did not stop within 15 s`, 1);
 }
 
 /** A keep-on-track verb, run as the agent that called it (D1.2). */
@@ -179,6 +267,8 @@ async function main(): Promise<void> {
     case 'serve': return serve(p);
     case 'scan': return scanOnce(p);
     case 'mcp': return mcp(p);
+    case 'start': return start(p);
+    case 'stop': return stop(p);
     default:
       if (VERBS.has(p.command) || PLAN_VERBS.has(p.command)) return verb(p.command, p);
       fail(`unknown command "${p.command}". Run codetrellis --help.`);

@@ -115,6 +115,9 @@ jobs:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The conformity step below diffs this branch against its base.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
@@ -161,11 +164,31 @@ jobs:
       - name: Build (material reader)
         run: npm run build:reader
 
+      # The same suite as `npm run test:unit`, also writing JUnit for the
+      # conformity step.
       - name: Unit tests
-        run: npm run test:unit
+        id: unit
+        run: npm run test:unit:junit
 
       - name: Lint
         run: npm run lint
+
+      # Phase 32 D1.4: this repository uses its own CLI the way
+      # docs/recipes/github-actions.yml tells others to. CodeTrellis runs
+      # headless in the runner, hears the unit run, and fails the job when
+      # this pull request's change does not conform: a changed file whose
+      # tests fail or are older than the code, a done task whose criterion
+      # check fails, or a system doc describing a changed file gone stale.
+      - name: CodeTrellis conformity
+        if: github.event_name == 'pull_request' && always() && steps.unit.outcome != 'skipped'
+        run: |
+          node bin/codetrellis.mjs start --quiet
+          node bin/codetrellis.mjs report-tests test-results/unit.xml
+          node bin/codetrellis.mjs check
+
+      - name: Stop CodeTrellis
+        if: always()
+        run: node bin/codetrellis.mjs stop || true
 
   # ---------------------------------------------------------------------------
   # Mobile: typecheck only.

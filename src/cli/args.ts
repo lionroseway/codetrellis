@@ -109,6 +109,12 @@ export const USAGE = `codetrellis — CodeTrellis for agents, without the deskto
   codetrellis scan [--project <dir>] [--data-dir <dir>] [--json]
       Scan a project once and print what was found, then exit.
 
+  codetrellis start [--project <dir>] [--data-dir <dir>] [--timeout <s>] [--quiet | --json]
+      serve in the background, unless it already runs for this folder; for a
+      session-start hook or a CI step. Its log is serve.log in the data dir.
+
+  codetrellis stop [--project <dir>] [--data-dir <dir>]
+
   codetrellis mcp [--data-dir <dir>]
       The stdio MCP connector an agent's config launches. Finds the headless
       backend for the folder it is started in, else the desktop app's.
@@ -126,6 +132,9 @@ which; text, or --json):
   codetrellis brief <task>                     what the task needs
   codetrellis awareness                        what overlaps your work
   codetrellis check <path>                     before an edit: overlaps, and whether a breakpoint holds it
+  codetrellis check [--base <ref>]             does this work conform? exit 3 when a breakpoint holds a
+                                               changed file, its tests fail or are older than the code, a
+                                               done task fails its checks, or a doc describing it is stale
   codetrellis report-tests <junit.xml>         tell CodeTrellis how the tests went
 
 Changing and committing the plan:
@@ -135,8 +144,12 @@ Changing and committing the plan:
   codetrellis plan edit <task> [--title <text>] [--body <text>]
   codetrellis plan move <task> (--under <task> | --top) [--position N]
   codetrellis commit [-m <subject>]            commits only CodeTrellis's own files (.codetrellis/)
-  codetrellis status                           plans, what is under way, blocked, and waiting on you
+  codetrellis status [--base <ref>]            plans, what is under way, blocked, and waiting on you,
+                                               and whether this work conforms (exit 3 when not)
 
   <task> is a uid, or its first characters ("6cb8cf43", "task 6cb8cf43").
-  Exit codes: 0 done, 1 refused, 2 usage, 3 held or not answered yet.
+  Exit codes: 0 done, 1 refused, 2 usage, 3 held, not answered yet, or not conforming.
+  This work is the branch since its base (--base, else the pull request's
+  base in GitHub Actions, else origin's default branch) and what is not
+  committed yet.
 `;

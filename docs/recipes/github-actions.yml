@@ -1,0 +1,43 @@
+# CodeTrellis in a pipeline (Phase 32 D1.4). Copy into .github/workflows/.
+#
+# The job runs CodeTrellis headless inside the runner (loopback only, the
+# token on every transport), hands it the test report, and fails when the
+# change does not conform to what the plan and the docs say: a done task
+# whose criterion check fails, a changed file whose tests fail or are older
+# than the code, or a system doc describing a changed file that has gone
+# stale. Breakpoints are a person's, set in their own app, so a runner has
+# none to hold.
+#
+# CodeTrellis runs no tests: run yours as you do now, writing JUnit XML.
+name: conformity
+on: pull_request
+jobs:
+  conformity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the merge base, and the commits docs were verified at
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - name: Install CodeTrellis
+        run: |
+          git clone --depth 1 https://github.com/lionroseway/codetrellis "$RUNNER_TEMP/codetrellis"
+          (cd "$RUNNER_TEMP/codetrellis" && npm ci && npm link)
+      # Your tests, as you run them now, writing JUnit XML. A failure still
+      # fails the job; the steps below run anyway so CodeTrellis hears of it.
+      - name: Tests
+        run: npm test -- --reporter=junit --outputFile=test-results/junit.xml
+      - name: Start CodeTrellis
+        if: always()
+        run: codetrellis start --quiet
+      - name: Report the tests
+        if: always()
+        run: codetrellis report-tests test-results/junit.xml
+      - name: Conformity
+        if: always()
+        run: codetrellis check # exit 3 when the change does not conform
+      - name: Stop CodeTrellis
+        if: always()
+        run: codetrellis stop

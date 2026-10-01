@@ -27,6 +27,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { flag, type Parsed } from './args';
+import { changedFiles, gate, gateWords } from './conformity';
 import type { Agent, ToolAnswer } from './agent';
 
 export const VERBS = new Set(['next', 'claim', 'update', 'stuck', 'done', 'request', 'brief', 'awareness', 'check', 'report-tests']);
@@ -213,8 +214,8 @@ async function request(ctx: Ctx, question: string): Promise<Outcome> {
 
 /** Before an edit: who else touches this file, and whether a breakpoint holds it. */
 async function check(ctx: Ctx, file: string | undefined): Promise<Outcome> {
-  if (!file) throw new UsageError('Which file? codetrellis check <path>');
   const root = projectRoot(ctx.cwd);
+  if (!file) return conforms(ctx, root);
   const rel = path.isAbsolute(file) ? path.relative(root, file) : path.relative(root, path.resolve(ctx.cwd, file));
   const footprint = await ctx.agent.call('check_footprint', { paths: [rel], project_path: root });
   const breakpoint = await ctx.agent.call('check_breakpoint', { path: rel });
@@ -233,4 +234,14 @@ async function check(ctx: Ctx, file: string | undefined): Promise<Outcome> {
   if (importedBy.length) lines.push(`  imported by ${importedBy.length} file${importedBy.length === 1 ? '' : 's'}: ${importedBy.slice(0, 5).join(', ')}${importedBy.length > 5 ? ', …' : ''}`);
   if (footprint.isError) lines.push(footprint.text);
   return { out: lines.join('\n'), code: held ? 3 : 0 };
+}
+
+/** No path: does this work's change conform (D1.4)? Exit 3 when it does not. */
+async function conforms(ctx: Ctx, root: string): Promise<Outcome> {
+  let changed;
+  try { changed = changedFiles(root, flag(ctx.p, 'base'), process.env); } catch (err) { throw new UsageError((err as Error).message); }
+  const g = await gate(ctx.agent, root, changed);
+  if ('error' in g) return { out: g.error, code: 1 };
+  if (ctx.json) return { out: JSON.stringify(g), code: g.ok ? 0 : 3 };
+  return { out: gateWords(g), code: g.ok ? 0 : 3 };
 }
