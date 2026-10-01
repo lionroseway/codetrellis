@@ -4,6 +4,7 @@
 
 import { z } from 'zod';
 import { planGitStatesFresh } from '../../services/item-git-state';
+import { planStatusFresh } from '../../services/plan-status';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { resultWithMeta, authorFromExtra } from '../helpers';
@@ -60,7 +61,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'get_plan',
     {
-      description: 'Read a plan by its UID. Returns plan metadata, a summary of its items (count by kind, status breakdown), and git_state: ' +
+      description: 'Read a plan by its UID. Returns plan metadata, a summary of its items (count by kind, status breakdown), state: ' +
+        'every item\'s state with its source (git or the review host for an item on a branch, "plan" for everything else, with who recorded it) ' +
+        'and the plan\'s progress, what waits on someone, what is under way and its lineage; and git_state: ' +
         'for each item worked on a branch, what git proves (building, pushed, or merged and how), with the commit and source. ' +
         'Where the person turned on a review host for the project, it also says in review (with checks and approvals) or closed, ' +
         'with source github. Use list_items to browse the item tree.',
@@ -81,6 +84,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         status: plan.status, projectPath: plan.projectPath,
         createdAt: plan.createdAt, updatedAt: plan.updatedAt,
         items: { total: items.length, objects: objectCount, actions: actionCount, byStatus: statusCounts },
+        // Phase 32 C2.4 — every item's state with its source, and the plan's status view.
+        state: await statusForAgent(plan_uid),
         // Phase 32 C2.1 — what git proves about each item's branch.
         git_state: await gitStateForAgent(plan_uid, items),
       }, null, 2) }] };
@@ -657,6 +662,24 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
   );
 
+}
+
+/** The plan's status for an agent: the same answer as the window's and the phone's, in snake case. */
+async function statusForAgent(planUid: string) {
+  const s = await planStatusFresh(planUid);
+  if (!s) return null;
+  return {
+    progress: s.progress.words,
+    waiting: s.waiting.map((w) => ({ item_uid: w.itemUid, title: w.title, says: w.words, source: w.source })),
+    in_progress: s.inProgress.map((w) => ({ item_uid: w.itemUid, title: w.title, says: w.words, source: w.source })),
+    lineage: s.lineage,
+    items: s.items.map((i) => ({
+      item_uid: i.itemUid, title: i.title, kind: i.kind, state: i.state, says: i.words, source: i.source,
+      ...(i.recorded ? { recorded_by: i.recorded.by, recorded_at: i.recorded.at } : {}),
+      ...(i.branch ? { branch: i.branch } : {}), ...(i.gitNote ? { git_note: i.gitNote } : {}),
+    })),
+    note: 'Read, never written: source says where each state came from — git or the review host for an item on a branch, the plan itself ("plan") for everything else.',
+  };
 }
 
 /** The plan's git states for an agent: each item by title, the words, and where they came from. */

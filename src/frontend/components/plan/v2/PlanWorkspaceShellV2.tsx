@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Allotment } from 'allotment';
 import { ChevronLeft, Minimize2, Activity as ActivityIcon, ListChecks, PanelRightOpen, MessageCircle, History, ArrowLeft } from 'lucide-react';
 import { useUiStore } from '../../../stores/ui-store';
@@ -20,6 +20,8 @@ import { ManifestConflictBar } from './ManifestConflictBar';
 import { ContributionPanel } from './ContributionPanel';
 import { PlanSwitcher } from './PlanSwitcher';
 import { CopyRef } from './CopyRef';
+import { PlanStatusChip } from './PlanStatusChip';
+import { usePlanStatus } from '../../../lib/plan-status';
 import { peekCodeReturn, returnToCode, type CodeReturn } from '../../../lib/open-file-at';
 
 /**
@@ -56,6 +58,9 @@ export function PlanWorkspaceShellV2() {
   });
   // F13 — reactive item map used to compute toolbar progress (see below).
   const itemsForProgress = usePlanItemsStore((s) => s.itemsByUid);
+  // C2.4 — the plan's status, read again whenever an item's state or branch changes.
+  const statusNonce = useMemo(() => Object.values(itemsForProgress).map((i) => `${i.uid}:${i.status ?? ''}:${i.workstream ?? ''}:${i.updatedAt ?? ''}`).join('|'), [itemsForProgress]);
+  const planStatus = usePlanStatus(plan?.uid ?? null, statusNonce);
 
   // Hydrate the V2 store whenever the active plan changes.
   const hydratePlan = usePlanItemsStore((s) => s.hydratePlan);
@@ -131,7 +136,6 @@ export function PlanWorkspaceShellV2() {
   // the toolbar contradict the card.
   const actions = Object.values(itemsForProgress).filter((i) => i.kind === 'action');
   const doneActions = actions.filter((a) => a.status === 'done').length;
-  const progress = actions.length ? Math.round((doneActions / actions.length) * 100) : 0;
 
   return (
     <div
@@ -193,13 +197,8 @@ export function PlanWorkspaceShellV2() {
         <CopyRef kind="plan" uid={plan.uid} title={plan.title} />
         <PlanSwitcher />
         <StatusBadge status={plan.status} />
-        <div className="flex items-center gap-2 text-[12px] text-foreground-subtle">
-          <span>{doneActions}/{actions.length} actions</span>
-          <div className="h-1.5 w-24 rounded-full bg-white/[0.05] overflow-hidden">
-            <div className="h-full bg-accent/60 rounded-full transition-all" style={{ width: `${progress}%` }} />
-          </div>
-          <span>{progress}%</span>
-        </div>
+        {/* Phase 32 C2.4 — how far the plan has got, read from git, a review host and the plan; opens its status view. */}
+        <PlanStatusChip status={planStatus} fallback={{ done: doneActions, total: actions.length }} />
         {/* Phase 17.G — Plan readiness score */}
         <PlanReadinessRing />
         {/* Phase 17.L — Drift detection badge */}

@@ -29,6 +29,7 @@ const SCREENS: Record<string, { title: string; load: () => Promise<{ default: Co
   'review-queue': { title: 'Review queue', load: () => import('../../mobile/app/review-queue') },
   stack: { title: 'Stack', load: () => import('../../mobile/app/stack') },
   'plan-review': { title: 'Review', load: () => import('../../mobile/app/plan-review') },
+  'plan-detail': { title: 'Plan', load: () => import('../../mobile/app/plan-detail') },
 };
 
 const phone = (window as unknown as { __PHONE__?: { state?: Partial<WorkspaceSnapshot> } }).__PHONE__ ?? {};

@@ -27,6 +27,7 @@ import { ContextRail } from './ContextRail';
 import { CopyRef } from './CopyRef';
 import { TargetsStrip } from './TargetsStrip';
 import { ItemRoutingPanel } from './ItemRoutingPanel';
+import { ItemStateLine } from './ItemStateLine';
 import { DriftIndicator } from './DriftIndicator';
 import { ExternalRefsPanel } from './ExternalRefsPanel';
 import { SpecLinksPanel } from './SpecLinksPanel';
@@ -143,7 +144,11 @@ export function PlanItemCanvas() {
             (attachments, comments, children) below. Reads like a
             research page rather than a metadata-stuffed admin panel. */}
         <div className="max-w-[42rem] mx-auto px-10 py-10 space-y-10">
-          <ItemHeaderProperties item={item} />
+          <div className="space-y-2">
+            <ItemHeaderProperties item={item} />
+            {/* Phase 32 C2.4 — its state with its source: git, a review host, or the plan itself. */}
+            <ItemStateLine item={item} />
+          </div>
           <ItemChannelBand itemUid={item.uid} />
           <SpecLinksPanel item={item} />
           <BodyEditor key={item.uid} item={item} />

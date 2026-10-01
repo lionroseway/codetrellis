@@ -13,11 +13,11 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — C2.3: GitLab and Bitbucket behind the review host"
-  status: "C2.2 done (#263, #264). C2.3 built: GitLab (merge requests !N with their pipeline and approvals, subgroups, token as PRIVATE-TOKEN with read_api) and Bitbucket Cloud (pull requests with build statuses and approvals, declined or superseded read closed, token as a bearer) on the same switch, cache and overlay; one request helper for all three (GET only, redirects refused); each state says its host; Settings speaks each host's words; the harness points every host at nowhere by default. Unit (1735), harness (review-host-gitlab-bitbucket 4 against stand-ins, the GitHub and switch specs), browser (review-host-settings incl. GitLab) green locally"
-  next: "Merge C2.3 when CI is green; then C2.4 on feat/phase-32-c2-4-status-read (status read, not written: every item a state with its source, the plan itself for a task with no branch; no STATUS.md)"
+  step: "Wave 2 — C2.4a: every item a state with its source, and one status view"
+  status: "C2.3 merged (#265); C2.2 and C2.3 done. C2.4 refined into a (read side) and b (no state change writes a file). C2.4a built: every item's state with its source — git or the review host for an item on a branch, the plan itself for everything else in words, with who recorded it; sections sum their tasks; the view (progress counting git merges, waiting on someone, in progress, lineage ticket → plan → PR only from a host) as GET /api/plans/:uid/status, the phone's plan.status and get_plan's state; window header chip, tree row hovers, the item page's State line, the phone's Status card. Unit (1746), harness (plan-status 6), browser (plan-status, git-state specs), phone (plan-status 2) green locally"
+  next: "Merge C2.4a when CI is green; then C2.4b on feat/phase-32-c2-4b-no-state-writes (state leaves the plan's files; a state-only change writes nothing; unchanged files not rewritten)"
   blockers: none
-  updated: 2026-09-30
+  updated: 2026-10-01
 sections:
   - title: Setup
     items:
@@ -503,6 +503,11 @@ sections:
             title: GitLab and Bitbucket on the same interface (Azure DevOps, Gitea later)
           - id: C2.4
             title: "Status read, not written: intent in the plan's YAML, state from git, a host or the plan itself, each saying its source; no STATUS.md"
+            items:
+              - id: C2.4a
+                title: "Every item a state with its source (git, a host, or the plan with who recorded it), and one status view: progress, waiting, in progress, lineage; window, phone and get_plan"
+              - id: C2.4b
+                title: "No state change writes a file: state leaves the plan's files, a state-only change schedules no write-through, unchanged files are not rewritten"
           - id: C2.5
             title: Ticket refs in the plan files; approvals as signed statements
           - id: C2.6
