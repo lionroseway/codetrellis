@@ -120,7 +120,7 @@ const REST_DOMAINS: Record<string, DomainKey> = {
   baseline: 'h', comparands: 'h', compare: 'h', conflicts: 'h', freeze: 'h', 'review-queue': 'h',
   terminals: 'i', audio: 'i',
   pairing: 'j', peers: 'j', sync: 'j',
-  settings: 'k', updates: 'k', logs: 'k', power: 'k', 'review-host': 'k', 'shared-task-state': 'k',
+  settings: 'k', updates: 'k', logs: 'k', power: 'k', 'review-host': 'k', 'shared-task-state': 'k', 'plans-folder': 'k',
   'system-docs': 'l',
 };
 

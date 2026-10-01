@@ -188,6 +188,33 @@ cached per record content (ssh-keygen is a process). The harness sets
 `CODETRELLIS_GIT_SIGN_RECORDS=0`, so its records use the device key unless
 a test turns git signing on.
 
+## A linked plans folder (Phase 32 C3.4a)
+
+`services/plans-home.ts`. A project's plans, task records and key
+introductions live under `.codetrellis/` in the project unless its
+committed `.codetrellis/config.json` names a plans folder,
+`plans.folder`: `{ kind: "git", remote }` (a planning repository) or
+`{ kind: "synced", provider, place }` (a folder OneDrive or SharePoint
+syncs, by its place under the provider's root). The config never holds a
+full path; `parsePlansFolderRef` refuses a remote with credentials and a
+place that is absolute or climbs. Each device's copy is confirmed by the
+person (`linked_plans_folder`, never the config alone), and only accepted
+when it is a real directory, not the project, and a copy of the folder
+named (its git remote, normalised by `normaliseRemote`, or its path ending
+in the place). `plansHome(project)` is the folder every plan-file, record
+and key path is built under: the project, the linked copy, or null when a
+folder is named but not linked here (or the config names another, or the
+copy has gone), and then nothing is read or written and an export is
+refused with the reason. Plans imported from a linked folder belong to
+its project (`projectOfPlansHome`), and `resolveTrustedPlanDir` accepts
+plan directories in a folder linked to an opened project. Routes: `GET/PUT
+/api/plans-folder` (naming is a grant), `POST/DELETE
+/api/plans-folder/link` (linking is a grant, unlinking anyone's); a change
+rebinds the plan and record watchers and imports what is there. Settings →
+Plans folder. The records watcher's start is awaited where a record may
+be written next: a folder created before chokidar is ready may never be
+watched.
+
 ## Approvals as signed statements (Phase 32 C2.5b)
 
 `services/signed-approvals.ts` over `signed-approval-record.ts` (pure). A

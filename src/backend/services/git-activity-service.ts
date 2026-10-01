@@ -16,6 +16,7 @@
 
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import { plansHome } from './plans-home';
 
 // --- Types -------------------------------------------------------------------
 
@@ -90,6 +91,8 @@ export function getPlanFilesAtCommit(
   planSlug: string,
   commitHash: string,
 ): Map<string, string> {
+  // The project's plans may live in a linked plans folder (Phase 32 C3.4a).
+  projectRoot = plansHome(projectRoot) ?? projectRoot;
   const planDir = `.codetrellis/plans/${planSlug}`;
   const files = new Map<string, string>();
 
@@ -122,6 +125,8 @@ export function getPlanCommitHistory(
   planSlug: string,
   options?: { limit?: number; since?: string | number },
 ): Array<{ hash: string; timestamp: string; author: string; subject: string; agentAttribution?: { agentType: string; model?: string } | null }> {
+  // The project's plans may live in a linked plans folder (Phase 32 C3.4a).
+  projectRoot = plansHome(projectRoot) ?? projectRoot;
   const planDir = `.codetrellis/plans/${planSlug}`;
   const maxCount = options?.limit ?? 30;
 
@@ -166,6 +171,8 @@ export function searchPlanHistory(
   query: string,
   options?: { since?: string | number; until?: string | number; limit?: number },
 ): Array<{ hash: string; timestamp: string; author: string; subject: string; matchedFiles: string[] }> {
+  // The project's plans may live in a linked plans folder (Phase 32 C3.4a).
+  projectRoot = plansHome(projectRoot) ?? projectRoot;
   const planDir = `.codetrellis/plans/${planSlug}`;
   const maxCount = options?.limit ?? 20;
 

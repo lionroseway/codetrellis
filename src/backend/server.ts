@@ -85,7 +85,7 @@ import { forgetHostReads } from './services/review-host/host-state';
 import { forgetReviewHostToken, getReviewHost, ReviewHostError, saveReviewHostToken, setReviewHost } from './services/review-host/switch';
 import { listTestReports, listTestResults, testsSummary } from './services/tests/test-results';
 import { groundingMap, groundingOf, NotAFileError } from './services/tests/grounding';
-import { getSharedTaskState, keepMyState, readAndTell, setRecordAppliedListener, setSharedTaskState, setSplitChangedListener, startRecordWatcher, trustTeammateKey, writeRecordFor } from './services/task-records/shared-state';
+import { getSharedTaskState, keepMyState, readAndTell, setRecordAppliedListener, setSharedTaskState, setSplitChangedListener, startRecordWatcher, stopRecordWatcher, trustTeammateKey, writeRecordFor } from './services/task-records/shared-state';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
 import { buildPlaybackSequence } from './services/playback-service';
 import * as commentService from './services/comment-service';
@@ -117,7 +117,8 @@ import { discoverSystems, buildAliasMap } from './services/system-discovery';
 // imports get bundled cleanly. The original lazy-require pattern
 // existed to dodge import cycles that no longer apply.
 import { recomputeCrossSystemEdges, listCrossSystemEdges, getCrossSystemStats } from './services/cross-system-service';
-import { setPlanImportedListener, startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs, exportIfSharedByDefault, exportOnFirstTitle, registerDiskHoldSettling } from './services/plan-file-service';
+import { getPlansFolder, linkPlansFolder, namePlansFolder, PlansFolderError, unlinkPlansFolder } from './services/plans-home';
+import { setPlanImportedListener, startPlanFileWatcher, stopPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs, exportIfSharedByDefault, exportOnFirstTitle, registerDiskHoldSettling } from './services/plan-file-service';
 import { getAllGraphEdges, getDb } from './services/database';
 import { getSettings, updateSettings, getAuthorKey, readGitIdentity, SettingsError } from './services/settings-service';
 import { grantChange, grantRefusal, httpGrantsAllowed } from './services/grant-guard';
@@ -1407,7 +1408,7 @@ async function runScan(projectPath: string): Promise<ScanStats> {
 
     // Phase 32 C3.1 — teammates' task-state records, when this project shares them.
     try {
-      startRecordWatcher(projectPath);
+      await startRecordWatcher(projectPath);
       readAndTell(projectPath);
     } catch (err) {
       console.warn('[Scan] Task-state records were not read:', err);
@@ -2507,13 +2508,16 @@ app.get('/api/shared-task-state', (req, res) => {
   res.json(getSharedTaskState(projectRoot));
 });
 
-app.put('/api/shared-task-state', (req, res) => {
+app.put('/api/shared-task-state', async (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   const enabled = req.body?.enabled;
   if (typeof enabled !== 'boolean') { res.status(400).json({ error: 'enabled must be true or false' }); return; }
   if (enabled && !mayGrant(req)) { res.status(403).json({ error: `Only you can share task state through the project's files — in the CodeTrellis app, ${SHARED_STATE_WHERE}.` }); return; }
   const status = setSharedTaskState(projectRoot, enabled, changedBy(req));
+  // A change made right after this answer writes the first record: the
+  // watcher must already be watching where it goes.
+  if (enabled) await startRecordWatcher(projectRoot);
   broadcast('shared-task-state-changed', { project: projectRoot });
   res.json(status);
 });
@@ -2537,6 +2541,71 @@ app.post('/api/shared-task-state/keys', (req, res) => {
     if (item) broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { rechecked: true } });
   }
   res.json(out);
+});
+
+// Phase 32 C3.4a — where a project's plans live. Naming a plans folder in
+// the committed config, and linking this device's copy of it, are the
+// person's (grants); unlinking is anyone's. A link moves where plans,
+// records and keys are read, so the watchers restart and what is there is
+// imported.
+const PLANS_FOLDER_WHERE = 'Settings → Plans folder';
+
+async function rebindPlansFolder(projectRoot: string): Promise<number> {
+  stopPlanFileWatcher(projectRoot);
+  stopRecordWatcher(projectRoot);
+  let imported = 0;
+  for (const dir of discoverPlanDirs(projectRoot)) {
+    try { importPlan(dir); imported++; } catch (err) { console.warn(`[PlansFolder] Import failed for ${dir}:`, err); }
+  }
+  await startPlanFileWatcher(projectRoot);
+  await startRecordWatcher(projectRoot);
+  readAndTell(projectRoot);
+  broadcast('plans-folder-changed', { project: projectRoot });
+  broadcast('plans-changed', { project: projectRoot });
+  return imported;
+}
+
+app.get('/api/plans-folder', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(getPlansFolder(projectRoot));
+});
+
+app.put('/api/plans-folder', async (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const raw = req.body?.folder;
+  const folder = raw === null ? null : _lazy___services_project_config_service.parsePlansFolderRef(raw);
+  if (raw !== null && !folder) { res.status(400).json({ error: 'folder must be { kind: "git", remote } or { kind: "synced", provider, place }, or null' }); return; }
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can choose where this project's plans live — in the CodeTrellis app, ${PLANS_FOLDER_WHERE}.` }); return; }
+  namePlansFolder(projectRoot, folder);
+  await rebindPlansFolder(projectRoot);
+  res.json(getPlansFolder(projectRoot));
+});
+
+app.post('/api/plans-folder/link', async (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can link a plans folder on this device — in the CodeTrellis app, ${PLANS_FOLDER_WHERE}.` }); return; }
+  // The folder the person picked, not a root: linkPlansFolder takes it only
+  // as a real directory that is a copy of the folder the config names.
+  const rawFolder: unknown = req.body?.path;
+  try {
+    linkPlansFolder(projectRoot, rawFolder, changedBy(req));
+  } catch (err) {
+    if (err instanceof PlansFolderError) { res.status(400).json({ error: err.message }); return; }
+    throw err;
+  }
+  const imported = await rebindPlansFolder(projectRoot);
+  res.json({ ...getPlansFolder(projectRoot), imported });
+});
+
+app.delete('/api/plans-folder/link', async (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  unlinkPlansFolder(projectRoot);
+  await rebindPlansFolder(projectRoot);
+  res.json(getPlansFolder(projectRoot));
 });
 
 // C3.2 — keep this machine's state of a task people set two ways at once.
@@ -5774,7 +5843,7 @@ function rearmProjectWatchers(): void {
       startProjectConfigWatcher(proj.path);
       try {
         void startPlanFileWatcher(proj.path);
-        startRecordWatcher(proj.path);
+        void startRecordWatcher(proj.path);
       } catch {
         // plan-file watcher may need a project scan to be useful;
         // best-effort.

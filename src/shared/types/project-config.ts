@@ -31,7 +31,21 @@ export interface ProjectPlansConfig {
    * are stored. When absent, falls through to the per-user setting.
    */
   attachmentLocation?: AttachmentLocation;
+  /**
+   * Phase 32 C3.4a — where this project's plans live when not in the
+   * project itself: a planning repository, by its remote, or a folder a
+   * sync client carries, by its place under the provider's root. Never a
+   * full path: every teammate's copy sits somewhere else. Each device's copy
+   * is confirmed by its person before anything there is read.
+   */
+  folder?: PlansFolderRef;
 }
+
+export type PlansFolderProvider = 'onedrive' | 'sharepoint' | 'folder';
+
+export type PlansFolderRef =
+  | { kind: 'git'; remote: string }
+  | { kind: 'synced'; provider: PlansFolderProvider; place: string };
 
 // --- Channels routing (Phase 2.2) ------------------------------------------
 

@@ -70,11 +70,12 @@ export function signingWay(projectRoot: string): SigningWay {
 }
 
 /**
- * Sign a record this machine is about to write. git's key first; when it
+ * Sign a record this machine is about to write, for a project whose records
+ * go under `home`. git's key (the project's git config) first; when it
  * cannot sign (no agent, a passphrase prompt that times out), the device's,
  * whose introduction is written to the project if it is not there yet.
  */
-export function signRecord(projectRoot: string, record: TaskRecord, bytes: string): RecordSignature {
+export function signRecord(projectRoot: string, home: string, record: TaskRecord, bytes: string): RecordSignature {
   const setup = gitSigningAllowed() ? signingSetup(projectRoot) : null;
   if (setup?.canSign) {
     try {
@@ -87,7 +88,8 @@ export function signRecord(projectRoot: string, record: TaskRecord, bytes: strin
     }
   }
   const key = deviceKey();
-  introduceDeviceKey(projectRoot, record.writer, record.name, key);
+  // Introduced where the records go: the project, or its linked plans folder (C3.4a).
+  introduceDeviceKey(home, record.writer, record.name, key);
   return signWithDevice(key, bytes);
 }
 

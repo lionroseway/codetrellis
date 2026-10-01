@@ -40,6 +40,7 @@ import { getSettings, readGitIdentity } from '../settings-service';
 import { getPlan } from '../plan-service';
 import { applyRecordedState, getItem } from '../plan-item-service';
 import { getLinkedPlanDir } from '../plan-file-service';
+import { plansHome } from '../plans-home';
 import type { PlanItem } from '../../../shared/types';
 import { headOf, headsBy, setHead, setHeadCheck, splitOf } from './heads';
 import type { AtOnceClaim, RecordCheck } from '../../../shared/lib/item-status';
@@ -122,8 +123,9 @@ function checkedCounts(projectRoot: string): SharedTaskStateStatus['checked'] {
   const ctx = checkContext(projectRoot);
   let verified = 0;
   const reasons = new Map<string, number>();
-  for (const f of itemFolders(projectRoot)) {
-    for (const r of readFolder(projectRoot, f)) {
+  const home = plansHome(projectRoot);
+  for (const f of home ? itemFolders(projectRoot) : []) {
+    for (const r of readFolder(home!, f)) {
       if (r.writer === me) continue;
       const v = verifyTaskRecord(r, signedOf(r), ctx);
       if (v.verified) verified++;
@@ -141,7 +143,8 @@ export function getSharedTaskState(projectRoot: string): SharedTaskStateStatus {
   const name = writerName(projectRoot);
   // Introductions are read whether or not sharing is on, so the person can
   // see who has introduced a key before choosing to share.
-  readKeyIntroductions(projectRoot, writerId());
+  const home = plansHome(projectRoot);
+  if (home) readKeyIntroductions(home, writerId());
   const found = records ? ` ${records} record${records === 1 ? '' : 's'} from ${writers} ${writers === 1 ? 'device' : 'devices'} are in the project's files.` : '';
   return {
     project: projectRoot,
@@ -170,7 +173,7 @@ export function setSharedTaskState(projectRoot: string, enabled: boolean, by: st
   );
   markDirty();
   if (enabled) {
-    startRecordWatcher(projectRoot);
+    void startRecordWatcher(projectRoot);
     readProjectRecords(projectRoot);
   } else {
     stopRecordWatcher(projectRoot);
@@ -182,7 +185,11 @@ export function setSharedTaskState(projectRoot: string, enabled: boolean, by: st
 
 /** Every `<plan>/<item>` folder under the records folder, never through a link. */
 function itemFolders(projectRoot: string, onlyPlan?: string): Array<{ plan: string; item: string; dir: string; files: string[] }> {
-  const root = path.join(projectRoot, RECORDS_DIR);
+  // The project's plans folder on this device (C3.4a): the project, or the
+  // folder it links. None when it names one not linked here.
+  const home = plansHome(projectRoot);
+  if (!home) return [];
+  const root = path.join(home, RECORDS_DIR);
   const out: Array<{ plan: string; item: string; dir: string; files: string[] }> = [];
   const dirs = (d: string) => {
     try { return fs.readdirSync(d, { withFileTypes: true }).filter((e) => e.isDirectory() && isRecordId(e.name)).map((e) => e.name); } catch { return []; }
@@ -209,10 +216,10 @@ const signedParts = new WeakMap<TaskRecord, SignedPart>();
 const UNSIGNED: SignedPart = { bytes: '', signature: null };
 const signedOf = (r: TaskRecord): SignedPart => signedParts.get(r) ?? UNSIGNED;
 
-/** One record file, or null when it is not one. */
-function readOne(projectRoot: string, f: { plan: string; item: string; dir: string }, name: string): TaskRecord | null {
+/** One record file, or null when it is not one. `home` is the folder the records sit under. */
+function readOne(home: string, f: { plan: string; item: string; dir: string }, name: string): TaskRecord | null {
   let text: string;
-  try { text = readTextWithin(projectRoot, path.join(f.dir, name), 'task record'); } catch { return null; }
+  try { text = readTextWithin(home, path.join(f.dir, name), 'task record'); } catch { return null; }
   const parsed = parseRecord(text, { plan: f.plan, item: f.item });
   if (!('record' in parsed)) return null;
   signedParts.set(parsed.record, parsed.signed);
@@ -220,17 +227,17 @@ function readOne(projectRoot: string, f: { plan: string; item: string; dir: stri
 }
 
 /** One item's records. A file that is not a record is skipped, never guessed at. */
-function readFolder(projectRoot: string, f: { plan: string; item: string; dir: string; files: string[] }): TaskRecord[] {
+function readFolder(home: string, f: { plan: string; item: string; dir: string; files: string[] }): TaskRecord[] {
   const out: TaskRecord[] = [];
   for (const name of f.files) {
-    const r = readOne(projectRoot, f, name);
+    const r = readOne(home, f, name);
     if (r) out.push(r);
   }
   return out;
 }
 
-function itemFolder(projectRoot: string, planUid: string, itemUid: string) {
-  const dir = path.join(projectRoot, RECORDS_DIR, planUid, itemUid);
+function itemFolder(projectRoot: string, home: string, planUid: string, itemUid: string) {
+  const dir = path.join(home, RECORDS_DIR, planUid, itemUid);
   return itemFolders(projectRoot, planUid).find((f) => f.item === itemUid) ?? { plan: planUid, item: itemUid, dir, files: [] };
 }
 
@@ -276,9 +283,11 @@ export function writeRecordFor(item: PlanItem, by: { author: string; authorType:
   if (!isRecordId(item.planUid) || !isRecordId(item.uid)) return null;
   const root = sharingRootOf(item.planUid);
   if (!root) return null;
+  const home = plansHome(root);
+  if (!home) return null;
   const me = writerId();
-  const folder = itemFolder(root, item.planUid, item.uid);
-  const existing = readFolder(root, folder);
+  const folder = itemFolder(root, home, item.planUid, item.uid);
+  const existing = readFolder(home, folder);
   const mine = existing.filter((r) => r.writer === me);
   let counter = Math.max(0, ...mine.map((r) => r.counter), ...folder.files.map((f) => (f.startsWith(`${me}-`) ? parseInt(f.slice(me.length + 1), 10) || 0 : 0))) + 1;
   while (fs.existsSync(path.join(folder.dir, recordFileName(me, counter)))) counter++;
@@ -288,8 +297,8 @@ export function writeRecordFor(item: PlanItem, by: { author: string; authorType:
     plan: item.planUid, item: item.uid, by, state: stateOf(item),
   };
   // Signed as it is written (C3.3): git's key, else this device's.
-  const signature = signRecord(root, record, recordBytes(record));
-  const file = writeFileWithin(root, path.join(folder.dir, recordFileName(me, counter)), serializeRecord(record, signature), 'task record');
+  const signature = signRecord(root, home, record, recordBytes(record));
+  const file = writeFileWithin(home, path.join(folder.dir, recordFileName(me, counter)), serializeRecord(record, signature), 'task record');
   // Made having seen everyone's latest, so it ends a split this machine had (C3.2).
   const ended = !!headOf(item.uid)?.split;
   setHead(item.uid, me, counter, null);
@@ -345,7 +354,9 @@ export function readProjectRecords(projectRoot: string, onlyPlan?: string, onApp
   const result: ReadResult = { read: 0, applied: [], split: [] };
   if (!isSharingTaskState(projectRoot)) return result;
   const me = writerId();
-  readKeyIntroductions(projectRoot, me);
+  const home = plansHome(projectRoot);
+  if (!home) return result;
+  readKeyIntroductions(home, me);
   let ctx: CheckContext | null = null;
   let changed = false;
   for (const f of itemFolders(projectRoot, onlyPlan)) {
@@ -353,7 +364,7 @@ export function readProjectRecords(projectRoot: string, onlyPlan?: string, onApp
     // Only a task this machine has, in the plan the folder names.
     if (!item || item.planUid !== f.plan || item.kind !== 'action') continue;
     if (getPlan(f.plan)?.projectPath !== projectRoot) continue;
-    const { records, clashing } = distinctRecords(readFolder(projectRoot, f));
+    const { records, clashing } = distinctRecords(readFolder(home, f));
     result.read += records.length;
     const read = readItem(records);
     const known = headOf(item.uid);
@@ -405,9 +416,10 @@ export function trustTeammateKey(writer: string, fingerprint: string, trust: boo
   for (const h of headsBy(writer)) {
     const item = getItem(h.itemUid);
     const root = item ? getPlan(item.planUid)?.projectPath : null;
-    if (!item || !root || !isRecordId(item.planUid) || !isRecordId(item.uid)) continue;
-    const folder = { plan: item.planUid, item: item.uid, dir: path.join(root, RECORDS_DIR, item.planUid, item.uid) };
-    const r = readOne(root, folder, recordFileName(writer, h.counter));
+    const home = root ? plansHome(root) : null;
+    if (!item || !root || !home || !isRecordId(item.planUid) || !isRecordId(item.uid)) continue;
+    const folder = { plan: item.planUid, item: item.uid, dir: path.join(home, RECORDS_DIR, item.planUid, item.uid) };
+    const r = readOne(home, folder, recordFileName(writer, h.counter));
     if (!r) continue;
     setHeadCheck(item.uid, recordCheck(r, verifyTaskRecord(r, signedOf(r), checkContext(root))));
     rechecked.push(item.uid);
@@ -418,6 +430,7 @@ export function trustTeammateKey(writer: string, fingerprint: string, trust: boo
 // ── Watching ─────────────────────────────────────────────────────────────
 
 const watchers = new Map<string, FSWatcher>();
+const watcherReady = new Map<string, Promise<void>>();
 let appliedListener: ((item: PlanItem) => void) | undefined;
 
 /** Told of each item whose state a teammate's record changed (the server broadcasts it). */
@@ -431,10 +444,19 @@ export function readAndTell(projectRoot: string, onlyPlan?: string): ReadResult 
 }
 
 /** Watch a project's records folder while sharing is on: a pull or a sync lands files. */
-export function startRecordWatcher(projectRoot: string): void {
-  if (watchers.has(projectRoot) || !isSharingTaskState(projectRoot)) return;
-  const dir = path.join(projectRoot, RECORDS_DIR);
-  try { fs.mkdirSync(dir, { recursive: true }); } catch { return; }
+/**
+ * Resolves once the watcher has scanned what is there. A folder made before
+ * then (the first record written right after sharing is turned on) may never
+ * be watched, so a teammate's record pulled into it later would go unread:
+ * callers that write next wait for it (C3.4a's tests found it on a cold run).
+ */
+export function startRecordWatcher(projectRoot: string): Promise<void> {
+  if (watchers.has(projectRoot)) return watcherReady.get(projectRoot) ?? Promise.resolve();
+  if (!isSharingTaskState(projectRoot)) return Promise.resolve();
+  const home = plansHome(projectRoot);
+  if (!home) return Promise.resolve();
+  const dir = path.join(home, RECORDS_DIR);
+  try { fs.mkdirSync(dir, { recursive: true }); } catch { return Promise.resolve(); }
   let timer: NodeJS.Timeout | null = null;
   const watcher = chokidar.watch(dir, {
     ignoreInitial: true, persistent: true, depth: 3, followSymlinks: false,
@@ -450,11 +472,19 @@ export function startRecordWatcher(projectRoot: string): void {
   });
   watcher.on('error', (err) => console.warn('[TaskRecords] watcher error:', err));
   watchers.set(projectRoot, watcher);
+  const ready = new Promise<void>((resolve) => {
+    watcher.once('ready', () => resolve());
+    // A watcher that never reports ready must not hold a request forever.
+    setTimeout(resolve, 5_000).unref?.();
+  });
+  watcherReady.set(projectRoot, ready);
+  return ready;
 }
 
 export function stopRecordWatcher(projectRoot: string): void {
   const w = watchers.get(projectRoot);
   if (!w) return;
   watchers.delete(projectRoot);
+  watcherReady.delete(projectRoot);
   void w.close();
 }

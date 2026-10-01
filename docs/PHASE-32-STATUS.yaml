@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — C3.3: signed task-state records"
-  status: "B8.3a merged (#275). Track D (the codetrellis CLI) added after C3, the owner's decision. C3.3 built: each record is signed when written, with git's SSH key when git signing is set up, else with a key the app makes for the device, introduced once in .codetrellis/keys; a teammate's key is trusted once in Settings → Shared task state after checking its fingerprint; a record that verifies reads \"in their signed record\", any other \"unverified\" with why; trusting a key relabels that device's records without a new change. Unit (signing 8, record, item-status), harness (task-records 19, git key and device key), browser (shared-task-state 8) green locally"
-  next: "Merge C3.3 when green; then C3.4 (a linked plans folder: OneDrive and SharePoint first), C3.5, C3.6; then D1 (the CLI)"
+  step: "Wave 2 — C3.4a: link a plans folder"
+  status: "C3.4a built: the committed config names a plans folder portably (a git remote, or a provider and a place), each device's copy confirmed by the person; plans, records and keys read and written there; Settings → Plans folder. Found and fixed: the records watcher was not awaited, so a cold first run could miss a teammate's record. Unit, harness (plans-folder 9, plan-file 66, task-records), browser (plans-folder, shots) green locally"
+  next: "Merge C3.4a when green; then C3.4b (OneDrive and SharePoint found where their clients put them; placeholders never opened)"
   blockers: "None"
   updated: 2026-10-01
 sections:
@@ -546,7 +546,14 @@ sections:
           - id: C3.3
             title: "Signed records: the person's git SSH key when set up, else a key the app makes for the device"
           - id: C3.4
-            title: "A linked plans folder: a planning repo or a synced folder (OneDrive and SharePoint first), placeholders never downloaded, materials by place and hash"
+            title: "A linked plans folder: a planning repo or a synced folder (OneDrive and SharePoint first), placeholders never downloaded, materials by place and hash, split in three:"
+            items:
+              - id: C3.4a
+                title: "Link a plans folder: named portably in the committed config, confirmed once per device by the person; plans, records and keys read and written there"
+              - id: C3.4b
+                title: "OneDrive and SharePoint found where their clients put them; a placeholder is \"not on this device\" and never opened"
+              - id: C3.4c
+                title: "Materials in the folder by their place and hash, never a full path; A6's signals match across machines"
           - id: C3.5
             title: "Teammates' material reads, a separate switch, on by default once a folder is shared"
           - id: C3.6

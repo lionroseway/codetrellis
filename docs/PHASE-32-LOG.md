@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — C3.3: signed task-state records |
-| **Status** | B8.3a merged (#275). Track D (the codetrellis CLI) added after C3, the owner's decision. C3.3 built: each record is signed when written, with git's SSH key when git signing is set up, else with a key the app makes for the device, introduced once in .codetrellis/keys; a teammate's key is trusted once in Settings → Shared task state after checking its fingerprint; a record that verifies reads "in their signed record", any other "unverified" with why; trusting a key relabels that device's records without a new change. Unit (signing 8, record, item-status), harness (task-records 19, git key and device key), browser (shared-task-state 8) green locally |
-| **In flight** | C3.3 building on `feat/phase-32-c3-3-signed-records` |
-| **Last merged** | B8.3a (#275, `5e2269f`) |
-| **Next action** | Merge C3.3 when green; then C3.4 (a linked plans folder: OneDrive and SharePoint first), C3.5, C3.6; then D1 (the CLI) |
+| **Stage / step** | Wave 2 — C3.4a: link a plans folder |
+| **Status** | C3.4a built: the committed config names a plans folder portably (a git remote, or a provider and a place), each device's copy confirmed by the person; plans, records and keys read and written there; Settings → Plans folder. Found and fixed: the records watcher was not awaited, so a cold first run could miss a teammate's record. Unit, harness (plans-folder 9, plan-file 66, task-records), browser (plans-folder, shots) green locally |
+| **In flight** | C3.4a building on `feat/phase-32-c3-4a-link-plans-folder` |
+| **Last merged** | C3.3 (#279, `960f7f5`) |
+| **Next action** | Merge C3.4a when green; then C3.4b (OneDrive and SharePoint found where their clients put them; placeholders never opened) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `5e2269f`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `960f7f5`, with open PRs from GitHub.
 
 ---
 
@@ -233,8 +233,11 @@
 - [ ] C3 A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice), refined in EXECUTION §6: — building
   - [x] C3.1 Task state as records in the project's files: one new file per change, one writer each, read from all; a teammate's state says whose record and that it is unverified; off until the person turns it on (#271)
   - [x] C3.2 A real disagreement is a signal: people acting at once are named on the task and in the inbox until one decides (#272)
-  - [ ] C3.3 Signed records: the person's git SSH key when set up, else a key the app makes for the device — building
-  - [ ] C3.4 A linked plans folder: a planning repo or a synced folder (OneDrive and SharePoint first), placeholders never downloaded, materials by place and hash
+  - [x] C3.3 Signed records: the person's git SSH key when set up, else a key the app makes for the device (#279)
+  - [ ] C3.4 A linked plans folder: a planning repo or a synced folder (OneDrive and SharePoint first), placeholders never downloaded, materials by place and hash, split in three: — building
+    - [ ] C3.4a Link a plans folder: named portably in the committed config, confirmed once per device by the person; plans, records and keys read and written there — building
+    - [ ] C3.4b OneDrive and SharePoint found where their clients put them; a placeholder is "not on this device" and never opened
+    - [ ] C3.4c Materials in the folder by their place and hash, never a full path; A6's signals match across machines
   - [ ] C3.5 Teammates' material reads, a separate switch, on by default once a folder is shared
   - [ ] C3.6 The C3 done-when
 - [ ] C4 Recurring playbooks
@@ -390,9 +393,46 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | In CI, `check` and `status` also gate on conformity with what the plan and the docs already say: a task marked done with a failing criterion, a system doc referencing a changed file gone stale. Declared product flows checked hop by hop against the cross-system map are a follow-on | Owner's point that pipelines could run conformity checks for product flows. The first two have a pass or fail today and cost little; declaring flows is a new concept, kept out of an already large phase unless the owner pulls it in |
 | 2026-10-01 | C3.3: a key file in the project is an introduction, never trust. A teammate's device key is trusted once, by the person in the app window, after comparing its fingerprint (computed by the app, never read from the file); trust is per device key, not per project | Anyone who can write to the folder can write a key file, so believing one would make signing worthless. Comparing a fingerprint once is how SSH and Signal settle the same question, and a teammate should not be introduced again for every project |
 | 2026-10-01 | C3.3: a record that does not verify is still read as it was before C3.3, as the teammate's and "unverified", with why; it is not refused | Refusing unsigned records would break every team mid-upgrade and every teammate whose key is not trusted yet. What C3.3 adds is proof where there is a key, and the words to tell the two apart; whether an unverified state should be taken at all is a later choice for teams that need it |
+| 2026-10-01 | C3.4 is refined into C3.4a (link a plans folder), C3.4b (OneDrive and SharePoint; placeholders never opened) and C3.4c (materials by place and hash) | Linking moves where every plan, record and key is read and written, so it stands alone with its own two-machine test; the providers and placeholders are platform work; place-and-hash changes what A6 records |
+| 2026-10-01 | C3.4a: the committed config names a plans folder portably (a git remote, or a provider and a place under its root), never a full path; each device's copy is confirmed by the person, in the app window, before anything there is read | A teammate's OneDrive sits at a different path on every machine, so a path cannot be shared; and a cloned repository must never point the app at a folder by itself, as C2.2a decided for review hosts |
 ---
 
 ## Entries
+
+### 2026-10-01: C3.4a — link a plans folder
+- **Journey.** Dana's team keeps its plans in their own repository. In
+  Settings → Plans folder she picks "A planning repository", gives its
+  remote and saves it for the team: it goes in the project's committed
+  config, her path does not. The section says the plans live there and
+  that nothing is read until she links her copy. She gives the wrong
+  folder and is told its remote is another; then her clone, and the
+  section shows it linked, with Unlink. Her plan and its task records are
+  written to the planning repository, not the code. Sam clones both, his
+  planning copy somewhere else: his app reads nothing there until he
+  links it, then has the plan, and his progress reaches Dana through the
+  planning repository. A OneDrive or SharePoint folder is named by its
+  place under the provider's root instead.
+- **Built.** `plans-home.ts` (`plansHome`, naming, linking, matching a
+  copy, `projectOfPlansHome`); `plans.folder` in the project config with
+  its parser; `linked_plans_folder`; plan-file export, discovery, linked
+  dir, prune and watcher, channel events, contributions, plan history,
+  pantry, task records and key introductions all built on `plansHome`;
+  import maps a linked folder to its project; the trusted plan-dir check
+  accepts linked folders; four routes; Settings → Plans folder.
+- **Found on the way.** On a cold first run, Sam's record never reached
+  Dana: the records watcher was started but not awaited when sharing was
+  turned on, and Dana's next change created the records folder before
+  chokidar was ready, so that folder was never watched. The watcher's start
+  is now awaited where a record may be written next, as the plan watcher's
+  already was.
+- **Tests.** Unit `plans-home.test.ts` (remotes, the config's refusals,
+  synced matching, words). Harness `plans-folder.test.ts` 9 (here by
+  default; named, unlinked, export refused; wrong folder refused; linked,
+  plan and records in the planning repo; Sam unlinked reads nothing, then
+  links at his own path and has the plan; his progress reaches Dana;
+  unlinked stops reading; synced by place; plain HTTP refused). Browser
+  `plans-folder.spec.ts` 2, with shots. The plan-file harness tests (66)
+  pass unchanged.
 
 ### 2026-10-01: C3.3 — signed task-state records
 - **Journey.** Sam has no git signing key, so the first record his app

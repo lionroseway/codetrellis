@@ -37,6 +37,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { canonicalRoot, ConfinementError } from './confined-fs';
 import { listEvictedProjects, listRecentProjects, MAX_RECENT_UNPINNED } from './recent-projects-service';
+import { linkedPlansHomes as linkedHomes } from './plans-home';
 
 /**
  * Canonicalise for comparison, tolerating a path that no longer exists.
@@ -209,6 +210,12 @@ export function resolveTrustedPlanDir(candidate: unknown, label = 'planDir'): st
   for (const root of listTrustedRoots()) {
     const canonRoot = canonicaliseForCompare(root);
     if (canonRoot && path.dirname(canon) === path.join(canonRoot, '.codetrellis', 'plans')) return canon;
+  }
+  // A plans folder the person linked to an opened project, on this device (C3.4a).
+  const trusted = new Set(listTrustedRoots().map(canonicaliseForCompare).filter(Boolean));
+  for (const { project, home } of linkedHomes()) {
+    const canonHome = canonicaliseForCompare(home);
+    if (canonHome && trusted.has(canonicaliseForCompare(project)) && path.dirname(canon) === path.join(canonHome, '.codetrellis', 'plans')) return canon;
   }
   throw new ConfinementError(
     `${label}: "${candidate}" is not a plan directory (.codetrellis/plans/<slug>) of a project this app has opened.`,
