@@ -19,13 +19,13 @@
 |---|---|
 | **Stage / step** | Track B — B8.4b: the grounding overlay in replay (J2) |
 | **Status** | B8.4a in review (#292). B8.4b built: each report keeps its cases; GET /api/tests/grounding/map?at= answers from the reports handed over by then on the replay frame's graph (older than the code against the first frame after the run); the overlay follows the replay cursor and the canvas says tests as reported by then. Harness grounding-replay 5 (and 53 related), browser graph/grounding-replay.spec (shots) |
-| **In flight** | B8.4a in review (#292) on `feat/phase-32-b8-4a-stale-done`; B8.4b building on `feat/phase-32-b8-4b-grounding-replay` |
-| **Last merged** | B8.3b (#291, `13e8c2e`) |
+| **In flight** | B8.4b in review (#293) on `feat/phase-32-b8-4b-grounding-replay` |
+| **Last merged** | B8.4a (#292, `fb3d64f`) |
 | **Next action** | Merge B8.4a, then B8.4b, when green; then B9 (play-forward) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `13e8c2e`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `fb3d64f`, with open PRs from GitHub.
 
 ---
 
@@ -206,8 +206,8 @@
     - [x] B8.3a The grounding overlay on the graph: ✗ ⚠ ✓ ○ on files, summed on clusters, the same answer as the Inspector (#275)
     - [x] B8.3b A grounding line on each task: "3 criteria · 2 grounded · 1 waiting on a person" (window, phone, get_brief) (#291)
   - [ ] B8.4 The done-when, split in two: — building
-    - [ ] B8.4a J1: an agent's "done" on a test report older than the code is refused, and the task says "⚠ tests older than the code" (#292) — in review
-    - [ ] B8.4b J2: the grounding overlay at a past moment in replay (billing/ from "○ no tests" to "✓ 12 passing") — building
+    - [x] B8.4a J1: an agent's "done" on a test report older than the code is refused, and the task says "⚠ tests older than the code" (#292)
+    - [ ] B8.4b J2: the grounding overlay at a past moment in replay (billing/ from "○ no tests" to "✓ 12 passing") (#293) — in review
 - [ ] B9 Play-forward (code, and the materials tasks rely on)
 - [ ] B10 The record
 
