@@ -119,7 +119,9 @@ export function seriesOf(projectRoot: string, rule: RecurrenceRule, now = Date.n
     rule,
     words: seriesWords(rule),
     runs,
-    due: open ? { period: open.period, label: open.label, since: open.dueAt, words: `${rule.title} is due ${sinceWords(rule, open.dueAt)}` } : null,
+    due: open
+      ? { period: open.period, label: open.label, since: open.dueAt, words: `${rule.title} is due ${sinceWords(rule, open.dueAt)}`, dismissed: isDismissed(projectRoot, rule.id, open.period) }
+      : null,
   };
 }
 
@@ -129,11 +131,30 @@ export function seriesFor(projectRoot: string, now = Date.now()): RecurringSerie
 
 /** What a run knows about its series, as started here. */
 export function runInfo(planUid: string): RecurrenceInfo | null {
-  const row = getDb().exec('SELECT rule_id, period, label, previous_uid, carried_json FROM recurring_runs WHERE plan_uid = ?', [planUid])[0]?.values[0];
+  const row = getDb().exec('SELECT rule_id, period, label, previous_uid, carried_json, started_by, started_at FROM recurring_runs WHERE plan_uid = ?', [planUid])[0]?.values[0];
   if (!row) return null;
   let carried: RecurrenceInfo['carried'] = [];
   try { carried = JSON.parse(String(row[4])) as RecurrenceInfo['carried']; } catch { /* kept empty */ }
-  return { rule: String(row[0]), period: String(row[1]), label: String(row[2]), previous: row[3] === null ? null : String(row[3]), carried };
+  return {
+    rule: String(row[0]), period: String(row[1]), label: String(row[2]), previous: row[3] === null ? null : String(row[3]), carried,
+    startedBy: String(row[5]), startedAt: Number(row[6]),
+  };
+}
+
+function isDismissed(projectRoot: string, ruleId: string, period: string): boolean {
+  return (getDb().exec('SELECT 1 FROM recurring_dismissed WHERE project_root = ? AND rule_id = ? AND period = ?', [projectRoot, ruleId, period])[0]?.values.length ?? 0) > 0;
+}
+
+/**
+ * "Not this time" (C4.2a): the person leaves the due run unstarted. It is not
+ * asked about again on this device, and reads missed once its period ends.
+ */
+export function dismissDue(projectRoot: string, ruleId: string, by: string, now = Date.now()): { period: string; label: string } {
+  const s = seriesOf(projectRoot, ruleOf(projectRoot, ruleId), now);
+  if (!s.due) throw new RecurringError(`${s.rule.title} has no run due now`, 409);
+  getDb().run('INSERT OR REPLACE INTO recurring_dismissed (project_root, rule_id, period, by_name, at) VALUES (?, ?, ?, ?, ?)', [projectRoot, ruleId, s.due.period, by, now]);
+  markDirty();
+  return { period: s.due.period, label: s.due.label };
 }
 
 export interface StartedRun { plan: Plan; created: boolean; info: RecurrenceInfo }
@@ -208,5 +229,5 @@ export function startRun(projectRoot: string, ruleId: string, by: { author: stri
     [uid, projectRoot, rule.id, period, label, previous?.uid ?? null, JSON.stringify(carried), now, by.author],
   );
   markDirty();
-  return { plan: getPlan(uid) ?? applied.plan, created: true, info: { rule: rule.id, period, label, previous: previous?.uid ?? null, carried } };
+  return { plan: getPlan(uid) ?? applied.plan, created: true, info: { rule: rule.id, period, label, previous: previous?.uid ?? null, carried, startedBy: by.author, startedAt: now } };
 }

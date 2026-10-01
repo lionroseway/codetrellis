@@ -56,7 +56,14 @@ export interface RecurringSeries {
   /** The counted periods up to now (at most the last eight), then the next one. */
   runs: RecurringRun[];
   /** The current period, when its run is due and not started: "Weekly security review is due since Monday 09:00". */
-  due: { period: string; label: string; since: number; words: string } | null;
+  due: {
+    period: string;
+    label: string;
+    since: number;
+    words: string;
+    /** The person chose "Not this time" on this device (C4.2a): not asked again; missed when the period ends. */
+    dismissed: boolean;
+  } | null;
 }
 
 /** What a run knows about its series (kept where it was started; found by id elsewhere). */
@@ -68,4 +75,7 @@ export interface RecurrenceInfo {
   previous: string | null;
   /** Tasks carried from it, with the period they came from. */
   carried: Array<{ itemUid: string; from: string }>;
+  /** Who started it here: a person, or the schedule (C4.2a), and when. */
+  startedBy?: string;
+  startedAt?: number;
 }

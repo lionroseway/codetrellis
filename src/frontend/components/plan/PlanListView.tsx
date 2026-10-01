@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { RecurringSeriesList } from './RecurringSeriesList';
 import { ClipboardList, Plus, FolderInput, Layers, Trash2, Search, X, CheckSquare, Square, AlertTriangle, RefreshCw, FolderOpen } from 'lucide-react';
 import { usePlanStore } from '../../stores/plan-store';
 import { useProjectStore } from '../../stores/project-store';
@@ -510,6 +511,9 @@ export function PlanList() {
           })}
         </div>
       )}
+
+      {/* Phase 32 C4.2a — each recurring playbook as one row: its runs by period. */}
+      <RecurringSeriesList root={root ?? null} />
 
       {activePlanRow && (
         <button
