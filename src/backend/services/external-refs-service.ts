@@ -12,6 +12,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { getDb } from './database';
+import * as _lazy___plan_file_service from './plan-file-service';
 import type { ExternalRef, ExternalRefKind } from '../../shared/types';
 
 // ── URL-to-kind inference ───────────────────────────────────────────────
@@ -127,6 +128,17 @@ export function getExternalRefsByPlan(planUid: string): ExternalRef[] {
   return (result[0]?.values ?? []).map(rowToRef);
 }
 
+/**
+ * A ref rides in its item's file (Phase 32 C2.5a), so adding, editing or
+ * removing one schedules the plan's write-through, as an item change does.
+ */
+function writeThroughFor(itemUid: string): void {
+  try {
+    const r = getDb().exec(`SELECT plan_uid FROM plan_items WHERE uid = ?`, [itemUid])[0]?.values[0];
+    if (r) _lazy___plan_file_service.scheduleWriteThrough(r[0] as string);
+  } catch { /* auto-sync not wired: the DB is still right */ }
+}
+
 export function createExternalRef(input: {
   itemUid: string;
   url: string;
@@ -165,6 +177,7 @@ export function createExternalRef(input: {
     ],
   );
 
+  writeThroughFor(input.itemUid);
   return {
     uid,
     itemUid: input.itemUid,
@@ -198,9 +211,13 @@ export function updateExternalRef(
   if (sets.length === 0) return;
   vals.push(uid);
   d.run(`UPDATE external_refs SET ${sets.join(', ')} WHERE uid = ?`, vals);
+  const ref = getExternalRef(uid);
+  if (ref) writeThroughFor(ref.itemUid);
 }
 
 export function deleteExternalRef(uid: string): void {
   const d = getDb();
+  const ref = getExternalRef(uid);
   d.run(`DELETE FROM external_refs WHERE uid = ?`, [uid]);
+  if (ref) writeThroughFor(ref.itemUid);
 }
