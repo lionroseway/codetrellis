@@ -69,6 +69,7 @@ import { heldByAnotherCheckout } from './checkout-identity';
 import { cleanBranch } from './section-workstreams';
 import { guardDiskEdit, settleDiskHold } from './plan-doc-guard';
 import { onHitAnswered } from './breakpoint-service';
+import { importItemRefs, importPlanRefs, refsForItem, refsForPlan } from './plan-file-refs';
 
 // --- Public surface ---
 
@@ -458,8 +459,9 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
 
   const projectPath = importedPlanRoot(planUid, planDir, planRaw.projectPath);
 
-  // 1. Plan upsert (same for V1 and V2).
+  // 1. Plan upsert (same for V1 and V2), and its tickets (C2.5a).
   upsertPlan(planUid, planRaw, projectPath);
+  if (planRaw.refs !== undefined) importPlanRefs(planUid, planRaw.refs);
 
   // 2. Detect format: version:2 in plan.yaml OR items/ directory → V2.
   const isV2 = planRaw.version === 2 || fs.existsSync(path.join(planDir, 'items'));
@@ -761,6 +763,9 @@ function upsertItem(
   if (item && Array.isArray(raw.criteria)) {
     criteriaService.importCriteria(item.uid, raw.criteria);
   }
+
+  // Phase 32 C2.5a — its links, cleaned; a file adds, never removes.
+  if (item && raw.refs !== undefined) importItemRefs(item.uid, raw.refs);
 
   // Inline comments
   if (Array.isArray(raw.comments)) {
@@ -1315,6 +1320,9 @@ function serializePlan(plan: Plan & { tasks?: Task[] }, version?: 1 | 2) {
   if (plan.scope && plan.scope.length > 0) {
     obj.scope = [...plan.scope].sort();
   }
+  // Phase 32 C2.5a — the plan's tickets, so its lineage survives a pull.
+  const refs = refsForPlan(plan.uid);
+  if (refs.length) obj.refs = refs;
   return obj;
 }
 
@@ -1385,6 +1393,10 @@ function serializeItem(item: PlanItem): Record<string, unknown> {
   // No updatedAt (C2.4b): every change bumps it, a status change too, so
   // writing it would rewrite the file for state. When an item last changed
   // is in git's history of its file.
+
+  // Phase 32 C2.5a — the links attached to it: tickets, designs, docs.
+  const refs = refsForItem(item.uid);
+  if (refs.length) obj.refs = refs;
 
   // Inline attachments
   if (attachments.length) {

@@ -202,6 +202,11 @@ since the unified item model, so a note written in the app reaches
 everyone who can read the repository — including, for a public repo, the
 public.
 
+**Ticket refs ride too** (Phase 32 C2.5a). `plan.yaml` names the plan's
+tickets and each item's file names its links, under `refs` (url, key,
+kind, title), so a plan's lineage survives a pull. Import adds a ref the
+machine lacks and never removes one; only http(s) links are read.
+
 **To keep something off disk**, mark the item `local` (Phase 3.2). A
 local item — and so its comments and attachments — is filtered out of the
 export by `listItemsForExport`. Its children are local too, unless one

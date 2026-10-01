@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — C2.4b: no state change writes a file |
-| **Status** | C2.4a merged (#266). C2.4b built: an item's file carries no status, progress, blocked reason, claim, progress report or updatedAt; a state-only update and a claim schedule no write-through; unchanged files are not rewritten; import still reads an older file's status and leaves this machine's claim alone. Unit, harness (plan-state-writes 4, task-context, the plan-file specs) green locally |
-| **In flight** | C2.4b building on `feat/phase-32-c2-4b-no-state-writes` |
-| **Last merged** | C2.4a (#266, `dd69b85`) |
-| **Next action** | Merge C2.4b when CI is green; then C2.5 (ticket refs in the plan files; approvals as signed statements), refined first |
+| **Stage / step** | Wave 2 — C2.5a: ticket refs in the plan files |
+| **Status** | C2.4 done (#266, #267). C2.5 refined into a (refs) and b (signed approvals with the git SSH signing key; there is no device signing key to reuse). C2.5a built: plan.yaml and item files carry their refs; import adds them cleaned (http(s) only, bounded) and never removes one; a ref change writes the plan's files; after a pull the lineage names the ticket. Unit, harness (plan-file-refs 4 and the plan-file specs) green locally |
+| **In flight** | C2.5a building on `feat/phase-32-c2-5a-ticket-refs` |
+| **Last merged** | C2.4b (#267, `9466c1e`) |
+| **Next action** | Merge C2.5a when CI is green; then C2.5b on feat/phase-32-c2-5b-signed-approvals |
 | **Blockers** | none |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `dd69b85`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `9466c1e`, with open PRs from GitHub.
 
 ---
 
@@ -215,10 +215,12 @@
     - [x] C2.2a Turning a review host on: detected from the remote, a per-device switch, the token in the OS keychain, Settings → Review hosts; no request yet (#263)
     - [x] C2.2b GitHub behind it: open, merged and closed pull requests, checks and approvals, read only when turned on; in review and closed, from GitHub (#264)
   - [x] C2.3 GitLab and Bitbucket on the same interface (Azure DevOps, Gitea later) (#265)
-  - [ ] C2.4 Status read, not written: intent in the plan's YAML, state from git, a host or the plan itself, each saying its source; no STATUS.md — building
+  - [x] C2.4 Status read, not written: intent in the plan's YAML, state from git, a host or the plan itself, each saying its source; no STATUS.md
     - [x] C2.4a Every item a state with its source (git, a host, or the plan with who recorded it), and one status view: progress, waiting, in progress, lineage; window, phone and get_plan (#266)
-    - [ ] C2.4b No state change writes a file: state leaves the plan's files, a state-only change schedules no write-through, unchanged files are not rewritten — building
-  - [ ] C2.5 Ticket refs in the plan files; approvals as signed statements
+    - [x] C2.4b No state change writes a file: state leaves the plan's files, a state-only change schedules no write-through, unchanged files are not rewritten (#267)
+  - [ ] C2.5 Ticket refs in the plan files; approvals as signed statements — building
+    - [ ] C2.5a Ticket refs in the plan files: plan.yaml and item files name their tickets and links; import adds, cleans, never removes; lineage survives a pull — building
+    - [ ] C2.5b Approvals as signed statements: an SSH-signed record per approval when git signing is set up, verified on import against git's allowed signers
   - [ ] C2.6 Teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when
 - [ ] C3 A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice)
 - [ ] C4 Recurring playbooks
@@ -344,9 +346,38 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | C2.4 is refined into C2.4a (every item a state with its source, and one view, in the window, on the phone and in `get_plan`) and C2.4b (no state change writes a file) | The read side stands alone and is what every surface shows. Taking state out of the plan's files changes what a teammate pulls, so it is its own step with its own test that a status change, a claim and progress leave `git status` clean |
 | 2026-10-01 | An item on a branch takes git's state (or the host's) even when the plan records something else; one whose branch git has not seen yet keeps the plan's state with a note; a section with no branch sums the tasks under it, and one with none is "context". Progress counts a task done when the plan says done or git (or a host) says merged | Git is proof for code, as C2.1 decided; until the branch exists git proves nothing, and the plan's record is the better answer. A section's own status is not recorded anywhere, so it is read from its tasks. A merged branch is finished whatever the task row says, so the header and the view must count it |
 | 2026-10-01 | The plan's own state names who recorded it from the newest `status_changed` plan event, and the plan's state is shown in the same type as git's, teal rather than grey | Who recorded a state is what makes a plan-recorded state checkable, and the event log already holds it with the transport's author. Grey would read as less certain, which the shared-work doc rules out for a task with no branch |
+| 2026-10-01 | C2.5 is refined into C2.5a (ticket refs in the plan files) and C2.5b (approvals as signed statements). Signed approvals use the approver's git SSH signing key, verified against git's `gpg.ssh.allowedSignersFile`, not a device key | The shared-work doc said to reuse "the key the device already holds for pairing", and there is none: pairing proves possession of a per-device shared secret, and the DTLS certificates are minted afresh each launch. Git's SSH signing is what a team already trusts for commits, keeps its allowed-signers list in one place, and needs no new key management in the app |
+| 2026-10-01 | A plan file's refs are added on import, never removed, and only http(s) links are read | A file is anyone's text. Adding is what a pull should do; removing on a file's word would let an edit take a ticket away silently, and a `javascript:` or `file:` link would be one click from harm |
 ---
 
 ## Entries
+
+### 2026-10-01: C2.5a — ticket refs in the plan files
+
+C2.4b merged (#267), so C2.4 is done. C2.5 is refined into a and b
+(decision rows): signed approvals will use the git SSH signing key, since
+there is no device signing key to reuse.
+
+- **Both files name their refs**: `plan.yaml` the plan's tickets (from
+  `set_plan_external_ref` or an intake), each item's file its links, under
+  `refs` with url, key, kind and a title that says more than the key.
+- **Import adds, cleans, never removes** (`plan-file-refs.ts`): http(s)
+  links only, keys and titles bounded, at most 50 a file; a ref this
+  machine has gets the file's title, and a file without one takes nothing
+  away.
+- **A ref change writes the plan's files**: adding, editing or removing a
+  link or a ticket schedules the write-through, as an item change does
+  (neither did before, so a ticket set after the export reached nobody).
+- **After a pull, the lineage names the ticket**: a teammate's status view
+  reads "FIN-88 → this plan → …".
+
+Tests: unit `plan-file-refs.test.ts` (2); harness `plan-file-refs.test.ts`
+(4: both files name their refs; adding a link writes; a teammate's import
+has the ticket in the lineage and the links; a link that is not http(s) is
+dropped and a file without a ref takes none away); the plan-file specs
+(`plan-export`, `task-context`, `plan-state-writes`, `intake`, `stack`,
+`external-sync-endpoint`) green. No new screen: the lineage is the status
+view's (C2.4a).
 
 ### 2026-10-01: C2.4b — no state change writes a file
 
