@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — C3.4b: OneDrive and SharePoint; files still in the cloud |
-| **Status** | C3.4a merged (#280). C3.4b built: OneDrive and SharePoint found where their clients put them and offered; a placeholder is never read, written over or deleted (two export paths would have lost a teammate's newer copy, found by the tests and fixed); Settings counts what is not on the device. Unit (cloud-files 5), harness (plans-folder 14; related 67), browser (plans-folder 3, shots) green locally |
-| **In flight** | C3.4b building on `feat/phase-32-c3-4b-cloud-placeholders` |
-| **Last merged** | C3.4a (#280, `ad2ded7`) |
-| **Next action** | Merge C3.4b when green; then C3.4c (materials by place and hash) |
+| **Stage / step** | Wave 2 — C3.4c: materials by their place in the plans folder |
+| **Status** | C3.4b merged (#281). C3.4c built: a material in the linked plans folder is stored as plans://<place> and read at each device's own path; roles travel in plan files; imported materials are watched; three readers no longer open a file still in the cloud. Unit (material-place 2), harness (plans-folder 18; related 86) green locally |
+| **In flight** | C3.4c building on `feat/phase-32-c3-4c-materials-by-place` |
+| **Last merged** | C3.4b (#281, `254dd4c`) |
+| **Next action** | Merge C3.4c when green; then C3.5 (teammates' material reads, on by default once a folder is shared), C3.6 (the C3 done-when); then D1 (the CLI) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `ad2ded7`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `254dd4c`, with open PRs from GitHub.
 
 ---
 
@@ -236,8 +236,8 @@
   - [x] C3.3 Signed records: the person's git SSH key when set up, else a key the app makes for the device (#279)
   - [ ] C3.4 A linked plans folder: a planning repo or a synced folder (OneDrive and SharePoint first), placeholders never downloaded, materials by place and hash, split in three: — building
     - [x] C3.4a Link a plans folder: named portably in the committed config, confirmed once per device by the person; plans, records and keys read and written there (#280)
-    - [ ] C3.4b OneDrive and SharePoint found where their clients put them; a placeholder is "not on this device" and never opened — building
-    - [ ] C3.4c Materials in the folder by their place and hash, never a full path; A6's signals match across machines
+    - [x] C3.4b OneDrive and SharePoint found where their clients put them; a placeholder is "not on this device" and never opened (#281)
+    - [ ] C3.4c Materials in the folder by their place and hash, never a full path; A6's signals match across machines — building
   - [ ] C3.5 Teammates' material reads, a separate switch, on by default once a folder is shared
   - [ ] C3.6 The C3 done-when
 - [ ] C4 Recurring playbooks
@@ -396,9 +396,37 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | C3.4 is refined into C3.4a (link a plans folder), C3.4b (OneDrive and SharePoint; placeholders never opened) and C3.4c (materials by place and hash) | Linking moves where every plan, record and key is read and written, so it stands alone with its own two-machine test; the providers and placeholders are platform work; place-and-hash changes what A6 records |
 | 2026-10-01 | C3.4a: the committed config names a plans folder portably (a git remote, or a provider and a place under its root), never a full path; each device's copy is confirmed by the person, in the app window, before anything there is read | A teammate's OneDrive sits at a different path on every machine, so a path cannot be shared; and a cloned repository must never point the app at a folder by itself, as C2.2a decided for review hosts |
 | 2026-10-01 | C3.4b: a file still only in the cloud is never read, written over or deleted by the app; it waits for the sync client, and the folder says how many are waiting | Reading downloads it, and writing or deleting it acts on what may be a teammate's newer copy. Waiting costs a teammate's change arriving late; acting costs it being lost |
+| 2026-10-01 | C3.4c: a material in the linked plans folder is stored as `plans://<path in the folder>`; a file reference's role travels in the plan files, its hash never does | The place is the same on every machine, the path is not. A hash taken on another machine is a claim; each device takes its own and compares |
 ---
 
 ## Entries
+
+### 2026-10-01: C3.4c — materials by their place in the plans folder
+- **What was already true.** Materials were stored relative to the project
+  root since Phase 31 (`toProjectRelative`), and A6's signals compare that
+  string and the sha256, so inside a project two machines already agree.
+  The gap was a material kept in the team's plans folder, beside the plans,
+  which could not be recorded at all.
+- **Journey.** Dana's team keeps the sales export in its OneDrive folder.
+  She records it as a material for two tasks from her copy: it is stored
+  as `plans://Materials/sales.csv`, and the plan's files carry that, not
+  her path. On Sam's machine, his copy of the folder somewhere else, the
+  tasks have the same material with the same hash, and his agent reads it
+  at his path. When the file is replaced, one signal names both tasks, by
+  its place.
+- **Built.** `material-place.ts` (`locateStored`, `placeOf`); every reader of
+  a material path goes through it; `plans://` values validated on import.
+- **Found on the way.** A file reference's role never travelled in the plan
+  files, so a teammate's materials arrived as plain attachments: it is
+  written and read now (never its hash). Materials arriving with a plan's
+  files were not watched for changes, only ones recorded here: an imported
+  plan's artefacts are watched now. And three readers C3.4b missed could
+  still open a file still in the cloud (criterion checks, the material
+  reader, the viewer): each says it is not on this device instead.
+- **Tests.** Unit `material-place.test.ts` (2). Harness `plans-folder.test.ts`
+  +4 (stored by place, never a path; a climbing place refused; Sam reads it
+  at his path with the same hash; one signal naming both tasks, by place).
+  Related harness (86) and unit (1796) green.
 
 ### 2026-10-01: C3.4b — OneDrive and SharePoint; files still in the cloud
 - **Journey.** Dana's team keeps its plans in OneDrive under "Acme/Board

@@ -810,6 +810,7 @@ function upsertItem(
         author: String(a.author ?? 'human'),
         authorType: String(a.authorType ?? 'human'),
         createdAt: toEpoch(a.createdAt) ?? Date.now(),
+        role: typeof a.role === 'string' ? a.role as 'material' : null,
       });
       if (!stored) warnings.push(`Skipped attachment ${String(a.uid)}: it belongs to another item`);
     }
@@ -1476,6 +1477,9 @@ function serializeItem(item: PlanItem): Record<string, unknown> {
       author: a.author,
       authorType: a.authorType,
       createdAt: new Date(a.createdAt).toISOString(),
+      // A file reference's role travels (C3.4c), so a material is one on a
+      // teammate's machine too. Its hash does not: each device takes its own.
+      ...(a.kind === 'file_ref' && a.role ? { role: a.role } : {}),
     }));
   }
 
@@ -1552,6 +1556,7 @@ function serializeTask(task: Task, attachments: TaskAttachment[], comments: Comm
       author: a.author,
       authorType: a.authorType,
       createdAt: new Date(a.createdAt).toISOString(),
+      ...(a.kind === 'file_ref' && a.role ? { role: a.role } : {}),
     })),
     comments: comments.map((c) => ({
       uid: c.uid,

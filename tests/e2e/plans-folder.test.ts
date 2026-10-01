@@ -340,3 +340,112 @@ test.describe.serial('OneDrive and files still in the cloud', () => {
     fs.rmSync(pdf);
   });
 });
+
+/**
+ * C3.4c — materials by their place in the plans folder, and their hash.
+ *
+ * Dana's team keeps the sales export in its OneDrive folder, beside the
+ * plans. Two tasks rely on it. Recorded from Dana's copy, it is stored by its
+ * place there, `plans://Materials/sales.csv`, never her path. Sam's copy of
+ * the folder sits somewhere else: his app reads the same material at his own
+ * path, with the same hash, and when the file is replaced, one signal names
+ * both tasks that read it.
+ */
+test.describe.serial('Materials in the plans folder', () => {
+  test.setTimeout(180_000);
+  const people: Record<'dana' | 'sam', { h: Harness; code: string; root: string; place: string }> = {} as never;
+  let plan: string;
+  const items: Record<string, string> = {};
+  const PLACE = 'Acme/Board pack';
+  const q = (code: string) => `?project=${encodeURIComponent(code)}`;
+
+  const setUp = async (who: 'dana' | 'sam', name: string) => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), `OneDrive - Acme ${who} `));
+    const h = await setupHarness(`plans-folder-materials-${who}`, {
+      env: { CODETRELLIS_CLOUD_ROOTS: JSON.stringify([{ provider: 'onedrive', path: root, account: 'Acme' }]) },
+      settings: { identity: { displayName: name, email: `${who}@acme.test` } },
+    });
+    const code = h.fixture.projectPath;
+    await h.client.scanProject(code);
+    const place = path.join(root, ...PLACE.split('/'));
+    fs.mkdirSync(place, { recursive: true });
+    people[who] = { h, code, root, place };
+  };
+  const link = async (who: 'dana' | 'sam') => {
+    const { h, code, place } = people[who];
+    expect((await h.client.raw('PUT', `/api/plans-folder${q(code)}`, { folder: { kind: 'synced', provider: 'onedrive', place: PLACE } })).status).toBe(200);
+    const res = await h.client.raw('POST', `/api/plans-folder/link${q(code)}`, { path: place });
+    expect(res.status, await res.clone().text()).toBe(200);
+    return (await res.json()) as { imported?: number };
+  };
+
+  test.beforeAll(async () => {
+    await setUp('dana', 'Dana Ortiz');
+    await setUp('sam', 'Sam Lee');
+  });
+  test.afterAll(async () => {
+    for (const p of Object.values(people)) {
+      await p.h.teardown();
+      fs.rmSync(p.root, { recursive: true, force: true });
+    }
+  });
+
+  test('recorded from Dana\'s copy, the material is stored by its place in the folder, never her path', async () => {
+    const { h, code, place } = people.dana;
+    await link('dana');
+    fs.mkdirSync(path.join(place, 'Materials'), { recursive: true });
+    fs.writeFileSync(path.join(place, 'Materials', 'sales.csv'), 'region,q3\nEMEA,120\n');
+    plan = (await h.client.createPlan({ title: 'Quarter close', projectPath: code })).uid;
+    for (const title of ['Q3 report', 'Board pack']) {
+      items[title] = ((await (await h.client.raw('POST', `/api/plans/${plan}/items`, { kind: 'action', title })).json()) as { uid: string }).uid;
+      const res = await h.client.raw('POST', `/api/items/${items[title]}/artefacts`, { path: path.join(place, 'Materials', 'sales.csv'), role: 'material' });
+      expect(res.status, await res.clone().text()).toBe(201);
+      expect((await res.json()) as { path: string }).toMatchObject({ path: 'plans://Materials/sales.csv' });
+    }
+    const planDir = (await h.client.exportPlan(plan, code)).planDir;
+    const files = (fs.readdirSync(planDir, { recursive: true }) as string[]).map((f) => path.join(planDir, f)).filter((f) => f.endsWith('.yaml'));
+    const text = files.map((f) => fs.readFileSync(f, 'utf8')).join('\n');
+    expect(text).toContain('plans://Materials/sales.csv');
+    expect(text).not.toContain(people.dana.root);
+  });
+
+  test('a place that climbs out of the folder is refused', async () => {
+    const { h } = people.dana;
+    const res = await h.client.raw('POST', `/api/items/${items['Q3 report']}/artefacts`, { path: 'plans://../secrets.csv', role: 'material' });
+    expect(res.status).toBe(400);
+  });
+
+  test('Sam\'s copy sits elsewhere: his app reads the same material at his path, with the same hash', async () => {
+    // The sync client brings Dana's folder to Sam's machine.
+    fs.cpSync(people.dana.place, people.sam.place, { recursive: true });
+    expect((await link('sam')).imported).toBe(1);
+    const { h } = people.sam;
+    const theirs = (await (await people.dana.h.client.raw('GET', `/api/items/${items['Q3 report']}/artefacts`)).json()) as Array<{ path: string; sha256: string }>;
+    const mine = (await (await h.client.raw('GET', `/api/items/${items['Q3 report']}/artefacts`)).json()) as Array<{ uid: string; path: string; sha256: string }>;
+    expect(mine.map((a) => a.path)).toEqual(['plans://Materials/sales.csv']);
+    expect(mine[0].sha256).toBe(theirs[0].sha256);
+    const agent = await h.spawnAgent({ agentType: 'claude-desktop' });
+    expect((await agent.callTool('get_brief', { item_uid: items['Q3 report'] })).isError).toBeFalsy();
+    const read = await agent.callTool('read_material', { attachment_uid: mine[0].uid });
+    expect(read.isError, read.text).toBeFalsy();
+    expect(read.text).toContain('EMEA,120');
+  });
+
+  test('both tasks read it; when it is replaced, one signal names both, by its place', async () => {
+    const { h, code, place } = people.sam;
+    for (const title of ['Q3 report', 'Board pack']) {
+      const [a] = (await (await h.client.raw('GET', `/api/items/${items[title]}/artefacts`)).json()) as Array<{ uid: string }>;
+      const agent = await h.spawnAgent({ agentType: 'claude-desktop' });
+      expect((await agent.callTool('get_brief', { item_uid: items[title] })).isError).toBeFalsy();
+      const read = await agent.callTool('read_material', { attachment_uid: a.uid });
+      expect(read.isError, read.text).toBeFalsy();
+    }
+    fs.writeFileSync(path.join(place, 'Materials', 'sales.csv'), 'region,q3\nEMEA,125\n');
+    type Signal = { kind: string; workstreams: string[]; subject: Record<string, unknown>; summary: string };
+    const signals = async () => ((await (await h.client.raw('GET', `/api/awareness?project=${encodeURIComponent(code)}`)).json()) as { signals: Signal[] }).signals.filter((s) => s.subject.material);
+    let found: Signal[] = [];
+    await expect.poll(async () => (found = await signals()).length, { timeout: 15_000 }).toBe(1);
+    expect(found[0]).toMatchObject({ kind: 'stale-base', subject: expect.objectContaining({ material: 'plans://Materials/sales.csv' }) });
+    expect(found[0].workstreams).toEqual([`task:${items['Board pack']}`, `task:${items['Q3 report']}`].sort());
+  });
+});
