@@ -106,6 +106,26 @@ The `src/backend/services/` directory holds ~50 services. Grouped by responsibil
   stand-ins; the harness points all three at nowhere by default. Azure
   DevOps and Gitea are follow-ups on the same shape.
 
+## A plan's status, read and never written (Phase 32 C2.4)
+
+`services/plan-status.ts` over `shared/lib/item-status.ts` (pure). Every item
+gets a state with its `source`: an item on a branch git can see takes git's
+state, or the review host's where one is on (`item-git-state.ts`); everything
+else takes **the plan's own** — a task's status in words ("in progress, 60%",
+"blocked: …", "done, signed off by Priya" from its criteria), with who
+recorded it (the newest `status_changed` plan event); a section sums the
+tasks under it ("1 of 3 tasks done; 1 blocked"), and one with none is
+`context`. A branch git has not seen yet keeps the plan's state with a
+`gitNote` ("no refunds branch yet"). The plan's view adds progress (done in
+the plan, or merged by git or a host), what waits on someone (blocked, or a
+criterion waiting for sign-off), what is under way, and a lineage per branch:
+ticket → this plan → "PR #118 (open)" only when a host said so, otherwise
+what git proves ("board-charts pushed"). One answer for
+`GET /api/plans/:uid/status` (the header chip's view, each tree row's hover,
+the item page's State line), the phone's `plan.status` and `get_plan`'s
+`state`. Nothing is written: there is no STATUS.md, and reading writes no
+file.
+
 ## Session persistence & power awareness
 
 CodeTrellis treats long-running agent sessions as first-class — desktops don't sleep while agents are working, and reconnects rehydrate state rather than starting fresh.

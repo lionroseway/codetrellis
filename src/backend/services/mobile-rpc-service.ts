@@ -39,6 +39,7 @@ import { listTrustedRoots, resolveTrustedPlanDir, resolveTrustedProjectRoot } fr
 import { reviewPlan } from './plan-review-service';
 import { reviewQueue } from './review-queue-service';
 import { buildStack } from './stack-service';
+import { planStatusFresh } from './plan-status';
 import { buildPrDraft } from './pr-draft-service';
 import { listComparands, compareSnapshots } from './snapshot-compare-service';
 import {
@@ -1284,6 +1285,16 @@ async function routeMethod(
     case 'stack.summary': {
       const projectPath = peerProjectRoot(params, { required: true })!;
       return buildStack(projectPath);
+    }
+
+    // The plan's status (Phase 32 C2.4): every item's state with its source,
+    // and the one view — progress, waiting, in progress, lineage. The same
+    // answer as `/api/plans/:uid/status` and get_plan's `status`.
+    case 'plan.status': {
+      const planUid = requirePlan(params, 'planUid');
+      const status = await planStatusFresh(planUid);
+      if (!status) throw new Error(`Plan not found: ${planUid}`);
+      return status;
     }
 
     // What to work on next. `getNextTask` reads plan_items for a V2 plan

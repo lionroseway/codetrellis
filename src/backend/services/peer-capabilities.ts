@@ -98,6 +98,7 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   'plan.items': 'read',
   'plan.list': 'read',
   'plan.nextItem': 'read',
+  'plan.status': 'read',
   'plan.template.list': 'read',
   // Phase 29 mobile review flow. All four are read-only by
   // construction: review and pr-draft never touch the repository (the

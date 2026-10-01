@@ -234,6 +234,19 @@ checks the RPC from a paired phone in `review-queue.test.ts` and
 `tests/phone/stack.spec.ts` photographs it; the harness checks the RPC from
 a paired phone in `stack.test.ts`.
 
+### A plan's status (Phase 32 C2.4)
+
+- **`plan.status`** (read) returns what `/api/plans/:uid/status` does: every
+  item's state with its source and the plan's view (progress, waiting, in
+  progress, lineage). `mobile/lib/plan-status.ts`.
+- **`plan-detail`** shows it as a **Status** card under the overview, each
+  line saying "from the plan", "from git" or the host; the header's count is
+  the status's, so the two agree. A desktop without `plan.status` shows the
+  plan without the card.
+
+`tests/phone/plan-status.spec.ts` photographs it; the harness checks the RPC
+from a paired phone in `plan-status.test.ts`.
+
 ## Seeing the screens (Phase 32 A4.5a)
 
 `npm run test:phone` renders the real screens from `mobile/` in a browser and

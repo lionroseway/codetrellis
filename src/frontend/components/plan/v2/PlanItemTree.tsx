@@ -11,6 +11,8 @@ import { useAwarenessStore } from '../../../stores/awareness-store';
 import { useReplayStore } from '../../../stores/replay-store';
 import type { PlanItem, PlanItemKind, TaskStatus } from '@shared/types';
 import { usePlanGitStates, GIT_STATE_TONE, gitStateTitle, type PlanItemGitState } from '../../../lib/plan-git-state';
+import { usePlanStatus } from '../../../lib/plan-status';
+import { statusLine, type ItemStatus } from '@shared/lib/item-status';
 import { gitStateChip, sourceWords } from '@shared/lib/git-state-words';
 
 const STATUS_ICON: Record<TaskStatus, { Icon: typeof Circle; tint: string }> = {
@@ -64,9 +66,13 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
   // C5.3b — and whether each is ready to merge.
   const workstreams = useAwarenessStore((s) => s.workstreams);
   const signals = useAwarenessStore((s) => s.signals);
-  // C2.1 — what git proves about each section's branch.
+  // C2.1 — what git proves about each section's branch; C2.4 — and every
+  // item's state with its source (git, a review host, or the plan itself).
   const branchesNonce = useMemo(() => Object.values(itemsByUid).map((i) => `${i.uid}:${i.workstream ?? ''}`).join('|'), [itemsByUid]);
   const gitStates = usePlanGitStates(planUid, branchesNonce);
+  const statusNonce = useMemo(() => Object.values(itemsByUid).map((i) => `${i.uid}:${i.status ?? ''}:${i.workstream ?? ''}:${i.updatedAt ?? ''}`).join('|'), [itemsByUid]);
+  const planStatus = usePlanStatus(planUid, statusNonce);
+  const statuses = useMemo(() => Object.fromEntries((planStatus?.items ?? []).map((s) => [s.itemUid, s])), [planStatus]);
   const localCount = useMemo(
     () => Object.values(itemsByUid).filter((i) => i.visibility === 'local').length,
     [itemsByUid],
@@ -161,6 +167,7 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
           isDropTarget={isDropTarget}
           onDrop={handleDrop}
           gitState={gitStates[uid]}
+          status={statuses[uid]}
         />
         {isOpen && childUids.length > 0 && (
           <div>{childUids.map((c) => renderNode(c, depth + 1))}</div>
@@ -264,7 +271,7 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
 
 function ItemRow({
   item, depth, isSelected, hasChildren, isOpen, onToggle, onClick,
-  drag, setDrag, isDropTarget, onDrop, gitState,
+  drag, setDrag, isDropTarget, onDrop, gitState, status,
 }: {
   item: PlanItem;
   depth: number;
@@ -278,6 +285,8 @@ function ItemRow({
   isDropTarget: boolean;
   onDrop: (targetUid: string, position: DropPosition) => void;
   gitState?: PlanItemGitState;
+  /** C2.4 — the item's state with its source. */
+  status?: ItemStatus;
 }) {
   const createItem = usePlanItemsStore((s) => s.createItem);
   const updateItem = usePlanItemsStore((s) => s.updateItem);
@@ -352,7 +361,9 @@ function ItemRow({
       ref={rowRef}
       aria-current={isSelected ? 'true' : undefined}
       data-replay-status={replaying && item.kind === 'action' ? (notYet ? 'not-yet' : shownStatus ?? 'none') : undefined}
-      title={notYet ? 'Made after the moment being replayed' : undefined}
+      data-state={status?.state}
+      data-state-source={status?.source}
+      title={notYet ? 'Made after the moment being replayed' : status ? statusLine(status) : undefined}
       className={[
         'group relative flex items-center gap-1.5 px-1.5 py-1.5 cursor-pointer rounded-md mx-1.5',
         notYet ? 'opacity-40' : '',

@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — C2.3: GitLab and Bitbucket behind the review host |
-| **Status** | C2.2 done (#263, #264). C2.3 built: GitLab (merge requests !N with their pipeline and approvals, subgroups, token as PRIVATE-TOKEN with read_api) and Bitbucket Cloud (pull requests with build statuses and approvals, declined or superseded read closed, token as a bearer) on the same switch, cache and overlay; one request helper for all three (GET only, redirects refused); each state says its host; Settings speaks each host's words; the harness points every host at nowhere by default. Unit (1735), harness (review-host-gitlab-bitbucket 4 against stand-ins, the GitHub and switch specs), browser (review-host-settings incl. GitLab) green locally |
-| **In flight** | C2.3 building on `feat/phase-32-c2-3-gitlab-bitbucket` |
-| **Last merged** | C2.2b (#264, `35d4f2d`) |
-| **Next action** | Merge C2.3 when CI is green; then C2.4 on feat/phase-32-c2-4-status-read (status read, not written: every item a state with its source, the plan itself for a task with no branch; no STATUS.md) |
+| **Stage / step** | Wave 2 — C2.4a: every item a state with its source, and one status view |
+| **Status** | C2.3 merged (#265); C2.2 and C2.3 done. C2.4 refined into a (read side) and b (no state change writes a file). C2.4a built: every item's state with its source — git or the review host for an item on a branch, the plan itself for everything else in words, with who recorded it; sections sum their tasks; the view (progress counting git merges, waiting on someone, in progress, lineage ticket → plan → PR only from a host) as GET /api/plans/:uid/status, the phone's plan.status and get_plan's state; window header chip, tree row hovers, the item page's State line, the phone's Status card. Unit (1746), harness (plan-status 6), browser (plan-status, git-state specs), phone (plan-status 2) green locally |
+| **In flight** | C2.4a building on `feat/phase-32-c2-4a-status-read` |
+| **Last merged** | C2.3 (#265, `27adc85`) |
+| **Next action** | Merge C2.4a when CI is green; then C2.4b on feat/phase-32-c2-4b-no-state-writes (state leaves the plan's files; a state-only change writes nothing; unchanged files not rewritten) |
 | **Blockers** | none |
-| **Last updated** | 2026-09-30 |
+| **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `35d4f2d`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `27adc85`, with open PRs from GitHub.
 
 ---
 
@@ -214,8 +214,10 @@
   - [x] C2.2 The review-host interface, and GitHub behind it, off until turned on per project
     - [x] C2.2a Turning a review host on: detected from the remote, a per-device switch, the token in the OS keychain, Settings → Review hosts; no request yet (#263)
     - [x] C2.2b GitHub behind it: open, merged and closed pull requests, checks and approvals, read only when turned on; in review and closed, from GitHub (#264)
-  - [ ] C2.3 GitLab and Bitbucket on the same interface (Azure DevOps, Gitea later) — building
-  - [ ] C2.4 Status read, not written: intent in the plan's YAML, state from git, a host or the plan itself, each saying its source; no STATUS.md
+  - [x] C2.3 GitLab and Bitbucket on the same interface (Azure DevOps, Gitea later) (#265)
+  - [ ] C2.4 Status read, not written: intent in the plan's YAML, state from git, a host or the plan itself, each saying its source; no STATUS.md — building
+    - [ ] C2.4a Every item a state with its source (git, a host, or the plan with who recorded it), and one status view: progress, waiting, in progress, lineage; window, phone and get_plan — building
+    - [ ] C2.4b No state change writes a file: state leaves the plan's files, a state-only change schedules no write-through, unchanged files are not rewritten
   - [ ] C2.5 Ticket refs in the plan files; approvals as signed statements
   - [ ] C2.6 Teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when
 - [ ] C3 A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice)
@@ -339,9 +341,53 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-09-30 | No STATUS.md. C2.4 becomes status read, not written: intent in the plan's YAML, state derived (git for a task on a branch, a host when on, the plan itself otherwise), each state saying its source, shown in the window, on the phone and in `get_plan` | The owner's point: status a program can read, as Phase 32's own tracker moved to YAML with state read from git (#246). The shared-work doc's STATUS.md predated that decision. A committed summary drifts, and one rewritten on every change is noise in git and a clash in a synced folder. An export for people without the app is left to C3 |
 | 2026-09-30 | C3's shared plans folder can be carried by git or by a cloud-synced folder (OneDrive, SharePoint, Google Drive, Dropbox), in one layout: each writer adds only its own records and never edits another's, state is read from all of them, records are signed with the device's pairing key, and a real disagreement is a signal | The owner's idea: business teams already share a synced folder the way developers share a repository. A sync has no merge, so clashes are made impossible rather than resolved: two writers never touch one file. The same layout ends merge conflicts in a git planning repo. The sync client moves the files, so the app still makes no request of its own; anyone can write to the folder, so authorship comes from a signature, not a field |
 
+| 2026-10-01 | C2.4 is refined into C2.4a (every item a state with its source, and one view, in the window, on the phone and in `get_plan`) and C2.4b (no state change writes a file) | The read side stands alone and is what every surface shows. Taking state out of the plan's files changes what a teammate pulls, so it is its own step with its own test that a status change, a claim and progress leave `git status` clean |
+| 2026-10-01 | An item on a branch takes git's state (or the host's) even when the plan records something else; one whose branch git has not seen yet keeps the plan's state with a note; a section with no branch sums the tasks under it, and one with none is "context". Progress counts a task done when the plan says done or git (or a host) says merged | Git is proof for code, as C2.1 decided; until the branch exists git proves nothing, and the plan's record is the better answer. A section's own status is not recorded anywhere, so it is read from its tasks. A merged branch is finished whatever the task row says, so the header and the view must count it |
+| 2026-10-01 | The plan's own state names who recorded it from the newest `status_changed` plan event, and the plan's state is shown in the same type as git's, teal rather than grey | Who recorded a state is what makes a plan-recorded state checkable, and the event log already holds it with the transport's author. Grey would read as less certain, which the shared-work doc rules out for a task with no branch |
 ---
 
 ## Entries
+
+### 2026-10-01: C2.4a — every item a state with its source
+
+C2.3 merged (#265), so C2.2 and C2.3 are done. C2.4 is refined into a and
+b (decision rows): this is the read side.
+
+- **Every item has a state and says where it came from**
+  (`shared/lib/item-status.ts`, pure; `services/plan-status.ts`). An item
+  on a branch git can see takes git's state, or the review host's where one
+  is on. Everything else takes the plan's own, in words: "not started",
+  "assigned to codex", "in progress, 60%", "blocked: waits on the
+  auditor", "done, signed off by Priya" (from its criteria), "1 of 3
+  criteria met, 1 waiting for sign-off". Each says who recorded it, from the
+  newest `status_changed` event. A section sums its tasks ("1 of 3 tasks
+  done; 1 blocked"); one with none is "context". A branch git has not seen
+  yet keeps the plan's state, noting "no refunds branch yet".
+- **One view** of the plan: progress (done in the plan, or merged by git
+  or a host), waiting on someone (blocked, or a criterion waiting for
+  sign-off), in progress, and a lineage per branch: "FIN-88 → this plan →
+  board-charts pushed", and "PR #118 (open)" only when a host said so.
+- **The same answer everywhere**: `GET /api/plans/:uid/status`, the phone's
+  `plan.status` (read) and `get_plan`'s new `state`. In the window, the
+  header's progress is now a chip that opens the view, every tree row says
+  its state and source on hover, and an item's page has a State line under
+  its properties. On the phone, the plan screen has a Status card, and its
+  header count is the status's, so the two agree.
+- **Nothing is written.** There is no STATUS.md, and reading the status
+  writes no file (the harness checks `git status`). C2.4b takes state out
+  of the plan's files.
+
+Found on the way: Escape in the status view also minimised the plan,
+because the workspace's own Escape handler saw it too; the view
+now catches it before the workspace does.
+
+Tests: unit `item-status.test.ts` (8); harness `plan-status.test.ts` (6:
+every item a state and a source, the plan's state with who recorded it,
+waiting and in progress, lineage without a host, `get_plan` and a paired
+phone equal to the route, reading writes nothing, 404); browser
+`plan-status.spec.ts` (shots `plan-status-view`, `item-state-line`), with
+the C2.1 and C2.2b tree specs still green; phone `plan-status.spec.ts` (2,
+shot `plan-status`).
 
 ### 2026-09-30: C2.3 — GitLab and Bitbucket behind the review host
 

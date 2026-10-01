@@ -78,6 +78,7 @@ import { buildStack } from './services/stack-service';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
 import { planGitStatesFresh } from './services/item-git-state';
+import { planStatusFresh } from './services/plan-status';
 import { forgetHostReads } from './services/review-host/host-state';
 import { forgetReviewHostToken, getReviewHost, ReviewHostError, saveReviewHostToken, setReviewHost } from './services/review-host/switch';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
@@ -2380,6 +2381,18 @@ app.get('/api/plans/:uid/git-state', async (req, res) => {
   const states = await planGitStatesFresh(req.params.uid);
   if (!states) { res.status(404).json({ error: 'Plan not found' }); return; }
   res.json(states);
+});
+
+/**
+ * Phase 32 C2.4 — the plan's status, read and never written: every item's
+ * state with its source (git or the review host for an item on a branch,
+ * the plan itself for everything else, with who recorded it), and the one
+ * view the window, the phone and get_plan share. No file is written.
+ */
+app.get('/api/plans/:uid/status', async (req, res) => {
+  const status = await planStatusFresh(req.params.uid);
+  if (!status) { res.status(404).json({ error: 'Plan not found' }); return; }
+  res.json(status);
 });
 
 /**
