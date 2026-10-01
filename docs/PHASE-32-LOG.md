@@ -19,7 +19,7 @@
 |---|---|
 | **Stage / step** | Wave 2 — C3.3: signed task-state records |
 | **Status** | B8.3a merged (#275). Track D (the codetrellis CLI) added after C3, the owner's decision. C3.3 built: each record is signed when written, with git's SSH key when git signing is set up, else with a key the app makes for the device, introduced once in .codetrellis/keys; a teammate's key is trusted once in Settings → Shared task state after checking its fingerprint; a record that verifies reads "in their signed record", any other "unverified" with why; trusting a key relabels that device's records without a new change. Unit (signing 8, record, item-status), harness (task-records 19, git key and device key), browser (shared-task-state 8) green locally |
-| **In flight** | B8.3 in review (#275) on `feat/phase-32-b8-3-grounding-overlay` |
+| **In flight** | B8.3 in review (#275) on `feat/phase-32-b8-3-grounding-overlay`; C3.3 building on `feat/phase-32-c3-3-signed-records` |
 | **Last merged** | B8.2 (#274, `deee2c9`) |
 | **Next action** | Merge C3.3 when green; then C3.4 (a linked plans folder: OneDrive and SharePoint first), C3.5, C3.6; then D1 (the CLI) |
 | **Blockers** | None |
@@ -233,7 +233,7 @@
 - [ ] C3 A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice), refined in EXECUTION §6: — building
   - [x] C3.1 Task state as records in the project's files: one new file per change, one writer each, read from all; a teammate's state says whose record and that it is unverified; off until the person turns it on (#271)
   - [x] C3.2 A real disagreement is a signal: people acting at once are named on the task and in the inbox until one decides (#272)
-  - [ ] C3.3 Signed records: the person's git SSH key when set up, else a key the app makes for the device
+  - [ ] C3.3 Signed records: the person's git SSH key when set up, else a key the app makes for the device — building
   - [ ] C3.4 A linked plans folder: a planning repo or a synced folder (OneDrive and SharePoint first), placeholders never downloaded, materials by place and hash
   - [ ] C3.5 Teammates' material reads, a separate switch, on by default once a folder is shared
   - [ ] C3.6 The C3 done-when
@@ -250,8 +250,9 @@
   - [ ] D1.1 `codetrellis serve` (headless backend, loopback, token on every transport) and `scan`
   - [ ] D1.2 Keep-on-track verbs as an agent: next, claim, update, stuck, done, request, brief, awareness, check, report-tests; text or --json
   - [ ] D1.3 Changing the plan (show, add, edit, move) and `commit`, which commits only CodeTrellis's own files; `status`
-  - [ ] D1.4 A SessionStart hook recipe, a CI/CD recipe, and exit codes on status and check for gating; this repository uses it
+  - [ ] D1.4 A SessionStart hook recipe, a CI/CD recipe, and exit codes on status and check for gating (breakpoints, tests older than the code, failing criteria, stale system docs); this repository uses it
   - [ ] D1.5 The D done-when: a cloud session or CI job claims, reports, edits the plan and commits; the desktop shows it after a pull
+  - [ ] Follow-up: Declared product flows checked hop by hop against the cross-system map in CI (owner's point, 2026-10-01): after Phase 32 unless pulled in
 
 ### Phase end
 - [ ] `main` merged in, full suite green on Node 26
@@ -386,6 +387,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | The `codetrellis` CLI comes into Phase 32 as Track D, after C3: headless `serve`, `scan`, `status`, every verb an agent needs to keep itself on track and update its own files (next, claim, update, stuck, done, request, plan edits, report tests, check before an edit, commit CodeTrellis's files), and a SessionStart hook. The live view through a tunnel and pairing over a remote network stay after Phase 32 | Owner's decision. Agents on any host, cloud sessions included, can then use CodeTrellis on demand; the remote surfaces need their own security review and would widen the phase. Supersedes the 2026-09-26 row that kept the whole CLI out |
 | 2026-10-01 | The CLI also serves agents run in CI/CD pipelines: a recipe, and exit codes on `status`/`check` so a job can gate on a held breakpoint or tests older than the code. A pipeline reports through git like a cloud session; watching one live waits with the tunnel | Owner's point: a remote workflow is one more headless host |
 | 2026-10-01 | The CLI's `snapshot` (FOLLOW-ON §4.1) is not built: a committed status file is what C2.4 removed, and C3.1's records already carry a cloud session's task state to the desktop through git | One way for state to travel, and no generated file to drift |
+| 2026-10-01 | In CI, `check` and `status` also gate on conformity with what the plan and the docs already say: a task marked done with a failing criterion, a system doc referencing a changed file gone stale. Declared product flows checked hop by hop against the cross-system map are a follow-on | Owner's point that pipelines could run conformity checks for product flows. The first two have a pass or fail today and cost little; declaring flows is a new concept, kept out of an already large phase unless the owner pulls it in |
 | 2026-10-01 | C3.3: a key file in the project is an introduction, never trust. A teammate's device key is trusted once, by the person in the app window, after comparing its fingerprint (computed by the app, never read from the file); trust is per device key, not per project | Anyone who can write to the folder can write a key file, so believing one would make signing worthless. Comparing a fingerprint once is how SSH and Signal settle the same question, and a teammate should not be introduced again for every project |
 | 2026-10-01 | C3.3: a record that does not verify is still read as it was before C3.3, as the teammate's and "unverified", with why; it is not refused | Refusing unsigned records would break every team mid-upgrade and every teammate whose key is not trusted yet. What C3.3 adds is proof where there is a key, and the words to tell the two apart; whether an unverified state should be taken at all is a later choice for teams that need it |
 ---

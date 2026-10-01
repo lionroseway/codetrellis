@@ -905,14 +905,18 @@ its arguments beyond the opened-project scope. Out of scope until after
 Phase 32: the live view through a tunnel and pairing over a remote
 network, which need their own security review; and `snapshot`, since a
 committed status file is what C2.4 removed and C3.1's records already
-carry a headless session's state through git.
+carry a headless session's state through git. Declared product flows
+checked hop by hop against the cross-system map ("checkout →
+`POST /api/orders` → payments → ledger SQL" still served, still called,
+still paired) are a follow-on: D1.4 gates on what already has a pass or
+fail (criteria, stale system docs, breakpoints, test grounding).
 
 | Sub-step | Delivers | Tests |
 |---|---|---|
 | D1.1 | `codetrellis serve [--project .]`: the backend headless (no Electron, mDNS, peer mesh or update check; the data dir in the environment's cache), loopback only, the token on every transport; prints the connector line for MCP configs. `codetrellis scan` (one-off; coverage and counts). An npm bin | unit; harness (serve in a temp dir, an agent connects, no outbound request) |
 | D1.2 | Keep-on-track verbs, as an agent: `next`, `claim <item>`, `update <item> --progress N --note`, `stuck <item> <why>` (blocked), `done <item>` (refused while a criterion's check fails, as submit is), `request <question>` (asks the person; waits like `await_user_input`, `--no-wait`), `brief <item>`, `awareness`, `check <path>` (`check_footprint` and `check_breakpoint` before an edit), `report-tests <file>`; text, or `--json` | harness per verb, as a client with no hook |
 | D1.3 | Changing the plan and committing it: `plan show\|add\|edit\|move` over the plan tools; `commit [-m]` commits only CodeTrellis's own files (the plan's folder, task records, key introductions) with a message naming the items, never the agent's code; `status` (plans, my items, blockers, waiting on the person) as text or `--json` | harness (edit → files → commit holds only `.codetrellis`; status matches `get_plan`) |
-| D1.4 | Sessions and pipelines pick it up: a SessionStart hook recipe (`.claude/settings.json`) that starts `serve` if needed and registers the connector, opt-in per developer; the same for other hosts' setup scripts; a CI recipe (a GitHub Actions job: `fetch-depth: 0`, the data dir cached or rebuilt, loopback only inside the runner) for agents run in pipelines; `status --json` and `check` exit non-zero when a breakpoint holds a path or a changed file's tests are older than the code, so a job can gate on them (CodeTrellis still runs no tests); docs; and this repository uses it (dogfood) | harness (the hook's command, exit codes); docs |
+| D1.4 | Sessions and pipelines pick it up: a SessionStart hook recipe (`.claude/settings.json`) that starts `serve` if needed and registers the connector, opt-in per developer; the same for other hosts' setup scripts; a CI recipe (a GitHub Actions job: `fetch-depth: 0`, the data dir cached or rebuilt, loopback only inside the runner) for agents run in pipelines; `status --json` and `check` exit non-zero when a breakpoint holds a path, a changed file's tests are older than the code, a task marked done has a failing criterion check, or a system doc referencing a changed file has gone stale, so a job can gate on conformity with what the plan and the docs say (CodeTrellis still runs no tests); docs; and this repository uses it (dogfood) | harness (the hook's command, exit codes); docs |
 | D1.5 | The D done-when: a cloud session or a CI job (no desktop app) claims a task, reports progress and tests, edits the plan, commits; the desktop, after a pull, shows it all through C3.1's records and the plan's files | harness (two machines; the CI recipe run as a job) |
 
 **Journey (D1).** Sam starts a cloud session on the repository. Its
