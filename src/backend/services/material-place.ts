@@ -31,6 +31,19 @@ function safeRel(rel: string): boolean {
 }
 
 /**
+ * Whether a value has the shape of a stored material path, on any machine:
+ * project-relative or `plans://…`, naming nothing outside its folder. For
+ * comparing a teammate's record with what is stored here (C3.5); it is
+ * never opened as a path.
+ */
+export function isStoredPlace(value: string): boolean {
+  if (typeof value !== 'string' || !value) return false;
+  const rel = isPlacePath(value) ? value.slice(PLANS_PREFIX.length) : value;
+  if (!isPlacePath(value) && /^[a-z][a-z0-9+.-]*:/i.test(value)) return false;
+  return safeRel(rel);
+}
+
+/**
  * The folder and the path in it for a stored material path, on this device;
  * null for one this device cannot place (a plans folder not linked here, an
  * absolute path or a URL, a path that climbs).

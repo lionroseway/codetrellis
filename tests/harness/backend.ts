@@ -200,6 +200,17 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
   }
 
   let stopped = false;
+  // A backend that dies mid-suite left nothing behind but the next request's
+  // ECONNREFUSED (Phase 32 C3.5's CI run): say how it ended, and what it
+  // last wrote, where the CI log shows it.
+  child.once('exit', (code, signal) => {
+    if (stopped) return;
+    const tail = stderrTail.join('').slice(-4000);
+    console.error(
+      `[harness] backend on :${backendPort} exited unexpectedly (code ${code}, signal ${signal})` +
+        (tail ? `\n--- last stderr ---\n${tail}` : '\n(no stderr)'),
+    );
+  });
   const stop = async () => {
     if (stopped) return;
     stopped = true;

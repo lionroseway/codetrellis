@@ -23,6 +23,7 @@ import { listWorkstreams } from '../../services/workstream-service';
 import { readProjectSkill, listProjectSkills } from '../../services/skills-service';
 import { recordSkillRead } from '../../services/skill-use-service';
 import { recordMaterialRead } from '../../services/material-footprints';
+import { shareMaterialRead } from '../../services/task-records/shared-state';
 import { resolveSection, branchOfRoot, claimRefusal, offeredTo, elsewhereLine, cleanBranch, workstreamOfBranch, whereWorked } from '../../services/section-workstreams';
 
 /**
@@ -876,7 +877,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (!read.ok) return { content: [{ type: 'text' as const, text: read.reason }], isError: true };
 
       // The task's footprint (A6.2): who read which material, and its hash then.
-      recordMaterialRead({ attachmentUid: attachment_uid, sessionId: deps.sessionId, locator: locator ?? null });
+      const readFor = recordMaterialRead({ attachmentUid: attachment_uid, sessionId: deps.sessionId, locator: locator ?? null });
+      // And, when the project shares them, for teammates (C3.5): which version this task read.
+      if (readFor) shareMaterialRead(readFor, attachment_uid, authorFromExtra(deps, extra));
 
       const where = read.kind === 'text' ? read.reply.where : null;
       const summary = `Read ${read.name}${where ? ` — ${where}` : ''}`;

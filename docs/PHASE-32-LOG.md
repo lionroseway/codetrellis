@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — C3.4c: materials by their place in the plans folder |
-| **Status** | C3.4b merged (#281). C3.4c built: a material in the linked plans folder is stored as plans://<place> and read at each device's own path; roles travel in plan files; imported materials are watched; three readers no longer open a file still in the cloud. Unit (material-place 2), harness (plans-folder 18; related 86) green locally |
-| **In flight** | C3.4c building on `feat/phase-32-c3-4c-materials-by-place` |
-| **Last merged** | C3.4b (#281, `254dd4c`) |
-| **Next action** | Merge C3.4c when green; then C3.5 (teammates' material reads, on by default once a folder is shared), C3.6 (the C3 done-when); then D1 (the CLI) |
+| **Stage / step** | Wave 2 — C3.5: teammates' material reads |
+| **Status** | C3.4c merged (#282); C3.4 done. C3.5 built: each app writes which version of each material its tasks read as signed records beside the task-state records, reads its teammates', and the material signals name whose read it was; on by default while task state is shared, off in Settings. Unit (1803), harness (material-reads 7) and browser (shared-task-state 9) green locally |
+| **In flight** | C3.5 building on `feat/phase-32-c3-5-teammates-reads` |
+| **Last merged** | C3.4c (#282, `f5d2834`) |
+| **Next action** | Merge C3.5 when green; then C3.6 (the C3 done-when); then D1 (the CLI) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `254dd4c`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `f5d2834`, with open PRs from GitHub.
 
 ---
 
@@ -234,11 +234,11 @@
   - [x] C3.1 Task state as records in the project's files: one new file per change, one writer each, read from all; a teammate's state says whose record and that it is unverified; off until the person turns it on (#271)
   - [x] C3.2 A real disagreement is a signal: people acting at once are named on the task and in the inbox until one decides (#272)
   - [x] C3.3 Signed records: the person's git SSH key when set up, else a key the app makes for the device (#279)
-  - [ ] C3.4 A linked plans folder: a planning repo or a synced folder (OneDrive and SharePoint first), placeholders never downloaded, materials by place and hash, split in three: — building
+  - [x] C3.4 A linked plans folder: a planning repo or a synced folder (OneDrive and SharePoint first), placeholders never downloaded, materials by place and hash, split in three:
     - [x] C3.4a Link a plans folder: named portably in the committed config, confirmed once per device by the person; plans, records and keys read and written there (#280)
     - [x] C3.4b OneDrive and SharePoint found where their clients put them; a placeholder is "not on this device" and never opened (#281)
-    - [ ] C3.4c Materials in the folder by their place and hash, never a full path; A6's signals match across machines — building
-  - [ ] C3.5 Teammates' material reads, a separate switch, on by default once a folder is shared
+    - [x] C3.4c Materials in the folder by their place and hash, never a full path; A6's signals match across machines (#282)
+  - [ ] C3.5 Teammates' material reads, a separate switch, on by default once a folder is shared — building
   - [ ] C3.6 The C3 done-when
 - [ ] C4 Recurring playbooks
 - [x] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
@@ -397,9 +397,34 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | C3.4a: the committed config names a plans folder portably (a git remote, or a provider and a place under its root), never a full path; each device's copy is confirmed by the person, in the app window, before anything there is read | A teammate's OneDrive sits at a different path on every machine, so a path cannot be shared; and a cloned repository must never point the app at a folder by itself, as C2.2a decided for review hosts |
 | 2026-10-01 | C3.4b: a file still only in the cloud is never read, written over or deleted by the app; it waits for the sync client, and the folder says how many are waiting | Reading downloads it, and writing or deleting it acts on what may be a teammate's newer copy. Waiting costs a teammate's change arriving late; acting costs it being lost |
 | 2026-10-01 | C3.4c: a material in the linked plans folder is stored as `plans://<path in the folder>`; a file reference's role travels in the plan files, its hash never does | The place is the same on every machine, the path is not. A hash taken on another machine is a claim; each device takes its own and compares |
+| 2026-10-01 | C3.5: a read record is written per version a task read, not per read; teammates' reads are forgotten here when either switch is off, and their names are in a signal's words, never its shape | Teammates need which version each task worked from; every read would be noise in the folder. A signal resting on reads the person chose not to use would be wrong. Naming who in the shape would reopen a signal when a key is trusted |
 ---
 
 ## Entries
+
+### 2026-10-01: C3.5 — teammates' material reads
+- **Journey.** Alex and Sam share "Q4 board pack", task state shared. Alex's
+  agent drafts the board report from last week's sales export. Sam replaces
+  the export and his agent updates the figures from the new one. On Sam's
+  machine one signal says “Draft the board report” (Alex Kim, unverified)
+  and “Update the sales figures” read different versions of
+  `data/sales.csv`, and the figures have the current one; once Sam trusts
+  Alex's key it says Alex's name alone. After a pull, Alex's machine says
+  the same, naming Sam. In Settings → Shared task state the reads are on by
+  default, say where they go and whose are here, and turn off in one click.
+- **Built.** `read-record.ts` (format, pure), `material-reads.ts` (switch,
+  write, read), `shareMaterialRead` from `read_material`; teammates' reads
+  in `taskFootprint` and the material signals' inputs; their names in the
+  version-split and stale-base words; `PUT /api/shared-task-state
+  {materialReads}`; the Settings box.
+- **Found on the way.** The signals' inputs listed only tasks this machine
+  had read, so a task only a teammate read was left out: they are listed
+  from both now.
+- **Tests.** Unit `read-record.test.ts` (6), `material-signals.test.ts` +1.
+  Harness `material-reads.test.ts` (7: off with task state; one record per
+  version; Sam's machine names Alex, unverified then trusted; Alex's names
+  Sam after a pull; off forgets and writes nothing; refused from plain
+  HTTP). Browser `shared-task-state.spec.ts` +1 (two shots).
 
 ### 2026-10-01: C3.4c — materials by their place in the plans folder
 - **What was already true.** Materials were stored relative to the project

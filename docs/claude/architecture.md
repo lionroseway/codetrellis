@@ -253,6 +253,33 @@ one. A file reference's role now travels in the plan files (written and
 read; never its hash, size or time, which each device takes itself), and
 the artefacts of an imported plan are watched like ones recorded here.
 
+**Teammates' material reads (C3.5).** `task-records/material-reads.ts` over
+`read-record.ts` (pure). A6.2 kept each read on the machine it happened on,
+so the material signals compared one person's tasks. With task state shared,
+`read_material` also writes, through `shareMaterialRead`, which version of
+which material the task read as
+`.codetrellis/reads/<plan>/<item>/<writer>-<counter>.yaml`, beside the
+task-state records: one per version, not per read (nothing is written when
+the device's latest record for that material names the same sha256). The
+material is its stored value (C3.4c), so it is one material on every
+machine. Each is signed with the record key (C3.3; the body carries
+`kind: material-read`, so it never parses as a task-state record or the
+reverse) and checked when read. Teammates' are read with the records
+(`readProjectRecords`, the same watcher, now over `reads/` too) into
+`teammate_material_reads`, never a device's own; a folder must be a task
+this machine has, in that plan of that project, and a file's name must be
+its writer and counter. `taskFootprint` merges them with this machine's
+reads by time, so `get_brief`'s `read_so_far` says "claude-code for Alex
+Kim (unverified)" and the signals' latest read per task can be a
+teammate's; a version split or stale base then names whose read it was in
+its words ("“Draft the board report” (Alex Kim)"), never in its shape, so
+the same signal is not reopened. The switch is a row in
+`shared_material_reads`: none means on whenever task state is shared (the
+owner's choice); `PUT /api/shared-task-state {materialReads}` sets it, on
+being the person's (`mayGrant`), off anyone's. Off, or task state unshared,
+teammates' reads are forgotten here so no signal rests on them; trusting or
+refusing a key forgets that device's and reads them again, checked anew.
+
 ## Approvals as signed statements (Phase 32 C2.5b)
 
 `services/signed-approvals.ts` over `signed-approval-record.ts` (pure). A

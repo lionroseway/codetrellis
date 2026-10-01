@@ -76,7 +76,7 @@ export function signingWay(projectRoot: string): SigningWay {
  * cannot sign (no agent, a passphrase prompt that times out), the device's,
  * whose introduction is written to the project if it is not there yet.
  */
-export function signRecord(projectRoot: string, home: string, record: TaskRecord, bytes: string): RecordSignature {
+export function signRecord(projectRoot: string, home: string, record: Pick<TaskRecord, 'writer' | 'name'>, bytes: string): RecordSignature {
   const setup = gitSigningAllowed() ? signingSetup(projectRoot) : null;
   if (setup?.canSign) {
     try {
@@ -218,7 +218,7 @@ export function checkContext(projectRoot: string): CheckContext {
 const verdicts = new Map<string, Verdict>();
 const MAX_VERDICTS = 20_000;
 
-export function verifyTaskRecord(record: TaskRecord, signed: SignedPart, ctx: CheckContext): Verdict {
+export function verifyTaskRecord(record: Pick<TaskRecord, 'writer'>, signed: SignedPart, ctx: CheckContext): Verdict {
   const sig = signed.signature;
   if (!sig) return { verified: false, why: 'it is not signed' };
   const key = crypto.createHash('sha256').update(`${record.writer}\n${signed.bytes}\n${JSON.stringify(sig)}\n${ctx.allowedStamp}`).digest('hex');
@@ -230,7 +230,7 @@ export function verifyTaskRecord(record: TaskRecord, signed: SignedPart, ctx: Ch
   return verdict;
 }
 
-function check(record: TaskRecord, bytes: string, sig: RecordSignature, ctx: CheckContext): Verdict {
+function check(record: Pick<TaskRecord, 'writer'>, bytes: string, sig: RecordSignature, ctx: CheckContext): Verdict {
   if (sig.how === 'git') {
     const out = verifySsh(bytes, sig.value, sig.signer, ctx.allowedSigners, RECORD_NAMESPACE);
     return out.ok ? { verified: true, how: 'git', who: sig.signer } : { verified: false, why: out.reason };

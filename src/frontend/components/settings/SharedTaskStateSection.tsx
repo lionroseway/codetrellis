@@ -13,6 +13,11 @@ import { useProjectStore } from '../../stores/project-store';
  * person's git SSH key, else this device's own key, which teammates trust
  * once here after checking its fingerprint. A teammate's record reads
  * unverified unless it is signed with a key trusted here.
+ *
+ * Teammates' material reads (C3.5) are a separate switch, on by default
+ * while task state is shared: which version of each material your tasks
+ * read is written beside the records, and teammates' reads are compared with
+ * yours, so "Alex's task used last week's version" can be said.
  */
 
 interface Status {
@@ -28,6 +33,7 @@ interface Status {
   signing: { how: 'git' | 'device'; as: string; says: string };
   keys: TeammateKey[];
   checked: { verified: number; unverified: number; reasons: Array<{ why: string; records: number }> };
+  materialReads: { enabled: boolean; chosen: boolean; changedAt: number | null; changedBy: string | null; mine: number; teammates: number; people: string[]; says: string };
 }
 
 interface TeammateKey {
@@ -88,7 +94,7 @@ export function SharedTaskStateSection() {
     }
   };
 
-  const toggle = async () => {
+  const put = async (body: { enabled: boolean } | { materialReads: boolean }) => {
     if (!root || !status) return;
     setBusy(true);
     setError(null);
@@ -96,7 +102,7 @@ export function SharedTaskStateSection() {
       const res = await fetch(`/api/shared-task-state?project=${encodeURIComponent(root)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: !status.enabled }),
+        body: JSON.stringify(body),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) { setError((json as { error?: string }).error ?? `Failed (${res.status})`); return; }
@@ -128,7 +134,7 @@ export function SharedTaskStateSection() {
             data-testid="shared-state-toggle"
             aria-pressed={status?.enabled ?? false}
             disabled={busy || !status}
-            onClick={() => { void toggle(); }}
+            onClick={() => { if (status) void put({ enabled: !status.enabled }); }}
             className={`shrink-0 px-3 py-1 rounded text-[12px] ${status?.enabled ? 'bg-white/[0.06] text-foreground hover:bg-white/[0.1]' : 'bg-accent text-white hover:bg-accent-hover'}`}
           >
             {status?.enabled ? 'Stop sharing' : 'Share task state'}
@@ -146,6 +152,37 @@ export function SharedTaskStateSection() {
           </p>
         )}
       </div>
+
+      {status && (
+        <div className="rounded border border-white/[0.06] bg-white/[0.02] p-3 space-y-2 text-[12px]" data-testid="shared-reads">
+          <div className="flex items-baseline justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-foreground-subtle text-[11px] uppercase tracking-wider">Teammates&apos; material reads</div>
+              <p className="text-foreground-muted leading-relaxed mt-1">
+                Which version of each spreadsheet or document your tasks worked from, so a task that used last week&apos;s file is named beside the one that replaced it.
+                {!status.materialReads.chosen && status.enabled ? ' On by default while task state is shared.' : ''}
+              </p>
+            </div>
+            {status.enabled && (
+              <button
+                data-testid="shared-reads-toggle"
+                aria-pressed={status.materialReads.enabled}
+                disabled={busy}
+                onClick={() => { void put({ materialReads: !status.materialReads.enabled }); }}
+                className={`shrink-0 px-3 py-1 rounded text-[12px] ${status.materialReads.enabled ? 'bg-white/[0.06] text-foreground hover:bg-white/[0.1]' : 'bg-accent text-white hover:bg-accent-hover'}`}
+              >
+                {status.materialReads.enabled ? 'Stop sharing reads' : 'Share reads'}
+              </button>
+            )}
+          </div>
+          <p className={status.materialReads.enabled ? 'text-emerald-300' : 'text-foreground'} data-testid="shared-reads-says">{status.materialReads.says}</p>
+          {status.materialReads.enabled && (
+            <p className="text-[11px] text-foreground-muted" data-testid="shared-reads-counts">
+              {plural(status.materialReads.mine, 'version')} read here {status.materialReads.mine === 1 ? 'is' : 'are'} recorded; {plural(status.materialReads.teammates, 'read')} from teammates {status.materialReads.teammates === 1 ? 'is' : 'are'} compared with yours.
+            </p>
+          )}
+        </div>
+      )}
 
       {status && (
         <div className="rounded border border-white/[0.06] bg-white/[0.02] p-3 space-y-2 text-[12px]" data-testid="shared-state-signing">

@@ -64,6 +64,12 @@ export function recordMaterialRead(input: {
 export interface MaterialReadRecord {
   sessionId: string | null;
   agent: string | null;
+  /**
+   * A teammate's read, from their record (C3.5): who, as people say it
+   * ("claude-code for Sam Lee"), and whether their record verified. Null for
+   * a read made on this machine.
+   */
+  teammate: { reader: string; name: string; verified: boolean } | null;
   attachmentUid: string;
   sha256: string | null;
   locator: MaterialLocator | null;
@@ -105,6 +111,11 @@ export interface TaskFootprint {
   cited: FootprintCitation[];
 }
 
+const verifiedOf = (verdict: string | null): boolean => {
+  try { return (JSON.parse(verdict ?? '{}') as { verified?: boolean }).verified === true; } catch { return false; }
+};
+const attachmentHere = (uid: string): boolean => rowsOf('SELECT 1 FROM attachments WHERE uid = ?', [uid]).length > 0;
+
 const parseLocator = (s: string | null): MaterialLocator | null => {
   if (!s) return null;
   try { return JSON.parse(s) as MaterialLocator; } catch { return null; }
@@ -112,18 +123,30 @@ const parseLocator = (s: string | null): MaterialLocator | null => {
 
 /** What a task works from and on. Empty lists when it has none of each. */
 export function taskFootprint(itemUid: string): TaskFootprint {
-  const reads = rowsOf<{ session_id: string | null; agent_type: string | null; attachment_uid: string; path: string; sha256: string | null; locator: string | null; at: number }>(
-    `SELECT r.session_id, s.agent_type, r.attachment_uid, r.path, r.sha256, r.locator, r.at
-       FROM material_reads r LEFT JOIN agent_sessions s ON s.session_id = r.session_id
-      WHERE r.item_uid = ? ORDER BY r.at, r.rowid`,
-    [itemUid],
+  // This machine's reads, and teammates' from their records (C3.5), in the
+  // order they happened by each machine's clock: which version a task read
+  // last is a question for people, not for ordering records.
+  const reads = rowsOf<{ session_id: string | null; agent_type: string | null; attachment_uid: string | null; path: string; sha256: string | null; locator: string | null; at: number; reader: string | null; name: string | null; verdict: string | null }>(
+    `SELECT * FROM (
+       SELECT r.session_id, s.agent_type, r.attachment_uid, r.path, r.sha256, r.locator, r.at, NULL AS reader, NULL AS name, NULL AS verdict, 0 AS src, r.rowid AS n
+         FROM material_reads r LEFT JOIN agent_sessions s ON s.session_id = r.session_id
+        WHERE r.item_uid = ?
+       UNION ALL
+       SELECT NULL, NULL, t.attachment_uid, t.path, t.sha256, NULL, t.at, t.reader, t.name, t.verdict, 1, t.counter
+         FROM teammate_material_reads t
+        WHERE t.item_uid = ?
+     ) ORDER BY at, src, n`,
+    [itemUid, itemUid],
   );
   const byPath = new Map<string, FootprintMaterial>();
   for (const r of reads) {
-    const m = byPath.get(r.path) ?? byPath.set(r.path, { path: r.path, attachmentUid: r.attachment_uid, reads: [], lastSha256: null, parts: [] }).get(r.path)!;
+    const m = byPath.get(r.path) ?? byPath.set(r.path, { path: r.path, attachmentUid: r.attachment_uid ?? '', reads: [], lastSha256: null, parts: [] }).get(r.path)!;
     const locator = parseLocator(r.locator);
-    m.reads.push({ sessionId: r.session_id, agent: r.agent_type, attachmentUid: r.attachment_uid, sha256: r.sha256, locator, at: Number(r.at) });
-    m.attachmentUid = r.attachment_uid;
+    const teammate = r.reader ? { reader: r.reader, name: r.name ?? 'someone', verified: verifiedOf(r.verdict) } : null;
+    // A teammate's read names the attachment as their plan's files carry it; it may not be here yet.
+    const attachmentUid = r.attachment_uid && (!teammate || attachmentHere(r.attachment_uid)) ? r.attachment_uid : m.attachmentUid;
+    m.reads.push({ sessionId: r.session_id, agent: r.agent_type, teammate, attachmentUid, sha256: r.sha256, locator, at: Number(r.at) });
+    m.attachmentUid = attachmentUid;
     m.lastSha256 = r.sha256;
     if (r.locator && !m.parts.some((p) => locatorKey(p) === r.locator)) m.parts.push(locator!);
   }
@@ -177,7 +200,7 @@ export function readSoFar(itemUid: string): Array<{ path: string; attachment_uid
     attachment_uid: m.attachmentUid,
     reads: m.reads.length,
     parts: [...new Set(m.reads.map((r) => partWords(r.locator)))],
-    by: [...new Set(m.reads.map((r) => r.agent ?? 'an agent'))],
+    by: [...new Set(m.reads.map((r) => (r.teammate ? `${r.teammate.reader}${r.teammate.verified ? '' : ' (unverified)'}` : r.agent ?? 'an agent')))],
     sha256: m.lastSha256,
     last_read_at: new Date(m.reads[m.reads.length - 1].at).toISOString(),
   }));
@@ -195,6 +218,7 @@ export function materialInputsOf(projectRoot: string): { tasks: MaterialTaskInpu
   const uids = rowsOf<{ uid: string }>(
     `SELECT DISTINCT uid FROM (
        SELECT item_uid AS uid FROM material_reads
+       UNION SELECT item_uid FROM teammate_material_reads
        UNION SELECT target_uid FROM attachments WHERE role = 'output'
        UNION SELECT c.item_uid FROM criterion_evidence e JOIN item_criteria c ON c.uid = e.criterion_uid WHERE e.attachment_uid IS NOT NULL
      ) WHERE uid IN (${inProject}) ORDER BY uid`,
@@ -217,8 +241,11 @@ export function materialInputsOf(projectRoot: string): { tasks: MaterialTaskInpu
       title: titleOf(uid),
       brief,
       reads: f.read.map((m) => {
-        const owner = ownerOf(m.attachmentUid) ?? uid;
-        return { path: m.path, sha256: m.lastSha256, owner: taskWorkstreamId(owner), ownerTitle: titleOf(owner) };
+        const owner = (m.attachmentUid ? ownerOf(m.attachmentUid) : null) ?? uid;
+        // Whose read it was when the latest is a teammate's (C3.5): the signals name them.
+        const last = m.reads[m.reads.length - 1]?.teammate;
+        const by = last ? `${last.name}${last.verified ? '' : ', unverified'}` : null;
+        return { path: m.path, sha256: m.lastSha256, owner: taskWorkstreamId(owner), ownerTitle: titleOf(owner), ...(by ? { by } : {}) };
       }),
       outputs: f.outputs.map((o) => o.path),
       cited: f.cited.map((c) => ({ path: c.path, part: partWords(c.locator), sha256: c.sha256AtCite, signedOff: c.signedOff })),
