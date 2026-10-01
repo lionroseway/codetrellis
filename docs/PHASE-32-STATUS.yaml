@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — C3.6: the C3 done-when, a shared plans folder end to end"
-  status: "C3.5 merged (#283). C3.6 built: the C3 journey over a synced OneDrive folder, two machines, end to end; found and fixed teammates' keys missing from Settings in a linked folder, and the window and the Brief now name whose read it was. Harness (journey 8; material 21), browser (journey 2, awareness tab 13) green locally"
-  next: "Merge C3.6 when green; then D1 (the CLI)"
+  step: "Track D — D1.1: `codetrellis serve` and `scan`"
+  status: "C3 done (#271–#284). D1.1 built: `codetrellis serve` runs the backend headless (loopback, the token on every transport, no update check or peers, data in the user's cache) and prints the connector line; `codetrellis mcp` finds it from the project folder; `scan` scans once. Unit (args 3), harness (cli-serve 6) green locally"
+  next: "Merge D1.1 when green; then D1.2 (the keep-on-track verbs)"
   blockers: "None"
   updated: 2026-10-01
 sections:

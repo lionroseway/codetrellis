@@ -6041,19 +6041,28 @@ export async function initializeBackend(): Promise<void> {
   // fails (e.g. a bundler edge in packaged Electron), the rest of
   // the backend boot keeps going. Updates can be checked manually
   // later via Settings → Updates → Check for Updates.
-  try {
-    startUpdatePolling();
-  } catch (err) {
-    console.warn('[Backend] Update polling failed to start:', err);
+  // Headless (`codetrellis serve`, Phase 32 D1.1): a cloud session or a CI
+  // job runs this for its agent, with nobody to offer an update to and no
+  // reason to ask the network anything. It makes no request of its own.
+  const headless = process.env.CODETRELLIS_HEADLESS === '1';
+  if (!headless) {
+    try {
+      startUpdatePolling();
+    } catch (err) {
+      console.warn('[Backend] Update polling failed to start:', err);
+    }
   }
 
   // CDev Phase 9 — peer connection manager. Starts mDNS discovery
   // and prepares for QR-based WebRTC pairing. Best-effort: if mDNS
   // fails (e.g. port 5353 in use), the rest of the app is unaffected.
-  try {
-    peerService.startPeerManager();
-  } catch (err) {
-    console.warn('[Backend] Peer connection manager failed to start:', err);
+  // Nor headless: no discovery and no phone to pair with on a runner.
+  if (!headless) {
+    try {
+      peerService.startPeerManager();
+    } catch (err) {
+      console.warn('[Backend] Peer connection manager failed to start:', err);
+    }
   }
 }
 
