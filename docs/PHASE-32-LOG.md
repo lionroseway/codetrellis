@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Track D — D1.2: the keep-on-track verbs |
-| **Status** | D1.1 in review (#285). D1.2 built: next, claim, update, stuck, done (refused while a criterion's check fails), request (asks on the plan, waits for the person's steer), brief, awareness, check (exit 3 when held) and report-tests, each an agent's MCP call, words or --json. Unit (agent 2), harness (cli-verbs 10) green locally |
-| **In flight** | D1.1 in review (#285) on `feat/phase-32-d1-1-serve-and-scan`; D1.2 building on `feat/phase-32-d1-2-keep-on-track` |
+| **Status** | D1.1 merged (#285). D1.2 built: next, claim, update, stuck, done (refused while a criterion's check fails), request (asks on the plan, waits for the person's steer), brief, awareness, check (exit 3 when held) and report-tests, each an agent's MCP call, words or --json. Unit (agent 2), harness (cli-verbs 10) green locally |
+| **In flight** | D1.2 building on `feat/phase-32-d1-2-keep-on-track` |
 | **Last merged** | C3.6 (#284, `8300675`) |
-| **Next action** | Merge D1.1, then D1.2 when green; then D1.3 (plan show/add/edit/move, commit, status) |
+| **Next action** | Merge D1.2 when green; then D1.3 (plan show/add/edit/move, commit, status) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `8300675`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `d38d08f`, with open PRs from GitHub.
 
 ---
 
@@ -250,7 +250,7 @@
 
 ### Track D: agents on demand
 - [ ] D1 The `codetrellis` CLI (owner's decision, 2026-10-01), refined in EXECUTION §6b: — building
-  - [ ] D1.1 `codetrellis serve` (headless backend, loopback, token on every transport) and `scan` (#285) — in review
+  - [ ] D1.1 `codetrellis serve` (headless backend, loopback, token on every transport) and `scan`
   - [ ] D1.2 Keep-on-track verbs as an agent: next, claim, update, stuck, done, request, brief, awareness, check, report-tests; text or --json — building
   - [ ] D1.3 Changing the plan (show, add, edit, move) and `commit`, which commits only CodeTrellis's own files; `status`
   - [ ] D1.4 A SessionStart hook recipe, a CI/CD recipe, and exit codes on status and check for gating (breakpoints, tests older than the code, failing criteria, stale system docs); this repository uses it
