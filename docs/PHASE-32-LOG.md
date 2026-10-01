@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Track B — B9.4: the phone and the G3 done-when |
-| **Status** | B9.3b in review (#297). B9.4 built (stacked on B9.3b): the phone's Stack screen opens with Played forward (each planned overlap, what was decided, and re-sequence, tell or leave from the phone), each plan says where it will meet another. G3 end to end: window, MCP client and phone agree on play-forward and the stack through approval, re-sequence and tell. Harness play-forward-g3 4, phone stack.spec 6 (shots); awareness.md has a play-forward section |
-| **In flight** | B9.3b in review (#297) on `feat/phase-32-b9-3b-approval-and-phone`; B9.4 building on `feat/phase-32-b9-4-phone-and-g3` |
-| **Last merged** | B9.3a (#296, `e2dd422`) |
-| **Next action** | Merge B9.3b, then B9.4, when green: B9 done. Then C4 |
+| **Status** | B9.3b merged (#297). B9.4 built: the phone's Stack screen opens with Played forward (each planned overlap, what was decided, and re-sequence, tell or leave from the phone), each plan says where it will meet another. G3 end to end: window, MCP client and phone agree on play-forward and the stack through approval, re-sequence and tell. Harness play-forward-g3 4, phone stack.spec 6 (shots); awareness.md has a play-forward section |
+| **In flight** | B9.4 in review (#298) on `feat/phase-32-b9-4-phone-and-g3` |
+| **Last merged** | B9.3b (#297, `1abcb2a`) |
+| **Next action** | Merge B9.4 when green: B9 done. Then C4 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `e2dd422`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `1abcb2a`, with open PRs from GitHub.
 
 ---
 
@@ -211,10 +211,10 @@
 - [ ] B9 Play-forward (code, and the materials tasks rely on) — building
   - [x] B9.1 The data: every active plan projected, planned overlaps (file, function, material), REST and get_play_forward (#294)
   - [x] B9.2 The window plays forward: dashed planned changes and ◇ planned overlaps on the graph, in the Stack tab (#295)
-  - [ ] B9.3 Acting on a planned overlap, split in two: — building
+  - [x] B9.3 Acting on a planned overlap, split in two:
     - [x] B9.3a Re-sequence, tell both agents, or leave it: by a person, kept with who and when (#296)
-    - [ ] B9.3b A new planned overlap said on approval; deciding one from the phone (#297) — in review
-  - [ ] B9.4 The phone and the G3 done-when — building
+    - [x] B9.3b A new planned overlap said on approval; deciding one from the phone (#297)
+  - [ ] B9.4 The phone and the G3 done-when (#298) — in review
 - [ ] B10 The record
 
 ### Track C: shared ways of working
