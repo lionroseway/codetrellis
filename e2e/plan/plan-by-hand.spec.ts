@@ -71,7 +71,9 @@ test.describe('planning by hand', () => {
     // lives, and it must be distinguishable from an action — which is
     // the thing that was wrong when pages and actions both counted as
     // "0/0 actions".
-    await page.locator('button:has-text("Page")').first().click();
+    // By exact name: `has-text` matches a substring, and the header's
+    // "0 of 0 tasks done" chip (C2.4a) is a button too.
+    await page.getByRole('button', { name: 'Page', exact: true }).first().click();
     await page.waitForTimeout(800);
 
     // ── a task, for the work ──────────────────────────────────────
@@ -80,7 +82,7 @@ test.describe('planning by hand', () => {
       await newBtn.click();
       await page.waitForTimeout(300);
     }
-    const taskBtn = page.locator('button:has-text("Task")').first();
+    const taskBtn = page.getByRole('button', { name: 'Task', exact: true }).first();
     await taskBtn.click();
 
     // Polled, not slept: a fixed 900ms read the items before the create landed

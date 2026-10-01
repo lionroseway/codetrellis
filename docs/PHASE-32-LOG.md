@@ -379,7 +379,10 @@ b (decision rows): this is the read side.
 
 Found on the way: Escape in the status view also minimised the plan,
 because the workspace's own Escape handler saw it too; the view
-now catches it before the workspace does.
+now catches it before the workspace does. And `plan-by-hand.spec.ts` picked
+its buttons with `has-text("Task")`, a substring match, so it clicked the new
+"0 of 0 tasks done" chip instead of the Task button (Browser suite 2/3 on
+#266); it now picks the Page and Task buttons by their exact names.
 
 Tests: unit `item-status.test.ts` (8); harness `plan-status.test.ts` (6:
 every item a state and a source, the plan's state with who recorded it,
