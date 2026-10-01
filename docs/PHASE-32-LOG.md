@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B8.3b: a grounding line on each task |
-| **Status** | B8.3b built: each criterion graded once (grounded, waiting on a person, sent back, changed since, failing, no evidence yet) into one line, served at GET /api/items/:uid/grounding, in get_brief and in the phone's criteria.list; the window's criteria block and the phone's task screen show it. Unit 2 files, harness task-grounding 5, browser criteria.spec 2, phone item-grounding 2 |
-| **In flight** | B8.3b building on `feat/phase-32-b8-3b-grounding-line` |
-| **Last merged** | C3.6 (#284, `8300675`) |
-| **Next action** | Merge B8.3b when green; then B8.4 (replay of the overlay, and J1 end to end) |
+| **Stage / step** | Track B — B8.4a: done on tests older than the code is refused (J1) |
+| **Status** | B8.4a built: an agent's update_item done is refused while a test criterion's report is older than the item's code, with why; the task line has a grade of its own (⚠ with tests older than the code) and the window says why under the criterion. Unit 2 files, harness stale-done 5 (and 13 related files, 93), browser stale-done.spec 1 (shot) |
+| **In flight** | B8.4a building on `feat/phase-32-b8-4a-stale-done` |
+| **Last merged** | B8.3b (#291, `13e8c2e`) |
+| **Next action** | Merge B8.4a when green; then B8.4b (the grounding overlay at a past moment in replay, J2) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `d34154d`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `13e8c2e`, with open PRs from GitHub.
 
 ---
 
@@ -202,10 +202,12 @@
 - [ ] B8 Grounding, refined in EXECUTION §5: — building
   - [x] B8.1 Per-test results: JUnit read test by test, each test's last result kept; report_tests, get_test_results, GET /api/tests; a test criterion names its failing tests (#273)
   - [x] B8.2 Tests mapped to code through imports: ✓ passing, ✗ failing, ○ no tests, ⚠ tests older than the code, per file (#274)
-  - [ ] B8.3 Where it shows, split in two: — building
+  - [x] B8.3 Where it shows, split in two:
     - [x] B8.3a The grounding overlay on the graph: ✗ ⚠ ✓ ○ on files, summed on clusters, the same answer as the Inspector (#275)
-    - [ ] B8.3b A grounding line on each task: "3 criteria · 2 grounded · 1 waiting on a person" (window, phone, get_brief) — building
-  - [ ] B8.4 Replay of grounding, and the J1 done-when: done on stale tests is refused and says so
+    - [x] B8.3b A grounding line on each task: "3 criteria · 2 grounded · 1 waiting on a person" (window, phone, get_brief) (#291)
+  - [ ] B8.4 The done-when, split in two: — building
+    - [ ] B8.4a J1: an agent's "done" on a test report older than the code is refused, and the task says "⚠ tests older than the code" — building
+    - [ ] B8.4b J2: the grounding overlay at a past moment in replay (billing/ from "○ no tests" to "✓ 12 passing")
 - [ ] B9 Play-forward (code, and the materials tasks rely on)
 - [ ] B10 The record
 
@@ -408,10 +410,34 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | D1.5 is refined into D1.5a (test runs travel; headless sharing) and D1.5b (the done-when). Test results never left the machine they were reported on, and records carry only task state, so "the desktop shows the tests after a pull" had nothing to show | The done-when names tests; building the missing piece inside the done-when step would hide a design change in a test |
 | 2026-10-01 | D1.5a: a test run travels as one signed record per device, its latest (older ones removed by their writer), naming the commit it ran on; a teammate's run is judged by commit, never by the file's time | Write-once files per writer, as C3.1's, so branches never edit the same file; keeping only the latest stops the folder growing with every CI run. A pull rewrites the files it brings, so by time every run made elsewhere would read "older than the code" |
 | 2026-10-01 | D1.5a: `--share-task-state` turns sharing on for a headless backend from the command line, refused for the desktop app's own data dir | In the app only the window may turn it on (the grant rule). A headless backend has no window: the person who wrote the hook or the pipeline is choosing, and an agent that could run the command can already write the project's files. The app's own switch stays the window's |
+| 2026-10-01 | B8.4 is split into B8.4a (J1, done on stale tests) and B8.4b (J2, the overlay in replay) | Different surfaces and different machinery (the criterion loop and update_item; replay frames and test history); one PR each |
+| 2026-10-01 | B8.4a: an agent's `update_item(status: done)` is refused only while a test criterion's report is older than the item's code; other failing checks still do not stop it there, and a person's "done" is never refused | J1 asks exactly this, and it is the one failure an agent cannot argue with: the report is about code that is gone. D1.2 left gating `update_item` on every check as a separate decision; that still stands. A person may close a task for reasons the checks cannot see |
 | 2026-10-01 | B8.3b: one grade per criterion, from its state and the criterion loop's own checks, in a fixed order (changed since and sent back before what its checks say; a judgement waits on a person until approved); the line lists only the grades there are | One grader means the window, the phone and an agent's brief can never disagree about a task; reusing check_criterion's checks means \"grounded\" is exactly what an agent's own check would say. A line of zeroes is noise |
 ---
 
 ## Entries
+
+### 2026-10-01: B8.4a — "done" on stale tests is refused (J1)
+- **Journey.** Sam's agent fixes VAT rounding in `src/billing/vat.ts`, runs
+  the tests and hands over the report: its test criterion is met and the
+  task says "1 criterion · grounded". It edits vat.ts once more and marks
+  the task done on the same report: refused, "Not done: "VAT tests pass" —
+  ⚠ tests older than the code: reports/vat.xml ran 09:10, before the last
+  change to this item's files (09:25) — run the tests again…", and nothing
+  changes. The task says "1 criterion · ⚠ 1 with tests older than the
+  code", in the window (with why under the criterion), in the agent's brief
+  and on the phone. Run again and handed over, "done" goes through. Sam
+  marking it done himself is his call.
+- **Built.** A check finding can carry a `reason`; the test check's "older
+  than the code" finding is worded so and tagged `tests_older`. A grade of
+  its own on the grounding line (`tests_older`, after "changed since").
+  `testsOlderThanCode(item)` in the criterion loop; `update_item` from an
+  agent asks it before "done". The criteria block shows why under the
+  criterion.
+- **Tests.** Unit `grounding-line.test.ts`, `task-grounding.test.ts`.
+  Harness `stale-done.test.ts` (5). Browser `plan/stale-done.spec.ts`
+  (against the real backend, shot). 13 related harness files (93) and the
+  criteria specs pass.
 
 ### 2026-10-01: B8.3b — a grounding line on each task
 - **Journey.** Sam's "Q3 revenue summary" is judged on three criteria: EMEA

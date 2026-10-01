@@ -9,6 +9,8 @@ test('the line names the criteria, then each grade there is, solid first', () =>
     '6 criteria · 1 grounded · 1 waiting on a person · 1 sent back · 1 changed since · 1 failing · 1 no evidence yet',
   );
   assert.equal(groundingLine(['failing']).words, '1 criterion · 1 failing');
+  // B8.4a: a report older than the code says so, after "changed since".
+  assert.equal(groundingLine(['grounded', 'tests_older']).words, '2 criteria · 1 grounded · 1 with tests older than the code');
 });
 
 test('all grounded says so; none at all says nothing', () => {
@@ -19,6 +21,6 @@ test('all grounded says so; none at all says nothing', () => {
   assert.equal(groundingLine(['grounded']).words, '1 criterion · grounded');
   assert.deepEqual(groundingLine([]), {
     words: null, total: 0, grounded: false,
-    counts: { grounded: 0, waiting: 0, sent_back: 0, changed: 0, failing: 0, no_evidence: 0 },
+    counts: { grounded: 0, waiting: 0, sent_back: 0, changed: 0, tests_older: 0, failing: 0, no_evidence: 0 },
   });
 });

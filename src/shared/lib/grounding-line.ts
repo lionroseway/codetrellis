@@ -9,22 +9,25 @@
  *    is a judgement only a person can make);
  *  - sent back: a person sent it back;
  *  - changed since: a file it was approved on has changed;
+ *  - tests older than the code: its test report ran before the item's files
+ *    last changed, so its "passing" is about code no longer there (B8.4a);
  *  - failing: its checks fail on the evidence there is;
  *  - no evidence yet: nothing offered and nothing to check.
  *
  * Pure: the grades are the backend's (`services/task-grounding.ts`).
  */
 
-export type CriterionGrade = 'grounded' | 'waiting' | 'sent_back' | 'changed' | 'failing' | 'no_evidence';
+export type CriterionGrade = 'grounded' | 'waiting' | 'sent_back' | 'changed' | 'tests_older' | 'failing' | 'no_evidence';
 
 /** The order the line names them in: what is solid first, then what needs a person, then what needs work. */
-export const GRADE_ORDER: readonly CriterionGrade[] = ['grounded', 'waiting', 'sent_back', 'changed', 'failing', 'no_evidence'];
+export const GRADE_ORDER: readonly CriterionGrade[] = ['grounded', 'waiting', 'sent_back', 'changed', 'tests_older', 'failing', 'no_evidence'];
 
 export const GRADE_WORDS: Record<CriterionGrade, string> = {
   grounded: 'grounded',
   waiting: 'waiting on a person',
   sent_back: 'sent back',
   changed: 'changed since',
+  tests_older: 'with tests older than the code',
   failing: 'failing',
   no_evidence: 'no evidence yet',
 };
@@ -35,6 +38,7 @@ export const GRADE_GLYPH: Record<CriterionGrade, string> = {
   waiting: '◐',
   sent_back: '↩',
   changed: '⚠',
+  tests_older: '⚠',
   failing: '✗',
   no_evidence: '○',
 };

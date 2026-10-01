@@ -69,7 +69,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 184 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 185 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -101,13 +101,13 @@ records that — but "✗ none" is proof of a gap.
 | c | `GET /api/comments` |  | ✗ none | 1 | ✓ 0.4c-2: threaded with replies (item-surface) |  |  |
 | c | `GET /api/contributions` |  | ✗ none | 3 | ✓ 0.4c: exercised by cdev-phase7, review-confinement, surfaced-rest (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/items/:itemUid/refs` |  | ✗ none | 3 | ✓ 0.4c: exercised by phone-plans, references (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `GET /api/items/:uid` |  | ✗ none | 20 | ✓ 0.4c: exercised by agent-loop, criteria-signoff, drift-review-tools, full-loop, +5 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/items/:uid` |  | ✗ none | 21 | ✓ 0.4c: exercised by agent-loop, criteria-signoff, drift-review-tools, full-loop, +5 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/items/:uid/attachments` |  | ✗ none | 1 | ✓ 0.4c: exercised by filesystem-sinks, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/items/:uid/comments` |  | ✗ none | 2 | ✓ 0.4c: exercised by phone-plans, short-references, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/items/:uid/criteria` |  | ✗ none | 3 | ✓ 0.4c: exercised by artefacts-stale, brief-surface, criteria-loops, criteria-signoff, +3 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/items/:uid/events` |  | ✗ none | 2 | ✓ 0.4c-2: rename recorded before/after (item-surface) |  |  |
 | c | `GET /api/items/:uid/full` |  | ✗ none | 2 | ✓ 0.4c: exercised by item-surface, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `GET /api/items/:uid/grounding` |  | ✗ none | 1 |  |  |  |
+| c | `GET /api/items/:uid/grounding` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/items/:uid/signed-approvals` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/items/:uid/skills` |  | ✗ none | 4 |  |  |  |
 | c | `GET /api/items/:uid/spec-links` |  | ✗ none | 1 |  |  |  |
@@ -165,7 +165,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/items/:uid/claim` |  | ✗ none | 2 | ✓ 0.4c-2: claims and records the assignee; full lifecycle (full-loop) |  |  |
 | c | `POST /api/items/:uid/code-reference` |  | ✗ none | 1 | ✓ 0.4c-1: appends line ranges; shows in the overlay; refusals (code-reference, e2e add-to-plan; bug 21) |  |  |
 | c | `POST /api/items/:uid/comments` |  | ✗ none | 3 | ✓ 0.4c: exercised by phone-plans, short-references, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `POST /api/items/:uid/criteria` |  | ✗ none | 13 | ✓ 0.4c: exercised by artefacts-stale, brief-surface, criteria-loops, criteria-signoff, +3 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/items/:uid/criteria` |  | ✗ none | 14 | ✓ 0.4c: exercised by artefacts-stale, brief-surface, criteria-loops, criteria-signoff, +3 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/items/:uid/keep-state` |  | ✗ none | 2 |  |  |  |
 | c | `POST /api/items/:uid/move` |  | ✗ none | 1 | ✓ 0.4c-2: re-parents and reorders; cycles, self, foreign and missing parents 400 (item-surface; bug 23) |  |  |
 | c | `POST /api/items/:uid/progress` |  | ✗ none | 1 | ✓ 0.4c: exercised by task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -173,9 +173,9 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/items/:uid/skill-arrivals/accept` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/spec-proposals` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/worktree` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans` |  | 1 | 108 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans` |  | 1 | 109 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 3 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `POST /api/plans/:planUid/items` |  | ✗ none | 74 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:planUid/items` |  | ✗ none | 75 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 2 | ✓ 0.4c: exercised by criteria-loops (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/docs` |  | ✗ none | 7 | ✓ 0.4c: exercised by full-loop, phone-plans, plan-docs, plan-export, +2 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -190,7 +190,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/plans/import-external` |  | ✗ none | 1 | ✓ 0.4c-1: issue checklist becomes Actions; unknown source 400 (plan-rest) |  |  |
 | c | `POST /api/plans/prune-orphans` |  | ✗ none | 1 | ✓ 0.4c-1: removes only the opened project's current orphans; everything else skipped (plan-rest) |  |  |
 | c | `POST /api/spec-proposals/:uid/decision` |  | ✗ none | 2 |  |  |  |
-| c | `PUT /api/items/:uid` |  | ✗ none | 25 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
+| c | `PUT /api/items/:uid` |  | ✗ none | 26 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
 | c | `PUT /api/items/:uid/relies-on` |  | ✗ none | 7 |  |  |  |
 | c | `PUT /api/items/:uid/workstream` |  | ✗ none | 12 |  |  |  |
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 3 | ✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -409,7 +409,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `set_plan_home_repo` | plan · write | ✗ none | 1 | ✓ 0.4c-1: normalised; empty clears (plan-tools) |  |  |
 | c | `suggest_specs` | plan-item · read | ✗ none | 1 | ✓ 0.4c-2: file specs under a scope (item-surface) |  |  |
 | c | `unlink_plan_from_files` | plan · write | ✗ none | 1 | ✓ 0.4c-1: removes the directory, even after a rename; plan survives (plan-tools; bug 22) |  |  |
-| c | `update_item` | plan-item · write | ✗ none | 18 | ✓ 0.4c: exercised by agent-loop, cdev-phase3-demo, cdev-phase5, criteria-signoff, +6 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `update_item` | plan-item · write | ✗ none | 19 | ✓ 0.4c: exercised by agent-loop, cdev-phase3-demo, cdev-phase5, criteria-signoff, +6 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `update_item_progress` | plan-item · write | ✗ none | 3 | ✓ 0.4c: exercised by plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `update_plan` | plan · write | ✗ none | 2 | ✓ 0.4c-1: title/status/description, version recorded; write-through continues after a rename (plan-tools; bug 22) |  |  |
 | d | `add_criterion` | plan-item · write | ✗ none | 3 | ✓ 0.4d: kept at propose, tagged with the agent's name in the app (criteria-signoff, criteria.spec) |  |  |
@@ -420,11 +420,11 @@ records that — but "✗ none" is proof of a gap.
 | d | `list_criteria` | plan-item · read | ✗ none | 4 | ✓ 0.4d: migrated line verbatim plus the gate, with decided_by (criteria-signoff) |  |  |
 | d | `report_tests` | test · write | ✗ none | 3 |  |  |  |
 | d | `run_checks` | plan-item · read | ✗ none | 1 | ✓ 0.4d: names the stale criterion and the changed file; approves nothing (criteria-loops) |  |  |
-| d | `submit_criterion` | plan-item · write | ✗ none | 8 | ✓ 0.4d: submitting is not approving; agent policy self-approves in the agent's name (criteria-signoff) |  |  |
-| e | `get_brief` | plan-item · read | ✗ none | 15 | ✓ 0.4e: item, guide from pages, own files + pages' materials only, still_needs; unknown refused (brief-surface) |  |  |
+| d | `submit_criterion` | plan-item · write | ✗ none | 9 | ✓ 0.4d: submitting is not approving; agent policy self-approves in the agent's name (criteria-signoff) |  |  |
+| e | `get_brief` | plan-item · read | ✗ none | 16 | ✓ 0.4e: item, guide from pages, own files + pages' materials only, still_needs; unknown refused (brief-surface) |  |  |
 | e | `list_materials` | plan-item · read | ✗ none | 1 | ✓ 0.4e: every file item by item in tree order, outputs included; unknown refused (brief-surface) |  |  |
 | e | `read_material` | plan-item · files | ✗ none | 8 | ✓ 0.4e: CSV by {range} (bug 24), text by {lines}, image as itself; read logged on the item (brief-surface, read unit) |  |  |
-| e | `record_artefact` | plan-item · write | ✗ none | 6 | ✓ 0.4e: agent records an output (brief-surface, criteria-loops) |  |  |
+| e | `record_artefact` | plan-item · write | ✗ none | 7 | ✓ 0.4e: agent records an output (brief-surface, criteria-loops) |  |  |
 | f | `await_ack` | presence · write | ✗ none | 1 | ✓ 0.4f: released by ack; instant when already acked; unknown card an error at once; dismissed → via dismissed (presence-channels; bug 25) |  |  |
 | f | `await_decision` | presence · read | ✗ none | 8 |  |  |  |
 | f | `await_user_input` | presence · write | ✗ none | 1 | ✓ 0.4f: gets the reply; a newer question supersedes an older wait at once (presence-channels; bug 25) |  |  |

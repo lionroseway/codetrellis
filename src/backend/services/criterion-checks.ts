@@ -418,7 +418,10 @@ export function runChecks(ctx: CheckContext): CriterionCheck {
       }
       for (const a of reports) {
         if (ctx.lastTargetChangeAt !== null && a.mtime !== null && a.mtime < ctx.lastTargetChangeAt - MTIME_SLACK_MS) {
-          findings.push(fail(`${a.path} is older than the last change to this item's files (${when(ctx.lastTargetChangeAt)}) — run the tests again`, a.uid));
+          findings.push({
+            ...fail(`⚠ tests older than the code: ${a.path} ran ${when(a.mtime)}, before the last change to this item's files (${when(ctx.lastTargetChangeAt)}) — run the tests again`, a.uid),
+            reason: 'tests_older',
+          });
           continue;
         }
         const read = readForCheck(root!, a);

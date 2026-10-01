@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track B — B8.3b: a grounding line on each task"
-  status: "B8.3b built: each criterion graded once (grounded, waiting on a person, sent back, changed since, failing, no evidence yet) into one line, served at GET /api/items/:uid/grounding, in get_brief and in the phone's criteria.list; the window's criteria block and the phone's task screen show it. Unit 2 files, harness task-grounding 5, browser criteria.spec 2, phone item-grounding 2"
-  next: "Merge B8.3b when green; then B8.4 (replay of the overlay, and J1 end to end)"
+  step: "Track B — B8.4a: done on tests older than the code is refused (J1)"
+  status: "B8.4a built: an agent's update_item done is refused while a test criterion's report is older than the item's code, with why; the task line has a grade of its own (⚠ with tests older than the code) and the window says why under the criterion. Unit 2 files, harness stale-done 5 (and 13 related files, 93), browser stale-done.spec 1 (shot)"
+  next: "Merge B8.4a when green; then B8.4b (the grounding overlay at a past moment in replay, J2)"
   blockers: "None"
   updated: 2026-10-01
 sections:
@@ -482,7 +482,12 @@ sections:
               - id: B8.3b
                 title: "A grounding line on each task: \"3 criteria · 2 grounded · 1 waiting on a person\" (window, phone, get_brief)"
           - id: B8.4
-            title: "Replay of grounding, and the J1 done-when: done on stale tests is refused and says so"
+            title: "The done-when, split in two:"
+            items:
+              - id: B8.4a
+                title: "J1: an agent's \"done\" on a test report older than the code is refused, and the task says \"⚠ tests older than the code\""
+              - id: B8.4b
+                title: "J2: the grounding overlay at a past moment in replay (billing/ from \"○ no tests\" to \"✓ 12 passing\")"
       - id: B9
         title: Play-forward (code, and the materials tasks rely on)
       - id: B10

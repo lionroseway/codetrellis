@@ -101,7 +101,7 @@ export function CriteriaBlock({
       </h3>
       <GroundingLine grounding={grounding} />
       <ul className="space-y-2">
-        {criteria.map((c) => <CriterionRow key={c.uid} itemUid={itemUid} criterion={c} attachments={attachments} vocabulary={vocabulary} you={you} signed={signed.filter((a) => a.criterionUid === c.uid)} />)}
+        {criteria.map((c) => <CriterionRow key={c.uid} itemUid={itemUid} criterion={c} attachments={attachments} vocabulary={vocabulary} you={you} signed={signed.filter((a) => a.criterionUid === c.uid)} graded={grounding?.criteria.find((g) => g.uid === c.uid) ?? null} />)}
       </ul>
 
       {adding ? (
@@ -150,10 +150,12 @@ export function CriteriaBlock({
 }
 
 function CriterionRow({
-  itemUid, criterion: c, attachments, vocabulary, you, signed,
+  itemUid, criterion: c, attachments, vocabulary, you, signed, graded,
 }: {
   itemUid: string;
   criterion: ItemCriterion;
+  /** B8.3b — its grade on the task's grounding line, and why. */
+  graded: { grade: string; why: string } | null;
   /** C2.5b — its approvals as signed statements. */
   signed: SignedApproval[];
   attachments: TaskAttachment[];
@@ -237,6 +239,10 @@ function CriterionRow({
               </select>
             )}
           </p>
+          {/* B8.4a — a report older than the code says so where the criterion is, not only on hover. */}
+          {graded?.grade === 'tests_older' && (
+            <p className="text-[11px] text-amber-300 mt-1" data-testid="criterion-tests-older">{graded.why}</p>
+          )}
           {(c.state === 'submitted' || c.state === 'stale') && (evidenceNote || evidenceCount > 0) && (
             <p className="text-[11px] text-foreground-muted mt-1">
               {evidenceNote}
