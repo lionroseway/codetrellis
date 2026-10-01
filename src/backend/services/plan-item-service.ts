@@ -29,6 +29,7 @@
  * tool surface this service backs.
  */
 
+import { isStateOnly } from '../../shared/lib/item-status';
 import { randomUUID } from 'node:crypto';
 import { withdrawProposals } from './spec-proposal-withdraw';
 import { getDb } from './database';
@@ -1548,7 +1549,8 @@ export function createItem(input: CreatePlanItemInput): PlanItem {
 
 export function updateItem(uid: string, updates: UpdatePlanItemInput): PlanItem | null {
   const item = updateItemImpl(uid, updates);
-  writeThrough(item?.planUid);
+  // C2.4b — state is in no file, so a change to it alone writes none.
+  if (!isStateOnly(updates)) writeThrough(item?.planUid);
   return item;
 }
 
@@ -1581,8 +1583,7 @@ export function claimItem(
   sessionId?: string,
   actor?: { author: string; authorType: string },
 ): ClaimItemResult {
-  const result = claimItemImpl(uid, agentId, agentType, model, capabilities, sessionId, actor);
-  if (result.ok) writeThrough(getItem(uid)?.planUid);
-  return result;
+  // A claim is state (C2.4b): it is in no file, so it writes none.
+  return claimItemImpl(uid, agentId, agentType, model, capabilities, sessionId, actor);
 }
 

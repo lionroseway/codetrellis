@@ -652,12 +652,14 @@ function upsertItem(
       title: typeof raw.title === 'string' ? raw.title : undefined,
       body: typeof raw.body === 'string' ? raw.body : undefined,
       template: raw.template ?? null,
+      // State is no longer written (C2.4b). A file from before that still
+      // carries it is read; a file without it leaves this machine's alone.
       status: isTaskStatus(raw.status) ? raw.status : undefined,
-      assignee: raw.assignee ?? null,
-      assigneeType: raw.assigneeType ?? null,
-      assigneeModel: raw.assigneeModel ?? null,
+      assignee: 'assignee' in raw ? raw.assignee ?? null : undefined,
+      assigneeType: 'assignee' in raw ? raw.assigneeType ?? null : undefined,
+      assigneeModel: 'assignee' in raw ? raw.assigneeModel ?? null : undefined,
       progressPercent: typeof raw.progressPercent === 'number' ? raw.progressPercent : undefined,
-      blockedReason: raw.blockedReason ?? null,
+      blockedReason: 'blockedReason' in raw ? raw.blockedReason ?? null : undefined,
       scopePath: raw.scopePath ?? null,
       fileSpecs: Array.isArray(raw.fileSpecs) ? raw.fileSpecs : undefined,
       symbolSpecs: Array.isArray(raw.symbolSpecs) ? raw.symbolSpecs : undefined,
@@ -1323,7 +1325,10 @@ function serializePlan(plan: Plan & { tasks?: Task[] }, version?: 1 | 2) {
  */
 function serializeItem(item: PlanItem): Record<string, unknown> {
   const attachments = taskAttachmentsService.listItemAttachments(item.uid);
-  const comments = commentService.listItemComments(item.uid);
+  // A progress report is state, like the percent it carries (C2.4b), so it
+  // stays on this machine; notes, blockers and questions are people's words
+  // to the team and ride with the item.
+  const comments = commentService.listItemComments(item.uid).filter((c) => c.kind !== 'progress');
 
   const obj: Record<string, unknown> = {
     uid: item.uid,
@@ -1335,16 +1340,11 @@ function serializeItem(item: PlanItem): Record<string, unknown> {
   if (item.body) obj.body = item.body;
   if (item.template) obj.template = item.template;
 
-  // Action-only fields — only include when present
+  // Action-only fields — only include when present. Its state (status,
+  // progress, blocked reason, claim) is not written (Phase 32 C2.4b): the
+  // file says what the task is, and its state is read from git, a host or
+  // this machine's record of it, so a status change rewrites nothing.
   if (item.kind === 'action') {
-    if (item.status) obj.status = item.status;
-    if (item.assignee) {
-      obj.assignee = item.assignee;
-      if (item.assigneeType) obj.assigneeType = item.assigneeType;
-      if (item.assigneeModel) obj.assigneeModel = item.assigneeModel;
-    }
-    if (item.progressPercent != null) obj.progressPercent = item.progressPercent;
-    if (item.blockedReason) obj.blockedReason = item.blockedReason;
     if (item.scopePath) obj.scopePath = item.scopePath;
     if (item.fileSpecs?.length) obj.fileSpecs = item.fileSpecs;
     if (item.symbolSpecs?.length) obj.symbolSpecs = item.symbolSpecs;
@@ -1382,7 +1382,9 @@ function serializeItem(item: PlanItem): Record<string, unknown> {
   obj.author = item.author;
   obj.authorType = item.authorType;
   obj.createdAt = new Date(item.createdAt).toISOString();
-  obj.updatedAt = new Date(item.updatedAt).toISOString();
+  // No updatedAt (C2.4b): every change bumps it, a status change too, so
+  // writing it would rewrite the file for state. When an item last changed
+  // is in git's history of its file.
 
   // Inline attachments
   if (attachments.length) {
@@ -1879,6 +1881,9 @@ function ensureDir(dir: string): void {
 }
 
 function writeFileAtomic(filePath: string, content: string): void {
+  // Unchanged content is not rewritten (C2.4b): a write-through re-exports
+  // the whole plan, and a file touched for nothing is noise to a sync client.
+  try { if (fs.readFileSync(filePath, 'utf-8') === content) return; } catch { /* not there yet */ }
   const tmp = `${filePath}.tmp`;
   fs.writeFileSync(tmp, content, 'utf-8');
   fs.renameSync(tmp, filePath);

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  branchLineageWords, itemStatuses, planStatusView, sectionStateWords, statusLine, taskStateWords,
+  branchLineageWords, isStateOnly, itemStatuses, planStatusView, sectionStateWords, statusLine, taskStateWords,
   type PlanItemFacts,
 } from './item-status';
 import type { ItemGitState } from './git-state-words';
@@ -102,4 +102,14 @@ test('the view: progress, waiting on someone, under way', () => {
   assert.deepEqual(view.progress, { done: 2, total: 5, words: '2 of 5 tasks done' });
   assert.deepEqual(view.waiting.map((w) => w.itemUid), ['b', 'd']);
   assert.deepEqual(view.inProgress.map((w) => w.itemUid), ['c']);
+});
+
+test('state is status, progress, blocked reason and claim; anything else is intent and is written', () => {
+  assert.equal(isStateOnly({ status: 'done', author: 'Sam', authorType: 'human' }), true);
+  assert.equal(isStateOnly({ assignee: 'codex', assigneeType: 'codex', assigneeSession: 's1' }), true);
+  assert.equal(isStateOnly({ progressPercent: 40, blockedReason: undefined }), true);
+  assert.equal(isStateOnly({ status: 'done', title: 'Renamed' }), false);
+  assert.equal(isStateOnly({ body: 'x' }), false);
+  // Nothing at all is not a state change either: there is nothing to skip.
+  assert.equal(isStateOnly({ author: 'Sam' }), false);
 });
