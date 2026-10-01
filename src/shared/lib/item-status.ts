@@ -203,6 +203,25 @@ function tasksUnder(uid: string, children: ReadonlyMap<string | null, PlanItemFa
   return out;
 }
 
+// ── What is state, and so never written (C2.4b) ─────────────────────────
+
+/**
+ * An item's state: its status, progress, blocked reason and who has claimed
+ * it. The plan's files keep intent and never these, so a change to them
+ * alone writes no file and a teammate's pull never carries them.
+ */
+export const ITEM_STATE_FIELDS: ReadonlySet<string> = new Set([
+  'status', 'assignee', 'assigneeType', 'assigneeModel', 'assigneeSession', 'progressPercent', 'blockedReason',
+]);
+
+/** True when an update changes nothing but state (who made it aside). */
+export function isStateOnly(updates: object): boolean {
+  const keys = Object.entries(updates)
+    .filter(([k, v]) => v !== undefined && k !== 'author' && k !== 'authorType')
+    .map(([k]) => k);
+  return keys.length > 0 && keys.every((k) => ITEM_STATE_FIELDS.has(k));
+}
+
 // ── The plan's status view ──────────────────────────────────────────────
 
 export interface StatusLine { itemUid: string; title: string; words: string; source: ItemStateSource; from: string }
