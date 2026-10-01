@@ -70,6 +70,33 @@ and proxies to the SSE server.
 - Built by `npm run build:connector` (its own Vite config, one
   self-contained file). Every `package:*` script and `predev` run it.
 
+## Without the desktop app: the `codetrellis` CLI (Phase 32 D1)
+
+`bin/codetrellis.mjs` (the package's `codetrellis` bin) runs `src/cli/main.ts`
+under tsx in one process.
+
+- `codetrellis serve [--project <dir>]` boots the backend in-process with
+  `CODETRELLIS_HEADLESS=1`: no update poller and no peer/mDNS manager (the
+  only two things that start on their own and reach the network), bound to
+  loopback, the capability token required as always. Its data dir is in the
+  user's cache, one per project (`headlessDataDir`: XDG / `~/Library/Caches` /
+  `%LOCALAPPDATA%`, `codetrellis/<name>-<hash>`), never the checkout. It opens
+  the project through `/api/project/scan` with its own token, as the app
+  opens a folder the person picked, and prints the connector line (`--json`
+  for scripts). The backend's console goes to stderr; stdout is the answer.
+- `codetrellis mcp` is the stdio connector (`connector/main.ts`), run by the
+  CLI. With no `--data-dir` it uses the headless backend for the folder it
+  starts in when one has published an endpoint, else the desktop app's, so an
+  agent's config can be the same line everywhere.
+- `codetrellis scan` boots, opens, prints counts and shuts down gracefully.
+- The process handlers and graceful shutdown are `backend/lifecycle.ts`,
+  shared with the web entry `backend/index.ts`.
+
+The verbs an agent uses to keep itself on track (D1.2) and to change and
+commit the plan (D1.3) are thin clients over the MCP tools through this
+connector, so each is an agent's call: attributed, capability-checked and in
+the Timeline.
+
 `getMcpSetup` (`/api/mcp/setup`) returns the connector's command, JSON and
 `claude mcp add` line; Settings, the guide and the status bar all copy the
 connector's config first. The direct, token-carrying config is still

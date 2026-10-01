@@ -10,6 +10,9 @@
     "url": "https://github.com/lionroseway/codetrellis-releases"
   },
   "main": "out/main/main.js",
+  "bin": {
+    "codetrellis": "bin/codetrellis.mjs"
+  },
   "scripts": {
     "postinstall": "patch-package",
     "predev": "bash scripts/free-dev-ports.sh && npm run build:connector && npm run build:rendition && npm run build:reader",
@@ -156,7 +159,7 @@
   "build": {
     "appId": "dev.codetrellis.app",
     "productName": "CodeTrellis",
-    "copyright": "Copyright \u00a9 2026 CodeTrellis Contributors",
+    "copyright": "Copyright © 2026 CodeTrellis Contributors",
     "directories": {
       "output": "out/make",
       "buildResources": "resources"

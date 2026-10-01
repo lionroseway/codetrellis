@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — C3.6: the C3 done-when, a shared plans folder end to end |
-| **Status** | C3.5 merged (#283). C3.6 built: the C3 journey over a synced OneDrive folder, two machines, end to end; found and fixed teammates' keys missing from Settings in a linked folder, and the window and the Brief now name whose read it was. Harness (journey 8; material 21), browser (journey 2, awareness tab 13) green locally |
-| **In flight** | C3.6 building on `feat/phase-32-c3-6-shared-folder-journey` |
-| **Last merged** | C3.5 (#283, `5a11937`) |
-| **Next action** | Merge C3.6 when green; then D1 (the CLI) |
+| **Stage / step** | Track D — D1.1: `codetrellis serve` and `scan` |
+| **Status** | C3 done (#271–#284). D1.1 built: `codetrellis serve` runs the backend headless (loopback, the token on every transport, no update check or peers, data in the user's cache) and prints the connector line; `codetrellis mcp` finds it from the project folder; `scan` scans once. Unit (args 3), harness (cli-serve 6) green locally |
+| **In flight** | D1.1 building on `feat/phase-32-d1-1-serve-and-scan` |
+| **Last merged** | C3.6 (#284, `8300675`) |
+| **Next action** | Merge D1.1 when green; then D1.2 (the keep-on-track verbs) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `5a11937`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `8300675`, with open PRs from GitHub.
 
 ---
 
@@ -230,7 +230,7 @@
   - [ ] C2.6 Teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when — building
     - [x] C2.6a Teammates' plans after a pull: who added a plan and in which commit, as git says, in the plans list, the Stack and get_plan (#270)
     - [ ] C2.6b Phase 32's own plan in CodeTrellis, npm run status reading through the app; the C2 done-when (at the phase end: the owner keeps the current way of working until then)
-- [ ] C3 A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice), refined in EXECUTION §6: — building
+- [x] C3 A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice), refined in EXECUTION §6:
   - [x] C3.1 Task state as records in the project's files: one new file per change, one writer each, read from all; a teammate's state says whose record and that it is unverified; off until the person turns it on (#271)
   - [x] C3.2 A real disagreement is a signal: people acting at once are named on the task and in the inbox until one decides (#272)
   - [x] C3.3 Signed records: the person's git SSH key when set up, else a key the app makes for the device (#279)
@@ -239,7 +239,7 @@
     - [x] C3.4b OneDrive and SharePoint found where their clients put them; a placeholder is "not on this device" and never opened (#281)
     - [x] C3.4c Materials in the folder by their place and hash, never a full path; A6's signals match across machines (#282)
   - [x] C3.5 Teammates' material reads, a separate switch, on by default once a folder is shared (#283)
-  - [ ] C3.6 The C3 done-when — building
+  - [x] C3.6 The C3 done-when (#284)
 - [ ] C4 Recurring playbooks
 - [x] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
   - [x] C5.1 `workstream` on an item, inherited; `assign_workstream`; next and claim respect it (#186)
@@ -249,8 +249,8 @@
     - [x] C5.3b A collision between two sections of one plan names both; readiness to merge per section (#190)
 
 ### Track D: agents on demand
-- [ ] D1 The `codetrellis` CLI (owner's decision, 2026-10-01), refined in EXECUTION §6b:
-  - [ ] D1.1 `codetrellis serve` (headless backend, loopback, token on every transport) and `scan`
+- [ ] D1 The `codetrellis` CLI (owner's decision, 2026-10-01), refined in EXECUTION §6b: — building
+  - [ ] D1.1 `codetrellis serve` (headless backend, loopback, token on every transport) and `scan` — building
   - [ ] D1.2 Keep-on-track verbs as an agent: next, claim, update, stuck, done, request, brief, awareness, check, report-tests; text or --json
   - [ ] D1.3 Changing the plan (show, add, edit, move) and `commit`, which commits only CodeTrellis's own files; `status`
   - [ ] D1.4 A SessionStart hook recipe, a CI/CD recipe, and exit codes on status and check for gating (breakpoints, tests older than the code, failing criteria, stale system docs); this repository uses it
@@ -399,9 +399,27 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | C3.4c: a material in the linked plans folder is stored as `plans://<path in the folder>`; a file reference's role travels in the plan files, its hash never does | The place is the same on every machine, the path is not. A hash taken on another machine is a claim; each device takes its own and compares |
 | 2026-10-01 | C3.5: a read record is written per version a task read, not per read; teammates' reads are forgotten here when either switch is off, and their names are in a signal's words, never its shape | Teammates need which version each task worked from; every read would be noise in the folder. A signal resting on reads the person chose not to use would be wrong. Naming who in the shape would reopen a signal when a key is trusted |
 | 2026-10-01 | C3.6: the done-when runs over a synced folder, not git: the sync is a copy of what each device wrote, and one record arrives as a placeholder first | git was C3.1's test; the folder is what business teams use and what C3.4 added, and partial arrival is the case only a synced folder has |
+| 2026-10-01 | D1.1: `serve` runs the backend in its own process with the existing token and loopback rules, adding only a headless switch that starts no update poller and no peer manager; its data is in the user's cache, one folder per project | A runner has nobody to offer an update to and no phone to pair; a second set of security rules for the CLI would be a second thing to get wrong. Data in the checkout would be committed by accident |
 ---
 
 ## Entries
+
+### 2026-10-01: D1.1 — `codetrellis serve` and `scan`
+- **Journey.** Sam's cloud session has the repository and Node, nothing else.
+  `codetrellis serve` runs CodeTrellis for it headless and prints the line
+  his agent's MCP config needs; the agent launches `codetrellis mcp` in the
+  project, finds that backend with no data dir given, and makes a plan, which
+  the backend records as the agent's call. Nothing goes into the checkout,
+  every request without the token is refused, and the backend asks the
+  network nothing of its own. `codetrellis scan` scans once and exits.
+- **Built.** `src/cli/` (`args.ts`, pure: arguments, the cache data dir, the
+  connector line; `main.ts`: serve, scan, mcp), `bin/codetrellis.mjs` (the
+  npm bin), `CODETRELLIS_HEADLESS` (no update poller, no peer/mDNS manager),
+  and `backend/lifecycle.ts`, the process handlers and graceful shutdown moved
+  out of `index.ts` so the CLI stops the same way.
+- **Tests.** Unit `src/cli/args.test.ts` (3). Harness `cli-serve.test.ts` (6:
+  serve's answer and data dir; the token; an agent through `codetrellis mcp`;
+  no outbound request; scan; help and refusal).
 
 ### 2026-10-01: C3.6 — the C3 done-when, a shared plans folder end to end
 - **Journey.** Dana and Sam keep "Q4 board pack" in their team's OneDrive
