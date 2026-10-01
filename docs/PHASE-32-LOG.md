@@ -19,13 +19,13 @@
 |---|---|
 | **Stage / step** | Track B — B9.3a: acting on a planned overlap |
 | **Status** | B9.1 merged (#294); B9.2 in review (#295). B9.3 split in two; B9.3a built (stacked on B9.2): Re-sequence (the person picks which plan goes first; the others' tasks wait on its tasks; a loop refused), Tell both agents (told once, on the next call), Fine, leave it; each kept with who and when and said under the overlap in the bar. Harness planned-overlap-actions 4, browser play-forward.spec 2 (shots) |
-| **In flight** | B9.2 in review (#295) on `feat/phase-32-b9-2-play-forward-window`; B9.3a building on `feat/phase-32-b9-3a-planned-overlap-actions` |
-| **Last merged** | B9.1 (#294, `09f2c47`) |
+| **In flight** | B9.3a in review (#296) on `feat/phase-32-b9-3a-planned-overlap-actions` |
+| **Last merged** | B9.2 (#295, `da755aa`) |
 | **Next action** | Merge B9.2, then B9.3a, when green; then B9.3b (a new planned overlap said on approval; the phone decides) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `09f2c47`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `da755aa`, with open PRs from GitHub.
 
 ---
 
@@ -210,9 +210,9 @@
     - [x] B8.4b J2: the grounding overlay at a past moment in replay (billing/ from "○ no tests" to "✓ 12 passing") (#293)
 - [ ] B9 Play-forward (code, and the materials tasks rely on) — building
   - [x] B9.1 The data: every active plan projected, planned overlaps (file, function, material), REST and get_play_forward (#294)
-  - [ ] B9.2 The window plays forward: dashed planned changes and ◇ planned overlaps on the graph, in the Stack tab (#295) — in review
+  - [x] B9.2 The window plays forward: dashed planned changes and ◇ planned overlaps on the graph, in the Stack tab (#295)
   - [ ] B9.3 Acting on a planned overlap, split in two: — building
-    - [ ] B9.3a Re-sequence, tell both agents, or leave it: by a person, kept with who and when — building
+    - [ ] B9.3a Re-sequence, tell both agents, or leave it: by a person, kept with who and when (#296) — in review
     - [ ] B9.3b A new planned overlap said on approval; deciding one from the phone
   - [ ] B9.4 The phone and the G3 done-when
 - [ ] B10 The record
