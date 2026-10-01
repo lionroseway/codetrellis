@@ -163,6 +163,31 @@ record naming another task than its folder is refused, 16 KB and 5,000 per
 item at most, read through `readTextWithin`, written through
 `writeFileWithin`. Routes: `GET/PUT /api/shared-task-state`.
 
+**Signed records (C3.3).** `task-records/signing.ts` (pure) and
+`trust.ts`. Each record is signed as it is written, over its body as
+canonical JSON (keys sorted): with git's SSH key when git signing is set up
+with one (`signingSetup` from C2.5b, `ssh-keygen -Y sign`, namespace
+`codetrellis-task-record`), else with this device's own Ed25519 key, made
+once and kept in `task_record_device_key` (the private half never leaves
+the database). A device key is introduced to the project once, as
+`.codetrellis/keys/<writer>.yaml`; a teammate's introduction is kept in
+`task_record_keys` as `new` until the person trusts it in Settings → Shared
+task state (`POST /api/shared-task-state/keys`; trusting is a grant,
+refusing anyone's), having compared the fingerprint, which is computed and
+never read from the file. Trust is per device key, so a teammate is
+introduced once across projects. On read, a record verifies when its
+signature is good for a key trusted for the device that wrote it, or for
+git's key of a signer listed in git's allowed signers; anything else (not
+signed, a key not trusted or refused, bytes changed after signing, a key the
+team does not list) is unverified, with why. The verdict is kept beside the
+head (`task_record_heads.verdict`) and laid over the status event by
+`plan-status`, so trusting a key turns that device's records "signed"
+without anyone changing a task: `recordedWords` says "in their signed
+record", `recordCheckWords` the hover, `get_plan` `recorded_in`. Checks are
+cached per record content (ssh-keygen is a process). The harness sets
+`CODETRELLIS_GIT_SIGN_RECORDS=0`, so its records use the device key unless
+a test turns git signing on.
+
 ## Approvals as signed statements (Phase 32 C2.5b)
 
 `services/signed-approvals.ts` over `signed-approval-record.ts` (pure). A

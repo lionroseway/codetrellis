@@ -10,9 +10,11 @@
  *     .codetrellis/records/<plan uid>/<item uid>/<writer>-<counter>.yaml
  *
  * and every writer's records are read back: a record made having seen this
- * machine's latest is the task's state here too, said as the teammate's and
- * unverified (records are not signed until C3.3). People acting at once is
- * kept, never picked between (C3.2 makes it a signal).
+ * machine's latest is the task's state here too, said as the teammate's. Each
+ * record is signed when written and checked when read (C3.3, `trust.ts`): one
+ * that verifies says whose key signed it, any other reads "unverified".
+ * People acting at once is kept, never picked between (C3.2 makes it a
+ * signal).
  *
  * The same layout works whether git or a synced folder carries the files:
  * two people acting at once make two files, so there is nothing to merge.
@@ -39,12 +41,16 @@ import { getPlan } from '../plan-service';
 import { applyRecordedState, getItem } from '../plan-item-service';
 import { getLinkedPlanDir } from '../plan-file-service';
 import type { PlanItem } from '../../../shared/types';
-import { headOf, setHead, splitOf } from './heads';
-import type { AtOnceClaim } from '../../../shared/lib/item-status';
+import { headOf, headsBy, setHead, setHeadCheck, splitOf } from './heads';
+import type { AtOnceClaim, RecordCheck } from '../../../shared/lib/item-status';
 import {
-  distinctRecords, isRecordId, parseRecord, readItem, recordFileName, seenOf, serializeRecord,
-  type RecordedState, type TaskRecord,
+  distinctRecords, isRecordId, parseRecord, readItem, recordBytes, recordFileName, seenOf, serializeRecord,
+  type RecordedState, type SignedPart, type TaskRecord,
 } from './record';
+import {
+  checkContext, decideKey, listTeammateKeys, readKeyIntroductions, signRecord, signingWay, verifyTaskRecord,
+  type CheckContext, type SigningWay, type TeammateKey, type Verdict,
+} from './trust';
 
 /** Records read from one item's folder at most: a team writes far fewer. */
 const MAX_RECORDS_PER_ITEM = 5_000;
@@ -64,6 +70,12 @@ export interface SharedTaskStateStatus {
   records: number;
   writers: number;
   says: string;
+  /** How records written here are signed (C3.3). */
+  signing: SigningWay;
+  /** Teammates' device keys introduced in this project, and whether each is trusted. */
+  keys: TeammateKey[];
+  /** Teammates' records, by whether they verified, and why the others did not. */
+  checked: { verified: number; unverified: number; reasons: Array<{ why: string; records: number }> };
 }
 
 // ── The switch ───────────────────────────────────────────────────────────
@@ -104,11 +116,32 @@ function counts(projectRoot: string): { records: number; writers: number } {
   return { records, writers: writers.size };
 }
 
+/** Teammates' records in the project, checked: how many verified, and why the rest did not. */
+function checkedCounts(projectRoot: string): SharedTaskStateStatus['checked'] {
+  const me = writerId();
+  const ctx = checkContext(projectRoot);
+  let verified = 0;
+  const reasons = new Map<string, number>();
+  for (const f of itemFolders(projectRoot)) {
+    for (const r of readFolder(projectRoot, f)) {
+      if (r.writer === me) continue;
+      const v = verifyTaskRecord(r, signedOf(r), ctx);
+      if (v.verified) verified++;
+      else reasons.set(v.why, (reasons.get(v.why) ?? 0) + 1);
+    }
+  }
+  const list = [...reasons].map(([why, n]) => ({ why, records: n })).sort((a, b) => b.records - a.records);
+  return { verified, unverified: list.reduce((t, r) => t + r.records, 0), reasons: list };
+}
+
 export function getSharedTaskState(projectRoot: string): SharedTaskStateStatus {
   const row = rowOf(projectRoot);
   const enabled = row?.enabled === true;
   const { records, writers } = counts(projectRoot);
   const name = writerName(projectRoot);
+  // Introductions are read whether or not sharing is on, so the person can
+  // see who has introduced a key before choosing to share.
+  readKeyIntroductions(projectRoot, writerId());
   const found = records ? ` ${records} record${records === 1 ? '' : 's'} from ${writers} ${writers === 1 ? 'device' : 'devices'} are in the project's files.` : '';
   return {
     project: projectRoot,
@@ -122,6 +155,9 @@ export function getSharedTaskState(projectRoot: string): SharedTaskStateStatus {
     says: enabled
       ? `On: each change to a task's state here is written to ${RECORDS_DIR} as ${name}, and teammates' records are read.${found}`
       : `Off. Task state stays on this device; teammates who pull see the plan, not who is doing what.${found}`,
+    signing: signingWay(projectRoot),
+    keys: listTeammateKeys(projectRoot),
+    checked: checkedCounts(projectRoot),
   };
 }
 
@@ -168,14 +204,27 @@ function itemFolders(projectRoot: string, onlyPlan?: string): Array<{ plan: stri
   return out;
 }
 
+/** What each record read says of its signature, beside the record. */
+const signedParts = new WeakMap<TaskRecord, SignedPart>();
+const UNSIGNED: SignedPart = { bytes: '', signature: null };
+const signedOf = (r: TaskRecord): SignedPart => signedParts.get(r) ?? UNSIGNED;
+
+/** One record file, or null when it is not one. */
+function readOne(projectRoot: string, f: { plan: string; item: string; dir: string }, name: string): TaskRecord | null {
+  let text: string;
+  try { text = readTextWithin(projectRoot, path.join(f.dir, name), 'task record'); } catch { return null; }
+  const parsed = parseRecord(text, { plan: f.plan, item: f.item });
+  if (!('record' in parsed)) return null;
+  signedParts.set(parsed.record, parsed.signed);
+  return parsed.record;
+}
+
 /** One item's records. A file that is not a record is skipped, never guessed at. */
 function readFolder(projectRoot: string, f: { plan: string; item: string; dir: string; files: string[] }): TaskRecord[] {
   const out: TaskRecord[] = [];
   for (const name of f.files) {
-    let text: string;
-    try { text = readTextWithin(projectRoot, path.join(f.dir, name), 'task record'); } catch { continue; }
-    const parsed = parseRecord(text, { plan: f.plan, item: f.item });
-    if ('record' in parsed) out.push(parsed.record);
+    const r = readOne(projectRoot, f, name);
+    if (r) out.push(r);
   }
   return out;
 }
@@ -238,7 +287,9 @@ export function writeRecordFor(item: PlanItem, by: { author: string; authorType:
     writer: me, name: writerName(root), counter, seen: others, at: now,
     plan: item.planUid, item: item.uid, by, state: stateOf(item),
   };
-  const file = writeFileWithin(root, path.join(folder.dir, recordFileName(me, counter)), serializeRecord(record), 'task record');
+  // Signed as it is written (C3.3): git's key, else this device's.
+  const signature = signRecord(root, record, recordBytes(record));
+  const file = writeFileWithin(root, path.join(folder.dir, recordFileName(me, counter)), serializeRecord(record, signature), 'task record');
   // Made having seen everyone's latest, so it ends a split this machine had (C3.2).
   const ended = !!headOf(item.uid)?.split;
   setHead(item.uid, me, counter, null);
@@ -264,14 +315,21 @@ export function keepMyState(itemUid: string, by: { author: string; authorType: s
 // ── Reading and taking teammates' state ──────────────────────────────────
 
 /**
- * Who a teammate's record says made the change, as a claim: the person
- * ("Sam Lee"), or the agent working on their machine ("claude-code for Sam
- * Lee"). A person in their window and one over their local API read alike
- * here: the whole record is unverified until it is signed.
+ * Who a teammate's record says made the change: the person ("Sam Lee"), or
+ * the agent working on their machine ("claude-code for Sam Lee"). A person in
+ * their window and one over their local API read alike here. Verified (C3.3),
+ * the person is whose key signed it, not the name the file claims.
  */
-function recordAuthor(r: TaskRecord): { author: string; authorType: string } {
+function recordCheck(r: TaskRecord, v: Verdict): RecordCheck {
   const person = r.by.authorType === 'human' || r.by.authorType === 'unverified' || r.by.author === r.name;
-  return { author: person ? r.name : `${r.by.author} for ${r.name}`, authorType: 'record' };
+  const as = (who: string) => (person ? who : `${r.by.author} for ${who}`);
+  return v.verified
+    ? { verified: true, claimed: as(r.name), how: v.how, who: v.who, author: as(v.who) }
+    : { verified: false, claimed: as(r.name), why: v.why };
+}
+
+function recordAuthor(check: RecordCheck): { author: string; authorType: string } {
+  return { author: check.verified && check.author ? check.author : check.claimed, authorType: 'record' };
 }
 
 export interface ReadResult { read: number; applied: string[]; split: string[] }
@@ -287,6 +345,8 @@ export function readProjectRecords(projectRoot: string, onlyPlan?: string, onApp
   const result: ReadResult = { read: 0, applied: [], split: [] };
   if (!isSharingTaskState(projectRoot)) return result;
   const me = writerId();
+  readKeyIntroductions(projectRoot, me);
+  let ctx: CheckContext | null = null;
   let changed = false;
   for (const f of itemFolders(projectRoot, onlyPlan)) {
     const item = getItem(f.item);
@@ -312,14 +372,16 @@ export function readProjectRecords(projectRoot: string, onlyPlan?: string, onApp
     const { head } = read;
     if (known && known.writer === head.writer && known.counter === head.counter && !known.split) continue;
     if (known?.split) changed = true;
-    setHead(item.uid, head.writer, head.counter, null);
-    if (head.writer === me) continue;
+    if (head.writer === me) { setHead(item.uid, head.writer, head.counter, null); continue; }
+    ctx ??= checkContext(projectRoot);
+    const check = recordCheck(head, verifyTaskRecord(head, signedOf(head), ctx));
+    setHead(item.uid, head.writer, head.counter, null, check);
     const s = head.state;
     const applied = applyRecordedState(item.uid, {
       status: (s.status ?? 'pending') as PlanItem['status'],
       assignee: s.assignee, assigneeType: s.assigneeType,
       progressPercent: s.progressPercent, blockedReason: s.blockedReason,
-    }, recordAuthor(head));
+    }, recordAuthor(check));
     if (applied) {
       result.applied.push(item.uid);
       onApplied?.(applied);
@@ -327,6 +389,30 @@ export function readProjectRecords(projectRoot: string, onlyPlan?: string, onApp
   }
   if (changed) splitsChanged(projectRoot);
   return result;
+}
+
+// ── Trusting a teammate's key ────────────────────────────────────────────
+
+/**
+ * Trust or refuse a teammate's device key, then check again every task whose
+ * state that device's records set here: trusting Sam's key turns his records
+ * "signed" without anyone changing a task. The caller checks the person asked.
+ */
+export function trustTeammateKey(writer: string, fingerprint: string, trust: boolean, by: string): { key: TeammateKey; rechecked: string[] } | null {
+  const key = decideKey(writer, fingerprint, trust, by);
+  if (!key) return null;
+  const rechecked: string[] = [];
+  for (const h of headsBy(writer)) {
+    const item = getItem(h.itemUid);
+    const root = item ? getPlan(item.planUid)?.projectPath : null;
+    if (!item || !root || !isRecordId(item.planUid) || !isRecordId(item.uid)) continue;
+    const folder = { plan: item.planUid, item: item.uid, dir: path.join(root, RECORDS_DIR, item.planUid, item.uid) };
+    const r = readOne(root, folder, recordFileName(writer, h.counter));
+    if (!r) continue;
+    setHeadCheck(item.uid, recordCheck(r, verifyTaskRecord(r, signedOf(r), checkContext(root))));
+    rechecked.push(item.uid);
+  }
+  return { key, rechecked };
 }
 
 // ── Watching ─────────────────────────────────────────────────────────────

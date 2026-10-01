@@ -323,10 +323,12 @@ Three things need care:
 
 - **Trust.** Anyone who can write to the folder can write a file claiming
   to be anyone. Every record's author comes from how it arrived (the
-  authorship rule), so each device signs its records with the key it
-  already holds for pairing, the same mechanism as signed approvals
-  (C-2 §3); an unsigned or unverifiable record reads "unverified", as a
-  plain HTTP call does. Records are untrusted input: parsed safely, size
+  authorship rule), so each device signs its records: with the person's
+  git SSH key when one is set up, the same mechanism as signed approvals
+  (C-2 §3), else with a key the app makes for the device and teammates
+  trust once (built in C3.3; there is no pairing key to reuse). An
+  unsigned or unverifiable record reads "unverified", as a plain HTTP call
+  does. Records are untrusted input: parsed safely, size
   limited, read through the confined-file helper, and never a source of a
   path or project root.
 - **Files on demand.** OneDrive and its peers leave placeholders that

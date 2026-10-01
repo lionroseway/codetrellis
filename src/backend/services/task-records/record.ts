@@ -15,11 +15,13 @@
  *
  * A record is untrusted input: anyone who can write to the folder can write
  * one claiming to be anyone. Parsed here with limits, it never supplies a
- * path, and its `by` is a claim, shown as unverified until records are
- * signed (C3.3). Pure: no file is read or written here.
+ * path, and its `by` is a claim, shown as unverified unless the record's
+ * signature verifies (C3.3, `signing.ts`). Pure: no file is read or written
+ * here.
  */
 
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { canonicalJson, parseSignature, type RecordSignature } from './signing';
 
 /** The item state a record carries: the fields C2.4b took out of the plan's files. */
 export interface RecordedState {
@@ -62,26 +64,38 @@ export function recordFileName(writer: string, counter: number): string {
   return `${writer}-${counter}.yaml`;
 }
 
-/** A record as YAML, with a note for anyone who opens it. */
-export function serializeRecord(r: TaskRecord): string {
-  const body = {
+function bodyOf(r: TaskRecord) {
+  return {
     writer: r.writer, name: r.name, counter: r.counter, seen: r.seen,
     at: new Date(r.at).toISOString(), plan: r.plan, item: r.item, by: r.by, state: r.state,
   };
+}
+
+/** The exact bytes a record's signature is over: its body as canonical JSON (C3.3). */
+export function recordBytes(r: TaskRecord): string {
+  return canonicalJson(bodyOf(r));
+}
+
+/** A record as YAML, with a note for anyone who opens it, and its signature when it has one. */
+export function serializeRecord(r: TaskRecord, signature?: RecordSignature | null): string {
+  const body = signature ? { ...bodyOf(r), signature } : bodyOf(r);
   return `# CodeTrellis task state, written once by one device and never edited.\n# The state everyone sees is read from all of these; delete none.\n${stringifyYaml(body, { lineWidth: 0 })}`;
 }
+
+/** What a record's file says of its signature: the bytes it claims to sign, and how. */
+export interface SignedPart { bytes: string; signature: RecordSignature | null }
 
 /**
  * A record from a file's text, or why not. `where` is the plan and item the
  * folder belongs to: a record naming another is not read, so a file copied
  * into the wrong folder cannot move state between tasks.
  */
-export function parseRecord(source: string, where: { plan: string; item: string }): { record: TaskRecord } | { error: string } {
+export function parseRecord(source: string, where: { plan: string; item: string }): { record: TaskRecord; signed: SignedPart } | { error: string } {
   if (Buffer.byteLength(source, 'utf8') > MAX_RECORD_BYTES) return { error: 'larger than a record can be' };
   let raw: unknown;
   try { raw = parseYaml(source, { maxAliasCount: 0 }); } catch { return { error: 'not YAML' }; }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { error: 'not a record' };
-  const r = raw as Record<string, unknown>;
+  const { signature: rawSignature, ...r } = raw as Record<string, unknown>;
   const writer = typeof r.writer === 'string' && WRITER.test(r.writer) ? r.writer : null;
   if (!writer) return { error: 'no writer' };
   const counter = Number.isSafeInteger(r.counter) && (r.counter as number) > 0 ? (r.counter as number) : null;
@@ -104,6 +118,9 @@ export function parseRecord(source: string, where: { plan: string; item: string 
     ? Math.max(0, Math.min(100, Math.round(s.progressPercent)))
     : null;
   return {
+    // Everything but the signature, exactly as the file has it: a field
+    // added or changed after signing makes these bytes differ.
+    signed: { bytes: canonicalJson(r), signature: parseSignature(rawSignature) },
     record: {
       writer,
       name: text(r.name, 120) ?? 'someone',

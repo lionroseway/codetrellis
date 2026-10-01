@@ -302,7 +302,32 @@ export const SCHEMA_PLANS_CORE = `
     item_uid TEXT PRIMARY KEY,
     writer TEXT NOT NULL,
     counter INTEGER NOT NULL,
-    split TEXT
+    split TEXT,
+    verdict TEXT
+  );
+
+  -- Phase 32 C3.3: this device's own signing key for its records (one row),
+  -- used when git signing has no SSH key; the private half stays here. And
+  -- teammates' device keys, as introduced in a project's .codetrellis/keys:
+  -- 'new' until the person trusts or refuses one, in Settings.
+  CREATE TABLE IF NOT EXISTS task_record_device_key (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    public_key TEXT NOT NULL,
+    private_key TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS task_record_keys (
+    writer TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    public_key TEXT NOT NULL,
+    name TEXT NOT NULL,
+    project_root TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'new',
+    first_seen INTEGER NOT NULL,
+    decided_at INTEGER,
+    decided_by TEXT,
+    PRIMARY KEY (writer, fingerprint)
   );
 
   -- Phase 32 C2.6a: a plan that first reached this machine through its files

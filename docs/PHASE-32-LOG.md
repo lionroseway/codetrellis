@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B8.3a: the grounding overlay on the graph |
-| **Status** | B8.2 merged (#274). B8.3 split into a (the overlay) and b (the task line). B8.3a built: Overlays → Test grounding draws ✗ failing, ⚠ tests older than the code, ✓ passing or ○ no tests on each file, words on hover, and sums clusters; nothing before any report; GET /api/tests/grounding/map gives the same answer per file as the Inspector. Unit (graph-overlays 10), harness (test-grounding 8), browser (grounding-overlay, graph-overlays) green locally |
-| **In flight** | B8.3 in review (#275) on `feat/phase-32-b8-3-grounding-overlay` |
-| **Last merged** | B8.2 (#274, `deee2c9`) |
-| **Next action** | Merge B8.3a when green; then back to C3, now answered: C3.3 (signed records), C3.4, C3.5, C3.6; then B8.3b and B8.4 |
-| **Blockers** | None waiting on the owner: C2.6b moves to the phase end; C3.3–C3.5 answered 2026-10-01 |
+| **Stage / step** | Wave 2 — C3.3: signed task-state records |
+| **Status** | B8.3a merged (#275). Track D (the codetrellis CLI) added after C3, the owner's decision. C3.3 built: each record is signed when written, with git's SSH key when git signing is set up, else with a key the app makes for the device, introduced once in .codetrellis/keys; a teammate's key is trusted once in Settings → Shared task state after checking its fingerprint; a record that verifies reads "in their signed record", any other "unverified" with why; trusting a key relabels that device's records without a new change. Unit (signing 8, record, item-status), harness (task-records 19, git key and device key), browser (shared-task-state 8) green locally |
+| **In flight** | C3.3 building on `feat/phase-32-c3-3-signed-records` |
+| **Last merged** | B8.3a (#275, `5e2269f`) |
+| **Next action** | Merge C3.3 when green; then C3.4 (a linked plans folder: OneDrive and SharePoint first), C3.5, C3.6; then D1 (the CLI) |
+| **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `deee2c9`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `5e2269f`, with open PRs from GitHub.
 
 ---
 
@@ -202,8 +202,8 @@
 - [ ] B8 Grounding, refined in EXECUTION §5: — building
   - [x] B8.1 Per-test results: JUnit read test by test, each test's last result kept; report_tests, get_test_results, GET /api/tests; a test criterion names its failing tests (#273)
   - [x] B8.2 Tests mapped to code through imports: ✓ passing, ✗ failing, ○ no tests, ⚠ tests older than the code, per file (#274)
-  - [ ] B8.3 Where it shows, split in two: (#275) — in review
-    - [ ] B8.3a The grounding overlay on the graph: ✗ ⚠ ✓ ○ on files, summed on clusters, the same answer as the Inspector
+  - [ ] B8.3 Where it shows, split in two: — building
+    - [x] B8.3a The grounding overlay on the graph: ✗ ⚠ ✓ ○ on files, summed on clusters, the same answer as the Inspector (#275)
     - [ ] B8.3b A grounding line on each task: "3 criteria · 2 grounded · 1 waiting on a person" (window, phone, get_brief)
   - [ ] B8.4 Replay of grounding, and the J1 done-when: done on stale tests is refused and says so
 - [ ] B9 Play-forward (code, and the materials tasks rely on)
@@ -233,7 +233,7 @@
 - [ ] C3 A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice), refined in EXECUTION §6: — building
   - [x] C3.1 Task state as records in the project's files: one new file per change, one writer each, read from all; a teammate's state says whose record and that it is unverified; off until the person turns it on (#271)
   - [x] C3.2 A real disagreement is a signal: people acting at once are named on the task and in the inbox until one decides (#272)
-  - [ ] C3.3 Signed records: the person's git SSH key when set up, else a key the app makes for the device
+  - [ ] C3.3 Signed records: the person's git SSH key when set up, else a key the app makes for the device — building
   - [ ] C3.4 A linked plans folder: a planning repo or a synced folder (OneDrive and SharePoint first), placeholders never downloaded, materials by place and hash
   - [ ] C3.5 Teammates' material reads, a separate switch, on by default once a folder is shared
   - [ ] C3.6 The C3 done-when
@@ -244,6 +244,15 @@
   - [x] C5.3 Workstream chips, progress per worktree, sections named in collisions, split in two:
     - [x] C5.3a ⎇ worktree on each section in the plan tree; progress per worktree; lanes name their sections (#188)
     - [x] C5.3b A collision between two sections of one plan names both; readiness to merge per section (#190)
+
+### Track D: agents on demand
+- [ ] D1 The `codetrellis` CLI (owner's decision, 2026-10-01), refined in EXECUTION §6b:
+  - [ ] D1.1 `codetrellis serve` (headless backend, loopback, token on every transport) and `scan`
+  - [ ] D1.2 Keep-on-track verbs as an agent: next, claim, update, stuck, done, request, brief, awareness, check, report-tests; text or --json
+  - [ ] D1.3 Changing the plan (show, add, edit, move) and `commit`, which commits only CodeTrellis's own files; `status`
+  - [ ] D1.4 A SessionStart hook recipe, a CI/CD recipe, and exit codes on status and check for gating (breakpoints, tests older than the code, failing criteria, stale system docs); this repository uses it
+  - [ ] D1.5 The D done-when: a cloud session or CI job claims, reports, edits the plan and commits; the desktop shows it after a pull
+  - [ ] Follow-up: Declared product flows checked hop by hop against the cross-system map in CI (owner's point, 2026-10-01): after Phase 32 unless pulled in
 
 ### Phase end
 - [ ] `main` merged in, full suite green on Node 26
@@ -375,9 +384,53 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | Task-state records are turned on per project, on this device, by the person; off writes and reads none | They add files to the team's repository or folder, which is sharing; the same rule as a review host. Reading teammates' records only when sharing is on keeps one switch with one meaning |
 | 2026-10-01 | A teammate's record is applied only when it was made having seen this machine's latest record for that task; records made at once that disagree are each kept, none applied | Clocks drift, so "newest" is not knowable from times; a silent pick would hide a real disagreement, which C3.2 names |
 | 2026-10-01 | A state recorded on this machine before sharing was turned on is not written as a record; a teammate's record replaces it | Writing every task's state when a switch flips would make everyone's first records collide; the first change after turning it on is shared as usual |
+| 2026-10-01 | The `codetrellis` CLI comes into Phase 32 as Track D, after C3: headless `serve`, `scan`, `status`, every verb an agent needs to keep itself on track and update its own files (next, claim, update, stuck, done, request, plan edits, report tests, check before an edit, commit CodeTrellis's files), and a SessionStart hook. The live view through a tunnel and pairing over a remote network stay after Phase 32 | Owner's decision. Agents on any host, cloud sessions included, can then use CodeTrellis on demand; the remote surfaces need their own security review and would widen the phase. Supersedes the 2026-09-26 row that kept the whole CLI out |
+| 2026-10-01 | The CLI also serves agents run in CI/CD pipelines: a recipe, and exit codes on `status`/`check` so a job can gate on a held breakpoint or tests older than the code. A pipeline reports through git like a cloud session; watching one live waits with the tunnel | Owner's point: a remote workflow is one more headless host |
+| 2026-10-01 | The CLI's `snapshot` (FOLLOW-ON §4.1) is not built: a committed status file is what C2.4 removed, and C3.1's records already carry a cloud session's task state to the desktop through git | One way for state to travel, and no generated file to drift |
+| 2026-10-01 | In CI, `check` and `status` also gate on conformity with what the plan and the docs already say: a task marked done with a failing criterion, a system doc referencing a changed file gone stale. Declared product flows checked hop by hop against the cross-system map are a follow-on | Owner's point that pipelines could run conformity checks for product flows. The first two have a pass or fail today and cost little; declaring flows is a new concept, kept out of an already large phase unless the owner pulls it in |
+| 2026-10-01 | C3.3: a key file in the project is an introduction, never trust. A teammate's device key is trusted once, by the person in the app window, after comparing its fingerprint (computed by the app, never read from the file); trust is per device key, not per project | Anyone who can write to the folder can write a key file, so believing one would make signing worthless. Comparing a fingerprint once is how SSH and Signal settle the same question, and a teammate should not be introduced again for every project |
+| 2026-10-01 | C3.3: a record that does not verify is still read as it was before C3.3, as the teammate's and "unverified", with why; it is not refused | Refusing unsigned records would break every team mid-upgrade and every teammate whose key is not trusted yet. What C3.3 adds is proof where there is a key, and the words to tell the two apart; whether an unverified state should be taken at all is a later choice for teams that need it |
 ---
 
 ## Entries
+
+### 2026-10-01: C3.3 — signed task-state records
+- **Journey.** Sam has no git signing key, so the first record his app
+  writes is signed with a key it makes for his device, and its public half
+  is introduced once as `.codetrellis/keys/<writer>.yaml`. His Settings →
+  Shared task state says how his records are signed and shows the
+  fingerprint. After a pull, Dana's Settings lists "Sam Lee
+  SHA256:Wm3kP7xQ1zL9…, New. Check that Sam Lee's Settings shows … before
+  trusting it", and his task reads "recorded by Sam Lee in their record,
+  unverified" with why on hover ("it is signed with Sam Lee's device key,
+  which you have not trusted yet"). She checks the fingerprint with him and
+  clicks Trust: the task now reads "recorded by Sam Lee in their signed
+  record", without anyone changing it, and an agent's `get_plan` says
+  "the teammate's record, signed with their trusted device key". A record
+  someone copies forward and edits, or one with no signature, still reads
+  unverified, saying which. Where git signing is set up, records are signed
+  with git's key and checked against git's allowed signers; signed with a
+  key the team does not list, a record does not verify.
+- **Built.** `task-records/signing.ts` (pure: canonical bytes, the device
+  key, key introductions, signature blocks) and `trust.ts` (this device's
+  key in `task_record_device_key`, teammates' in `task_record_keys`,
+  `verifyTaskRecord` with a cache per record content); a record's YAML
+  gains `signature` (`how: device` with the key's fingerprint, or `how:
+  git` with the signer); the verdict is kept on the head
+  (`task_record_heads.verdict`) and laid over the status event by
+  `plan-status`; `POST /api/shared-task-state/keys` (trust is a grant,
+  refusing anyone's); Settings gains Signing and Teammates' keys;
+  `recordedWords`/`recordCheckWords`; `verifyRecord` in
+  `signed-approvals.ts` takes a namespace.
+- **Tests.** Unit: `signing.test.ts` (8: round trip, edits after signing,
+  other keys, signature shapes, introductions and their refusals),
+  `record.test.ts`, `item-status.test.ts` (the words). Harness:
+  `task-records.test.ts` 19 (device key introduced and never the private
+  half; new key, unverified with why; trusted, relabelled without a change,
+  `get_plan`; edited and unsigned stay unverified; refused; trust refused
+  from plain HTTP; git key verified against allowed signers, an unlisted
+  key not). Browser: `shared-task-state.spec.ts` 8, shots of the keys list
+  before and after Trust and of the signed line.
 
 ### 2026-10-01: B8.3a — the grounding overlay on the graph
 

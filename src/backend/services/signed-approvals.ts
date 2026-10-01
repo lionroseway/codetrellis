@@ -169,15 +169,15 @@ export interface CriterionLookup {
   addSignoff(input: { uid: string; criterionUid: string; actor: string; evidence: Record<string, string | null>; at: number }): boolean;
 }
 
-/** Check one record's signature against git's allowed signers. */
-export function verifyRecord(text: string, signature: string, signer: string, allowedSigners: string | null): { ok: true } | { ok: false; reason: string } {
+/** Check one record's signature against git's allowed signers (an approval's namespace unless told another). */
+export function verifyRecord(text: string, signature: string, signer: string, allowedSigners: string | null, namespace = NAMESPACE): { ok: true } | { ok: false; reason: string } {
   if (!allowedSigners) return { ok: false, reason: 'git has no allowed signers to check it against (gpg.ssh.allowedSignersFile)' };
   if (!fs.existsSync(allowedSigners)) return { ok: false, reason: `the allowed signers file ${allowedSigners} is not on this machine` };
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codetrellis-verify-'));
   try {
     const sig = path.join(dir, 'approval.sig');
     fs.writeFileSync(sig, signature, { mode: 0o600 });
-    execFileSync(SSH_KEYGEN, ['-Y', 'verify', '-f', allowedSigners, '-I', signer, '-n', NAMESPACE, '-s', sig], {
+    execFileSync(SSH_KEYGEN, ['-Y', 'verify', '-f', allowedSigners, '-I', signer, '-n', namespace, '-s', sig], {
       input: text, stdio: ['pipe', 'pipe', 'pipe'], timeout: 15_000,
     });
     return { ok: true };
