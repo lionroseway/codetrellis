@@ -19,13 +19,13 @@
 |---|---|
 | **Stage / step** | Track B — B9.2: the window plays forward |
 | **Status** | B9.1 in review (#294). B9.2 built (stacked on it): Play the plans forward from the Stack tab or the Timeline; the bar says now → all plans done and each planned overlap; the graph draws planned files dashed and planned overlaps as dashed ◇ zones on files and clusters; each plan in the stack says where it will meet another. Unit 3, browser play-forward.spec (shots) |
-| **In flight** | B9.1 in review (#294) on `feat/phase-32-b9-1-play-forward`; B9.2 building on `feat/phase-32-b9-2-play-forward-window` |
-| **Last merged** | B8.4b (#293, `655c925`) |
+| **In flight** | B9.2 in review (#295) on `feat/phase-32-b9-2-play-forward-window` |
+| **Last merged** | B9.1 (#294, `09f2c47`) |
 | **Next action** | Merge B9.1, then B9.2, when green; then B9.3 (acting on a planned overlap) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `655c925`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `09f2c47`, with open PRs from GitHub.
 
 ---
 
@@ -209,8 +209,8 @@
     - [x] B8.4a J1: an agent's "done" on a test report older than the code is refused, and the task says "⚠ tests older than the code" (#292)
     - [x] B8.4b J2: the grounding overlay at a past moment in replay (billing/ from "○ no tests" to "✓ 12 passing") (#293)
 - [ ] B9 Play-forward (code, and the materials tasks rely on) — building
-  - [ ] B9.1 The data: every active plan projected, planned overlaps (file, function, material), REST and get_play_forward (#294) — in review
-  - [ ] B9.2 The window plays forward: dashed planned changes and ◇ planned overlaps on the graph, in the Stack tab — building
+  - [x] B9.1 The data: every active plan projected, planned overlaps (file, function, material), REST and get_play_forward (#294)
+  - [ ] B9.2 The window plays forward: dashed planned changes and ◇ planned overlaps on the graph, in the Stack tab (#295) — in review
   - [ ] B9.3 Acting on a planned overlap: re-sequence, tell both agents, leave it; a new one said on approval
   - [ ] B9.4 The phone and the G3 done-when
 - [ ] B10 The record
