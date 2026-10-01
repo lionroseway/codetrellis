@@ -863,13 +863,14 @@ export function MainCanvas() {
   );
   // B8.3a — every file's tests, from the reports agents handed over; read
   // again when a report arrives. Nothing is fetched while the overlay is off.
+  // B8.4b — while replaying, as they were at the cursor's moment.
   const testsOverlay = graphOverlays.includes('tests');
   const [groundingMap, setGroundingMap] = useState<GroundingMapView | null>(null);
   useEffect(() => {
     if (!testsOverlay || !root) { setGroundingMap(null); return; }
     let live = true;
     const load = () => {
-      fetch(`/api/tests/grounding/map?project=${encodeURIComponent(root)}`)
+      fetch(`/api/tests/grounding/map?project=${encodeURIComponent(root)}${replayAt !== null ? `&at=${replayAt}` : ''}`)
         .then((r) => (r.ok ? r.json() : null))
         .then((m) => { if (live) setGroundingMap(m as GroundingMapView | null); })
         .catch(() => { /* keeps what is shown */ });
@@ -877,7 +878,7 @@ export function MainCanvas() {
     load();
     window.addEventListener('tests-reported', load);
     return () => { live = false; window.removeEventListener('tests-reported', load); };
-  }, [testsOverlay, root]);
+  }, [testsOverlay, root, replayAt]);
 
   const displayGraphData = useMemo(() => {
     const hasPlanHighlights = (planOverlay || !!stackFocus) && planHighlightPaths.size > 0;
@@ -1161,7 +1162,9 @@ export function MainCanvas() {
       {replayAt !== null && (
         <div data-testid="replay-canvas" className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-10 rounded-full border border-accent/40 bg-background/80 px-3 py-1 text-[11px] text-accent shadow">
           As it was at {hhmm(replayAt)}
-          {replayGraph ? ` · ${replayGraph.files.length} ${replayGraph.files.length === 1 ? 'file' : 'files'}` : ''} · replaying
+          {replayGraph ? ` · ${replayGraph.files.length} ${replayGraph.files.length === 1 ? 'file' : 'files'}` : ''}
+          {/* B8.4b — the tests overlay is of that moment too. */}
+          {testsOverlay && groundingMap ? (groundingMap.hasResults ? ' · tests as reported by then' : ' · no tests reported by then') : ''} · replaying
         </div>
       )}
       <div className="pointer-events-none absolute inset-0 opacity-45 [background-image:radial-gradient(circle_at_center,rgba(59,130,246,0.08)_0,transparent_46%),linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:100%_100%,28px_28px,28px_28px]" />

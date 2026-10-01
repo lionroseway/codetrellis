@@ -84,7 +84,7 @@ import { allPlanArrivals } from './services/plan-arrivals';
 import { forgetHostReads } from './services/review-host/host-state';
 import { forgetReviewHostToken, getReviewHost, ReviewHostError, saveReviewHostToken, setReviewHost } from './services/review-host/switch';
 import { listTestReports, listTestResults, testsSummary } from './services/tests/test-results';
-import { groundingMap, groundingOf, NotAFileError } from './services/tests/grounding';
+import { groundingMap, groundingMapAt, groundingOf, NotAFileError } from './services/tests/grounding';
 import { teammateRunSummaries } from './services/tests/teammate-runs';
 import { taskGrounding } from './services/task-grounding';
 import { getSharedTaskState, keepMyState, readAndTell, setRecordAppliedListener, setSharedMaterialReads, setSharedTaskState, setRunsChangedListener, setSplitChangedListener, startRecordWatcher, stopRecordWatcher, trustTeammateKey, writeRecordFor } from './services/task-records/shared-state';
@@ -2483,6 +2483,13 @@ app.get('/api/tests', (req, res) => {
 app.get('/api/tests/grounding/map', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
+  // B8.4b — at a past moment, for replay: what was reported by then, on the graph as it was.
+  if (req.query.at !== undefined) {
+    const at = Number(req.query.at);
+    if (!Number.isFinite(at) || at <= 0) { res.status(400).json({ error: 'at must be a time in ms' }); return; }
+    res.json(groundingMapAt(projectRoot, at));
+    return;
+  }
   res.json(groundingMap(projectRoot));
 });
 

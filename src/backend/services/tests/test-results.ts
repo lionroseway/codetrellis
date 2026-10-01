@@ -21,6 +21,7 @@ import { getDb } from '../database';
 import { markDirty } from '../persistence';
 import { readFileWithin, resolveWithin, ConfinementError } from '../confined-fs';
 import { parseJUnit, testLabel, type TestCase, type TestResult } from './junit';
+import { RETENTION_DAYS } from '../agent-event-log';
 
 export const MAX_REPORT_BYTES = 20 * 1024 * 1024;
 
@@ -113,6 +114,19 @@ export function ingestTestReport(
     [projectRoot, rel, sha256, t.tests, t.passed, t.failed, t.errors, t.skipped, ranAt, now, by.author, by.authorType],
   );
   const id = Number(db.exec('SELECT id FROM test_reports WHERE project_root = ? AND sha256 = ?', [projectRoot, sha256])[0].values[0][0]);
+  // B8.4b: the report's own cases, for what the tests said at a past moment.
+  // Kept as long as replay frames are.
+  db.run(
+    'DELETE FROM test_report_cases WHERE report_id IN (SELECT id FROM test_reports WHERE project_root = ? AND reported_at < ?)',
+    [projectRoot, now - RETENTION_DAYS * 86_400_000],
+  );
+  for (const c of parsed.cases) {
+    db.run(
+      `INSERT OR REPLACE INTO test_report_cases (report_id, test_key, suite, classname, name, file, result, duration_ms, message)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, keyOf(c), c.suite, c.classname, c.name, c.file, c.result, c.durationMs, c.message],
+    );
+  }
   for (const c of parsed.cases) {
     // An older run never overwrites a newer result.
     db.run(
@@ -171,6 +185,41 @@ export function listTestResults(projectRoot: string, opts: { match?: string; res
     .filter((t) => !m || [t.file, t.classname, t.suite].some((v) => v?.toLowerCase().includes(m)))
     .sort((a, b) => order[a.result] - order[b.result] || a.label.localeCompare(b.label))
     .slice(0, opts.limit ?? 500);
+}
+
+/**
+ * Each test's result as it was known at `at` (B8.4b): from the reports
+ * handed over by then, each test's newest run. A report from before its
+ * cases were kept (B8.4b) answers with the results it still holds.
+ */
+export function testResultsAt(projectRoot: string, at: number): TestResultRow[] {
+  const db = getDb();
+  const reports = db.exec(
+    'SELECT id, path, ran_at FROM test_reports WHERE project_root = ? AND reported_at <= ? ORDER BY ran_at, id',
+    [projectRoot, at],
+  )[0]?.values ?? [];
+  const byKey = new Map<string, TestResultRow>();
+  for (const [id, reportPath, ranAt] of reports) {
+    let rows = db.exec(
+      'SELECT test_key, suite, classname, name, file, result, duration_ms, message FROM test_report_cases WHERE report_id = ?',
+      [id as number],
+    )[0]?.values ?? [];
+    if (rows.length === 0) {
+      rows = db.exec(
+        'SELECT test_key, suite, classname, name, file, result, duration_ms, message FROM test_results WHERE project_root = ? AND report_id = ?',
+        [projectRoot, id as number],
+      )[0]?.values ?? [];
+    }
+    for (const r of rows) {
+      const c = { suite: r[1] as string | null, classname: r[2] as string | null, name: String(r[3]), file: r[4] as string | null };
+      // Oldest run first, so a newer one replaces it.
+      byKey.set(String(r[0]), {
+        ...c, label: testLabel(c), result: r[5] as TestResult, durationMs: (r[6] as number | null) ?? null,
+        message: (r[7] as string | null) ?? null, ranAt: Number(ranAt), reportPath: String(reportPath),
+      });
+    }
+  }
+  return [...byKey.values()];
 }
 
 /** The project's latest reports, newest run first. */

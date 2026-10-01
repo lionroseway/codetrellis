@@ -17,11 +17,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B8.4a: done on tests older than the code is refused (J1) |
-| **Status** | B8.4a built: an agent's update_item done is refused while a test criterion's report is older than the item's code, with why; the task line has a grade of its own (⚠ with tests older than the code) and the window says why under the criterion. Unit 2 files, harness stale-done 5 (and 13 related files, 93), browser stale-done.spec 1 (shot) |
-| **In flight** | B8.4a building on `feat/phase-32-b8-4a-stale-done` |
+| **Stage / step** | Track B — B8.4b: the grounding overlay in replay (J2) |
+| **Status** | B8.4a in review (#292). B8.4b built: each report keeps its cases; GET /api/tests/grounding/map?at= answers from the reports handed over by then on the replay frame's graph (older than the code against the first frame after the run); the overlay follows the replay cursor and the canvas says tests as reported by then. Harness grounding-replay 5 (and 53 related), browser graph/grounding-replay.spec (shots) |
+| **In flight** | B8.4a in review (#292) on `feat/phase-32-b8-4a-stale-done`; B8.4b building on `feat/phase-32-b8-4b-grounding-replay` |
 | **Last merged** | B8.3b (#291, `13e8c2e`) |
-| **Next action** | Merge B8.4a when green; then B8.4b (the grounding overlay at a past moment in replay, J2) |
+| **Next action** | Merge B8.4a, then B8.4b, when green; then B9 (play-forward) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
@@ -206,8 +206,8 @@
     - [x] B8.3a The grounding overlay on the graph: ✗ ⚠ ✓ ○ on files, summed on clusters, the same answer as the Inspector (#275)
     - [x] B8.3b A grounding line on each task: "3 criteria · 2 grounded · 1 waiting on a person" (window, phone, get_brief) (#291)
   - [ ] B8.4 The done-when, split in two: — building
-    - [ ] B8.4a J1: an agent's "done" on a test report older than the code is refused, and the task says "⚠ tests older than the code" — building
-    - [ ] B8.4b J2: the grounding overlay at a past moment in replay (billing/ from "○ no tests" to "✓ 12 passing")
+    - [ ] B8.4a J1: an agent's "done" on a test report older than the code is refused, and the task says "⚠ tests older than the code" (#292) — in review
+    - [ ] B8.4b J2: the grounding overlay at a past moment in replay (billing/ from "○ no tests" to "✓ 12 passing") — building
 - [ ] B9 Play-forward (code, and the materials tasks rely on)
 - [ ] B10 The record
 
@@ -412,10 +412,32 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | D1.5a: `--share-task-state` turns sharing on for a headless backend from the command line, refused for the desktop app's own data dir | In the app only the window may turn it on (the grant rule). A headless backend has no window: the person who wrote the hook or the pipeline is choosing, and an agent that could run the command can already write the project's files. The app's own switch stays the window's |
 | 2026-10-01 | B8.4 is split into B8.4a (J1, done on stale tests) and B8.4b (J2, the overlay in replay) | Different surfaces and different machinery (the criterion loop and update_item; replay frames and test history); one PR each |
 | 2026-10-01 | B8.4a: an agent's `update_item(status: done)` is refused only while a test criterion's report is older than the item's code; other failing checks still do not stop it there, and a person's "done" is never refused | J1 asks exactly this, and it is the one failure an agent cannot argue with: the report is about code that is gone. D1.2 left gating `update_item` on every check as a separate decision; that still stands. A person may close a task for reasons the checks cannot see |
+| 2026-10-01 | B8.4b: a past moment's overlay is rebuilt from what was kept (each report's cases, and the replay frame's files and imports), not recorded per frame; "older than the code" then compares a file's content with the first frame after its tests ran | Nothing new is taken at each frame, so replay costs nothing until it is used. The first frame after a run is the code the run was about (an agent edits, runs, and its turn ends); the frame before it would call every edit made just before the run stale. This can miss an edit between the run and that frame; it never invents one |
+| 2026-10-01 | B8.4b: a teammate's run is shown live only, and the answer says so | Only each device's latest run is kept (D1.5a) and nothing records when it arrived here, so it cannot be placed at a past moment honestly |
 | 2026-10-01 | B8.3b: one grade per criterion, from its state and the criterion loop's own checks, in a fixed order (changed since and sent back before what its checks say; a judgement waits on a person until approved); the line lists only the grades there are | One grader means the window, the phone and an agent's brief can never disagree about a task; reusing check_criterion's checks means \"grounded\" is exactly what an agent's own check would say. A line of zeroes is noise |
 ---
 
 ## Entries
+
+### 2026-10-01: B8.4b — the grounding overlay in replay (J2)
+- **Journey.** Sam replays the last hour with Overlays → Test grounding on.
+  At the first moment the billing cluster reads "○ 2": its invoice and tax
+  modules have no tests. At the next, the agent's billing tests have landed
+  and the cluster reads "✓ 3" (the test file is there now too). At the
+  last, tax.ts changed after they ran: "⚠ 1 · ✓ 2". The canvas says "As it
+  was at 16:42 · 5 files · tests as reported by then". Back to live, the
+  overlay asks for now.
+- **Built.** `test_report_cases` (each report's own cases, kept 14 days like
+  frames), `testResultsAt`, `groundingMapAt` (the frame's files and
+  imports, re-exports read from now, staleness against the first frame
+  after the run), `GET /api/tests/grounding/map?at=`, the overlay's fetch
+  following the replay cursor, the canvas pill's words.
+- **Tests.** Harness `grounding-replay.test.ts` (5: before any report;
+  billing untested; 12 passing from that moment, the moment before
+  unchanged; tax.ts older than the code from its moment, ✓ before it, and
+  live agreeing; no frame yet, a bad time refused). Browser
+  `graph/grounding-replay.spec.ts` (three moments, back to live; shots).
+  Related harness files (53) pass.
 
 ### 2026-10-01: B8.4a — "done" on stale tests is refused (J1)
 - **Journey.** Sam's agent fixes VAT rounding in `src/billing/vat.ts`, runs
