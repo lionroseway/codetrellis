@@ -13,6 +13,7 @@ import { buildPlanPrompt, buildItemPrompt } from '../prompt-builders';
 import { getActiveProjectRoot, isTrustedProjectRoot } from '../../services/trusted-roots';
 import { buildStack } from '../../services/stack-service';
 import { buildPlayForward } from '../../services/play-forward';
+import { seriesFor } from '../../services/recurring-service';
 
 export function register(server: McpServer, deps: ToolDeps): void {
   // --- Plan CRUD ---
@@ -183,6 +184,25 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const root = project_path ?? getActiveProjectRoot();
       if (!root) return { isError: true, content: [{ type: 'text' as const, text: 'No project is open.' }] };
       return { content: [{ type: 'text' as const, text: JSON.stringify(buildPlayForward(root), null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    'list_recurring',
+    {
+      description:
+        'The project\'s recurring playbooks (Phase 32 C4): each rule ("Weekly security review, every Mon 09:00 · skill: ' +
+        'security-review") with its runs by period, ✓ done, ◐ in progress, ✗ missed, the one due now if it is not started, ' +
+        'and the next. Each run is an ordinary plan (planUid). A person makes a playbook recur and starts a run in the app; ' +
+        'this only reads.',
+      inputSchema: {
+        project_path: z.string().optional().describe('An opened project. Omit for the one open in the app.'),
+      },
+    },
+    async ({ project_path }) => {
+      const root = project_path ?? getActiveProjectRoot();
+      if (!root) return { isError: true, content: [{ type: 'text' as const, text: 'No project is open.' }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ series: seriesFor(root) }, null, 2) }] };
     },
   );
 

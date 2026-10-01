@@ -37,6 +37,8 @@ export interface ApplyTemplateInput {
    * `{{key}}` if no default is set.
    */
   placeholderValues?: Record<string, string>;
+  /** Phase 32 C4.1 — the plan's uid, when the caller derived one (a recurring run). */
+  uid?: string;
 }
 
 export interface ApplyTemplateResult {
@@ -211,7 +213,7 @@ function applyV2Template(
 ): ApplyTemplateResult {
   // Create plan container (no V1 tasks).
   const plan = createPlan(
-    { title, description, tasks: [] },
+    { title, description, tasks: [], uid: input.uid },
     author, authorType, input.projectPath,
   );
 
@@ -259,6 +261,7 @@ function applyV1Template(
         description: t.description,
         affectedFiles: t.affectedFiles,
       })),
+      uid: input.uid,
     },
     author, authorType, input.projectPath,
   );

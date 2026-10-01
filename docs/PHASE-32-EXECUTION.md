@@ -736,7 +736,7 @@ verbatim in a notice title.
 | C1 | Skills: model fields, skills index and picker, brief/claim/next delivery, proof of use, safety flag on pulled skills |
 | C2 | Team status through git: state read from git for any host, a host adapter only when turned on (GitHub, GitLab, Bitbucket), status read from the plan files and git with no written summary, ticket refs exported, signed approvals, Phase 32's own plan moved in |
 | C3 | A shared plans folder, carried by git or by a cloud-synced folder: one writer per file, only ever added, signed records; a code project links to it; teammates' material reads shared when the team turns it on |
-| C4 | Recurring playbooks |
+| C4 | Recurring playbooks: a rule on a playbook in the committed config; one run per period, by its id; missed shown, never back-filled; an agent only by opt-in (refined below) |
 | C5 | One plan across worktrees: sections of a plan assigned to workstreams (owner's ask, 2026-09-28) |
 
 ### B8: Grounding
@@ -895,6 +895,49 @@ record, unverified". She marks it done; Sam pulls and sees it as hers. They
 both change "Check the figures" at once, each to something different:
 neither machine picks, and (C3.2) both are named on the task until one of
 them decides.
+
+### C4: Recurring playbooks
+
+Refined 2026-10-01 (shared-work doc C-4). Nothing recurs today: Phase 31's
+playbooks are templates with criteria, and the `scheduled` check trigger has
+no caller. A recurrence is a rule on a playbook, kept in the committed
+`.codetrellis/config.json` so the team sees it ("Weekly security review,
+every Mon 09:00, Europe/London"); each run is a fresh plan from the playbook.
+
+- **One run per period, by its id.** A run's uid is derived from the series
+  (the plans folder the config names, else the repository's origin, else
+  the folder's name), the rule and the period (`2026-W40`, `2026-10-01`,
+  `2026-10`). Started twice, here or on two machines, it is one plan: the
+  second start returns the first, and git or the sync sees one directory.
+- **A period runs from its due moment to the next one's**, in the rule's
+  time zone (ISO weeks for weekly rules), so "due since Monday 09:00" stays
+  true until the next Monday.
+- **Missed runs are shown, never back-filled.** Only the current period can
+  be started. A period that ended with no run reads "✗ missed"; periods
+  before the rule was set are not counted.
+- **Each run stands alone**, with the playbook's items, criteria and the
+  rule's skills, and, when the rule says so, the previous run's open tasks
+  carried over ("carried from W39"; a task the playbook brings again is not
+  carried twice).
+- **Setting a rule is the person's** (as a plans folder is, C3.4a); starting
+  a run is anyone's, as making a plan is, with its author from the transport.
+- **Starting an agent on a run is opt-in** per rule on this device, needs the
+  `terminal` capability, and is off by default (C4.3).
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| C4.1 | The data: rules in the committed config (`recurring`: id, playbook, title, every day, week or month, on, at, time zone, carry over, skills, since), validated on read and set; period maths in the rule's zone; the run's uid; `startRun` (the current period only; idempotent; items, criteria and skills; carry-over; `recurring_runs` keeps previous and carried); the series (✓ done, ◐ in progress, ✗ missed, due, the next one) in words: "every Mon 09:00 · skill: security-review". `GET /api/recurring`, `PUT` and `DELETE /api/recurring/:id` (the person's), `POST /api/recurring/:id/start`; `list_recurring` (`read`) | unit `recurrence.test.ts` (periods across a year end and ISO week 53, due moments in a zone with summer time, the uid, missed and due); harness `recurring.test.ts` (set by the person, refused from plain HTTP; started twice is one run; the series; carried; an agent's answer equals REST; bad rules refused) |
+| C4.2 | Due, in the window: while the app runs, a run whose moment comes is started as it comes; on launch, a due run is asked about in the inbox ("Weekly security review is due since Monday. Start it?" Start, or leave it to be missed). The plans list shows each series as one row ("W37 ✓ · W38 ✓ · W39 ✗ missed · W40 ◐"), a run says which series and period it is, and carried tasks say so. Settings → Recurring playbooks sets a rule (playbook, every, at, carry over) | harness (due on launch; started as it comes; not twice); browser (series row, the notice, Settings; shots) |
+| C4.3 | The phone and the done-when: the phone lists the series and starts a due run (`recurring.list` read, `recurring.start` write); per rule and device, "start an agent on each run" (off by default, needs `terminal`). The C4 journey end to end, two machines on one plans folder | harness (two machines, one W40); phone (shots) |
+
+**Journey (C4).** Sam's team runs a security review every Monday. Sam sets
+"Weekly security review" to recur from the Security review playbook, every
+Monday 09:00, carrying open tasks over. On Monday the run "Weekly security
+review — W40" is started on his laptop as the moment comes; Dana's laptop,
+asleep at nine, asks when she opens it, and starting it there finds Sam's
+run (the same id), not a second one. W39 nobody ran: the series reads "W37 ✓
+· W38 ✓ · W39 ✗ missed · W40 ◐ in progress", and W38's unfinished
+"Rotate the staging keys" is in W40, carried from W38.
 
 ### C5: One plan, several worktrees
 

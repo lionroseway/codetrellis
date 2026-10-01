@@ -21,6 +21,7 @@ import {
   type PlansFolderRef,
 } from '../../shared/types';
 import { getSettings } from './settings-service';
+import { parseRecurrenceRule } from './recurrence-rule';
 
 /**
  * Per-project config service — Phase 1.1 of the CDev target architecture.
@@ -138,6 +139,8 @@ export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): 
     defaultSurface: patch.defaultSurface !== undefined ? patch.defaultSurface : current.defaultSurface,
     // Phase 6.5 — freeze periods: replace wholesale when present.
     freeze: patch.freeze !== undefined ? patch.freeze : current.freeze,
+    // Phase 32 C4 — recurring playbooks: replaced wholesale, like routing.
+    recurring: patch.recurring !== undefined ? patch.recurring : current.recurring,
     updatedAt: new Date().toISOString(),
   };
 
@@ -168,6 +171,7 @@ export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): 
   if (next.repoRole === undefined || next.repoRole === 'mixed') {
     delete next.repoRole;
   }
+  if (!next.recurring || next.recurring.length === 0) delete next.recurring;
   // The graph is the default, so it is never written down either.
   if (next.defaultSurface === undefined || next.defaultSurface === 'graph') {
     delete next.defaultSurface;
@@ -477,6 +481,13 @@ function parseProjectConfig(raw: unknown): ProjectConfig {
   // Phase 31 §10.1 — where opening the folder lands.
   if (r.defaultSurface === 'code' || r.defaultSurface === 'brief') {
     result.defaultSurface = r.defaultSurface;
+  }
+
+  // Phase 32 C4 — recurring playbooks. The file is anyone's text: a rule
+  // that does not read as one is left out, never guessed at.
+  if (Array.isArray(r.recurring)) {
+    const rules = r.recurring.map((x) => parseRecurrenceRule(x).rule).filter((x): x is NonNullable<typeof x> => !!x);
+    if (rules.length > 0) result.recurring = rules;
   }
 
   // Phase 6.5 — freeze periods.

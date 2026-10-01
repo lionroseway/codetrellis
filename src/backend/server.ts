@@ -77,6 +77,7 @@ import { reviewQueue } from './services/review-queue-service';
 import { buildStack } from './services/stack-service';
 import { buildPlayForward } from './services/play-forward';
 import { resequence, tellAgents, leaveOverlap, OverlapActionError, noteApproval, approvalNotices, markNoticeSeen } from './services/planned-overlap-actions';
+import { seriesFor, setRule, removeRule, startRun, RecurringError } from './services/recurring-service';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
 import { planGitStatesFresh } from './services/item-git-state';
@@ -2636,6 +2637,65 @@ app.delete('/api/plans-folder/link', async (req, res) => {
   unlinkPlansFolder(projectRoot);
   await rebindPlansFolder(projectRoot);
   res.json(getPlansFolder(projectRoot));
+});
+
+// Phase 32 C4.1 — recurring playbooks. A rule lives in the committed config,
+// so setting or removing one is the person's (as naming a plans folder is);
+// starting a run is anyone's, as making a plan is, and starting it twice is
+// one run.
+const RECURRING_WHERE = 'Settings → Recurring playbooks';
+
+app.get('/api/recurring', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json({ series: seriesFor(projectRoot) });
+});
+
+app.put('/api/recurring/:id', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can make a playbook recur — in the CodeTrellis app, ${RECURRING_WHERE}.` }); return; }
+  try {
+    // The rule's own fields, by name: nothing else in the body reaches the config.
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const fields = { id: req.params.id, playbook: b.playbook, title: b.title, every: b.every, on: b.on, at: b.at, timeZone: b.timeZone, carryOver: b.carryOver, skills: b.skills };
+    const rule = setRule(projectRoot, fields, changedBy(req));
+    broadcast('recurring-changed', { project: projectRoot });
+    res.json({ rule, series: seriesFor(projectRoot).find((s) => s.rule.id === rule.id) });
+  } catch (err) {
+    if (err instanceof RecurringError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+app.delete('/api/recurring/:id', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can stop a playbook recurring — in the CodeTrellis app, ${RECURRING_WHERE}.` }); return; }
+  try {
+    removeRule(projectRoot, req.params.id);
+    broadcast('recurring-changed', { project: projectRoot });
+    res.json({ removed: req.params.id });
+  } catch (err) {
+    if (err instanceof RecurringError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+app.post('/api/recurring/:id/start', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  try {
+    const run = startRun(projectRoot, req.params.id, personFrom(req));
+    if (run.created) {
+      broadcast('plans-changed', { project: projectRoot });
+      broadcast('recurring-changed', { project: projectRoot });
+    }
+    res.json({ planUid: run.plan.uid, title: run.plan.title, created: run.created, recurrence: run.info });
+  } catch (err) {
+    if (err instanceof RecurringError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
 });
 
 // C3.2 — keep this machine's state of a task people set two ways at once.

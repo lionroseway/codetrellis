@@ -562,6 +562,8 @@ export interface PlanDocumentVersion {
 export interface CreatePlanInput {
   title: string;
   description: string;
+  /** Phase 32 C4.1 — a uid the caller derived (a recurring run's, from its rule and period). */
+  uid?: string;
   tasks: Array<{
     description: string;
     affectedFiles?: string[];

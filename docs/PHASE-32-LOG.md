@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B9.4: the phone and the G3 done-when |
-| **Status** | B9.3b merged (#297). B9.4 built: the phone's Stack screen opens with Played forward (each planned overlap, what was decided, and re-sequence, tell or leave from the phone), each plan says where it will meet another. G3 end to end: window, MCP client and phone agree on play-forward and the stack through approval, re-sequence and tell. Harness play-forward-g3 4, phone stack.spec 6 (shots); awareness.md has a play-forward section |
-| **In flight** | B9.4 in review (#298) on `feat/phase-32-b9-4-phone-and-g3` |
-| **Last merged** | B9.3b (#297, `1abcb2a`) |
-| **Next action** | Merge B9.4 when green: B9 done. Then C4 |
+| **Stage / step** | Track C — C4.1: recurring playbooks, the data |
+| **Status** | B9 done (#294–#298). C4 refined into three parts (EXECUTION §6). C4.1 built: a rule on a playbook in the committed config (every day, week or month, at a time in a zone, carry over, skills), one run per period by an id derived from the series, rule and period (started twice is one plan), the series in words (✓ done, ◐ in progress, ✗ missed, due, next), carry-over of the last run's open tasks; REST and list_recurring. Unit recurrence, recurrence-rule, recurring-service; harness recurring 6 |
+| **In flight** | C4 building on `feat/phase-32-c4-wip` |
+| **Last merged** | B9.4 (#298, `fa788d7`) |
+| **Next action** | Merge C4.1 when green; then C4.2 (due in the window: started as it comes, asked about on launch; the series row; Settings → Recurring playbooks) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `1abcb2a`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `fa788d7`, with open PRs from GitHub.
 
 ---
 
@@ -208,13 +208,13 @@
   - [x] B8.4 The done-when, split in two:
     - [x] B8.4a J1: an agent's "done" on a test report older than the code is refused, and the task says "⚠ tests older than the code" (#292)
     - [x] B8.4b J2: the grounding overlay at a past moment in replay (billing/ from "○ no tests" to "✓ 12 passing") (#293)
-- [ ] B9 Play-forward (code, and the materials tasks rely on) — building
+- [x] B9 Play-forward (code, and the materials tasks rely on)
   - [x] B9.1 The data: every active plan projected, planned overlaps (file, function, material), REST and get_play_forward (#294)
   - [x] B9.2 The window plays forward: dashed planned changes and ◇ planned overlaps on the graph, in the Stack tab (#295)
   - [x] B9.3 Acting on a planned overlap, split in two:
     - [x] B9.3a Re-sequence, tell both agents, or leave it: by a person, kept with who and when (#296)
     - [x] B9.3b A new planned overlap said on approval; deciding one from the phone (#297)
-  - [ ] B9.4 The phone and the G3 done-when (#298) — in review
+  - [x] B9.4 The phone and the G3 done-when (#298)
 - [ ] B10 The record
 
 ### Track C: shared ways of working
@@ -248,7 +248,10 @@
     - [x] C3.4c Materials in the folder by their place and hash, never a full path; A6's signals match across machines (#282)
   - [x] C3.5 Teammates' material reads, a separate switch, on by default once a folder is shared (#283)
   - [x] C3.6 The C3 done-when (#284)
-- [ ] C4 Recurring playbooks
+- [ ] C4 Recurring playbooks, refined in EXECUTION §6: — building
+  - [ ] C4.1 The data: a rule on a playbook in the committed config, one run per period by its id, the series, carry-over
+  - [ ] C4.2 Due, in the window: started as it comes, asked about on launch; the series row; Settings → Recurring playbooks
+  - [ ] C4.3 The phone, an agent only by opt-in, and the C4 done-when
 - [x] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
   - [x] C5.1 `workstream` on an item, inherited; `assign_workstream`; next and claim respect it (#186)
   - [x] C5.2 Start a worktree for a section; a start command for any agent (#187)
@@ -421,6 +424,9 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | B9 is refined into four parts (EXECUTION §5): the data, the window, acting on a planned overlap, the phone and G3. G3's question (run on approval?) is answered by computing play-forward on read, and B9.3 says a new planned overlap when an approval forms one | Computed on read it is never out of date and costs nothing until asked; saying a new one at approval is the moment G3 cares about, without a job that runs |
 | 2026-10-01 | B9.1: only unfinished tasks are projected, and which planned files exist is read from the project's folder through confined-fs, not the held graph | A done task's change is the code now, not the future. The server's graph is the last project scanned (HD1), so it cannot say whether another project's file exists; a planned path is agent-written and is confined like any other |
 | 2026-10-01 | B9.3 is split into B9.3a (the three actions, in the window) and B9.3b (said on approval; the phone) | The actions are one service and one surface; the approval notice and the phone's RPCs each touch another door with its own tests |
+| 2026-10-01 | C4 is refined into three parts (EXECUTION §6): the data, due in the window, the phone and the done-when. A recurrence rule lives in the committed config and a run's uid is derived from the series (the plans folder named, else the origin, else the folder's name), the rule and the period | The team sees the rule where it sees the plans folder; a derived id makes two starts, here or on two machines, one plan without either asking the other, and the series key never includes this device's path |
+| 2026-10-01 | C4.1: a period runs from its due moment to the next one's, in the rule's own time zone; only the current period can be started, and periods before the rule was set are not counted | "Due since Monday" stays true until the next Monday, and a team in one zone shares one clock across laptops in others; refusing older periods is the doc's "missed runs are shown, not back-filled" |
+| 2026-10-01 | C4.1: what a run carried and the run before it are kept where the run was started (`recurring_runs`); elsewhere the run is found by its id | The run itself is an ordinary plan that reaches teammates through the plans folder; its series bookkeeping is this device's, and nothing about finding a run depends on it |
 | 2026-10-01 | B9.4: the phone shows play-forward on its Stack screen, not a screen of its own, and asks for it separately so a desktop without it still shows the stack | Planned overlaps are about the same plans the stack lists, so they belong beside them; a separate call keeps an older desktop's stack working |
 | 2026-10-01 | B9.3b: an approval says only the planned overlaps it put the plan in that no one has answered (not sequenced, not left), in its answer and once in the inbox until seen; approving again says nothing more | The moment G3 cares about is the approval; an overlap a person already sequenced or chose to leave is answered, and saying it again teaches people to ignore the notice |
 | 2026-10-01 | B9.3a: what a person does about a planned overlap is kept by the overlap's id (its subject and its plans), and re-sequencing writes ordinary task dependencies rather than a new kind of order | The same plans meeting on the same thing is the same question, so the answer carries over; a dependency is what every "what is next" door (B6.1) already honours, so a re-sequenced plan holds its work back without anything new |
@@ -431,6 +437,27 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-01: C4.1 — recurring playbooks, the data
+- **Journey.** Sam's team committed "Daily security check" from the
+  Security review playbook three days ago, every day at 00:00 UTC, with the
+  security-review skill. Nobody ran it since: the series reads two days ✗
+  missed and today's run due ("Daily security check is due since 00:00").
+  Started, today's run is a plan from the playbook whose tasks carry the
+  skill; started again, the same plan. An agent's `list_recurring` gives the
+  same answer. Made recurring now, a monthly rule is kept in the committed
+  config and is not due until its first moment. The next run carries the
+  last one's open tasks ("carried from 29 Sep"), not one the playbook brings
+  again.
+- **Built.** `shared/types/recurring.ts`, `shared/lib/recurrence.ts` (period
+  maths in a zone), `services/recurrence-rule.ts`, `services/recurring-service.ts`
+  (rules, the run's id, `startRun`, the series), `recurring` in the project
+  config, `recurring_runs`, a uid a caller can give a plan and a template;
+  `GET /api/recurring`, `PUT` and `DELETE /api/recurring/:id` (the person's),
+  `POST /api/recurring/:id/start`; `list_recurring` (`read`) and a guide row.
+- **Tests.** Unit `recurrence.test.ts` (5), `recurrence-rule.test.ts` (3),
+  `recurring-service.test.ts` (7, the clock in the test's hands). Harness
+  `recurring.test.ts` (6).
 
 ### 2026-10-01: B9.4 — the phone, and the G3 done-when
 - **Journey.** JIRA-142 and JIRA-150 both plan to change validators.ts, and
