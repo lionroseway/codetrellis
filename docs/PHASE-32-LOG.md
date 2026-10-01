@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — C3.4a: link a plans folder |
-| **Status** | C3.4a built: the committed config names a plans folder portably (a git remote, or a provider and a place), each device's copy confirmed by the person; plans, records and keys read and written there; Settings → Plans folder. Found and fixed: the records watcher was not awaited, so a cold first run could miss a teammate's record. Unit, harness (plans-folder 9, plan-file 66, task-records), browser (plans-folder, shots) green locally |
-| **In flight** | C3.4a building on `feat/phase-32-c3-4a-link-plans-folder` |
-| **Last merged** | C3.3 (#279, `960f7f5`) |
-| **Next action** | Merge C3.4a when green; then C3.4b (OneDrive and SharePoint found where their clients put them; placeholders never opened) |
+| **Stage / step** | Wave 2 — C3.4b: OneDrive and SharePoint; files still in the cloud |
+| **Status** | C3.4a merged (#280). C3.4b built: OneDrive and SharePoint found where their clients put them and offered; a placeholder is never read, written over or deleted (two export paths would have lost a teammate's newer copy, found by the tests and fixed); Settings counts what is not on the device. Unit (cloud-files 5), harness (plans-folder 14; related 67), browser (plans-folder 3, shots) green locally |
+| **In flight** | C3.4b building on `feat/phase-32-c3-4b-cloud-placeholders` |
+| **Last merged** | C3.4a (#280, `ad2ded7`) |
+| **Next action** | Merge C3.4b when green; then C3.4c (materials by place and hash) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `960f7f5`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `ad2ded7`, with open PRs from GitHub.
 
 ---
 
@@ -235,8 +235,8 @@
   - [x] C3.2 A real disagreement is a signal: people acting at once are named on the task and in the inbox until one decides (#272)
   - [x] C3.3 Signed records: the person's git SSH key when set up, else a key the app makes for the device (#279)
   - [ ] C3.4 A linked plans folder: a planning repo or a synced folder (OneDrive and SharePoint first), placeholders never downloaded, materials by place and hash, split in three: — building
-    - [ ] C3.4a Link a plans folder: named portably in the committed config, confirmed once per device by the person; plans, records and keys read and written there — building
-    - [ ] C3.4b OneDrive and SharePoint found where their clients put them; a placeholder is "not on this device" and never opened
+    - [x] C3.4a Link a plans folder: named portably in the committed config, confirmed once per device by the person; plans, records and keys read and written there (#280)
+    - [ ] C3.4b OneDrive and SharePoint found where their clients put them; a placeholder is "not on this device" and never opened — building
     - [ ] C3.4c Materials in the folder by their place and hash, never a full path; A6's signals match across machines
   - [ ] C3.5 Teammates' material reads, a separate switch, on by default once a folder is shared
   - [ ] C3.6 The C3 done-when
@@ -395,9 +395,40 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | C3.3: a record that does not verify is still read as it was before C3.3, as the teammate's and "unverified", with why; it is not refused | Refusing unsigned records would break every team mid-upgrade and every teammate whose key is not trusted yet. What C3.3 adds is proof where there is a key, and the words to tell the two apart; whether an unverified state should be taken at all is a later choice for teams that need it |
 | 2026-10-01 | C3.4 is refined into C3.4a (link a plans folder), C3.4b (OneDrive and SharePoint; placeholders never opened) and C3.4c (materials by place and hash) | Linking moves where every plan, record and key is read and written, so it stands alone with its own two-machine test; the providers and placeholders are platform work; place-and-hash changes what A6 records |
 | 2026-10-01 | C3.4a: the committed config names a plans folder portably (a git remote, or a provider and a place under its root), never a full path; each device's copy is confirmed by the person, in the app window, before anything there is read | A teammate's OneDrive sits at a different path on every machine, so a path cannot be shared; and a cloned repository must never point the app at a folder by itself, as C2.2a decided for review hosts |
+| 2026-10-01 | C3.4b: a file still only in the cloud is never read, written over or deleted by the app; it waits for the sync client, and the folder says how many are waiting | Reading downloads it, and writing or deleting it acts on what may be a teammate's newer copy. Waiting costs a teammate's change arriving late; acting costs it being lost |
 ---
 
 ## Entries
+
+### 2026-10-01: C3.4b — OneDrive and SharePoint; files still in the cloud
+- **Journey.** Dana's team keeps its plans in OneDrive under "Acme/Board
+  pack". In Settings → Plans folder she picks "A synced folder": the
+  section lists the OneDrive and SharePoint folders found on her Mac, and
+  once she saves the place, offers her copy of it ("Found where your sync
+  client keeps it") with Link this folder. Two files in it are still only in
+  the cloud: the section says so, in amber, and how to keep the folder on
+  the device. Nothing reads them: a task whose file is one keeps its state,
+  a teammate's record waits for its file, and recording a material still
+  in the cloud says it is not on this device.
+- **Built.** `cloud-files.ts` (roots for macOS, Windows and Linux; the
+  placeholder test; `findPlace`); the plans-folder status gains `roots`,
+  `found` and `notOnDevice`; plan discovery, item import, records, key
+  introductions and material hashing skip placeholders.
+- **Found on the way.** Two ways an export would have lost a teammate's
+  newer copy: `writeFileAtomic` read a file to compare it (downloading a
+  placeholder) and then wrote over it, and renaming a task pruned its old
+  file even when that file was still only in the cloud, which deletes it
+  there. Neither touches a placeholder now. And a sparse file counted as a
+  placeholder anywhere, which refused the rendition test's large test file:
+  on POSIX only files under a sync client's folder can be placeholders.
+- **Tests.** Unit `cloud-files.test.ts` (5: macOS and Windows roots, the
+  placeholder test, `findPlace`, cloud-root scoping). Harness
+  `plans-folder.test.ts` +5 (the folder found and offered; a task file
+  skipped, kept, never written over or deleted on rename; a plan.yaml in
+  the cloud not found, its import refused with why; a teammate's record
+  waits and Settings counts 3; a material not hashed). Browser
+  `plans-folder.spec.ts` +1, shots. Related harness (67) and unit (1794)
+  green.
 
 ### 2026-10-01: C3.4a — link a plans folder
 - **Journey.** Dana's team keeps its plans in their own repository. In

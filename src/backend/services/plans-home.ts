@@ -23,6 +23,7 @@ import { getDb } from './database';
 import { markDirty } from './persistence';
 import { getProjectConfig, updateProjectConfig } from './project-config-service';
 import type { PlansFolderRef } from '../../shared/types';
+import { cloudRoots, findPlace, isPlaceholder, type CloudRoot } from './cloud-files';
 
 export type PlansFolderState = 'here' | 'linked' | 'unlinked' | 'changed' | 'missing';
 
@@ -34,6 +35,32 @@ export interface PlansFolderStatus {
   /** This device's confirmed copy, when there is one. */
   linked: { path: string; confirmedAt: number; confirmedBy: string } | null;
   says: string;
+  /** The OneDrive and SharePoint folders on this machine, to offer when naming one (C3.4b). */
+  roots: CloudRoot[];
+  /** For a synced folder named but not linked here: this device's copy, where the client keeps it. */
+  found: string | null;
+  /** Files in the plans folder still only in the cloud, never opened. */
+  notOnDevice: number;
+}
+
+const MAX_WALK = 20_000;
+
+/** Placeholders under a folder's `.codetrellis/`, by stat alone. */
+function countPlaceholders(home: string): number {
+  let n = 0;
+  let seen = 0;
+  const walk = (dir: string) => {
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (++seen > MAX_WALK) return;
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.isFile() && isPlaceholder(p)) n++;
+    }
+  };
+  walk(path.join(home, '.codetrellis'));
+  return n;
 }
 
 export class PlansFolderError extends Error {}
@@ -107,7 +134,16 @@ export function getPlansFolder(projectRoot: string): PlansFolderStatus {
     changed: `The project now names ${where} for its plans, not the folder linked on this device. Link your copy of it; until then nothing is read.`,
     missing: `This project's plans live in ${where}, linked on this device at ${row?.path}, which is not there now. Nothing is read until it is back or linked again.`,
   }[state];
-  return { project: projectRoot, named, state, linked, says };
+  const home = state === 'linked' ? row!.path : state === 'here' ? projectRoot : null;
+  const notOnDevice = home ? countPlaceholders(home) : 0;
+  const roots = cloudRoots();
+  const found = named?.kind === 'synced' && named.provider !== 'folder' && state !== 'linked'
+    ? findPlace(named.provider, named.place, roots)
+    : null;
+  const keep = notOnDevice
+    ? ` ${notOnDevice} ${notOnDevice === 1 ? 'file in it is' : 'files in it are'} not on this device yet and ${notOnDevice === 1 ? 'is' : 'are'} not read until ${notOnDevice === 1 ? 'it is' : 'they are'}: set the folder to "Always keep on this device" in OneDrive.`
+    : '';
+  return { project: projectRoot, named, state, linked, says: says + keep, roots, found, notOnDevice };
 }
 
 /** Name the project's plans folder in its committed config, or clear it (null). The caller checks the person asked. */

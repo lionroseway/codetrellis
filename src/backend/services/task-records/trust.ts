@@ -29,6 +29,7 @@ import {
   signWithDevice, verifyWithDevice, type DeviceKey, type RecordSignature,
 } from './signing';
 import type { SignedPart, TaskRecord } from './record';
+import { isPlaceholder } from '../cloud-files';
 
 export const KEYS_DIR = path.join('.codetrellis', 'keys');
 const MAX_KEY_FILES = 500;
@@ -138,6 +139,7 @@ export function readKeyIntroductions(projectRoot: string, me: string): number {
   for (const name of names) {
     const writer = name.slice(0, -'.yaml'.length);
     if (writer === me) continue;
+    if (isPlaceholder(path.join(dir, name))) continue; // still in the cloud (C3.4b)
     let text: string;
     try { text = readTextWithin(projectRoot, path.join(KEYS_DIR, name), 'device key'); } catch { continue; }
     const parsed = parseKeyIntroduction(text, writer);

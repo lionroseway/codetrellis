@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — C3.4a: link a plans folder"
-  status: "C3.4a built: the committed config names a plans folder portably (a git remote, or a provider and a place), each device's copy confirmed by the person; plans, records and keys read and written there; Settings → Plans folder. Found and fixed: the records watcher was not awaited, so a cold first run could miss a teammate's record. Unit, harness (plans-folder 9, plan-file 66, task-records), browser (plans-folder, shots) green locally"
-  next: "Merge C3.4a when green; then C3.4b (OneDrive and SharePoint found where their clients put them; placeholders never opened)"
+  step: "Wave 2 — C3.4b: OneDrive and SharePoint; files still in the cloud"
+  status: "C3.4a merged (#280). C3.4b built: OneDrive and SharePoint found where their clients put them and offered; a placeholder is never read, written over or deleted (two export paths would have lost a teammate's newer copy, found by the tests and fixed); Settings counts what is not on the device. Unit (cloud-files 5), harness (plans-folder 14; related 67), browser (plans-folder 3, shots) green locally"
+  next: "Merge C3.4b when green; then C3.4c (materials by place and hash)"
   blockers: "None"
   updated: 2026-10-01
 sections:

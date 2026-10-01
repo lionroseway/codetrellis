@@ -215,6 +215,29 @@ Plans folder. The records watcher's start is awaited where a record may
 be written next: a folder created before chokidar is ready may never be
 watched.
 
+**OneDrive, SharePoint and placeholders (C3.4b).** `services/cloud-files.ts`.
+`cloudRoots()` finds where the sync client mounts OneDrive and SharePoint
+libraries: macOS `~/Library/CloudStorage/OneDrive-*` (and
+`OneDrive-SharedLibraries-*` for SharePoint; the older `~/OneDrive - <Org>`),
+Windows `%OneDrive%`, `%OneDriveCommercial%`, `%OneDriveConsumer%` and the
+client's registered mount points (`reg query
+HKCU\Software\SyncEngines\Providers\OneDrive`), Linux `~/OneDrive`;
+`CODETRELLIS_CLOUD_ROOTS` replaces them (the harness sets it to `[]`). The
+plans-folder status offers them, and for a named synced folder not linked
+here the copy found under them (`found`). `isPlaceholder(file)` never opens
+the file: on POSIX a non-empty file with no blocks under a cloud root (an
+ordinary sparse file elsewhere is read as usual), on Windows the offline
+attribute from `attrib`. A placeholder is never read or written: plan
+discovery skips a plan whose `plan.yaml` is one and import says why; an item
+file that is one is skipped with a warning and its task kept; a record or
+key introduction waits; `sha256FileWithin` refuses to hash one
+(`NotOnDeviceError`), so recording a material says why and a refresh keeps
+the last hash; and `writeFileAtomic` neither reads nor overwrites one, and
+the export's stale-file pruning does not delete one, since either would
+replace or remove what may be a teammate's newer copy in the cloud. The
+status counts placeholders under the folder (`notOnDevice`) and says how to
+keep it on the device.
+
 ## Approvals as signed statements (Phase 32 C2.5b)
 
 `services/signed-approvals.ts` over `signed-approval-record.ts` (pure). A

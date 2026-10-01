@@ -44,6 +44,7 @@ import { plansHome } from '../plans-home';
 import type { PlanItem } from '../../../shared/types';
 import { headOf, headsBy, setHead, setHeadCheck, splitOf } from './heads';
 import type { AtOnceClaim, RecordCheck } from '../../../shared/lib/item-status';
+import { isPlaceholder } from '../cloud-files';
 import {
   distinctRecords, isRecordId, parseRecord, readItem, recordBytes, recordFileName, seenOf, serializeRecord,
   type RecordedState, type SignedPart, type TaskRecord,
@@ -218,6 +219,9 @@ const signedOf = (r: TaskRecord): SignedPart => signedParts.get(r) ?? UNSIGNED;
 
 /** One record file, or null when it is not one. `home` is the folder the records sit under. */
 function readOne(home: string, f: { plan: string; item: string; dir: string }, name: string): TaskRecord | null {
+  // A record a sync client has not brought down is never opened (C3.4b):
+  // its teammate's state arrives once the file does.
+  if (isPlaceholder(path.join(f.dir, name))) return null;
   let text: string;
   try { text = readTextWithin(home, path.join(f.dir, name), 'task record'); } catch { return null; }
   const parsed = parseRecord(text, { plan: f.plan, item: f.item });
