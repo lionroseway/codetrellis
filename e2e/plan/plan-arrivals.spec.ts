@@ -29,13 +29,22 @@ test.describe('Teammates\' plans after a pull', () => {
     const at = Date.now();
     await page.route((url) => url.pathname === '/api/plans', async (route) => {
       if (route.request().method() !== 'GET') return route.fallback();
-      const res = await route.fetch();
-      const plans = (await res.json()) as Array<{ uid: string; arrival?: unknown }>;
+      // The page can reload while this list is on its way (the dev server
+      // reloads it when files change); the answer to the abandoned request
+      // is then disposed, and the reloaded page asks again.
+      let res: Awaited<ReturnType<typeof route.fetch>>;
+      let plans: Array<{ uid: string; arrival?: unknown }>;
+      try {
+        res = await route.fetch();
+        plans = (await res.json()) as typeof plans;
+      } catch {
+        return;
+      }
       const arrival: Record<string, unknown> = {
         [forecast.uid]: { addedBy: 'Priya Shah', commit: '3f9c2e1', arrivedAt: at },
         [hiring.uid]: { addedBy: null, commit: null, arrivedAt: at },
       };
-      await route.fulfill({ response: res, json: plans.map((p) => ({ ...p, arrival: arrival[p.uid] ?? null })) });
+      await route.fulfill({ response: res, json: plans.map((p) => ({ ...p, arrival: arrival[p.uid] ?? null })) }).catch(() => { /* the page moved on */ });
     });
 
     await gotoWithProject(page);
