@@ -17,7 +17,7 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 262 | 260 | 0 | 0 | 217 | 0 |
+| REST routes | 263 | 261 | 0 | 0 | 217 | 0 |
 | MCP tools | 204 | 204 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 90 | 79 | 0 | 0 | 78 | 0 |
 | Frontend components | 119 | n/a | n/a | n/a | 0 | 23 |
@@ -31,7 +31,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4a Project and scan | 19 | 12 | 10 | 0 | 0 | 0 |
 | 0.4b Graph | 19 | 15 | 8 | 13 | 0 | 0 |
 | 0.4c Plans and items | 107 | 58 | 25 | 60 | 0 | 0 |
-| 0.4d Criteria and sign-off | 10 | 9 | 3 | 0 | 0 | 0 |
+| 0.4d Criteria and sign-off | 11 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 12 | 7 | 1 | 0 | 0 |
 | 0.4g Agents and MCP | 26 | 32 | 10 | 28 | 0 | 0 |
@@ -48,7 +48,7 @@ records that — but "✗ none" is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (262)
+## REST routes (263)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -69,7 +69,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 174 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 175 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -203,6 +203,7 @@ records that — but "✗ none" is proof of a gap.
 | d | `GET /api/plans/:uid/signoff-pack.html` |  | ✗ none | 4 | ✓ 0.4d: attachment download, CSP sandbox, nosniff; unverified approvals listed apart (signoff-surface) |  |  |
 | d | `GET /api/plans/:uid/worklist` |  | ✗ none | 1 | ✓ 0.4d: sent back first with note, then open; met/waiting counted; stale after source moves (signoff-surface) |  |  |
 | d | `GET /api/tests` |  | ✗ none | 1 |  |  |  |
+| d | `GET /api/tests/grounding` |  | ✗ none | 1 |  |  |  |
 | d | `POST /api/criteria/:uid/check` |  | ✗ none | 1 | ✓ 0.4d: holds while cited cell exists, fails with the reason once it is gone; 404 (signoff-surface) |  |  |
 | d | `POST /api/criteria/:uid/decide` |  | ✗ none | 6 | ✓ 0.4d: approve / send back (note required); HTTP records unverified, app window records human (criteria-signoff, ipc-dispatcher unit) |  |  |
 | d | `POST /api/plans/:uid/signoff-pack/verify` |  | ✗ none | 1 | ✓ 0.4d: matches, then changed after edit; empty, non-pack and other plan's pack refused (signoff-surface) |  |  |
@@ -407,10 +408,10 @@ records that — but "✗ none" is proof of a gap.
 | d | `add_criterion` | plan-item · write | ✗ none | 3 | ✓ 0.4d: kept at propose, tagged with the agent's name in the app (criteria-signoff, criteria.spec) |  |  |
 | d | `approve_gate` | plan-item · read | ✗ none | 1 | ✓ 0.4d: retired — refuses and points at submit_criterion (criteria-signoff) |  |  |
 | d | `check_criterion` | plan-item · read | ✗ none | 3 | ✓ 0.4d: refuses a cell outside the file, passes once fixed (criteria-loops) |  |  |
-| d | `get_test_results` | test · read | ✗ none | 1 |  |  |  |
+| d | `get_test_results` | test · read | ✗ none | 2 |  |  |  |
 | d | `get_worklist` | plan-item · read | ✗ none | 1 | ✓ 0.4d: hands back the send-back note and where it points (criteria-loops) |  |  |
 | d | `list_criteria` | plan-item · read | ✗ none | 4 | ✓ 0.4d: migrated line verbatim plus the gate, with decided_by (criteria-signoff) |  |  |
-| d | `report_tests` | test · write | ✗ none | 1 |  |  |  |
+| d | `report_tests` | test · write | ✗ none | 2 |  |  |  |
 | d | `run_checks` | plan-item · read | ✗ none | 1 | ✓ 0.4d: names the stale criterion and the changed file; approves nothing (criteria-loops) |  |  |
 | d | `submit_criterion` | plan-item · write | ✗ none | 7 | ✓ 0.4d: submitting is not approving; agent policy self-approves in the agent's name (criteria-signoff) |  |  |
 | e | `get_brief` | plan-item · read | ✗ none | 11 | ✓ 0.4e: item, guide from pages, own files + pages' materials only, still_needs; unknown refused (brief-surface) |  |  |

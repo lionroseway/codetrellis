@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — B8.1: per-test results |
-| **Status** | C3.2 merged (#272); C3.3–C3.5 wait on the owner, so B8 is next. B8 refined into four parts (EXECUTION §5). B8.1 built: a JUnit report read test by test, each test's last result kept per project (an older run never replaces a newer one); report_tests and get_test_results for any agent, GET /api/tests for the window; a test criterion's check names its failing tests with why. CodeTrellis runs no tests. Unit (junit 6), harness (test-results 7), browser (test-results) green locally |
-| **In flight** | B8.1 building on `feat/phase-32-b8-1-per-test-results` |
-| **Last merged** | C3.2 (#272, `516b858`) |
-| **Next action** | Open B8.1's PR and merge when green; then B8.2 (tests mapped to code through imports) |
+| **Stage / step** | Wave 2 — B8.2: tests mapped to code |
+| **Status** | B8.1 merged (#273). B8.2 built: a file's tests are those whose test file imports it, directly or through a barrel; it reads ✗ failing, ⚠ tests older than the code, ✓ passing or ○ no tests, for an agent (get_test_results for_file), the window (GET /api/tests/grounding) and in the Inspector's Tests line. Unit (grounding 3), harness (test-grounding 7), browser (inspector tests-line) green locally |
+| **In flight** | B8.2 building on `feat/phase-32-b8-2-tests-to-code` |
+| **Last merged** | B8.1 (#273, `831a22c`) |
+| **Next action** | Open B8.2's PR and merge when green; then B8.3 (the grounding overlay on the graph and a grounding line on each task) |
 | **Blockers** | C2.6b waits on the owner's choice; C3.3–C3.5 wait on the owner's answers (which key signs records; which providers first; what people without the app see; whether material reads are shared by default) |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `516b858`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `831a22c`, with open PRs from GitHub.
 
 ---
 
@@ -200,8 +200,8 @@
   - [x] B7.6 The phone (#249)
   - [x] B7.7 I1 done-when and docs (#250)
 - [ ] B8 Grounding, refined in EXECUTION §5: — building
-  - [ ] B8.1 Per-test results: JUnit read test by test, each test's last result kept; report_tests, get_test_results, GET /api/tests; a test criterion names its failing tests — building
-  - [ ] B8.2 Tests mapped to code through imports: ✓ passing, ✗ failing, ○ no tests, ⚠ tests older than the code, per file
+  - [x] B8.1 Per-test results: JUnit read test by test, each test's last result kept; report_tests, get_test_results, GET /api/tests; a test criterion names its failing tests (#273)
+  - [ ] B8.2 Tests mapped to code through imports: ✓ passing, ✗ failing, ○ no tests, ⚠ tests older than the code, per file — building
   - [ ] B8.3 The grounding overlay on the graph and a grounding line on each task (window, phone, get_brief)
   - [ ] B8.4 Replay of grounding, and the J1 done-when: done on stale tests is refused and says so
 - [ ] B9 Play-forward (code, and the materials tasks rely on)
@@ -370,6 +370,35 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-01: B8.2 — tests mapped to code
+
+B8.1 merged (#273).
+
+- **A test file covers what it imports** (`services/tests/grounding.ts`),
+  directly or through a barrel, by the same `importersOf` the awareness
+  engine uses; no coverage tooling. A result's test file is the report's
+  `file` attribute, else a class or suite name that looks like a path;
+  anything outside the project is dropped.
+- **Each file in one line**: "✗ 1 of 3 tests failing" (with ", and it
+  changed after they ran" when both), "⚠ tests older than the code: it
+  changed after its 3 tests last ran" (its mtime after the newest run of
+  its tests, two seconds' slack for clocks), "✓ 3 tests passing", or "○ no
+  tests". A test file shows its own tests.
+- **Where it shows**: `get_test_results(for_file)` for any agent,
+  `GET /api/tests/grounding` for the window, and a Tests line under a
+  file's name in the Inspector: the failing test and why, which test files,
+  Show tests for all.
+
+Found on the way: the Inspector opens folders as well as files, and a
+folder would have read "○ no tests"; a folder is now refused ("is a
+folder, not a file") and the line is not shown.
+
+Tests: unit `grounding.test.ts` (3); harness `test-grounding.test.ts` (7:
+none yet; direct and through the barrel with the failing test named; a file
+no test imports; passing; stale after a change; a test file; the tool and
+refusals, a folder included); browser `inspector/tests-line.spec.ts`
+(shots `inspector-tests-failing`, `inspector-tests-stale`).
 
 ### 2026-10-01: B8 refined; B8.1 — per-test results
 

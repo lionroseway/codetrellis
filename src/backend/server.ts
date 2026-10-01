@@ -84,6 +84,7 @@ import { allPlanArrivals } from './services/plan-arrivals';
 import { forgetHostReads } from './services/review-host/host-state';
 import { forgetReviewHostToken, getReviewHost, ReviewHostError, saveReviewHostToken, setReviewHost } from './services/review-host/switch';
 import { listTestReports, listTestResults, testsSummary } from './services/tests/test-results';
+import { groundingOf, NotAFileError } from './services/tests/grounding';
 import { getSharedTaskState, keepMyState, readAndTell, setRecordAppliedListener, setSharedTaskState, setSplitChangedListener, startRecordWatcher, writeRecordFor } from './services/task-records/shared-state';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
 import { buildPlaybackSequence } from './services/playback-service';
@@ -2470,6 +2471,22 @@ app.get('/api/tests', (req, res) => {
     reports: listTestReports(projectRoot, 10),
     tests: listTestResults(projectRoot, { match, limit: 500 }),
   });
+});
+
+// Phase 32 B8.2 — one file's tests: those whose file imports it, and whether
+// they pass, fail, are older than the code, or there are none.
+app.get('/api/tests/grounding', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const file = typeof req.query.path === 'string' ? req.query.path : '';
+  if (!file) { res.status(400).json({ error: 'path query param required' }); return; }
+  try {
+    res.json(groundingOf(projectRoot, file));
+  } catch (err) {
+    if (err instanceof ConfinementError) { res.status(400).json({ error: `${file} is not a file inside this project.` }); return; }
+    if (err instanceof NotAFileError) { res.status(400).json({ error: err.message }); return; }
+    throw err;
+  }
 });
 
 // Phase 32 C3.1 — task state shared as records in the project's files. Per
