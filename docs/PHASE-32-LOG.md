@@ -19,10 +19,10 @@
 |---|---|
 | **Stage / step** | Wave 2 — B8.3a: the grounding overlay on the graph |
 | **Status** | B8.2 merged (#274). B8.3 split into a (the overlay) and b (the task line). B8.3a built: Overlays → Test grounding draws ✗ failing, ⚠ tests older than the code, ✓ passing or ○ no tests on each file, words on hover, and sums clusters; nothing before any report; GET /api/tests/grounding/map gives the same answer per file as the Inspector. Unit (graph-overlays 10), harness (test-grounding 8), browser (grounding-overlay, graph-overlays) green locally |
-| **In flight** | B8.3 building on `feat/phase-32-b8-3-grounding-overlay` |
+| **In flight** | B8.3 in review (#275) on `feat/phase-32-b8-3-grounding-overlay` |
 | **Last merged** | B8.2 (#274, `deee2c9`) |
-| **Next action** | Open B8.3a's PR and merge when green; then B8.3b (a grounding line on each task) |
-| **Blockers** | C2.6b waits on the owner's choice; C3.3–C3.5 wait on the owner's answers (which key signs records; which providers first; what people without the app see; whether material reads are shared by default) |
+| **Next action** | Merge B8.3a when green; then back to C3, now answered: C3.3 (signed records), C3.4, C3.5, C3.6; then B8.3b and B8.4 |
+| **Blockers** | None waiting on the owner: C2.6b moves to the phase end; C3.3–C3.5 answered 2026-10-01 |
 | **Last updated** | 2026-10-01 |
 
 > Read from git at `origin/feat/phase-32` `deee2c9`, with open PRs from GitHub.
@@ -202,7 +202,7 @@
 - [ ] B8 Grounding, refined in EXECUTION §5: — building
   - [x] B8.1 Per-test results: JUnit read test by test, each test's last result kept; report_tests, get_test_results, GET /api/tests; a test criterion names its failing tests (#273)
   - [x] B8.2 Tests mapped to code through imports: ✓ passing, ✗ failing, ○ no tests, ⚠ tests older than the code, per file (#274)
-  - [ ] B8.3 Where it shows, split in two: — building
+  - [ ] B8.3 Where it shows, split in two: (#275) — in review
     - [ ] B8.3a The grounding overlay on the graph: ✗ ⚠ ✓ ○ on files, summed on clusters, the same answer as the Inspector
     - [ ] B8.3b A grounding line on each task: "3 criteria · 2 grounded · 1 waiting on a person" (window, phone, get_brief)
   - [ ] B8.4 Replay of grounding, and the J1 done-when: done on stale tests is refused and says so
@@ -229,13 +229,13 @@
     - [x] C2.5b Approvals as signed statements: an SSH-signed record per approval when git signing is set up, verified on import against git's allowed signers (#269)
   - [ ] C2.6 Teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when — building
     - [x] C2.6a Teammates' plans after a pull: who added a plan and in which commit, as git says, in the plans list, the Stack and get_plan (#270)
-    - [ ] C2.6b Phase 32's own plan in CodeTrellis, npm run status reading through the app; the C2 done-when (owner's choice first)
+    - [ ] C2.6b Phase 32's own plan in CodeTrellis, npm run status reading through the app; the C2 done-when (at the phase end: the owner keeps the current way of working until then)
 - [ ] C3 A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice), refined in EXECUTION §6: — building
   - [x] C3.1 Task state as records in the project's files: one new file per change, one writer each, read from all; a teammate's state says whose record and that it is unverified; off until the person turns it on (#271)
   - [x] C3.2 A real disagreement is a signal: people acting at once are named on the task and in the inbox until one decides (#272)
-  - [ ] C3.3 Signed records (the owner's choice of key first)
-  - [ ] C3.4 A linked plans folder: a planning repo or a synced folder, placeholders never downloaded, materials by place and hash (the owner's choice of providers first)
-  - [ ] C3.5 Teammates' material reads, a separate switch (the owner's choice of default first)
+  - [ ] C3.3 Signed records: the person's git SSH key when set up, else a key the app makes for the device
+  - [ ] C3.4 A linked plans folder: a planning repo or a synced folder (OneDrive and SharePoint first), placeholders never downloaded, materials by place and hash
+  - [ ] C3.5 Teammates' material reads, a separate switch, on by default once a folder is shared
   - [ ] C3.6 The C3 done-when
 - [ ] C4 Recurring playbooks
 - [x] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
@@ -364,6 +364,11 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | A plan file's refs are added on import, never removed, and only http(s) links are read | A file is anyone's text. Adding is what a pull should do; removing on a file's word would let an edit take a ticket away silently, and a `javascript:` or `file:` link would be one click from harm |
 | 2026-10-01 | C2.6 is refined into C2.6a (teammates' plans after a pull) and C2.6b (Phase 32's own plan in CodeTrellis). C2.6b waits on the owner: keep `PHASE-32-STATUS.yaml` as intent and import it as a plan, or replace it with the plan's files | Moving the phase's own tracker changes how every session reads the work, so it is the owner's choice, not a build step. C2.6a stands alone and needs no such choice |
 | 2026-10-01 | A pulled plan's author is who committed its `plan.yaml`, as `git log` says, never the file's own `author` field | A plan file is anyone's text; the commit is how it arrived (the authorship rule). The same reading as C1.4's skill arrivals |
+| 2026-10-01 | C2.6b (Phase 32's own plan in CodeTrellis) moves to the phase end; the YAML tracker and `npm run status` stay the way of working until then | Owner's choice: switch over after, not mid-phase |
+| 2026-10-01 | C3.3: task-state records are signed with the person's git SSH key when one is set up, else with a key the app makes for the device | Owner's choice. Git's key is what a developer team already trusts; business users rarely have one, so the app supplies its own |
+| 2026-10-01 | C3.4: OneDrive and SharePoint are detected and tested first; people without the app see nothing extra in the shared folder for now | Owner's choice |
+| 2026-10-01 | C3.5: teammates' material reads are shared by default once a folder is shared (still a separate switch, which can be turned off) | Owner's choice: the cross-person version signals are the point of the shared folder |
+| 2026-10-01 | With C3 answered, the order returns to the plan: C3.3–C3.6 after B8.3a, then B8.3b and B8.4 | B8 was taken up only because C3 was waiting on these answers |
 | 2026-10-01 | B8.3 is split into B8.3a (the overlay on the graph) and B8.3b (the grounding line on each task) | They are different surfaces with different tests (the graph's nodes; the task's criteria on window, phone and get_brief); one PR each keeps both reviewable |
 | 2026-10-01 | B8 is refined into four parts (EXECUTION §5). CodeTrellis never runs tests, as observability §9 says; JOURNEYS J1's open question is settled by that principle | Running an agent's tests would make the app an executor with the project's full reach; checking what the run reported keeps provenance with the agent and judgement with the person (the Phase 31 rule) |
 | 2026-10-01 | C3 is refined into six parts (EXECUTION §6). C3.1 and C3.2 need no answer; C3.3 (which key signs records), C3.4 (which providers first; what people without the app see) and C3.5 (whether material reads are shared by default) wait on the owner | Records, their order and their disagreements are the same whichever key, provider or default is chosen, so building them first loses nothing |

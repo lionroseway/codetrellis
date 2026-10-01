@@ -15,8 +15,8 @@
 now:
   step: "Wave 2 — B8.3a: the grounding overlay on the graph"
   status: "B8.2 merged (#274). B8.3 split into a (the overlay) and b (the task line). B8.3a built: Overlays → Test grounding draws ✗ failing, ⚠ tests older than the code, ✓ passing or ○ no tests on each file, words on hover, and sums clusters; nothing before any report; GET /api/tests/grounding/map gives the same answer per file as the Inspector. Unit (graph-overlays 10), harness (test-grounding 8), browser (grounding-overlay, graph-overlays) green locally"
-  next: "Open B8.3a's PR and merge when green; then B8.3b (a grounding line on each task)"
-  blockers: "C2.6b waits on the owner's choice; C3.3–C3.5 wait on the owner's answers (which key signs records; which providers first; what people without the app see; whether material reads are shared by default)"
+  next: "Merge B8.3a when green; then back to C3, now answered: C3.3 (signed records), C3.4, C3.5, C3.6; then B8.3b and B8.4"
+  blockers: "None waiting on the owner: C2.6b moves to the phase end; C3.3–C3.5 answered 2026-10-01"
   updated: 2026-10-01
 sections:
   - title: Setup
@@ -535,7 +535,7 @@ sections:
               - id: C2.6a
                 title: "Teammates' plans after a pull: who added a plan and in which commit, as git says, in the plans list, the Stack and get_plan"
               - id: C2.6b
-                title: "Phase 32's own plan in CodeTrellis, npm run status reading through the app; the C2 done-when (owner's choice first)"
+                title: "Phase 32's own plan in CodeTrellis, npm run status reading through the app; the C2 done-when (at the phase end: the owner keeps the current way of working until then)"
       - id: C3
         title: "A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice), refined in EXECUTION §6:"
         items:
@@ -544,11 +544,11 @@ sections:
           - id: C3.2
             title: "A real disagreement is a signal: people acting at once are named on the task and in the inbox until one decides"
           - id: C3.3
-            title: "Signed records (the owner's choice of key first)"
+            title: "Signed records: the person's git SSH key when set up, else a key the app makes for the device"
           - id: C3.4
-            title: "A linked plans folder: a planning repo or a synced folder, placeholders never downloaded, materials by place and hash (the owner's choice of providers first)"
+            title: "A linked plans folder: a planning repo or a synced folder (OneDrive and SharePoint first), placeholders never downloaded, materials by place and hash"
           - id: C3.5
-            title: "Teammates' material reads, a separate switch (the owner's choice of default first)"
+            title: "Teammates' material reads, a separate switch, on by default once a folder is shared"
           - id: C3.6
             title: The C3 done-when
       - id: C4
