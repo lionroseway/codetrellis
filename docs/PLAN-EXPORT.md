@@ -230,8 +230,21 @@ under the nearest exported ancestor.
   change, a claim or progress rewrites no file and a pull carries no churn.
   A file written before this still carries a `status`, and it is read; a
   file without a claim leaves this machine's claim alone. A file whose
-  content would not change is not rewritten. Until C3's signed records, a
-  teammate does not see a no-branch task's recorded state.
+  content would not change is not rewritten. With Settings → Shared task
+  state on (C3.1), each change is also written as a record under
+  `.codetrellis/records/` (below), which is how a teammate sees it.
+- **Task-state records** (Phase 32 C3.1), only when the person turns on
+  Settings → Shared task state for the project: one file per state change,
+  `.codetrellis/records/<plan uid>/<item uid>/<writer>-<counter>.yaml`,
+  written once by one device and never edited or removed. It carries the
+  writer (a random id per device), the name its records go by (Settings →
+  Identity), its counter, the highest counter it had seen from each other
+  writer of that task, the time, who made the change there (the person or
+  which agent) and the state. The state everyone sees is read from all of
+  them: a record made having seen this machine's latest is the task's state
+  here too, recorded by that teammate "in their record, unverified"; people
+  acting at once are each kept, nothing is picked. Two people never write
+  one file, so git and a synced folder never merge one.
 - Deviations (re-derived on scan)
 - Trellis snapshots (per-device baseline)
 - Agent sessions (live state)

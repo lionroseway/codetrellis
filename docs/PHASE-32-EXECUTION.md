@@ -781,7 +781,7 @@ tasks beside it.
 ### C3: A shared plans folder
 
 Design settled 2026-09-30 (shared-work doc C-3, log entry "Business work
-in the plan"); refined into parts when next. Business teams share a
+in the plan"); refined into parts on 2026-10-01 (table below). Business teams share a
 OneDrive or SharePoint folder the way developers share a git repository,
 so the plans folder can be carried by either, with one layout:
 
@@ -804,6 +804,36 @@ so the plans folder can be carried by either, with one layout:
 - **Teammates' material reads**, shared only when the team turns it on,
   give A6's clashes across people: "Alex's task used last week's version;
   Sam replaced it on Tuesday."
+
+Four questions are the owner's, and only the parts that need them wait:
+which providers are detected and tested first (C3.4); what people without
+the app see in the folder (C3.4); whether teammates' material reads are
+shared by default once a folder is on (C3.5); and which key signs records
+(C3.3). On the last, C2.5b found there is no device key to reuse (pairing
+proves a shared secret, not an identity), so the choice is the person's git
+SSH key, which C2.5b already signs approvals with but business users rarely
+have, or a new key per device, made by the app, that teammates would have to
+be told about once.
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| C3.1 | Task state as records in the project's files: a switch per project, on this device (`shared_task_state`, never the committed config), turned on only by the person (the grant rule) and off by anyone; on, each state change made here (status, claim, progress, blocker) writes one new record `.codetrellis/records/<plan>/<item>/<writer>-<counter>.yaml`, never edited, with the writer's counter and the highest counter it had seen from each other writer; every writer's records are read on project open, on import and when the folder changes, and a teammate's settled record is the task's state here, recorded by them "in their record, unverified". Reading again changes nothing; a conflicted copy is one more copy; a record naming another task than its folder is not read; records are size-limited, read through the confined helper and never a path. Settings → Shared task state; the item's state line says whose record and why unverified | unit (`record.test.ts`: round trip, refusals, order without clocks, splits, duplicates; `item-status` words); harness `task-records.test.ts` (two machines and git: off writes nothing; Sam's record reaches Dana as his; Dana's "done", made having seen it, reaches Sam; read twice; conflicted copy and wrong folder; acting at once keeps each; off; refused from plain HTTP); browser `shared-task-state.spec.ts` (shots) |
+| C3.2 | A real disagreement is a signal: two people setting one task two ways without seeing each other are named on the task ("Sam: done · Alex: blocked, at the same time") in the window, the phone and `get_plan`, and in the one inbox; a later record made having seen both ends it. Records a writer could not have made (two different ones under one counter) say so | unit; harness (two machines acting at once; a forged duplicate); browser |
+| C3.3 | Signed records (the owner's choice of key first): each record signed when written, verified when read; an unsigned or unverifiable one stays "unverified" and a verified one says whose key | unit; harness (verified, forged, unsigned) |
+| C3.4 | A linked plans folder: a code project names its planning repo or synced folder (`plansRepo` / `plansFolder`), confirmed once by the person; the providers chosen first detected; a placeholder shown as "not on this device" and never downloaded to be read; materials known by their place in the folder and their hash, never a full path (the owner's choices first) | unit; harness (a folder with placeholders, two machines' paths) |
+| C3.5 | Teammates' material reads, a separate switch: each app writes which version of each material its tasks read as records, and A6's signals work across people (the owner's choice of default first) | harness (Alex used last week's version; Sam replaced it) |
+| C3.6 | The C3 done-when: the journey below, end to end | harness; browser (shots) |
+
+**Journey (C3).** Dana and Sam share "Q4 board pack" through their team's
+repository. Neither has turned sharing on, so Sam's progress on the report
+stays on his laptop. Dana turns it on in Settings → Shared task state, and
+so does Sam. Sam marks the report in progress, 40%; one small file appears
+under `.codetrellis/records/`, and nothing else in the checkout changes.
+Dana pulls: the report says "in progress, 40%, recorded by Sam Lee in their
+record, unverified". She marks it done; Sam pulls and sees it as hers. They
+both change "Check the figures" at once, each to something different:
+neither machine picks, and (C3.2) both are named on the task until one of
+them decides.
 
 ### C5: One plan, several worktrees
 

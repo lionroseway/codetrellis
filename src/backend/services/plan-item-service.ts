@@ -446,6 +446,30 @@ export type StatusChangeListener = (change: { planUid: string; itemUid: string; 
 let statusListener: StatusChangeListener | null = null;
 export function setStatusChangeListener(fn: StatusChangeListener | null): void { statusListener = fn; }
 
+/**
+ * Told when an item's state (status, claim, progress, blocker) changes on
+ * this machine, so it can be written as a task-state record (Phase 32 C3.1).
+ * Not told of a change that came from a record or from a plan file, which
+ * are someone else's.
+ */
+export type StateWriteListener = (item: PlanItem, by: { author: string; authorType: string }) => void;
+let stateWriteListener: StateWriteListener | null = null;
+let stateFromElsewhere = 0;
+export function setStateWriteListener(fn: StateWriteListener | null): void { stateWriteListener = fn; }
+
+/** Run `fn` with its state changes not written as this machine's records: they came from a file. */
+export function withoutStateRecords<T>(fn: () => T): T {
+  stateFromElsewhere++;
+  try { return fn(); } finally { stateFromElsewhere--; }
+}
+
+/** A teammate's recorded state, applied as theirs (C3.1). Writes no record and no file. */
+export function applyRecordedState(uid: string, state: Pick<UpdatePlanItemInput, 'status' | 'assignee' | 'assigneeType' | 'progressPercent' | 'blockedReason'>, author: { author: string; authorType: string }): PlanItem | null {
+  return withoutStateRecords(() => updateItemImpl(uid, { ...state, ...author, changeSummary: 'from a teammate\'s record' }));
+}
+
+const RECORDED_FIELDS = ['status', 'assignee', 'progressPercent', 'blockedReason'] as const;
+
 function updateItemImpl(uid: string, updates: UpdatePlanItemInput): PlanItem | null {
   const db = getDb();
   const before = getItem(uid);
@@ -707,6 +731,10 @@ function updateItemImpl(uid: string, updates: UpdatePlanItemInput): PlanItem | n
   }
   if (statusListener && structuralEvents.some((ev) => ev.kind === 'status_changed')) {
     try { statusListener({ planUid: after.planUid, itemUid: after.uid, status: after.status ?? null }); } catch { /* never undoes the change */ }
+  }
+  if (stateWriteListener && !stateFromElsewhere && after.kind === 'action'
+    && RECORDED_FIELDS.some((k) => (after[k] ?? null) !== (before[k] ?? null))) {
+    try { stateWriteListener(after, { author: updates.author ?? 'someone', authorType: updates.authorType ?? 'unknown' }); } catch { /* never undoes the change */ }
   }
 
   return after;

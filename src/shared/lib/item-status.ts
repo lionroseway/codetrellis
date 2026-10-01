@@ -132,9 +132,15 @@ export function stateFromWords(source: ItemStateSource): string {
   return source === 'plan' ? 'from the plan' : sourceWords({ source });
 }
 
-/** "recorded by Sam, 26 Sep". */
+/**
+ * "recorded by Sam, 26 Sep". A state taken from a teammate's record in the
+ * project's files (C3.1) says so: anyone who can write to the folder could
+ * have written it, until records are signed.
+ */
 export function recordedWords(r: StateRecord | null | undefined): string | null {
-  return r ? `recorded by ${r.by}, ${shortDate(Math.floor(r.at / 1000))}` : null;
+  if (!r) return null;
+  const when = shortDate(Math.floor(r.at / 1000));
+  return r.byType === 'record' ? `recorded by ${r.by} in their record, unverified, ${when}` : `recorded by ${r.by}, ${when}`;
 }
 
 /** The line an item's page and a row's hover say: "in progress, 40% — from the plan, recorded by Sam, 26 Sep". */

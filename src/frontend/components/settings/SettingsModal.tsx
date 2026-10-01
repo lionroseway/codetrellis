@@ -21,6 +21,7 @@ import {
   Loader2,
   Zap,
   GitPullRequest,
+  Users,
 } from 'lucide-react';
 import { generateQrSvg } from '../../lib/qr-svg';
 import { VerifiedUpdateDownload } from './VerifiedUpdateDownload';
@@ -30,6 +31,7 @@ import { configText, copyText, fetchMcpSetup, maskToken, recommendedConfigText, 
 import type { AppSettings, PowerStatus, PowerTriggers, PeerCapabilityName } from '@shared/types';
 import { AddToClaudeDesktop } from './AddToClaudeDesktop';
 import { ReviewHostSection } from './ReviewHostSection';
+import { SharedTaskStateSection } from './SharedTaskStateSection';
 import { AddToClaudeCode } from './AddToClaudeCode';
 import { AddToGeminiCli } from './AddToGeminiCli';
 
@@ -158,7 +160,7 @@ const MCP_CAPABILITIES: Array<{
  * `settings-changed` so other open instances stay in sync.
  */
 
-type Section = 'identity' | 'appearance' | 'mcp' | 'plans' | 'review-hosts' | 'data' | 'devices' | 'power' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'about';
+type Section = 'identity' | 'appearance' | 'mcp' | 'plans' | 'review-hosts' | 'shared-state' | 'data' | 'devices' | 'power' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'about';
 
 const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'identity', label: 'Identity', Icon: User },
@@ -166,6 +168,7 @@ const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'mcp', label: 'MCP Server', Icon: Plug },
   { key: 'plans', label: 'Plans', Icon: ClipboardList },
   { key: 'review-hosts', label: 'Review hosts', Icon: GitPullRequest },
+  { key: 'shared-state', label: 'Shared task state', Icon: Users },
   { key: 'data', label: 'Data', Icon: HardDrive },
   { key: 'devices', label: 'Devices', Icon: Smartphone },
   { key: 'power', label: 'Power', Icon: Zap },
@@ -287,6 +290,7 @@ export function SettingsModal({
               <PlansSection settings={settings} onChange={update} />
             )}
             {section === 'review-hosts' && <ReviewHostSection />}
+            {section === 'shared-state' && <SharedTaskStateSection />}
             {section === 'logs' && <LogsSection />}
             {section === 'sync' && (
               <SyncSection settings={settings} onChange={update} />

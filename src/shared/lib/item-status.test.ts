@@ -63,6 +63,12 @@ test('every item gets a state and a source: git on a branch, the plan for the re
   assert.equal(s.Notes.state, 'context');
 });
 
+test('a state taken from a teammate\'s record says so, and that it is unverified (C3.1)', () => {
+  const at = Date.UTC(2026, 9, 1, 9, 30);
+  const [s] = itemStatuses([task('Write the board report', { status: 'in_progress', recorded: { by: 'Sam Lee', byType: 'record', at } })], new Map());
+  assert.equal(statusLine(s), 'in progress — from the plan, recorded by Sam Lee in their record, unverified, 1 Oct');
+});
+
 test('a branch git has not seen yet: the plan\'s state, saying why', () => {
   const items = [task('Refunds', { status: 'assigned', assignee: 'codex' })];
   const [s] = itemStatuses(items, new Map([['Refunds', git({ state: 'none', branch: 'refunds', words: 'no refunds branch yet' })]]));

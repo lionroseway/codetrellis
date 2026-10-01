@@ -13,10 +13,10 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — C2.6a: teammates' plans after a pull"
-  status: "C2.5 done (#268, #269). C2.6 refined into a (teammates' plans after a pull) and b (Phase 32's own plan in CodeTrellis: a proposal for the owner). C2.6a built: a plan that first arrives through its files records who added it and in which commit, as git says, shown in the plans list, the Stack (window and phone) and get_plan; uncommitted, it says so and learns its commit later. Harness (plan-arrivals 6), browser (plan-arrivals), phone (stack) green locally"
-  next: "Merge C2.6a when CI is green; then C2.6b needs the owner's choice (keep PHASE-32-STATUS.yaml as intent imported as a plan, or replace it with the plan's files); C3 can start meanwhile"
-  blockers: "C2.6b waits on the owner's choice"
+  step: "Wave 2 — C3.1: task state as records in the project's files"
+  status: "C2.6a merged (#270). C3 refined into six parts (EXECUTION §6); four owner questions hold only C3.3–C3.5. C3.1 built: with Settings → Shared task state on, each state change here writes one new record under .codetrellis/records/, never edited, and teammates' records are read back; a teammate's state says whose record and that it is unverified. Unit (record 10, item-status), harness (task-records 9), browser (shared-task-state 2, modal-chrome) green locally"
+  next: "Open C3.1's PR and merge when green; then C3.2 (a real disagreement is a signal)"
+  blockers: "C2.6b waits on the owner's choice; C3.3–C3.5 wait on the owner's answers (which key signs records; which providers first; what people without the app see; whether material reads are shared by default)"
   updated: 2026-10-01
 sections:
   - title: Setup
@@ -523,7 +523,20 @@ sections:
               - id: C2.6b
                 title: "Phase 32's own plan in CodeTrellis, npm run status reading through the app; the C2 done-when (owner's choice first)"
       - id: C3
-        title: "A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice)"
+        title: "A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice), refined in EXECUTION §6:"
+        items:
+          - id: C3.1
+            title: "Task state as records in the project's files: one new file per change, one writer each, read from all; a teammate's state says whose record and that it is unverified; off until the person turns it on"
+          - id: C3.2
+            title: "A real disagreement is a signal: people acting at once are named on the task and in the inbox until one decides"
+          - id: C3.3
+            title: "Signed records (the owner's choice of key first)"
+          - id: C3.4
+            title: "A linked plans folder: a planning repo or a synced folder, placeholders never downloaded, materials by place and hash (the owner's choice of providers first)"
+          - id: C3.5
+            title: "Teammates' material reads, a separate switch (the owner's choice of default first)"
+          - id: C3.6
+            title: The C3 done-when
       - id: C4
         title: Recurring playbooks
       - id: C5

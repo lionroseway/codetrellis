@@ -134,6 +134,28 @@ and `claimItem` none at all; `writeFileAtomic` leaves a file alone when its
 content would not change. Import still reads an older file's `status`, and a
 file without a claim or blocked reason leaves this machine's alone.
 
+## Task state as records (Phase 32 C3.1)
+
+`services/task-records/shared-state.ts` over `record.ts` (pure). Off until
+the person turns on Settings → Shared task state for a project (a row in
+`shared_task_state` on this device, never the committed config; turning on
+is a grant, turning off anyone's). On, `plan-item-service`'s state-write
+listener writes each state change made here (status, claim, progress,
+blocker; not one taken from a record or an older plan file, which run under
+`withoutStateRecords`) as one new file,
+`.codetrellis/records/<plan>/<item>/<writer>-<counter>.yaml`. Order is by
+each writer's counter and what it had seen of the others, never clocks.
+Records are read on project open, after a plan's import, and when the
+folder changes (a chokidar watcher, while sharing is on): an item's settled
+head that is a teammate's and new to this machine (`task_record_heads`) is
+applied through `applyRecordedState` with author type `record`, which
+`recordedWords` says as "recorded by Sam Lee in their record, unverified".
+Heads that disagree (people acting at once) are kept unapplied with the
+split noted for C3.2. Records are untrusted: uid folder names only, a
+record naming another task than its folder is refused, 16 KB and 5,000 per
+item at most, read through `readTextWithin`, written through
+`writeFileWithin`. Routes: `GET/PUT /api/shared-task-state`.
+
 ## Approvals as signed statements (Phase 32 C2.5b)
 
 `services/signed-approvals.ts` over `signed-approval-record.ts` (pure). A

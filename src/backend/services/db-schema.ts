@@ -247,6 +247,30 @@ export const SCHEMA_PLANS_CORE = `
     changed_by TEXT NOT NULL
   );
 
+  -- Phase 32 C3.1: task state shared as records in the project's files, per
+  -- project, on this device only (never the committed config). Off until
+  -- the person turns it on.
+  CREATE TABLE IF NOT EXISTS shared_task_state (
+    project_root TEXT PRIMARY KEY,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    changed_at INTEGER NOT NULL,
+    changed_by TEXT NOT NULL
+  );
+
+  -- Phase 32 C3.1: this device's writer id for task-state records (one row),
+  -- and, per item, the record whose state this machine last took or wrote:
+  -- reading the same records again changes nothing.
+  CREATE TABLE IF NOT EXISTS task_record_writer (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    writer TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS task_record_heads (
+    item_uid TEXT PRIMARY KEY,
+    writer TEXT NOT NULL,
+    counter INTEGER NOT NULL,
+    split TEXT
+  );
+
   -- Phase 32 C2.6a: a plan that first reached this machine through its files
   -- (a pull, a copy, an import), with who added it and in which commit, as
   -- git says; nulls when it was not committed yet. A plan made here has none.
