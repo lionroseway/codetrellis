@@ -510,7 +510,21 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
     warnings.push(`Approval records were not read: ${err instanceof Error ? err.message : err}`);
   }
 
+  // Phase 32 C3.1 — teammates' task-state records for this plan, once its
+  // items are known (a pull can land the records before the plan).
+  if (planImportedListener) {
+    try { planImportedListener(planUid, projectPath); } catch (err) {
+      warnings.push(`Task-state records were not read: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
   return result;
+}
+
+let planImportedListener: ((planUid: string, projectRoot: string) => void) | null = null;
+/** Told after a plan is imported from its files (C3.1 reads its task-state records then). */
+export function setPlanImportedListener(fn: ((planUid: string, projectRoot: string) => void) | null): void {
+  planImportedListener = fn;
 }
 
 /** V1 import path — reads phases/, tasks/, docs/ directories. */
@@ -673,8 +687,9 @@ function upsertItem(
   const now = Date.now();
 
   if (existing) {
-    // Update existing item
-    planItemService.updateItem(uid, {
+    // Update existing item. A state an older file still carries is the
+    // file's, not this machine's, so it is never written as our record (C3.1).
+    planItemService.withoutStateRecords(() => planItemService.updateItem(uid, {
       title: typeof raw.title === 'string' ? raw.title : undefined,
       body: typeof raw.body === 'string' ? raw.body : undefined,
       template: raw.template ?? null,
@@ -709,7 +724,7 @@ function upsertItem(
       parentUid,
       author: 'file-import',
       authorType: 'system',
-    });
+    }));
   } else {
     // Create new item with preserved UID
     planItemService.createItem({

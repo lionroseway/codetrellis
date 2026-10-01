@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — C2.6a: teammates' plans after a pull |
-| **Status** | C2.5 done (#268, #269). C2.6 refined into a (teammates' plans after a pull) and b (Phase 32's own plan in CodeTrellis: a proposal for the owner). C2.6a built: a plan that first arrives through its files records who added it and in which commit, as git says, shown in the plans list, the Stack (window and phone) and get_plan; uncommitted, it says so and learns its commit later. Harness (plan-arrivals 6), browser (plan-arrivals), phone (stack) green locally |
-| **In flight** | C2.6a building on `feat/phase-32-c2-6a-teammates-plans` |
-| **Last merged** | C2.5b (#269, `1d1239c`) |
-| **Next action** | Merge C2.6a when CI is green; then C2.6b needs the owner's choice (keep PHASE-32-STATUS.yaml as intent imported as a plan, or replace it with the plan's files); C3 can start meanwhile |
-| **Blockers** | C2.6b waits on the owner's choice |
+| **Stage / step** | Wave 2 — C3.1: task state as records in the project's files |
+| **Status** | C2.6a merged (#270). C3 refined into six parts (EXECUTION §6); four owner questions hold only C3.3–C3.5. C3.1 built: with Settings → Shared task state on, each state change here writes one new record under .codetrellis/records/, never edited, and teammates' records are read back; a teammate's state says whose record and that it is unverified. Unit (record 10, item-status), harness (task-records 9), browser (shared-task-state 2, modal-chrome) green locally |
+| **In flight** | C3.1 building on `feat/phase-32-c3-1-shared-plans-folder` |
+| **Last merged** | C2.6a (#270, `0ff9d8b`) |
+| **Next action** | Open C3.1's PR and merge when green; then C3.2 (a real disagreement is a signal) |
+| **Blockers** | C2.6b waits on the owner's choice; C3.3–C3.5 wait on the owner's answers (which key signs records; which providers first; what people without the app see; whether material reads are shared by default) |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `1d1239c`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `0ff9d8b`, with open PRs from GitHub.
 
 ---
 
@@ -222,9 +222,15 @@
     - [x] C2.5a Ticket refs in the plan files: plan.yaml and item files name their tickets and links; import adds, cleans, never removes; lineage survives a pull (#268)
     - [x] C2.5b Approvals as signed statements: an SSH-signed record per approval when git signing is set up, verified on import against git's allowed signers (#269)
   - [ ] C2.6 Teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when — building
-    - [ ] C2.6a Teammates' plans after a pull: who added a plan and in which commit, as git says, in the plans list, the Stack and get_plan — building
+    - [x] C2.6a Teammates' plans after a pull: who added a plan and in which commit, as git says, in the plans list, the Stack and get_plan (#270)
     - [ ] C2.6b Phase 32's own plan in CodeTrellis, npm run status reading through the app; the C2 done-when (owner's choice first)
-- [ ] C3 A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice)
+- [ ] C3 A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice), refined in EXECUTION §6: — building
+  - [ ] C3.1 Task state as records in the project's files: one new file per change, one writer each, read from all; a teammate's state says whose record and that it is unverified; off until the person turns it on — building
+  - [ ] C3.2 A real disagreement is a signal: people acting at once are named on the task and in the inbox until one decides
+  - [ ] C3.3 Signed records (the owner's choice of key first)
+  - [ ] C3.4 A linked plans folder: a planning repo or a synced folder, placeholders never downloaded, materials by place and hash (the owner's choice of providers first)
+  - [ ] C3.5 Teammates' material reads, a separate switch (the owner's choice of default first)
+  - [ ] C3.6 The C3 done-when
 - [ ] C4 Recurring playbooks
 - [x] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
   - [x] C5.1 `workstream` on an item, inherited; `assign_workstream`; next and claim respect it (#186)
@@ -352,9 +358,57 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | A plan file's refs are added on import, never removed, and only http(s) links are read | A file is anyone's text. Adding is what a pull should do; removing on a file's word would let an edit take a ticket away silently, and a `javascript:` or `file:` link would be one click from harm |
 | 2026-10-01 | C2.6 is refined into C2.6a (teammates' plans after a pull) and C2.6b (Phase 32's own plan in CodeTrellis). C2.6b waits on the owner: keep `PHASE-32-STATUS.yaml` as intent and import it as a plan, or replace it with the plan's files | Moving the phase's own tracker changes how every session reads the work, so it is the owner's choice, not a build step. C2.6a stands alone and needs no such choice |
 | 2026-10-01 | A pulled plan's author is who committed its `plan.yaml`, as `git log` says, never the file's own `author` field | A plan file is anyone's text; the commit is how it arrived (the authorship rule). The same reading as C1.4's skill arrivals |
+| 2026-10-01 | C3 is refined into six parts (EXECUTION §6). C3.1 and C3.2 need no answer; C3.3 (which key signs records), C3.4 (which providers first; what people without the app see) and C3.5 (whether material reads are shared by default) wait on the owner | Records, their order and their disagreements are the same whichever key, provider or default is chosen, so building them first loses nothing |
+| 2026-10-01 | Task-state records are turned on per project, on this device, by the person; off writes and reads none | They add files to the team's repository or folder, which is sharing; the same rule as a review host. Reading teammates' records only when sharing is on keeps one switch with one meaning |
+| 2026-10-01 | A teammate's record is applied only when it was made having seen this machine's latest record for that task; records made at once that disagree are each kept, none applied | Clocks drift, so "newest" is not knowable from times; a silent pick would hide a real disagreement, which C3.2 names |
+| 2026-10-01 | A state recorded on this machine before sharing was turned on is not written as a record; a teammate's record replaces it | Writing every task's state when a switch flips would make everyone's first records collide; the first change after turning it on is shared as usual |
 ---
 
 ## Entries
+
+### 2026-10-01: C3 refined; C3.1 — task state as records in the project's files
+
+C2.6a merged (#270). C2.6b waits on the owner, so C3 is next: refined into
+six parts in EXECUTION §6 (decision rows). Four questions are the owner's,
+and only C3.3–C3.5 wait on them: which providers first; what people without
+the app see; whether teammates' material reads are shared by default; and
+which key signs records. On the last, C2.5b found no device key to reuse,
+so it is the person's git SSH key (which business users rarely have) or a
+new per-device key the app makes and teammates are told about once.
+
+- **One writer per file, only ever added** (`task-records/record.ts`,
+  `shared-state.ts`). With Settings → Shared task state on, each change to a
+  task's state made here (status, claim, progress, blocker) writes one new
+  file, `.codetrellis/records/<plan>/<item>/<writer>-<counter>.yaml`. Two
+  people acting at once make two files: git and a synced folder never merge
+  one.
+- **Order without clocks.** Each record carries its writer's counter and
+  the highest counter it had seen from each other writer of that task. A
+  teammate's record made having seen this machine's latest is the task's
+  state here, said "recorded by Sam Lee in their record, unverified" on the
+  item's State line, with why on hover; `get_plan`'s status carries it as `byType: record`.
+- **Nothing picked.** Records made at once that disagree are each kept and
+  none is applied; C3.2 names both on the task and in the inbox.
+- **Partial arrival is normal.** Reading again changes nothing; a sync's
+  conflicted copy is one more copy of a record; a record naming another
+  task than its folder is not read. Records are untrusted: uid folders
+  only, 16 KB and 5,000 per item at most, through the confined helper.
+- **The person's switch.** Per project, on this device, never the committed
+  config; turning it on is a grant (refused from plain HTTP with where to do
+  it), turning it off anyone's. Off, nothing is written or read. Settings
+  says the name records carry and why a teammate's state is unverified.
+
+Found on the way: an older plan file that still carries a `status` sets it
+through the same update as a person's change, so it would have been written
+as this machine's record; imports now run under `withoutStateRecords`.
+
+Tests: unit `record.test.ts` (10) and `item-status` (the record's words);
+harness `task-records.test.ts` (9: two machines and git between them; off
+writes nothing; Sam's record reaches Dana as his; Dana's done, made having
+seen it, reaches Sam; read twice; conflicted copy and wrong folder; acting
+at once keeps each; off again; refused from plain HTTP); browser
+`shared-task-state.spec.ts` (shots `shared-task-state-settings`,
+`shared-task-state-line`); `modal-chrome` and the UX audit list the section.
 
 ### 2026-10-01: C2.6a — teammates' plans after a pull
 

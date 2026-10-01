@@ -407,6 +407,10 @@ export function useWebSocket() {
           if (type === 'review-host-changed') {
             window.dispatchEvent(new CustomEvent('review-host-changed', { detail: payload }));
           }
+          // Phase 32 C3.1 — sharing task state through the project's files turned on or off.
+          if (type === 'shared-task-state-changed') {
+            window.dispatchEvent(new CustomEvent('shared-task-state-changed', { detail: payload }));
+          }
           // Phase 32 B7.2 — a spec change was proposed (and, from B7.4, decided).
           if (typeof type === 'string' && type.startsWith('spec-proposal-')) {
             window.dispatchEvent(new CustomEvent('spec-proposals-changed', { detail: payload }));

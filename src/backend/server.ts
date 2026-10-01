@@ -83,6 +83,7 @@ import { listSignedApprovals } from './services/signed-approvals';
 import { allPlanArrivals } from './services/plan-arrivals';
 import { forgetHostReads } from './services/review-host/host-state';
 import { forgetReviewHostToken, getReviewHost, ReviewHostError, saveReviewHostToken, setReviewHost } from './services/review-host/switch';
+import { getSharedTaskState, readAndTell, setRecordAppliedListener, setSharedTaskState, startRecordWatcher, writeRecordFor } from './services/task-records/shared-state';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
 import { buildPlaybackSequence } from './services/playback-service';
 import * as commentService from './services/comment-service';
@@ -114,7 +115,7 @@ import { discoverSystems, buildAliasMap } from './services/system-discovery';
 // imports get bundled cleanly. The original lazy-require pattern
 // existed to dodge import cycles that no longer apply.
 import { recomputeCrossSystemEdges, listCrossSystemEdges, getCrossSystemStats } from './services/cross-system-service';
-import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs, exportIfSharedByDefault, exportOnFirstTitle, registerDiskHoldSettling } from './services/plan-file-service';
+import { setPlanImportedListener, startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs, exportIfSharedByDefault, exportOnFirstTitle, registerDiskHoldSettling } from './services/plan-file-service';
 import { getAllGraphEdges, getDb } from './services/database';
 import { getSettings, updateSettings, getAuthorKey, readGitIdentity, SettingsError } from './services/settings-service';
 import { grantChange, grantRefusal, httpGrantsAllowed } from './services/grant-guard';
@@ -1402,6 +1403,14 @@ async function runScan(projectPath: string): Promise<ScanStats> {
       console.warn('[Scan] Plan file watcher failed to start:', err);
     }
 
+    // Phase 32 C3.1 — teammates' task-state records, when this project shares them.
+    try {
+      startRecordWatcher(projectPath);
+      readAndTell(projectPath);
+    } catch (err) {
+      console.warn('[Scan] Task-state records were not read:', err);
+    }
+
     // Phase 31 §4.4 — the recorded artefacts, so an approval taken on a
     // file notices when the file changes.
     try {
@@ -2447,6 +2456,27 @@ app.put('/api/review-host/token', (req, res) => {
     broadcast('review-host-changed', { project: projectRoot });
     res.json(status);
   } catch (err) { sendReviewHostError(res, err); }
+});
+
+// Phase 32 C3.1 — task state shared as records in the project's files. Per
+// project, on this device; turning it on is the person's, as a grant.
+const SHARED_STATE_WHERE = 'Settings → Shared task state';
+
+app.get('/api/shared-task-state', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(getSharedTaskState(projectRoot));
+});
+
+app.put('/api/shared-task-state', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const enabled = req.body?.enabled;
+  if (typeof enabled !== 'boolean') { res.status(400).json({ error: 'enabled must be true or false' }); return; }
+  if (enabled && !mayGrant(req)) { res.status(403).json({ error: `Only you can share task state through the project's files — in the CodeTrellis app, ${SHARED_STATE_WHERE}.` }); return; }
+  const status = setSharedTaskState(projectRoot, enabled, changedBy(req));
+  broadcast('shared-task-state-changed', { project: projectRoot });
+  res.json(status);
 });
 
 app.delete('/api/review-host/token', (req, res) => {
@@ -5675,6 +5705,7 @@ function rearmProjectWatchers(): void {
       startProjectConfigWatcher(proj.path);
       try {
         void startPlanFileWatcher(proj.path);
+        startRecordWatcher(proj.path);
       } catch {
         // plan-file watcher may need a project scan to be useful;
         // best-effort.
@@ -5724,6 +5755,14 @@ export async function initializeBackend(): Promise<void> {
   setFramePublisher(broadcast);
   startReplayFrames();
   setRecordedListener((evt) => noteAgentActivity(evt));
+  // C3.1: a state change made here is written as this device's record (when
+  // its project shares task state); a teammate's record taken is told to the
+  // window; a plan imported from its files has its records read.
+  planItemService.setStateWriteListener((item, by) => { writeRecordFor(item, by); });
+  setRecordAppliedListener((item) => {
+    broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { status: item.status, fromRecord: true } });
+  });
+  setPlanImportedListener((planUid, projectRoot) => { readAndTell(projectRoot, planUid); });
   planItemService.setStatusChangeListener(({ planUid, itemUid }) => {
     const plan = planService.getPlan(planUid);
     if (!plan?.projectPath) return;

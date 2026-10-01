@@ -8,9 +8,9 @@
 import { test, expect } from '@playwright/test';
 import { gotoWithProject } from '../helpers/setup';
 
-/** The sidebar, in order. Thirteen since Review hosts joined (Phase 32 C2.2a). */
+/** The sidebar, in order. Fourteen since Shared task state joined (Phase 32 C3.1). */
 const SECTIONS = [
-  'Identity', 'Appearance', 'MCP Server', 'Plans', 'Review hosts', 'Data', 'Devices',
+  'Identity', 'Appearance', 'MCP Server', 'Plans', 'Review hosts', 'Shared task state', 'Data', 'Devices',
   'Power', 'Sync', 'Logs', 'Telemetry', 'Updates', 'About',
 ];
 
