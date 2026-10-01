@@ -17,12 +17,12 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 279 | 277 | 0 | 0 | 217 | 0 |
+| REST routes | 280 | 278 | 0 | 0 | 217 | 0 |
 | MCP tools | 207 | 207 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 92 | 81 | 0 | 0 | 78 | 0 |
-| Frontend components | 127 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 129 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 37 | n/a | n/a | n/a | 0 | 0 |
-| Settings sections | 15 | n/a | n/a | n/a | 11 | 13 |
+| Settings sections | 16 | n/a | n/a | n/a | 11 | 13 |
 
 ## By domain
 
@@ -30,7 +30,7 @@ records that — but "✗ none" is proof of a gap.
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 19 | 12 | 10 | 0 | 0 | 0 |
 | 0.4b Graph | 19 | 15 | 8 | 15 | 0 | 0 |
-| 0.4c Plans and items | 117 | 60 | 27 | 62 | 0 | 0 |
+| 0.4c Plans and items | 118 | 60 | 27 | 63 | 0 | 0 |
 | 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 13 | 7 | 1 | 0 | 0 |
@@ -38,7 +38,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4h Drift, governance, review | 11 | 25 | 9 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 37 | 0 |
-| 0.4k Settings, updates, privacy | 22 | 0 | 3 | 9 | 0 | 15 |
+| 0.4k Settings, updates, privacy | 22 | 0 | 3 | 10 | 0 | 16 |
 | 0.4l System docs and intake | 7 | 11 | 6 | 1 | 0 | 0 |
 
 ## MCP tools: registry vs capability matrix
@@ -48,7 +48,7 @@ records that — but "✗ none" is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (279)
+## REST routes (280)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -142,6 +142,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `GET /api/plans/:uid/phases` |  | ✗ none | 3 | ✓ 0.4c: exercised by full-loop, plan-phases, plan-templates (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:uid/pr-draft` |  | ✗ none | 5 | ✓ 0.4c: exercised by phone-graph-review, plan-review-surface, plan-review, review-comparand-edges, +1 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:uid/projection` |  | ✗ none | 1 | ✓ 0.4c-1: ghost and modified files from an Action (plan-rest) |  |  |
+| c | `GET /api/plans/:uid/recurrence` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/plans/:uid/refs` |  | ✗ none | 1 | ✓ 0.4c: exercised by references (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:uid/review` |  | ✗ none | 8 | ✓ 0.4c: exercised by phone-graph-review, plan-review-surface, plan-review, review-after-rescan, +2 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:uid/skill-arrivals` |  | ✗ none | 1 |  |  |  |
@@ -641,7 +642,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (127)
+## Frontend components (129)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -716,6 +717,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `plan/v2/PlanTicketSyncChip.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanVersionHistory.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/PlanWorkspaceShellV2.tsx` |  | n/a | n/a |  | ✓ 0.5 — no "V2" badge (0.5c) |  |
+| c | `plan/v2/RecurringRunLine.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/SignedApprovalLines.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/SkillsEditor.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/SlashMenu.tsx` |  | n/a | n/a |  |  |  |
@@ -766,6 +768,7 @@ records that — but "✗ none" is proof of a gap.
 | k | `settings/AddToClaudeDesktop.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/AddToGeminiCli.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/PlansFolderSection.tsx` |  | n/a | n/a |  |  |  |
+| k | `settings/RecurringSection.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/ReviewHostSection.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/SettingsModal.tsx` |  | n/a | n/a |  | ✓ 0.5 — one height for every section (0.5b) |  |
 | k | `settings/SharedTaskStateSection.tsx` |  | n/a | n/a |  |  |  |
@@ -815,7 +818,7 @@ records that — but "✗ none" is proof of a gap.
 | j | `workstream-detail.tsx` |  | n/a | 1 |  |  |  |
 | j | `workstreams.tsx` |  | n/a | 1 |  |  |  |
 
-## Settings sections (15)
+## Settings sections (16)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -829,6 +832,7 @@ records that — but "✗ none" is proof of a gap.
 | k | `plans` |  | n/a | n/a | ✓ 0.4k: default visibility saves (e2e sections-save, e2e plans) | ✓ 0.5a — stale "coming" note and raw markdown link fixed |  |
 | k | `plans-folder` |  | n/a | n/a |  |  |  |
 | k | `power` |  | n/a | n/a | ✓ 0.4k: a keep-awake trigger saves, siblings kept (e2e sections-save, settings-surface) | ✓ 0.5 — plain words, status says what is happening (0.5b) |  |
+| k | `recurring` |  | n/a | n/a |  |  |  |
 | k | `review-hosts` |  | n/a | n/a | ✓ C2.2a: off until turned on per project; turning on and saving a token only from the app window; token never echoed, kept in the OS keychain or memory only; the switch no longer applies when the remote names another repository; nothing requested (harness review-host-switch) | ✓ C2.2a: names the host and what it would read before anything is; says where the token is kept (e2e review-host-settings) |  |
 | k | `shared-state` |  | n/a | n/a |  |  |  |
 | k | `sync` |  | n/a | n/a |  | ✓ 0.5a |  |

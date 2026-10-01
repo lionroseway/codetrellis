@@ -15,6 +15,7 @@ import { useSlashMenu } from './SlashMenu';
 import { useMentionPicker } from './MentionPicker';
 import { BodyRenderer } from './BodyRenderer';
 import { PlanGitContextChip } from './PlanGitContextChip';
+import { RecurringRunLine } from './RecurringRunLine';
 import { PlanBudgetChip } from './PlanBudgetChip';
 import { PlanTicketSyncChip } from './PlanTicketSyncChip';
 import { PlanSyncChip } from './PlanSyncChip';
@@ -550,6 +551,8 @@ function PlanHomePage() {
               placeholder="Untitled plan"
               className="w-full bg-transparent border-0 text-[40px] font-bold text-foreground placeholder:text-foreground-subtle focus:outline-none focus:ring-0 px-0 leading-tight"
             />
+            {/* Phase 32 C4.2b — a recurring playbook's run says which, for when, and what it carried. */}
+            <RecurringRunLine planUid={plan.uid} />
             <div className="flex items-center gap-2 flex-wrap text-[13px] text-foreground-subtle">
               <span className="px-2.5 py-1 rounded-full border border-white/[0.08] bg-white/[0.02] uppercase tracking-wider text-[11.5px] font-medium">
                 Plan

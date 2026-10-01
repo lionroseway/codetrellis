@@ -77,7 +77,7 @@ import { reviewQueue } from './services/review-queue-service';
 import { buildStack } from './services/stack-service';
 import { buildPlayForward } from './services/play-forward';
 import { resequence, tellAgents, leaveOverlap, OverlapActionError, noteApproval, approvalNotices, markNoticeSeen } from './services/planned-overlap-actions';
-import { seriesFor, setRule, removeRule, startRun, dismissDue, RecurringError } from './services/recurring-service';
+import { seriesFor, setRule, removeRule, startRun, dismissDue, recurrenceOf, RecurringError } from './services/recurring-service';
 import { startRecurringScheduler } from './services/recurring-scheduler';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
@@ -2697,6 +2697,15 @@ app.post('/api/recurring/:id/start', (req, res) => {
     if (err instanceof RecurringError) { res.status(err.status).json({ error: err.message }); return; }
     throw err;
   }
+});
+
+// C4.2b — which series a plan is a run of. The root is the stored plan's,
+// never the request's.
+app.get('/api/plans/:uid/recurrence', (req, res) => {
+  const plan = planService.getPlan(req.params.uid);
+  if (!plan) { res.status(404).json({ error: 'Plan not found' }); return; }
+  if (!plan.projectPath) { res.json({ recurrence: null }); return; }
+  res.json({ recurrence: recurrenceOf(plan.projectPath, plan.uid) });
 });
 
 // C4.2a — "Not this time": the due run is left unstarted on this device, and

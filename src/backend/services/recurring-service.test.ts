@@ -160,3 +160,26 @@ describe('due runs, while the app runs and after (C4.2a)', () => {
     assert.throws(() => recurring.dismissDue(project, 'daily-report', 'Sam Lee', at('2026-10-03T12:00:00Z')), /has no run due now/);
   });
 });
+
+describe('which series a plan is a run of (C4.2b)', () => {
+  test('a run started here says which, for when, who started it, and what it carried', () => {
+    const run = recurring.runUid(project, 'daily-report', '2026-10-01');
+    const r = recurring.recurrenceOf(project, run, at('2026-10-05T12:00:00Z'))!;
+    assert.equal(r.line, 'Daily report · 1 Oct run · started by Sam Lee · 1 task carried from 29 Sep');
+    assert.equal(r.words, 'every day 09:00 · skill: security-review');
+    assert.deepEqual(r.carriedTasks.map((t) => [t.title, t.from]), [['Rotate the staging keys', '29 Sep']]);
+    const scheduled = recurring.recurrenceOf(project, recurring.runUid(project, 'daily-report', '2026-10-03'), at('2026-10-05T12:00:00Z'))!;
+    // The schedule carried 1 Oct's open task on, as the rule says.
+    assert.equal(scheduled.line, 'Daily report · 3 Oct run · started by the schedule · 1 task carried from 1 Oct');
+  });
+
+  test('a run that arrived from a teammate is recognised by its id; a plan that is no run says nothing', async () => {
+    const db = await import('./database');
+    const run = recurring.runUid(project, 'daily-report', '2026-09-29');
+    db.getDb().run('DELETE FROM recurring_runs WHERE plan_uid = ?', [run]);
+    const r = recurring.recurrenceOf(project, run, at('2026-10-05T12:00:00Z'))!;
+    assert.equal(r.line, 'Daily report · 29 Sep run');
+    assert.deepEqual(r.carriedTasks, []);
+    assert.equal(recurring.recurrenceOf(project, '00000000-0000-4000-8000-000000000000', at('2026-10-05T12:00:00Z')), null);
+  });
+});

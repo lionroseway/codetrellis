@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track C — C4.2a: recurring runs due, in the window"
-  status: "C4.1 merged (#299). C4.2 split in two; C4.2a built: a run is started by the schedule as its moment comes while the app runs; one due while it was closed is asked about in the Awareness inbox (Start, or Not this time, then missed); each series is one row in the plans list, a run opens its plan and the due one starts from the row. Unit recurring-service 9, harness recurring 7, browser recurring.spec 1 (shots)"
-  next: "Merge C4.2a when green; then C4.2b (Settings → Recurring playbooks; the run's line)"
+  step: "Track C — C4.2b: Settings → Recurring playbooks, and a run's own line"
+  status: "C4.1 (#299) and C4.2a (#300) merged. C4.2b built: Settings → Recurring playbooks sets a rule for the team (playbook, every, on, at, zone, carry over, skills) and stops one; a run's page says which series and period it is, who started it, and names its carried tasks, recognised by its id when it came from a teammate. Unit recurring-service 11, harness recurring 7, browser settings/recurring.spec 2 (shots)"
+  next: "Merge C4.2b when green; then C4.3 (the phone, an agent only by opt-in, and the C4 done-when)"
   blockers: "None"
   updated: 2026-10-01
 sections:

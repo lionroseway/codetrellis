@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track C — C4.2a: recurring runs due, in the window |
-| **Status** | C4.1 merged (#299). C4.2 split in two; C4.2a built: a run is started by the schedule as its moment comes while the app runs; one due while it was closed is asked about in the Awareness inbox (Start, or Not this time, then missed); each series is one row in the plans list, a run opens its plan and the due one starts from the row. Unit recurring-service 9, harness recurring 7, browser recurring.spec 1 (shots) |
-| **In flight** | C4.2a in review (#300) on `feat/phase-32-c4-2a-due-in-window`; C4.2b in review (#301) on `feat/phase-32-c4-2b-settings-and-run-line` |
-| **Last merged** | C4.1 (#299, `03de0dd`) |
-| **Next action** | Merge C4.2a when green; then C4.2b (Settings → Recurring playbooks; the run's line) |
+| **Stage / step** | Track C — C4.2b: Settings → Recurring playbooks, and a run's own line |
+| **Status** | C4.1 (#299) and C4.2a (#300) merged. C4.2b built: Settings → Recurring playbooks sets a rule for the team (playbook, every, on, at, zone, carry over, skills) and stops one; a run's page says which series and period it is, who started it, and names its carried tasks, recognised by its id when it came from a teammate. Unit recurring-service 11, harness recurring 7, browser settings/recurring.spec 2 (shots) |
+| **In flight** | C4.2b in review (#301) on `feat/phase-32-c4-2b-settings-and-run-line` |
+| **Last merged** | C4.2a (#300, `2a605c8`) |
+| **Next action** | Merge C4.2b when green; then C4.3 (the phone, an agent only by opt-in, and the C4 done-when) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `03de0dd`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `2a605c8`, with open PRs from GitHub.
 
 ---
 
@@ -251,7 +251,7 @@
 - [ ] C4 Recurring playbooks, refined in EXECUTION §6: — building
   - [x] C4.1 The data: a rule on a playbook in the committed config, one run per period by its id, the series, carry-over (#299)
   - [ ] C4.2 Due, in the window, split in two: — building
-    - [ ] C4.2a Started as it comes; asked about when it fell due while the app was closed; the series row in the plans list (#300) — in review
+    - [x] C4.2a Started as it comes; asked about when it fell due while the app was closed; the series row in the plans list (#300)
     - [ ] C4.2b Settings → Recurring playbooks; a run's series, period and carried tasks on the run (#301) — in review
   - [ ] C4.3 The phone, an agent only by opt-in, and the C4 done-when
 - [x] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
@@ -442,6 +442,20 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-01: C4.2b — Settings → Recurring playbooks, and a run's own line
+- **Journey.** Sam opens Settings → Recurring playbooks and makes the Bug fix
+  playbook recur as "Weekly triage", every Monday 09:00 Europe/London,
+  carrying open tasks over, with the triage skill; it is listed for the team
+  with who set it, and he can stop it there. This week's run says on its page
+  "Weekly triage · W40 run · started by the schedule · 1 task carried from
+  W39" and names "Rotate the staging keys — carried from W39", which opens.
+- **Built.** `RecurringSection` (Settings), `recurrenceOf` and `GET
+  /api/plans/:uid/recurrence` (the root is the stored plan's), a run that
+  arrived from a teammate recognised by its id, `usePlanRecurrence` and
+  `RecurringRunLine` on the plan's page.
+- **Tests.** Unit `recurring-service.test.ts` (11). Harness `recurring.test.ts`
+  (7). Browser `settings/recurring.spec.ts` (2, shots).
 
 ### 2026-10-01: C4.2a — recurring runs due, in the window
 - **Journey.** Sam's laptop was closed at midnight, when "Daily security
