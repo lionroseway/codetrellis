@@ -32,6 +32,7 @@ import { readSoFar } from './material-footprints';
 import { affectedByOtherWork } from './other-work';
 import { planGitStates, refreshPlanHostStates } from './item-git-state';
 import type { ItemCriterion } from '../../shared/types/criteria';
+import { taskGrounding } from './task-grounding';
 
 const MAX_BODY_CHARS = 20_000;
 const MAX_GUIDE_BODY_CHARS = 4_000;
@@ -205,6 +206,8 @@ export async function getBrief(itemUid: string, opts: { workstreamRoot?: string 
     materials: materialsFor(items, item),
     criteria,
     sent_back: criteria.filter((c) => c.state === 'sent_back').length,
+    // How far the criteria rest on evidence, as the window and the phone say it (B8.3b).
+    grounding: await groundingForBrief(item.uid),
     // What this task has read through read_material, and the hash each saw (A6.2).
     read_so_far: readSoFar(item.uid),
     // What git proves about the task's branch (C2.1), when it is worked on one.
@@ -216,6 +219,13 @@ export async function getBrief(itemUid: string, opts: { workstreamRoot?: string 
     how_to_work: HOW_TO_WORK,
     about_materials: ABOUT_MATERIALS,
   };
+}
+
+/** The grounding line and each criterion's grade, in the brief's snake case. */
+async function groundingForBrief(itemUid: string) {
+  const g = await taskGrounding(itemUid);
+  if (!g || g.total === 0) return null;
+  return { says: g.words, grounded: g.grounded, criteria: g.criteria.map((c) => ({ uid: c.uid, grade: c.grade, why: c.why })) };
 }
 
 /**

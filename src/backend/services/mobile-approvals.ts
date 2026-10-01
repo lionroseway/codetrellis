@@ -31,6 +31,7 @@ import path from 'node:path';
 import * as criteriaService from './criteria-service';
 import { refreshArtefactHashes, getArtefact } from './artefact-service';
 import { getItem } from './plan-item-service';
+import { taskGrounding } from './task-grounding';
 import { issueHumanDecision } from './human-decision';
 import { getAuthorKey } from './settings-service';
 import { getPairedDevice } from './paired-device-service';
@@ -172,15 +173,19 @@ function awaiting(params: Record<string, unknown>): { entries: AwaitingEntry[] }
 async function criteriaForItem(itemUid: string): Promise<{
   item: { uid: string; title: string; planUid: string };
   criteria: PhoneCriterion[];
+  /** B8.3b: the task's grounding line and each criterion's grade, as the window says them. */
+  grounding: { words: string | null; grounded: boolean; grades: Record<string, { grade: string; why: string }> } | null;
 }> {
   const item = getItem(itemUid);
   if (!item) throw new Error('Item not found');
   // The authoritative check (§4.4): the files may have changed while no
   // watcher was looking, and the person is about to judge them.
   await refreshArtefactHashes(itemUid).catch(() => []);
+  const g = await taskGrounding(itemUid);
   return {
     item: { uid: item.uid, title: item.title, planUid: item.planUid },
     criteria: criteriaService.listCriteria(itemUid).map(toPhone),
+    grounding: g && g.total ? { words: g.words, grounded: g.grounded, grades: Object.fromEntries(g.criteria.map((c) => [c.uid, { grade: c.grade, why: c.why }])) } : null,
   };
 }
 

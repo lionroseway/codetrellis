@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track D — D1.5b: the done-when |
-| **Status** | D1.4 (#288) and D1.5a (#289) merged. D1.5b: a cloud session through the SessionStart hook (now with --share-task-state) and the CLI alone claims, reports 60%, commits its code, reports its tests, adds a task and commits the plan, and pushes; the CI recipe, its steps run as written, conforms; Sam's desktop after a pull shows the claim and progress as the session said them, the new task, the file grounded by the session's run, and the commit's author and co-author. Found: report-tests printed raw JSON; fixed. Harness done-when-d 3 |
-| **In flight** | D1.5b building on `feat/phase-32-d1-5b-done-when` |
+| **Stage / step** | Track B — B8.3b: a grounding line on each task |
+| **Status** | Track D done (D1.1–D1.5b, #285–#290). B8.3b building: each criterion graded once (grounded, waiting on a person, sent back, changed since, failing, no evidence yet) into one line, "3 criteria · 2 grounded · 1 waiting on a person"; served at GET /api/items/:uid/grounding, in get_brief and in the phone's criteria.list |
+| **In flight** | B8.3b building on `feat/phase-32-b8-3b-grounding-line` |
 | **Last merged** | C3.6 (#284, `8300675`) |
-| **Next action** | Merge D1.5b when green; then B8.3b (a grounding line on each task) |
+| **Next action** | The line in the window's criteria block and on the phone's task screen; unit, harness, browser and phone tests; docs |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `b07c239`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `d34154d`, with open PRs from GitHub.
 
 ---
 
@@ -204,7 +204,7 @@
   - [x] B8.2 Tests mapped to code through imports: ✓ passing, ✗ failing, ○ no tests, ⚠ tests older than the code, per file (#274)
   - [ ] B8.3 Where it shows, split in two: — building
     - [x] B8.3a The grounding overlay on the graph: ✗ ⚠ ✓ ○ on files, summed on clusters, the same answer as the Inspector (#275)
-    - [ ] B8.3b A grounding line on each task: "3 criteria · 2 grounded · 1 waiting on a person" (window, phone, get_brief)
+    - [ ] B8.3b A grounding line on each task: "3 criteria · 2 grounded · 1 waiting on a person" (window, phone, get_brief) — building
   - [ ] B8.4 Replay of grounding, and the J1 done-when: done on stale tests is refused and says so
 - [ ] B9 Play-forward (code, and the materials tasks rely on)
 - [ ] B10 The record
@@ -249,14 +249,14 @@
     - [x] C5.3b A collision between two sections of one plan names both; readiness to merge per section (#190)
 
 ### Track D: agents on demand
-- [ ] D1 The `codetrellis` CLI (owner's decision, 2026-10-01), refined in EXECUTION §6b: — building
+- [ ] D1 The `codetrellis` CLI (owner's decision, 2026-10-01), refined in EXECUTION §6b:
   - [ ] D1.1 `codetrellis serve` (headless backend, loopback, token on every transport) and `scan`
   - [ ] D1.2 Keep-on-track verbs as an agent: next, claim, update, stuck, done, request, brief, awareness, check, report-tests; text or --json
   - [ ] D1.3 Changing the plan (show, add, edit, move) and `commit`, which commits only CodeTrellis's own files; `status`
   - [ ] D1.4 A SessionStart hook recipe, a CI/CD recipe, and exit codes on status and check for gating (breakpoints, tests older than the code, failing criteria, stale system docs); this repository uses it
-  - [ ] D1.5 The D done-when, refined into two parts (2026-10-01): — building
+  - [ ] D1.5 The D done-when, refined into two parts (2026-10-01):
     - [ ] D1.5a Test runs travel as signed run records, grounding a teammate's run by commit; `--share-task-state` for a headless backend
-    - [ ] D1.5b The done-when: a cloud session or CI job claims, reports, edits the plan and commits; the desktop shows it after a pull — building
+    - [ ] D1.5b The done-when: a cloud session or CI job claims, reports, edits the plan and commits; the desktop shows it after a pull
   - [ ] Follow-up: Declared product flows checked hop by hop against the cross-system map in CI (owner's point, 2026-10-01): after Phase 32 unless pulled in
 
 ### Phase end
