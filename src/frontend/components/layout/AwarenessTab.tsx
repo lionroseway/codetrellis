@@ -21,6 +21,7 @@ import { sideWords } from '@shared/lib/signal-words';
 import type { AwarenessSignal, SettableSignalState, Workstream } from '@shared/types';
 import { UnverifiedIf } from '../UnverifiedTag';
 import { BreakpointsWaiting, BreakpointsSet } from './Breakpoints';
+import { PlannedOverlapNotices } from './PlannedOverlapNotices';
 
 /**
  * The Awareness tab (Phase 32 A1.8, awareness spec §7.2): what overlaps
@@ -113,6 +114,7 @@ export function AwarenessTab() {
   return (
     <div data-testid="awareness-tab" className="text-[11px] space-y-3 max-w-3xl">
       <BreakpointsWaiting now={now} />
+      <PlannedOverlapNotices />
       <div data-testid="awareness-digest" className="flex gap-2.5 rounded-lg border border-border-subtle bg-surface/60 px-3 py-2.5">
         <Radar size={14} className={`shrink-0 mt-0.5 ${groups.needsYou.length > 0 ? 'text-warning' : 'text-foreground-subtle'}`} />
         <div className="min-w-0">

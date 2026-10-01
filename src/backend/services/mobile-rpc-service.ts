@@ -39,6 +39,8 @@ import { listTrustedRoots, resolveTrustedPlanDir, resolveTrustedProjectRoot } fr
 import { reviewPlan } from './plan-review-service';
 import { reviewQueue } from './review-queue-service';
 import { buildStack } from './stack-service';
+import { buildPlayForward } from './play-forward';
+import { resequence, tellAgents, leaveOverlap, approvalNotices } from './planned-overlap-actions';
 import { planStatusFresh } from './plan-status';
 import { buildPrDraft } from './pr-draft-service';
 import { listComparands, compareSnapshots } from './snapshot-compare-service';
@@ -545,8 +547,9 @@ async function routeMethod(
       if (params.title !== undefined) updates.title = params.title;
       if (params.status !== undefined) updates.status = params.status;
       if (params.description !== undefined) updates.description = params.description;
-      updatePlanAsPerson(uid, updates as any, phonePerson());
-      return { ok: true };
+      const done = updatePlanAsPerson(uid, updates as any, phonePerson());
+      // B9.3b: approving it on the phone says its planned overlaps, as on the desktop.
+      return { ok: true, ...(done.plannedOverlaps.length ? { plannedOverlaps: done.plannedOverlaps } : {}) };
     }
 
     case 'plan.create': {
@@ -1285,6 +1288,35 @@ async function routeMethod(
     case 'stack.summary': {
       const projectPath = peerProjectRoot(params, { required: true })!;
       return buildStack(projectPath);
+    }
+
+    // Play-forward (Phase 32 B9.3b): what every active plan will change and
+    // where two will meet, as the desktop's bar says it, and a person on the
+    // phone deciding one: re-sequence, tell the agents, or leave it.
+    case 'playForward.summary': {
+      const projectPath = peerProjectRoot(params, { required: true })!;
+      return { ...buildPlayForward(projectPath), notices: approvalNotices(projectPath) };
+    }
+
+    case 'playForward.decide': {
+      const projectPath = peerProjectRoot(params, { required: true })!;
+      const overlapId = requireString(params, 'overlapId');
+      const action = requireString(params, 'action');
+      const who = phonePerson();
+      let result: Record<string, unknown> = {};
+      if (action === 'resequence') {
+        const r = resequence(projectPath, overlapId, requireString(params, 'first'), who);
+        for (const t of r.waiting) broadcast('plan-item-updated', { planUid: planItemService.getItem(t.uid)?.planUid, itemUid: t.uid, kind: 'action', changes: { dependencies: true } });
+        result = { waiting: r.waiting };
+      } else if (action === 'tell') {
+        result = tellAgents(projectPath, overlapId, who);
+      } else if (action === 'leave') {
+        leaveOverlap(projectPath, overlapId, who);
+      } else {
+        throw new Error('action must be resequence, tell or leave');
+      }
+      broadcast('play-forward-changed', { project: projectPath });
+      return { ...result, playForward: buildPlayForward(projectPath) };
     }
 
     // The plan's status (Phase 32 C2.4): every item's state with its source,

@@ -234,6 +234,22 @@ checks the RPC from a paired phone in `review-queue.test.ts` and
 `tests/phone/stack.spec.ts` photographs it; the harness checks the RPC from
 a paired phone in `stack.test.ts`.
 
+### Play-forward (Phase 32 B9.3b)
+
+- **`playForward.summary`** (read) returns what `/api/play-forward` does
+  (B9.1), with the inbox's unseen approval notices (`notices`), for an
+  opened project only.
+- **`playForward.decide`** (write) does what the window's bar does (B9.3a):
+  `overlapId` and `action` (`resequence` with `first`, the plan that goes
+  first; `tell`; or `leave`). The decision is the person's, from
+  `phonePerson()`, and the answer carries the new `playForward`.
+- **`plan.update`** answers `plannedOverlaps` when approving the plan put it
+  in a planned overlap that was not sequenced or left, as `PUT
+  /api/plans/:uid` does.
+
+The harness checks all three from a paired phone in
+`play-forward-approval.test.ts`; the phone's screen is B9.4.
+
 ### A plan's status (Phase 32 C2.4)
 
 - **`plan.status`** (read) returns what `/api/plans/:uid/status` does: every

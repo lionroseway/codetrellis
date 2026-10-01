@@ -76,7 +76,7 @@ import { reviewPlan, renderReviewMarkdown } from './services/plan-review-service
 import { reviewQueue } from './services/review-queue-service';
 import { buildStack } from './services/stack-service';
 import { buildPlayForward } from './services/play-forward';
-import { resequence, tellAgents, leaveOverlap, OverlapActionError } from './services/planned-overlap-actions';
+import { resequence, tellAgents, leaveOverlap, OverlapActionError, noteApproval, approvalNotices, markNoticeSeen } from './services/planned-overlap-actions';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
 import { planGitStatesFresh } from './services/item-git-state';
@@ -2253,7 +2253,7 @@ export function updatePlanAsPerson(
   planUid: string,
   changes: Parameters<typeof planService.updatePlan>[1],
   by: { author: string; authorType: string },
-): void {
+): { plannedOverlaps: string[] } {
   const plan = planService.getPlan(planUid);
   if (!plan) throw new PlanRequestError(404, 'Plan not found');
   if (changes.status !== undefined && !isPlanStatus(changes.status)) {
@@ -2277,8 +2277,17 @@ export function updatePlanAsPerson(
     }
   }
 
+  // B9.3b (G3): approving a plan says the planned overlaps it is in, once.
+  let plannedOverlaps: string[] = [];
+  if (changes.status === 'approved' && plan.status !== 'approved' && plan.projectPath) {
+    const noted = noteApproval(plan.projectPath, planUid);
+    plannedOverlaps = noted.overlaps;
+    if (noted.noticeId !== null) broadcast('play-forward-changed', { project: plan.projectPath });
+  }
+
   broadcast('plan-updated', { planUid, status: changes.status });
   saveNow(() => exportDatabase());
+  return { plannedOverlaps };
 }
 
 /**
@@ -2326,14 +2335,15 @@ app.put('/api/plans/:uid', (req, res) => {
     title, description, status,
     baseRef, targetBranch, targetWorktree, autoCreateBranch,
   } = req.body;
+  let result: ReturnType<typeof updatePlanAsPerson>;
   try {
-    updatePlanAsPerson(
+    result = updatePlanAsPerson(
       req.params.uid,
       { title, description, status, baseRef, targetBranch, targetWorktree, autoCreateBranch },
       personFrom(req),
     );
   } catch (err) { sendPlanError(res, err); return; }
-  res.json({ ok: true });
+  res.json({ ok: true, ...(result.plannedOverlaps.length ? { plannedOverlaps: result.plannedOverlaps } : {}) });
 });
 
 // Delete (archive) plan
@@ -4189,6 +4199,22 @@ app.get('/api/play-forward', (req, res) => {
  * once, or leave it. The author comes from the transport; no MCP tool
  * reaches these. The project is the query's, confined like every other.
  */
+/** B9.3b — the inbox's notices of plans approved into planned overlaps, not yet seen. */
+app.get('/api/play-forward/notices', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json({ notices: approvalNotices(projectRoot) });
+});
+
+app.post('/api/play-forward/notices/:id/seen', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!markNoticeSeen(projectRoot, Number(req.params.id), personFrom(req))) { res.status(404).json({ error: 'No such notice, or it was seen already.' }); return; }
+  broadcast('play-forward-changed', { project: projectRoot });
+  saveNow(() => exportDatabase());
+  res.json({ ok: true });
+});
+
 app.post('/api/play-forward/overlaps/:id/:action', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;

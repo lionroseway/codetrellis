@@ -112,6 +112,7 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   'review.prDraft': 'read',
   'review.queue': 'read',
   'stack.summary': 'read',
+  'playForward.summary': 'read',
   'power.status': 'read',
   'project.active': 'read',
   'project.list': 'read',
@@ -150,6 +151,7 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   'breakpoint.answer': 'write',
   // Deciding a spec change: also a CONFIRMED pairing, audited; the person's, never an agent's.
   'proposal.decide': 'write',
+  'playForward.decide': 'write',
   // Answering a signal or replying to its agents: also a CONFIRMED pairing, audited.
   'awareness.answer': 'write',
   'awareness.reply': 'write',

@@ -15,7 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { cleanupPlans, gotoWithProject, seedPlan, FIXTURE_PATH } from '../helpers/setup';
+import { API, authHeaders, cleanupPlans, gotoWithProject, seedPlan, FIXTURE_PATH } from '../helpers/setup';
 
 const OUT = path.join('test-results', 'ux-audit');
 const VALIDATORS = 'packages/shared/src/validators.ts';
@@ -102,5 +102,32 @@ test.describe('Playing the plans forward', () => {
     // Sequenced, there is nothing left to decide here.
     await expect(row.getByTestId('play-forward-resequence')).toHaveCount(0);
     await row.screenshot({ path: path.join(OUT, 'play-forward-resequenced.png') });
+  });
+
+  test('B9.3b: approving a plan into a planned overlap says so once in the inbox, with the way in', async ({ page, request }) => {
+    const tag = Math.random().toString(36).slice(2, 6);
+    const VAT = `E2E B9 VAT rounding ${tag}`;
+    const CURRENCY = `E2E B9 Currency ${tag}`;
+    await seedPlan(request, { title: VAT, projectPath: FIXTURE_PATH, actions: [{ title: 'Round VAT per line', fileSpecs: [{ path: VALIDATORS, action: 'modify' }] }] });
+    const currency = await seedPlan(request, { title: CURRENCY, projectPath: FIXTURE_PATH, actions: [{ title: 'Add a currency field', fileSpecs: [{ path: VALIDATORS, action: 'modify' }] }] });
+    const approved = await request.put(`${API}/plans/${currency.uid}`, { headers: authHeaders(), data: { status: 'approved' } });
+    expect(((await approved.json()) as { plannedOverlaps?: string[] }).plannedOverlaps?.[0]).toMatch(/^◇ planned overlap: /);
+
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
+    await page.getByRole('button', { name: /^Awareness( \d+)?$/ }).first().click();
+    const notice = page.getByTestId('planned-overlap-notice').filter({ hasText: `Approving ${CURRENCY} puts it in a planned overlap` });
+    await expect(notice).toBeVisible({ timeout: 10_000 });
+    await expect(notice.getByTestId('planned-overlap-notice-overlap')).toHaveText(new RegExp(`both plan to change ${VALIDATORS.replace(/\//g, '\\/').replace(/\./g, '\\.')}$`));
+    fs.mkdirSync(OUT, { recursive: true });
+    await notice.screenshot({ path: path.join(OUT, 'play-forward-approval-notice.png') });
+
+    // The way in: play the plans forward from the notice.
+    await notice.getByTestId('planned-overlap-notice-play').click();
+    await expect(page.getByTestId('play-forward-bar')).toBeVisible();
+    await page.getByTestId('play-forward-now').click();
+
+    // Seen: it leaves the inbox.
+    await notice.getByTestId('planned-overlap-notice-seen').click();
+    await expect(notice).toHaveCount(0);
   });
 });

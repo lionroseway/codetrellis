@@ -309,6 +309,18 @@ export const SCHEMA_PLANS_CORE = `
     by_type TEXT NOT NULL,
     at INTEGER NOT NULL
   );
+  -- Phase 32 B9.3b: a plan approved into planned overlaps, said once in the
+  -- inbox until a person marks it seen.
+  CREATE TABLE IF NOT EXISTS planned_overlap_notices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_root TEXT NOT NULL,
+    plan_uid TEXT NOT NULL,
+    plan_label TEXT NOT NULL,
+    words_json TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    seen_at INTEGER,
+    seen_by TEXT
+  );
   -- Each session told of a planned overlap its task is in, read once.
   CREATE TABLE IF NOT EXISTS planned_overlap_tells (
     overlap_id TEXT NOT NULL,
