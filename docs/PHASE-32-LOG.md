@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Wave 2 — C3.5: teammates' material reads |
-| **Status** | C3.4c in review (#282). C3.5 built: each app writes which version of each material its tasks read as signed records beside the task-state records, reads its teammates', and the material signals name whose read it was; on by default while task state is shared, off in Settings. Unit (1803), harness (material-reads 7) and browser (shared-task-state 9) green locally |
-| **In flight** | C3.4c in review (#282) on `feat/phase-32-c3-4c-materials-by-place`; C3.5 building on `feat/phase-32-c3-5-teammates-reads` |
-| **Last merged** | C3.4b (#281, `254dd4c`) |
-| **Next action** | Merge C3.4c, then C3.5 when green; then C3.6 (the C3 done-when); then D1 (the CLI) |
+| **Status** | C3.4c merged (#282); C3.4 done. C3.5 built: each app writes which version of each material its tasks read as signed records beside the task-state records, reads its teammates', and the material signals name whose read it was; on by default while task state is shared, off in Settings. Unit (1803), harness (material-reads 7) and browser (shared-task-state 9) green locally |
+| **In flight** | C3.5 building on `feat/phase-32-c3-5-teammates-reads` |
+| **Last merged** | C3.4c (#282, `f5d2834`) |
+| **Next action** | Merge C3.5 when green; then C3.6 (the C3 done-when); then D1 (the CLI) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `254dd4c`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `f5d2834`, with open PRs from GitHub.
 
 ---
 
@@ -234,10 +234,10 @@
   - [x] C3.1 Task state as records in the project's files: one new file per change, one writer each, read from all; a teammate's state says whose record and that it is unverified; off until the person turns it on (#271)
   - [x] C3.2 A real disagreement is a signal: people acting at once are named on the task and in the inbox until one decides (#272)
   - [x] C3.3 Signed records: the person's git SSH key when set up, else a key the app makes for the device (#279)
-  - [ ] C3.4 A linked plans folder: a planning repo or a synced folder (OneDrive and SharePoint first), placeholders never downloaded, materials by place and hash, split in three: — building
+  - [x] C3.4 A linked plans folder: a planning repo or a synced folder (OneDrive and SharePoint first), placeholders never downloaded, materials by place and hash, split in three:
     - [x] C3.4a Link a plans folder: named portably in the committed config, confirmed once per device by the person; plans, records and keys read and written there (#280)
     - [x] C3.4b OneDrive and SharePoint found where their clients put them; a placeholder is "not on this device" and never opened (#281)
-    - [ ] C3.4c Materials in the folder by their place and hash, never a full path; A6's signals match across machines (#282) — in review
+    - [x] C3.4c Materials in the folder by their place and hash, never a full path; A6's signals match across machines (#282)
   - [ ] C3.5 Teammates' material reads, a separate switch, on by default once a folder is shared — building
   - [ ] C3.6 The C3 done-when
 - [ ] C4 Recurring playbooks
