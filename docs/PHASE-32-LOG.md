@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track C — C4.1: recurring playbooks, the data |
-| **Status** | B9 done (#294–#298). C4 refined into three parts (EXECUTION §6). C4.1 built: a rule on a playbook in the committed config (every day, week or month, at a time in a zone, carry over, skills), one run per period by an id derived from the series, rule and period (started twice is one plan), the series in words (✓ done, ◐ in progress, ✗ missed, due, next), carry-over of the last run's open tasks; REST and list_recurring. Unit recurrence, recurrence-rule, recurring-service; harness recurring 6 |
-| **In flight** | C4 building on `feat/phase-32-c4-wip` |
-| **Last merged** | B9.4 (#298, `fa788d7`) |
-| **Next action** | Merge C4.1 when green; then C4.2 (due in the window: started as it comes, asked about on launch; the series row; Settings → Recurring playbooks) |
+| **Stage / step** | Track C — C4.2a: recurring runs due, in the window |
+| **Status** | C4.1 merged (#299). C4.2 split in two; C4.2a built: a run is started by the schedule as its moment comes while the app runs; one due while it was closed is asked about in the Awareness inbox (Start, or Not this time, then missed); each series is one row in the plans list, a run opens its plan and the due one starts from the row. Unit recurring-service 9, harness recurring 7, browser recurring.spec 1 (shots) |
+| **In flight** | C4.2a in review (#300) on `feat/phase-32-c4-2a-due-in-window`; C4.2b in review (#301) on `feat/phase-32-c4-2b-settings-and-run-line` |
+| **Last merged** | C4.1 (#299, `03de0dd`) |
+| **Next action** | Merge C4.2a when green; then C4.2b (Settings → Recurring playbooks; the run's line) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `fa788d7`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `03de0dd`, with open PRs from GitHub.
 
 ---
 
@@ -249,8 +249,10 @@
   - [x] C3.5 Teammates' material reads, a separate switch, on by default once a folder is shared (#283)
   - [x] C3.6 The C3 done-when (#284)
 - [ ] C4 Recurring playbooks, refined in EXECUTION §6: — building
-  - [ ] C4.1 The data: a rule on a playbook in the committed config, one run per period by its id, the series, carry-over
-  - [ ] C4.2 Due, in the window: started as it comes, asked about on launch; the series row; Settings → Recurring playbooks
+  - [x] C4.1 The data: a rule on a playbook in the committed config, one run per period by its id, the series, carry-over (#299)
+  - [ ] C4.2 Due, in the window, split in two: — building
+    - [ ] C4.2a Started as it comes; asked about when it fell due while the app was closed; the series row in the plans list (#300) — in review
+    - [ ] C4.2b Settings → Recurring playbooks; a run's series, period and carried tasks on the run (#301) — in review
   - [ ] C4.3 The phone, an agent only by opt-in, and the C4 done-when
 - [x] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
   - [x] C5.1 `workstream` on an item, inherited; `assign_workstream`; next and claim respect it (#186)
@@ -424,6 +426,9 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | B9 is refined into four parts (EXECUTION §5): the data, the window, acting on a planned overlap, the phone and G3. G3's question (run on approval?) is answered by computing play-forward on read, and B9.3 says a new planned overlap when an approval forms one | Computed on read it is never out of date and costs nothing until asked; saying a new one at approval is the moment G3 cares about, without a job that runs |
 | 2026-10-01 | B9.1: only unfinished tasks are projected, and which planned files exist is read from the project's folder through confined-fs, not the held graph | A done task's change is the code now, not the future. The server's graph is the last project scanned (HD1), so it cannot say whether another project's file exists; a planned path is agent-written and is confined like any other |
 | 2026-10-01 | B9.3 is split into B9.3a (the three actions, in the window) and B9.3b (said on approval; the phone) | The actions are one service and one surface; the approval notice and the phone's RPCs each touch another door with its own tests |
+| 2026-10-01 | C4.2a: the app starts a run only when its moment falls while the app runs (between two ticks); one that fell due while it was closed is asked about, never started on launch | The doc's "the app only acts while running": a laptop opened at ten should not make a nine o'clock run on its own, since a teammate may have run it or the person may not want it; asking keeps the person in the decision |
+| 2026-10-01 | C4.2a: a scheduled start is authored `schedule` (a system author, as other app-made records are), and the run keeps who set the rule | No person or agent called; the rule a person set is the reason, and saying "schedule" never passes the app off as that person |
+| 2026-10-01 | C4.2 is split into C4.2a (due runs and the series row) and C4.2b (Settings and the run's own line) | Each is a surface with its own browser journey; the first answers "what is due", the second "how is it set up" |
 | 2026-10-01 | C4 is refined into three parts (EXECUTION §6): the data, due in the window, the phone and the done-when. A recurrence rule lives in the committed config and a run's uid is derived from the series (the plans folder named, else the origin, else the folder's name), the rule and the period | The team sees the rule where it sees the plans folder; a derived id makes two starts, here or on two machines, one plan without either asking the other, and the series key never includes this device's path |
 | 2026-10-01 | C4.1: a period runs from its due moment to the next one's, in the rule's own time zone; only the current period can be started, and periods before the rule was set are not counted | "Due since Monday" stays true until the next Monday, and a team in one zone shares one clock across laptops in others; refusing older periods is the doc's "missed runs are shown, not back-filled" |
 | 2026-10-01 | C4.1: what a run carried and the run before it are kept where the run was started (`recurring_runs`); elsewhere the run is found by its id | The run itself is an ordinary plan that reaches teammates through the plans folder; its series bookkeeping is this device's, and nothing about finding a run depends on it |
@@ -437,6 +442,23 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-01: C4.2a — recurring runs due, in the window
+- **Journey.** Sam's laptop was closed at midnight, when "Daily security
+  check" fell due. The Awareness inbox asks "Daily security check is due
+  since 00:00. Start it?" He chooses "Not this time" and the question goes.
+  In the plans list the series is one row, "29 Sep ✗ missed · 30 Sep ✗
+  missed · 1 Oct due · Start · 2 Oct next". He starts it from the row after
+  all: the run opens and the row reads "1 Oct ◐". Had the app been running at
+  midnight, the schedule would have started it then.
+- **Built.** `services/recurring-scheduler.ts` (each tick starts the runs due
+  since the last one, in every opened project; `CODETRELLIS_RECURRING_TICK_MS`),
+  `recurring_dismissed`, `dismissDue`, `POST /api/recurring/:id/dismiss`,
+  `due.dismissed` and the run's `startedBy`; `useRecurring`, `RecurringDue`
+  in the Awareness tab, `RecurringSeriesList` above the plans list; a started
+  run is announced as a new plan.
+- **Tests.** Unit `recurring-service.test.ts` (9). Harness `recurring.test.ts`
+  (7). Browser `plan/recurring.spec.ts` (1, shots).
 
 ### 2026-10-01: C4.1 — recurring playbooks, the data
 - **Journey.** Sam's team committed "Daily security check" from the

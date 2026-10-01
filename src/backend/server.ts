@@ -77,7 +77,8 @@ import { reviewQueue } from './services/review-queue-service';
 import { buildStack } from './services/stack-service';
 import { buildPlayForward } from './services/play-forward';
 import { resequence, tellAgents, leaveOverlap, OverlapActionError, noteApproval, approvalNotices, markNoticeSeen } from './services/planned-overlap-actions';
-import { seriesFor, setRule, removeRule, startRun, RecurringError } from './services/recurring-service';
+import { seriesFor, setRule, removeRule, startRun, dismissDue, RecurringError } from './services/recurring-service';
+import { startRecurringScheduler } from './services/recurring-scheduler';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
 import { planGitStatesFresh } from './services/item-git-state';
@@ -2688,10 +2689,25 @@ app.post('/api/recurring/:id/start', (req, res) => {
   try {
     const run = startRun(projectRoot, req.params.id, personFrom(req));
     if (run.created) {
-      broadcast('plans-changed', { project: projectRoot });
+      broadcast('plan-created', { plan: run.plan });
       broadcast('recurring-changed', { project: projectRoot });
     }
     res.json({ planUid: run.plan.uid, title: run.plan.title, created: run.created, recurrence: run.info });
+  } catch (err) {
+    if (err instanceof RecurringError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+// C4.2a — "Not this time": the due run is left unstarted on this device, and
+// reads missed once its period ends. Only hides the question here.
+app.post('/api/recurring/:id/dismiss', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  try {
+    const out = dismissDue(projectRoot, req.params.id, changedBy(req));
+    broadcast('recurring-changed', { project: projectRoot });
+    res.json(out);
   } catch (err) {
     if (err instanceof RecurringError) { res.status(err.status).json({ error: err.message }); return; }
     throw err;
@@ -6157,6 +6173,13 @@ export async function initializeBackend(): Promise<void> {
   } catch (err) {
     console.warn('[Backend] Project watcher re-arm failed:', err);
   }
+
+  // Phase 32 C4.2a — recurring runs start as their moment comes while the app
+  // runs; one that fell due while it was closed is asked about in the inbox.
+  startRecurringScheduler((projectRoot, run) => {
+    broadcast('plan-created', { plan: run.plan });
+    broadcast('recurring-changed', { project: projectRoot });
+  });
 
   // Restore the active project on boot. The frontend restores the project
   // VIEW from the persisted DB but never re-scans, so the backend's

@@ -407,6 +407,10 @@ export function useWebSocket() {
           if (type === 'play-forward-changed') {
             window.dispatchEvent(new CustomEvent('stack-changed'));
           }
+          // Phase 32 C4 — a recurring playbook was set, started or dismissed: its series reads again.
+          if (type === 'recurring-changed') {
+            window.dispatchEvent(new CustomEvent('recurring-changed'));
+          }
           // Phase 32 C2.2a — a review host was turned on or off, or its token saved.
           if (type === 'review-host-changed') {
             window.dispatchEvent(new CustomEvent('review-host-changed', { detail: payload }));

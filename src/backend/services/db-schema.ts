@@ -335,6 +335,16 @@ export const SCHEMA_PLANS_CORE = `
     started_at INTEGER NOT NULL,
     started_by TEXT NOT NULL
   );
+  -- Phase 32 C4.2a: a due run the person chose not to start this time, on
+  -- this device. It stays due until its period ends, then reads missed.
+  CREATE TABLE IF NOT EXISTS recurring_dismissed (
+    project_root TEXT NOT NULL,
+    rule_id TEXT NOT NULL,
+    period TEXT NOT NULL,
+    by_name TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    PRIMARY KEY (project_root, rule_id, period)
+  );
   -- Each session told of a planned overlap its task is in, read once.
   CREATE TABLE IF NOT EXISTS planned_overlap_tells (
     overlap_id TEXT NOT NULL,

@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track C — C4.1: recurring playbooks, the data"
-  status: "B9 done (#294–#298). C4 refined into three parts (EXECUTION §6). C4.1 built: a rule on a playbook in the committed config (every day, week or month, at a time in a zone, carry over, skills), one run per period by an id derived from the series, rule and period (started twice is one plan), the series in words (✓ done, ◐ in progress, ✗ missed, due, next), carry-over of the last run's open tasks; REST and list_recurring. Unit recurrence, recurrence-rule, recurring-service; harness recurring 6"
-  next: "Merge C4.1 when green; then C4.2 (due in the window: started as it comes, asked about on launch; the series row; Settings → Recurring playbooks)"
+  step: "Track C — C4.2a: recurring runs due, in the window"
+  status: "C4.1 merged (#299). C4.2 split in two; C4.2a built: a run is started by the schedule as its moment comes while the app runs; one due while it was closed is asked about in the Awareness inbox (Start, or Not this time, then missed); each series is one row in the plans list, a run opens its plan and the due one starts from the row. Unit recurring-service 9, harness recurring 7, browser recurring.spec 1 (shots)"
+  next: "Merge C4.2a when green; then C4.2b (Settings → Recurring playbooks; the run's line)"
   blockers: "None"
   updated: 2026-10-01
 sections:
@@ -583,7 +583,12 @@ sections:
           - id: C4.1
             title: "The data: a rule on a playbook in the committed config, one run per period by its id, the series, carry-over"
           - id: C4.2
-            title: "Due, in the window: started as it comes, asked about on launch; the series row; Settings → Recurring playbooks"
+            title: "Due, in the window, split in two:"
+            items:
+              - id: C4.2a
+                title: "Started as it comes; asked about when it fell due while the app was closed; the series row in the plans list"
+              - id: C4.2b
+                title: "Settings → Recurring playbooks; a run's series, period and carried tasks on the run"
           - id: C4.3
             title: "The phone, an agent only by opt-in, and the C4 done-when"
       - id: C5

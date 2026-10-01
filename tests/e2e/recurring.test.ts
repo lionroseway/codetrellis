@@ -21,11 +21,11 @@ import { periodLabel, periodOf } from '../../src/shared/lib/recurrence';
 const DAY = 86_400_000;
 const label = (ms: number) => { const d = new Date(ms); return periodLabel(periodOf('day', { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate() })); };
 
-function writeRule(root: string, since: number) {
+function writeRule(root: string, since: number, playbook = 'security-review') {
   fs.mkdirSync(path.join(root, '.codetrellis'), { recursive: true });
   fs.writeFileSync(path.join(root, '.codetrellis', 'config.json'), JSON.stringify({
     recurring: [{
-      id: 'daily-security-check', playbook: 'security-review', title: 'Daily security check', every: 'day', at: '00:00', timeZone: 'UTC',
+      id: 'daily-security-check', playbook, title: 'Daily security check', every: 'day', at: '00:00', timeZone: 'UTC',
       carryOver: true, skills: [{ name: 'security-review', source: 'skill', required: false }], since: new Date(since).toISOString(), by: 'Sam Lee',
     }],
   }, null, 2));
@@ -150,5 +150,46 @@ test.describe.serial('Only the person makes a playbook recur', () => {
     expect(removed.status).toBe(403);
     expect(((await removed.json()) as { error: string }).error).toBe('Only you can stop a playbook recurring — in the CodeTrellis app, Settings → Recurring playbooks.');
     expect((await h.client.raw('GET', `/api/recurring?project=${root}`)).status).toBe(200);
+  });
+});
+
+/**
+ * C4.2a — a run that fell due while the app was closed. The app starts a run
+ * only as its moment comes while it runs; one due before it opened is asked
+ * about. "Not this time" leaves it, on this device, until its period ends;
+ * the person can still start it, and once started there is nothing to leave.
+ */
+test.describe.serial('A run due while the app was closed', () => {
+  test.setTimeout(90_000);
+  let h: Harness;
+  let root: string;
+  const series = async () => ((await (await h.client.raw('GET', `/api/recurring?project=${encodeURIComponent(root)}`)).json()) as { series: RecurringSeries[] }).series;
+
+  test.beforeAll(async () => {
+    h = await setupHarness('recurring-due');
+    root = h.fixture.projectPath;
+    writeRule(root, Date.now() - 3 * DAY, 'bug-fix');
+    await h.client.scanProject(root);
+  });
+  test.afterAll(async () => { await h?.teardown(); });
+
+  test('it is asked about, not started; "Not this time" leaves it here; started anyway, there is nothing to leave', async () => {
+    const [before] = await series();
+    expect(before.rule.playbook).toBe('bug-fix');
+    expect(before.due).toMatchObject({ label: label(Date.now()), words: 'Daily security check is due since 00:00', dismissed: false });
+
+    const left = await h.client.raw('POST', `/api/recurring/daily-security-check/dismiss?project=${encodeURIComponent(root)}`, {});
+    expect(left.status, await left.clone().text()).toBe(200);
+    expect(await left.json()).toEqual({ period: before.due!.period, label: before.due!.label });
+    const [after] = await series();
+    expect(after.due!.dismissed).toBe(true);
+    expect(after.runs.at(-2)!.state).toBe('due');
+
+    const started = await h.client.raw('POST', `/api/recurring/daily-security-check/start?project=${encodeURIComponent(root)}`, {});
+    expect(((await started.json()) as { created: boolean }).created).toBe(true);
+    const nothing = await h.client.raw('POST', `/api/recurring/daily-security-check/dismiss?project=${encodeURIComponent(root)}`, {});
+    expect(nothing.status).toBe(409);
+    expect(((await nothing.json()) as { error: string }).error).toBe('Daily security check has no run due now');
+    expect((await h.client.raw('POST', `/api/recurring/nope/dismiss?project=${encodeURIComponent(root)}`, {})).status).toBe(404);
   });
 });

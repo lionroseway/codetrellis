@@ -22,6 +22,7 @@ const project = fs.realpathSync(fs.mkdtempSync(path.join(tmp, 'project-')));
 let recurring: typeof import('./recurring-service');
 let items: typeof import('./plan-item-service');
 let plans: typeof import('./plan-service');
+let scheduler: typeof import('./recurring-scheduler');
 
 const SAM = { author: 'Sam Lee', authorType: 'human' };
 const at = (iso: string) => Date.parse(iso);
@@ -37,6 +38,7 @@ before(async () => {
   recurring = await import('./recurring-service');
   items = await import('./plan-item-service');
   plans = await import('./plan-service');
+  scheduler = await import('./recurring-scheduler');
 });
 
 after(() => {
@@ -67,7 +69,7 @@ describe('a recurring playbook', () => {
     assert.equal(first.plan.title, 'Daily report — 29 Sep');
     assert.equal(first.plan.uid, recurring.runUid(project, 'daily-report', '2026-09-29'));
     assert.match(first.plan.uid, /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-    assert.deepEqual(first.info, { rule: 'daily-report', period: '2026-09-29', label: '29 Sep', previous: null, carried: [] });
+    assert.deepEqual(first.info, { rule: 'daily-report', period: '2026-09-29', label: '29 Sep', previous: null, carried: [], startedBy: 'Sam Lee', startedAt: now });
     const actions = items.listAllItems(first.plan.uid).filter((i) => i.kind === 'action');
     assert.deepEqual(actions.map((a) => a.title), ['Gather', 'Analyse', 'Draft', 'Review']);
     assert.ok(actions.every((a) => (a.skills ?? []).some((s) => s.name === 'security-review')));
@@ -106,7 +108,7 @@ describe('a recurring playbook', () => {
 
     // The next morning, 2 Oct's run is due and not started.
     const [t] = recurring.seriesFor(project, at('2026-10-02T09:30:00Z'));
-    assert.deepEqual(t.due, { period: '2026-10-02', label: '2 Oct', since: at('2026-10-02T09:00:00Z'), words: 'Daily report is due since 09:00' });
+    assert.deepEqual(t.due, { period: '2026-10-02', label: '2 Oct', since: at('2026-10-02T09:00:00Z'), words: 'Daily report is due since 09:00', dismissed: false });
     assert.equal(t.runs.at(-2)!.words, '2 Oct due since 09:00');
     // Only eight past days are shown.
     assert.equal(recurring.seriesFor(project, at('2026-10-30T12:00:00Z'))[0].runs.length, 9);
@@ -129,5 +131,32 @@ describe('a recurring playbook', () => {
     assert.equal(recurring.runUid(project, 'daily-report', '2026-W40'), a);
     assert.notEqual(recurring.runUid(project, 'daily-report', '2026-W41'), a);
     assert.notEqual(recurring.runUid(project, 'weekly-review', '2026-W40'), a);
+  });
+});
+
+describe('due runs, while the app runs and after (C4.2a)', () => {
+  test('a run whose moment falls between two ticks is started by the schedule; not twice; not one due before', () => {
+    const started = scheduler.startRunsDueBetween([project], at('2026-10-03T08:59:00Z'), at('2026-10-03T09:00:30Z'));
+    assert.deepEqual(started.map((s) => s.run.plan.title), ['Daily report — 3 Oct']);
+    assert.equal(started[0].run.info.startedBy, 'schedule');
+    assert.equal(recurring.runInfo(started[0].run.plan.uid)!.startedBy, 'schedule');
+    // The same window again (a slow tick): the run exists, nothing more.
+    assert.deepEqual(scheduler.startRunsDueBetween([project], at('2026-10-03T08:59:00Z'), at('2026-10-03T09:01:00Z')), []);
+    // 4 Oct 09:00 fell before the app's first tick at 10:00: not started, asked about instead.
+    assert.deepEqual(scheduler.startRunsDueBetween([project], at('2026-10-04T10:00:00Z'), at('2026-10-04T10:01:00Z')), []);
+    const [s] = recurring.seriesFor(project, at('2026-10-04T10:01:00Z'));
+    assert.equal(s.due!.words, 'Daily report is due since 09:00');
+    assert.equal(s.due!.dismissed, false);
+  });
+
+  test('"Not this time" is kept on this device; the run reads missed once its day ends', () => {
+    assert.deepEqual(recurring.dismissDue(project, 'daily-report', 'Sam Lee', at('2026-10-04T10:05:00Z')), { period: '2026-10-04', label: '4 Oct' });
+    assert.equal(recurring.seriesFor(project, at('2026-10-04T10:06:00Z'))[0].due!.dismissed, true);
+    // Still due at 08:00 on 5 Oct: a day runs from 09:00 to 09:00. Past it, missed.
+    assert.equal(recurring.seriesFor(project, at('2026-10-05T08:00:00Z'))[0].due!.period, '2026-10-04');
+    const [next] = recurring.seriesFor(project, at('2026-10-05T09:30:00Z'));
+    assert.equal(next.runs.find((r) => r.period === '2026-10-04')!.state, 'missed');
+    // Nothing is due between 09:00 runs.
+    assert.throws(() => recurring.dismissDue(project, 'daily-report', 'Sam Lee', at('2026-10-03T12:00:00Z')), /has no run due now/);
   });
 });

@@ -17,10 +17,10 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 278 | 276 | 0 | 0 | 217 | 0 |
+| REST routes | 279 | 277 | 0 | 0 | 217 | 0 |
 | MCP tools | 207 | 207 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 92 | 81 | 0 | 0 | 78 | 0 |
-| Frontend components | 125 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 127 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 37 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 15 | n/a | n/a | n/a | 11 | 13 |
 
@@ -30,11 +30,11 @@ records that — but "✗ none" is proof of a gap.
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 19 | 12 | 10 | 0 | 0 | 0 |
 | 0.4b Graph | 19 | 15 | 8 | 15 | 0 | 0 |
-| 0.4c Plans and items | 116 | 60 | 27 | 61 | 0 | 0 |
+| 0.4c Plans and items | 117 | 60 | 27 | 62 | 0 | 0 |
 | 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 13 | 7 | 1 | 0 | 0 |
-| 0.4g Agents and MCP | 26 | 32 | 10 | 30 | 0 | 0 |
+| 0.4g Agents and MCP | 26 | 32 | 10 | 31 | 0 | 0 |
 | 0.4h Drift, governance, review | 11 | 25 | 9 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 37 | 0 |
@@ -48,7 +48,7 @@ records that — but "✗ none" is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (278)
+## REST routes (279)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -195,6 +195,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/plans/prune-orphans` |  | ✗ none | 1 | ✓ 0.4c-1: removes only the opened project's current orphans; everything else skipped (plan-rest) |  |  |
 | c | `POST /api/play-forward/notices/:id/seen` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/play-forward/overlaps/:id/:action` |  | ✗ none | 2 |  |  |  |
+| c | `POST /api/recurring/:id/dismiss` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/recurring/:id/start` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/spec-proposals/:uid/decision` |  | ✗ none | 2 |  |  |  |
 | c | `PUT /api/items/:uid` |  | ✗ none | 28 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
@@ -640,7 +641,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (125)
+## Frontend components (127)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -669,6 +670,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `plan/PlanTemplatePicker.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/ProposedChanges.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/PublishTemplateModal.tsx` |  | n/a | n/a |  |  |  |
+| c | `plan/RecurringSeriesList.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/StatusBadge.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/AnchorPicker.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/BodyRenderer.tsx` |  | n/a | n/a |  |  |  |
@@ -743,6 +745,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `layout/PlannedOverlapNotices.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/PlanPanel.tsx` |  | n/a | n/a |  | ✓ 0.5a — major fixed: "Agent active" vs "No agents" (M3) |  |
 | g | `layout/PlayForwardBar.tsx` |  | n/a | n/a |  |  |  |
+| g | `layout/RecurringDue.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/ReplayBar.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/ReviewTab.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/Sidebar.tsx` |  | n/a | n/a |  | ✓ 0.5a |  |
