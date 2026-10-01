@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track B — B9.3a: acting on a planned overlap"
-  status: "B9.1 merged (#294); B9.2 in review (#295). B9.3 split in two; B9.3a built (stacked on B9.2): Re-sequence (the person picks which plan goes first; the others' tasks wait on its tasks; a loop refused), Tell both agents (told once, on the next call), Fine, leave it; each kept with who and when and said under the overlap in the bar. Harness planned-overlap-actions 4, browser play-forward.spec 2 (shots)"
-  next: "Merge B9.2, then B9.3a, when green; then B9.3b (a new planned overlap said on approval; the phone decides)"
+  step: "Track B — B9.3b: a new planned overlap said on approval; the phone decides"
+  status: "B9.1–B9.3a merged (#294–#296). B9.3b built: approving a plan into a planned overlap says it in the approval's answer (REST and the phone) and once in the Awareness inbox, with Play forward and Seen; a left or sequenced overlap is not said again. The phone reads play-forward and decides an overlap as the person (playForward.summary, playForward.decide). Harness play-forward-approval 4, browser play-forward.spec 3 (shot)"
+  next: "Merge B9.3b when green; then B9.4 (the phone's planned overlaps screen, and the G3 done-when end to end)"
   blockers: "None"
   updated: 2026-10-01
 sections:

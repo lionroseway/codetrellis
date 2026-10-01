@@ -150,3 +150,65 @@ export function plannedOverlapNoticeFor(sessionId: string, now = Date.now()): st
     return null;
   }
 }
+
+// ── B9.3b: said when a plan is approved ─────────────────────────────
+
+export interface ApprovalNotice {
+  id: number;
+  planUid: string;
+  planLabel: string;
+  /** "Approving JIRA-150 puts it in 1 planned overlap" */
+  title: string;
+  /** Each open planned overlap's words. */
+  overlaps: string[];
+  at: number;
+}
+
+/**
+ * A plan was approved (G3's question): the planned overlaps it is in that
+ * nobody has dealt with (not sequenced, not left) are said in the
+ * approval's answer and, once, in the inbox. Nothing is said when there are
+ * none. Never throws: an approval must not fail on a notice.
+ */
+export function noteApproval(projectRoot: string, planUid: string, now = Date.now()): { overlaps: string[]; noticeId: number | null } {
+  try {
+    const forward = buildPlayForward(projectRoot);
+    const label = forward.plans.find((p) => p.uid === planUid)?.label ?? planUid;
+    const open = forward.overlaps.filter((o) => !o.sequenced && !o.left && o.plans.some((p) => p.uid === planUid));
+    if (open.length === 0) return { overlaps: [], noticeId: null };
+    const words = open.map((o) => o.words);
+    getDb().run(
+      'INSERT INTO planned_overlap_notices (project_root, plan_uid, plan_label, words_json, at) VALUES (?, ?, ?, ?, ?)',
+      [projectRoot, planUid, label, JSON.stringify(words), now],
+    );
+    const id = Number(rows('SELECT MAX(id) FROM planned_overlap_notices')[0]?.[0] ?? 0);
+    markDirty();
+    return { overlaps: words, noticeId: id };
+  } catch (err) {
+    console.warn('[PlayForward] approval notice failed:', err instanceof Error ? err.message : err);
+    return { overlaps: [], noticeId: null };
+  }
+}
+
+const noticeTitle = (label: string, n: number) => `Approving ${label} puts it in ${n === 1 ? 'a planned overlap' : `${n} planned overlaps`}`;
+
+/** The inbox's notices not yet seen, newest first. */
+export function approvalNotices(projectRoot: string): ApprovalNotice[] {
+  return rows(
+    'SELECT id, plan_uid, plan_label, words_json, at FROM planned_overlap_notices WHERE project_root = ? AND seen_at IS NULL ORDER BY at DESC, id DESC',
+    [projectRoot],
+  ).map((r) => {
+    let overlaps: string[] = [];
+    try { overlaps = JSON.parse(String(r[3])) as string[]; } catch { /* kept empty */ }
+    return { id: Number(r[0]), planUid: String(r[1]), planLabel: String(r[2]), title: noticeTitle(String(r[2]), overlaps.length), overlaps, at: Number(r[4]) };
+  });
+}
+
+/** Seen: it leaves the inbox. */
+export function markNoticeSeen(projectRoot: string, id: number, by: { author: string }, now = Date.now()): boolean {
+  const open = rows('SELECT 1 FROM planned_overlap_notices WHERE id = ? AND project_root = ? AND seen_at IS NULL', [id, projectRoot]).length > 0;
+  if (!open) return false;
+  getDb().run('UPDATE planned_overlap_notices SET seen_at = ?, seen_by = ? WHERE id = ?', [now, by.author, id]);
+  markDirty();
+  return true;
+}

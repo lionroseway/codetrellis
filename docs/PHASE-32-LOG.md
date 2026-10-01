@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B9.3a: acting on a planned overlap |
-| **Status** | B9.1 merged (#294); B9.2 in review (#295). B9.3 split in two; B9.3a built (stacked on B9.2): Re-sequence (the person picks which plan goes first; the others' tasks wait on its tasks; a loop refused), Tell both agents (told once, on the next call), Fine, leave it; each kept with who and when and said under the overlap in the bar. Harness planned-overlap-actions 4, browser play-forward.spec 2 (shots) |
-| **In flight** | B9.3a in review (#296) on `feat/phase-32-b9-3a-planned-overlap-actions` |
-| **Last merged** | B9.2 (#295, `da755aa`) |
-| **Next action** | Merge B9.2, then B9.3a, when green; then B9.3b (a new planned overlap said on approval; the phone decides) |
+| **Stage / step** | Track B — B9.3b: a new planned overlap said on approval; the phone decides |
+| **Status** | B9.1–B9.3a merged (#294–#296). B9.3b built: approving a plan into a planned overlap says it in the approval's answer (REST and the phone) and once in the Awareness inbox, with Play forward and Seen; a left or sequenced overlap is not said again. The phone reads play-forward and decides an overlap as the person (playForward.summary, playForward.decide). Harness play-forward-approval 4, browser play-forward.spec 3 (shot) |
+| **In flight** | B9.3b building on `feat/phase-32-b9-3b-approval-and-phone` |
+| **Last merged** | B9.3a (#296, `e2dd422`) |
+| **Next action** | Merge B9.3b when green; then B9.4 (the phone's planned overlaps screen, and the G3 done-when end to end) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `da755aa`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `e2dd422`, with open PRs from GitHub.
 
 ---
 
@@ -212,8 +212,8 @@
   - [x] B9.1 The data: every active plan projected, planned overlaps (file, function, material), REST and get_play_forward (#294)
   - [x] B9.2 The window plays forward: dashed planned changes and ◇ planned overlaps on the graph, in the Stack tab (#295)
   - [ ] B9.3 Acting on a planned overlap, split in two: — building
-    - [ ] B9.3a Re-sequence, tell both agents, or leave it: by a person, kept with who and when (#296) — in review
-    - [ ] B9.3b A new planned overlap said on approval; deciding one from the phone
+    - [x] B9.3a Re-sequence, tell both agents, or leave it: by a person, kept with who and when (#296)
+    - [ ] B9.3b A new planned overlap said on approval; deciding one from the phone — building
   - [ ] B9.4 The phone and the G3 done-when
 - [ ] B10 The record
 
@@ -421,6 +421,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | B9 is refined into four parts (EXECUTION §5): the data, the window, acting on a planned overlap, the phone and G3. G3's question (run on approval?) is answered by computing play-forward on read, and B9.3 says a new planned overlap when an approval forms one | Computed on read it is never out of date and costs nothing until asked; saying a new one at approval is the moment G3 cares about, without a job that runs |
 | 2026-10-01 | B9.1: only unfinished tasks are projected, and which planned files exist is read from the project's folder through confined-fs, not the held graph | A done task's change is the code now, not the future. The server's graph is the last project scanned (HD1), so it cannot say whether another project's file exists; a planned path is agent-written and is confined like any other |
 | 2026-10-01 | B9.3 is split into B9.3a (the three actions, in the window) and B9.3b (said on approval; the phone) | The actions are one service and one surface; the approval notice and the phone's RPCs each touch another door with its own tests |
+| 2026-10-01 | B9.3b: an approval says only the planned overlaps it put the plan in that no one has answered (not sequenced, not left), in its answer and once in the inbox until seen; approving again says nothing more | The moment G3 cares about is the approval; an overlap a person already sequenced or chose to leave is answered, and saying it again teaches people to ignore the notice |
 | 2026-10-01 | B9.3a: what a person does about a planned overlap is kept by the overlap's id (its subject and its plans), and re-sequencing writes ordinary task dependencies rather than a new kind of order | The same plans meeting on the same thing is the same question, so the answer carries over; a dependency is what every "what is next" door (B6.1) already honours, so a re-sequenced plan holds its work back without anything new |
 | 2026-10-01 | B9.2: replay and play-forward are one clock with two directions; entering one leaves the other, and the canvas's views wait while either is on. The Stack tab shows each plan's "◇ will overlap" lines only while playing forward | Two clocks at once would draw two moments on one graph. The declared overlap band (B6.3) is today's; the ◇ lines are what the plans will do, so they belong to the forward clock, not beside today's |
 | 2026-10-01 | B8.4b: a past moment's overlay is rebuilt from what was kept (each report's cases, and the replay frame's files and imports), not recorded per frame; "older than the code" then compares a file's content with the first frame after its tests ran | Nothing new is taken at each frame, so replay costs nothing until it is used. The first frame after a run is the code the run was about (an agent edits, runs, and its turn ends); the frame before it would call every edit made just before the run stale. This can miss an edit between the run and that frame; it never invents one |
@@ -429,6 +430,25 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-01: B9.3b — said on approval; the phone decides
+- **Journey.** JIRA-142 and JIRA-150 both plan to change validators.ts. Sam
+  approves JIRA-150: the answer carries "◇ planned overlap: JIRA-142 and
+  JIRA-150 both plan to change packages/shared/src/validators.ts", and the
+  Awareness tab says "Approving JIRA-150 puts it in a planned overlap" with
+  the overlap, "Play the plans forward" and "Seen". Approving it again, or a
+  plan that meets nobody, says nothing. On his phone, play-forward is the
+  window's answer; he leaves the overlap from there, as himself. Approving
+  JIRA-142 then says nothing (its only overlap was left); once JIRA-160 plans
+  to change validators.ts too, approving it on the phone says the new one.
+- **Built.** `planned_overlap_notices`; `noteApproval`, `approvalNotices`,
+  `markNoticeSeen` in `planned-overlap-actions.ts`; `PUT /api/plans/:uid` and
+  `plan.update` answer `plannedOverlaps`; `GET /api/play-forward/notices`,
+  `POST /api/play-forward/notices/:id/seen`; the RPCs `playForward.summary`
+  (read) and `playForward.decide` (write) with their capability rows;
+  `PlannedOverlapNotices` in the Awareness tab.
+- **Tests.** Harness `play-forward-approval.test.ts` (4). Browser
+  `plan/play-forward.spec.ts` (3, twice; shot).
 
 ### 2026-10-01: B9.3a — acting on a planned overlap
 - **Journey.** JIRA-142 and JIRA-150 both plan to change validators.ts, and
