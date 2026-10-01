@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  branchLineageWords, isStateOnly, itemStatuses, planStatusView, sectionStateWords, statusLine, taskStateWords,
+  atOnceWords, branchLineageWords, isStateOnly, itemStatuses, planStatusView, sectionStateWords, statusLine, taskStateWords,
   type PlanItemFacts,
 } from './item-status';
 import type { ItemGitState } from './git-state-words';
@@ -67,6 +67,18 @@ test('a state taken from a teammate\'s record says so, and that it is unverified
   const at = Date.UTC(2026, 9, 1, 9, 30);
   const [s] = itemStatuses([task('Write the board report', { status: 'in_progress', recorded: { by: 'Sam Lee', byType: 'record', at } })], new Map());
   assert.equal(statusLine(s), 'in progress — from the plan, recorded by Sam Lee in their record, unverified, 1 Oct');
+});
+
+test('a task set two ways at once names both, waits on them, and picks neither (C3.2)', () => {
+  const atOnce = [{ name: 'Sam Lee', status: 'in_progress', at: 2 }, { name: 'Dana Ortiz', status: 'blocked', at: 1 }];
+  const [s] = itemStatuses([task('Check the figures', { status: 'blocked', blockedReason: 'waits on the ledger', atOnce })], new Map());
+  assert.equal(s.words, 'blocked: waits on the ledger');
+  assert.equal(s.atOnce?.words, 'set two ways at once: Sam Lee says in progress, Dana Ortiz says blocked');
+  assert.match(statusLine(s), /; set two ways at once: Sam Lee says in progress, Dana Ortiz says blocked$/);
+  const view = planStatusView([s], [], null);
+  assert.deepEqual(view.waiting.map((w) => w.words), ['blocked: waits on the ledger; set two ways at once: Sam Lee says in progress, Dana Ortiz says blocked']);
+  assert.equal(atOnceWords([{ name: 'Sam Lee', status: 'done', at: 1, forged: true }, { name: 'Sam Lee', status: 'skipped', at: 1, forged: true }]),
+    'two different records claim to be the same change by Sam Lee; neither is taken');
 });
 
 test('a branch git has not seen yet: the plan\'s state, saying why', () => {

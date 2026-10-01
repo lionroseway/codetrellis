@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — C3.1: task state as records in the project's files"
-  status: "C2.6a merged (#270). C3 refined into six parts (EXECUTION §6); four owner questions hold only C3.3–C3.5. C3.1 built: with Settings → Shared task state on, each state change here writes one new record under .codetrellis/records/, never edited, and teammates' records are read back; a teammate's state says whose record and that it is unverified. Unit (record 10, item-status), harness (task-records 9), browser (shared-task-state 2, modal-chrome) green locally"
-  next: "Open C3.1's PR and merge when green; then C3.2 (a real disagreement is a signal)"
+  step: "Wave 2 — C3.2: a real disagreement is a signal"
+  status: "C3.1 merged (#271). C3.2 built: when records made without seeing each other leave a task in two states, the task names both (window, phone, get_plan), it joins what the plan waits on, and a state-split signal is in the inbox; Keep on the item (or any later change) ends it on every machine; a second record forged in one person's name and number is named, high, and neither is taken. Unit (item-status, signal-words), harness (task-records 12, awareness, phone-awareness, plan-status), browser (shared-task-state 3) green locally"
+  next: "Open C3.2's PR and merge when green; then C3.3 needs the owner's choice of key, so C3.6's journey or B8 next"
   blockers: "C2.6b waits on the owner's choice; C3.3–C3.5 wait on the owner's answers (which key signs records; which providers first; what people without the app see; whether material reads are shared by default)"
   updated: 2026-10-01
 sections:

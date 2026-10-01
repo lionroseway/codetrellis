@@ -35,11 +35,14 @@ export function usePlanStatus(planUid: string | null, nonce = ''): PlanStatus | 
     void load();
     window.addEventListener('workstreams-changed', load);
     window.addEventListener('review-host-changed', load);
+    // C3.2: a task set two ways at once starts and ends with the signals.
+    window.addEventListener('awareness-changed', load);
     const id = setInterval(load, REFRESH_MS);
     return () => {
       live = false;
       window.removeEventListener('workstreams-changed', load);
       window.removeEventListener('review-host-changed', load);
+      window.removeEventListener('awareness-changed', load);
       clearInterval(id);
     };
   }, [planUid, nonce]);

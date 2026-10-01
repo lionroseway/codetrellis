@@ -18,6 +18,7 @@ import { listCriteria } from './criteria-service';
 import { getExternalRefsByPlan } from './external-refs-service';
 import { getPlanExternalRefs } from './external-intake-service';
 import { planGitStates, planGitStatesFresh, type PlanItemGitState } from './item-git-state';
+import { allSplits } from './task-records/heads';
 import {
   itemStatuses, planStatusView,
   type CriteriaTally, type ItemStatus, type PlanItemFacts, type PlanStatusView, type StateRecord,
@@ -70,12 +71,14 @@ function build(planUid: string, git: { base: string | null; items: PlanItemGitSt
   if (!plan) return null;
   const records = statusRecords(planUid);
   const items = listAllItems(planUid);
+  const splits = allSplits();
   const facts: PlanItemFacts[] = items.map((i) => ({
     uid: i.uid, title: i.title, kind: i.kind, parentUid: i.parentUid,
     status: i.status ?? null, assignee: i.assignee ?? null,
     progressPercent: i.progressPercent ?? null, blockedReason: i.blockedReason ?? null,
     criteria: i.kind === 'action' ? criteriaOf(i.uid) : null,
     recorded: records.get(i.uid) ?? null,
+    atOnce: splits.get(i.uid) ?? null,
   }));
   const byItem = new Map((git?.items ?? []).map((s) => [s.itemUid, s]));
   const statuses = itemStatuses(facts, byItem);

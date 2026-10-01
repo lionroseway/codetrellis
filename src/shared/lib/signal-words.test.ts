@@ -5,7 +5,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { kindWords, sideRootsOf, sideWords } from './signal-words';
+import { briefLine, kindWords, sideRootsOf, sideWords } from './signal-words';
 import type { AwarenessSignal } from '../types';
 
 const label = (root: string) => ({ '/w/auth': 'auth-refresh', '/w/billing': 'billing-v2', '/w/checkout': 'checkout-fix' } as Record<string, string>)[root] ?? root;
@@ -44,5 +44,27 @@ describe('each side, in words', () => {
       ['auth-refresh changes 1 file outside the task it claimed: a.ts.']);
     assert.deepEqual(sideWords(sig({ kind: 'stale-base', workstreams: ['/w/billing'], subject: { files: ['src/b.ts'] } }), label).map((x) => x.words),
       ['main changed src/b.ts since billing-v2 branched, and billing-v2 changes it too.']);
+  });
+});
+
+describe('a task set two ways at once (C3.2)', () => {
+  const split = (said: NonNullable<AwarenessSignal['subject']['said']>) => sig({
+    kind: 'state-split', workstreams: ['task:t1'], subject: { items: ['t1'], labels: { 'task:t1': 'Check the figures' }, said },
+  });
+
+  test('one side per person, each with what they set, on the one task', () => {
+    const s = split([{ name: 'Sam Lee', status: 'in_progress' }, { name: 'Dana Ortiz', status: 'blocked' }]);
+    assert.equal(kindWords(s), 'Set two ways at once');
+    assert.deepEqual(sideWords(s, label), [
+      { root: 'task:t1', name: 'Sam Lee', words: 'Sam Lee set “Check the figures” to in progress, without having seen the other change.' },
+      { root: 'task:t1', name: 'Dana Ortiz', words: 'Dana Ortiz set “Check the figures” to blocked, without having seen the other change.' },
+    ]);
+    assert.equal(briefLine(s, 'task:t1'), 'Sam Lee set this task to in progress; Dana Ortiz set this task to blocked, at once.');
+  });
+
+  test('two records claiming to be one change by the same person say so', () => {
+    const s = split([{ name: 'Sam Lee', status: 'done', forged: true }, { name: 'Sam Lee', status: 'skipped', forged: true }]);
+    assert.equal(kindWords(s), "A record in someone else's name");
+    assert.match(sideWords(s, label)[1].words, /^A record claiming to be Sam Lee's sets “Check the figures” to skipped; another record claims to be the same change\.$/);
   });
 });

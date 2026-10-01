@@ -22,6 +22,7 @@ import { computeSignals, contractCandidates, importableName, reconcileSignals, n
 import { pushForSignal } from './push-notification-service';
 import { computeMaterialSignals } from './material-signals';
 import { materialInputsOf } from './material-footprints';
+import { stateSplitDrafts } from './task-records/split-signals';
 import type { FileSpec } from '../../shared/types';
 
 const SHA = /^[0-9a-f]{40}$/;
@@ -214,6 +215,8 @@ export function refreshSignals(projectRoot: string, now = Date.now()): boolean {
   const drafts = [
     ...computeSignals(footprintsOf(listWorkstreams(projectRoot, { includeIdle: true, fresh: true }), projectRoot)),
     ...computeMaterialSignals(materials.tasks, materials.current),
+    // Teammates' records that set a task two ways at once (C3.2).
+    ...stateSplitDrafts(projectRoot),
   ];
   const previous = loadSignals(projectRoot);
   const { upserts, resolved, reopened } = reconcileSignals(previous, drafts, now);

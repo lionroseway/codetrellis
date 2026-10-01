@@ -83,7 +83,7 @@ import { listSignedApprovals } from './services/signed-approvals';
 import { allPlanArrivals } from './services/plan-arrivals';
 import { forgetHostReads } from './services/review-host/host-state';
 import { forgetReviewHostToken, getReviewHost, ReviewHostError, saveReviewHostToken, setReviewHost } from './services/review-host/switch';
-import { getSharedTaskState, readAndTell, setRecordAppliedListener, setSharedTaskState, startRecordWatcher, writeRecordFor } from './services/task-records/shared-state';
+import { getSharedTaskState, keepMyState, readAndTell, setRecordAppliedListener, setSharedTaskState, setSplitChangedListener, startRecordWatcher, writeRecordFor } from './services/task-records/shared-state';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
 import { buildPlaybackSequence } from './services/playback-service';
 import * as commentService from './services/comment-service';
@@ -2477,6 +2477,15 @@ app.put('/api/shared-task-state', (req, res) => {
   const status = setSharedTaskState(projectRoot, enabled, changedBy(req));
   broadcast('shared-task-state-changed', { project: projectRoot });
   res.json(status);
+});
+
+// C3.2 — keep this machine's state of a task people set two ways at once.
+app.post('/api/items/:uid/keep-state', (req, res) => {
+  const out = keepMyState(req.params.uid, personFrom(req));
+  if (!out.ok) { res.status(out.status).json({ error: out.error }); return; }
+  const item = planItemService.getItem(req.params.uid);
+  if (item) broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { settled: true } });
+  res.json({ settled: true, record: out.file });
 });
 
 app.delete('/api/review-host/token', (req, res) => {
@@ -5763,6 +5772,9 @@ export async function initializeBackend(): Promise<void> {
     broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { status: item.status, fromRecord: true } });
   });
   setPlanImportedListener((planUid, projectRoot) => { readAndTell(projectRoot, planUid); });
+  // C3.2: people setting a task two ways at once is a signal; it starts and
+  // ends with the records, so the project's signals are refreshed then.
+  setSplitChangedListener((projectRoot) => { refreshSignals(projectRoot); });
   planItemService.setStatusChangeListener(({ planUid, itemUid }) => {
     const plan = planService.getPlan(planUid);
     if (!plan?.projectPath) return;

@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — C3.1: task state as records in the project's files |
-| **Status** | C2.6a merged (#270). C3 refined into six parts (EXECUTION §6); four owner questions hold only C3.3–C3.5. C3.1 built: with Settings → Shared task state on, each state change here writes one new record under .codetrellis/records/, never edited, and teammates' records are read back; a teammate's state says whose record and that it is unverified. Unit (record 10, item-status), harness (task-records 9), browser (shared-task-state 2, modal-chrome) green locally |
-| **In flight** | C3.1 building on `feat/phase-32-c3-1-shared-plans-folder` |
-| **Last merged** | C2.6a (#270, `0ff9d8b`) |
-| **Next action** | Open C3.1's PR and merge when green; then C3.2 (a real disagreement is a signal) |
+| **Stage / step** | Wave 2 — C3.2: a real disagreement is a signal |
+| **Status** | C3.1 merged (#271). C3.2 built: when records made without seeing each other leave a task in two states, the task names both (window, phone, get_plan), it joins what the plan waits on, and a state-split signal is in the inbox; Keep on the item (or any later change) ends it on every machine; a second record forged in one person's name and number is named, high, and neither is taken. Unit (item-status, signal-words), harness (task-records 12, awareness, phone-awareness, plan-status), browser (shared-task-state 3) green locally |
+| **In flight** | C3.2 building on `feat/phase-32-c3-2-disagreements` |
+| **Last merged** | C3.1 (#271, `4e8be2f`) |
+| **Next action** | Open C3.2's PR and merge when green; then C3.3 needs the owner's choice of key, so C3.6's journey or B8 next |
 | **Blockers** | C2.6b waits on the owner's choice; C3.3–C3.5 wait on the owner's answers (which key signs records; which providers first; what people without the app see; whether material reads are shared by default) |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `0ff9d8b`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `4e8be2f`, with open PRs from GitHub.
 
 ---
 
@@ -225,8 +225,8 @@
     - [x] C2.6a Teammates' plans after a pull: who added a plan and in which commit, as git says, in the plans list, the Stack and get_plan (#270)
     - [ ] C2.6b Phase 32's own plan in CodeTrellis, npm run status reading through the app; the C2 done-when (owner's choice first)
 - [ ] C3 A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice), refined in EXECUTION §6: — building
-  - [ ] C3.1 Task state as records in the project's files: one new file per change, one writer each, read from all; a teammate's state says whose record and that it is unverified; off until the person turns it on — building
-  - [ ] C3.2 A real disagreement is a signal: people acting at once are named on the task and in the inbox until one decides
+  - [x] C3.1 Task state as records in the project's files: one new file per change, one writer each, read from all; a teammate's state says whose record and that it is unverified; off until the person turns it on (#271)
+  - [ ] C3.2 A real disagreement is a signal: people acting at once are named on the task and in the inbox until one decides — building
   - [ ] C3.3 Signed records (the owner's choice of key first)
   - [ ] C3.4 A linked plans folder: a planning repo or a synced folder, placeholders never downloaded, materials by place and hash (the owner's choice of providers first)
   - [ ] C3.5 Teammates' material reads, a separate switch (the owner's choice of default first)
@@ -365,6 +365,42 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-01: C3.2 — a real disagreement is a signal
+
+C3.1 merged (#271).
+
+- **Named on the task.** When records made without seeing each other leave
+  a task in two states, nothing is picked (C3.1) and now both are said:
+  "set two ways at once: Sam Lee says in progress, Dana Ortiz says blocked"
+  on the item's State line, in what the plan waits on (window, phone), and
+  in an agent's `get_plan` (`set_at_once`).
+- **In the one inbox.** A `state-split` signal on the task's workstream
+  (`task:<uid>`), its sides the people, computed in the same
+  `refreshSignals` pass as every other signal and refreshed whenever a
+  split starts or ends: the Awareness tab, the digest ("which state is
+  right?"), the phone's detail, a push when it is high.
+- **Settled by a person.** Keep on the item writes this machine's state
+  again as a record that has seen both (`POST /api/items/:uid/keep-state`);
+  setting another state does the same as any change. The split ends here at
+  once and, after a pull, on the teammate's machine, which takes the kept
+  state.
+- **A record in someone else's name.** Two different records under one
+  writer and counter, which no honest writer makes, are named as one
+  person's change claimed twice; neither is taken, and the signal is high.
+
+Found on the way: the signal engine reached the plan services through the
+new drafts, which loaded the server half-way through its own load
+(`awareness-notices.test.ts` caught it); the drafts read the two columns
+they need from the tables, and the record heads moved to a database-only
+module (`task-records/heads.ts`).
+
+Tests: unit `item-status` (the words, waiting, forged) and `signal-words`
+(sides per person, forged); harness `task-records.test.ts` (12: acting at
+once is named on the task, in waiting, as a signal on both machines, on the
+phone and in `get_plan`; Keep ends it here and after a pull there; a forged
+duplicate is high); browser `shared-task-state.spec.ts` (the banner and Keep,
+shot `state-split-banner`).
 
 ### 2026-10-01: C3 refined; C3.1 — task state as records in the project's files
 

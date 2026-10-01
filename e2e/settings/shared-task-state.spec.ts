@@ -93,4 +93,47 @@ test.describe('Shared task state', () => {
     fs.mkdirSync(OUT, { recursive: true });
     await state.locator('..').screenshot({ path: path.join(OUT, 'shared-task-state-line.png') });
   });
+
+  test('C3.2: a task set two ways at once names both, and Keep settles it with a new record', async ({ page, request }) => {
+    const plan = await seedPlan(request, { title: PLAN, actions: [{ title: 'Check the figures' }] });
+    const check = plan.actionUids[0];
+    const at = Date.UTC(2026, 9, 1, 10, 5);
+    const claims = [{ name: 'Sam Lee', status: 'in_progress', at }, { name: 'Dana Ortiz', status: 'blocked', at: at - 60_000 }];
+    const words = 'set two ways at once: Sam Lee says in progress, Dana Ortiz says blocked';
+    let kept = false;
+    const statusNow = () => {
+      const line = { itemUid: check, title: 'Check the figures', words: kept ? 'blocked: waits on the ledger' : `blocked: waits on the ledger; ${words}`, source: 'plan', from: 'from the plan' };
+      return {
+        planUid: plan.uid, title: PLAN, base: null,
+        items: [{
+          itemUid: check, title: 'Check the figures', kind: 'action', state: 'blocked', source: 'plan', from: 'from the plan',
+          words: 'blocked: waits on the ledger', recorded: { by: 'dana@acme.test', byType: 'human', at }, branch: null,
+          ...(kept ? {} : { atOnce: { words, claims } }),
+        }],
+        progress: { done: 0, total: 1, words: '0 of 1 task done' },
+        waiting: [line], inProgress: [], lineage: [], updatedAt: at,
+      };
+    };
+    await page.route(`**/api/plans/${plan.uid}/status`, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(statusNow()) }));
+    await page.route(`**/api/items/${check}/keep-state`, async (route) => {
+      kept = true;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ settled: true, record: '3f9c2e1a7b4d5e6f-2.yaml' }) });
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent('awareness-changed')));
+    });
+
+    await gotoWithProject(page);
+    await openPlan(page, PLAN);
+    await page.getByText('Check the figures', { exact: true }).first().click();
+    const banner = page.getByTestId('item-state-at-once');
+    await expect(banner).toContainText('⚠ Set two ways at once: Sam Lee says in progress, Dana Ortiz says blocked.');
+    const keep = banner.getByTestId('item-state-keep');
+    await expect(keep).toHaveText('Keep “blocked: waits on the ledger”');
+    await expect(banner).toContainText('or set the state you want.');
+    fs.mkdirSync(OUT, { recursive: true });
+    await page.getByTestId('item-state-line').locator('..').screenshot({ path: path.join(OUT, 'state-split-banner.png') });
+
+    await keep.click();
+    await expect(banner).toHaveCount(0);
+    expect(kept).toBe(true);
+  });
 });
