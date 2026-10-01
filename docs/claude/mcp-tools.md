@@ -143,6 +143,14 @@ and exits 0. `status` is the plan's own state, so it says what the app
 and the phone say: progress, what is in progress (claimed), what is
 blocked and why, and what waits on the person.
 
+**Sessions and pipelines (D1.4).** `codetrellis start` / `stop` run `serve`
+in the background once per folder; `check` with no path and `status` gate
+on this work's changes through `check_changes` (a breakpoint on a changed
+file, its tests failing or older than the code, a done task whose criterion
+check fails, a stale system doc describing it) and exit 3 when it does not
+conform. The SessionStart hook, `.mcp.json` and GitHub Actions recipes are
+in `docs/recipes/`; how they fit is [`cli.md`](cli.md).
+
 `getMcpSetup` (`/api/mcp/setup`) returns the connector's command, JSON and
 `claude mcp add` line; Settings, the guide and the status bar all copy the
 connector's config first. The direct, token-carrying config is still

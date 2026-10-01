@@ -608,6 +608,7 @@ All sensor-emitted events have \`authorType: 'sensor'\` and a \`payload.source\`
 | \`get_state_at(at)\` | The project as it was at a past moment (ISO 8601 or milliseconds): tasks' statuses and who was on them then, what was waiting on the person, the signals open, the stack then, and how the graph has changed since. For "what was going on when…" or what changed while you were away |
 | \`declare_intent(summary, paths?, symbols?, clear?)\` | After planning: what you are about to change. Joins your workstream's footprint so overlaps show before any edit; lasts until you declare again, clear it, or disconnect |
 | \`check_footprint(paths, project_path?)\` | Before editing: which other workstreams changed these files (and which functions), and what imports them |
+| \`check_changes(paths, project_path?)\` | After changing files, or in CI: does the change conform? A breakpoint on a changed file, its tests failing or older than the code, a done task whose criterion check fails, a stale system doc that describes it. Read only |
 | \`get_line_changes(path, workstream?, diff?)\` | Which lines of a file other workstreams changed, from git: added / changed / removed runs, the functions they fall in, committed or not; the diff text when asked |
 | \`setup_agent_permissions(project_path)\` | Auto-approve all CodeTrellis MCP tools for this project (writes .claude/settings.local.json) |
 

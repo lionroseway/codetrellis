@@ -28,6 +28,7 @@ Deep-dive docs live in `docs/claude/`:
 - [`docs/claude/mobile-companion.md`](docs/claude/mobile-companion.md) — Expo app, routes, RPC/bridge layers, mobile MCP commands, release flow.
 - [`docs/claude/mcp-tools.md`](docs/claude/mcp-tools.md) — the 18 MCP tool categories grouped by domain.
 - [`docs/claude/awareness.md`](docs/claude/awareness.md) — parallel awareness: workstreams, footprints, signals, the digest, notices, and the Claude Code skill and hook.
+- [`docs/claude/cli.md`](docs/claude/cli.md) — the `codetrellis` CLI in sessions and pipelines: `start`/`stop`, the SessionStart hook and CI recipes in `docs/recipes/`, the conformity gate and its exit codes.
 
 The team's design docs (vision, UX, plans) live alongside these at the
 `docs/` root — `ARCHITECTURE.md`, `MCP-INTEGRATION.md`, etc.

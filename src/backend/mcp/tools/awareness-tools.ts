@@ -27,6 +27,7 @@ import { stateAt } from '../../services/replay-state';
 import { holdsProject } from '../../services/replay-frames';
 import { importersOf, type Importer } from '../../services/importers';
 import { enforceEdit, editView } from '../../services/code-breakpoints';
+import { checkChanges } from '../../services/conformity-gate';
 import { enforceSignalsForSession, signalHeldText } from '../../services/signal-breakpoints';
 import { listTaskWorkstreams, sessionWorkstreams } from '../../services/task-workstreams';
 
@@ -328,6 +329,36 @@ export function register(server: McpServer, deps: ToolDeps): void {
         agent: session?.agentType ?? 'mcp-agent', sessionId: deps.sessionId, workstreamRoot: session?.workstreamRoot ?? null,
       }, Date.now(), old_text);
       return { content: [{ type: 'text' as const, text: JSON.stringify(editView(result), null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    'check_changes',
+    {
+      description:
+        'After you change files, or in a CI job before merging: does the change conform to what the plan and the docs say? ' +
+        'For the changed files (relative to the repository root), it lists a breakpoint a person set on one of them, ' +
+        'tests that fail or are older than the code, a task marked done whose criterion check now fails, and a system doc ' +
+        'that describes a changed file and was verified before it changed. ok is true when there is none. Read only: ' +
+        'nothing is recorded and no breakpoint is hit. CodeTrellis runs no tests; it reads the reports handed over.',
+      inputSchema: {
+        paths: z.array(z.string().min(1).max(500)).max(500).describe('The changed files, relative to the repository root.'),
+        project_path: z.string().optional().describe('Absolute path of an opened project. Defaults to the active project.'),
+      },
+    },
+    async ({ paths, project_path }) => {
+      const root = project_path ?? deps.getActiveProjectPath();
+      if (!root) return noProject;
+      const c = await checkChanges(root, paths, (uid) => deps.criterionLoop.checkCriterion(uid));
+      return {
+        _meta: { summary: c.ok ? `Checked ${c.files.length} changed file${c.files.length === 1 ? '' : 's'}: conforms` : `Checked ${c.files.length} changed files: ${c.says.length} to act on` },
+        content: [{ type: 'text' as const, text: JSON.stringify({
+          ok: c.ok, says: c.says, files: c.files.length,
+          breakpoints: c.breakpoints, tests: c.tests,
+          criteria: c.criteria.map((x) => ({ item_uid: x.itemUid, task: x.task, criterion: x.criterion, findings: x.findings })),
+          docs: c.docs.map((d) => ({ uid: d.uid, title: d.title, slug: d.slug, verified_at: d.verifiedAt, files: d.files })),
+        }, null, 2) }],
+      };
     },
   );
 

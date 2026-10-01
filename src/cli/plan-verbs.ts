@@ -21,6 +21,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { flag, type Parsed } from './args';
 import type { Agent, ToolAnswer } from './agent';
+import { changedFiles, gate, gateWords } from './conformity';
 import { projectRoot, UsageError, type Outcome } from './verbs';
 
 export const PLAN_VERBS = new Set(['plan', 'commit', 'status']);
@@ -211,16 +212,22 @@ async function status(ctx: Ctx): Promise<Outcome> {
       })),
     });
   }
-  if (ctx.json) return { out: JSON.stringify({ project: ctx.root, plans: out }), code: 0 };
-  if (out.length === 0) return { out: `No plan in ${ctx.root}.`, code: 0 };
+  // D1.4: and whether this work conforms, so a job can gate on `status` too.
+  let changed;
+  try { changed = changedFiles(ctx.root, flag(ctx.p, 'base'), process.env); } catch (err) { throw new UsageError((err as Error).message); }
+  const g = await gate(ctx.agent, ctx.root, changed);
+  const code = 'error' in g ? 1 : g.ok ? 0 : 3;
+  if (ctx.json) return { out: JSON.stringify({ project: ctx.root, plans: out, conformity: g }), code };
   const lines: string[] = [];
+  if (out.length === 0) lines.push(`No plan in ${ctx.root}.`);
   for (const s of out) {
     lines.push(`${s.title}${s.progress ? ` — ${s.progress}` : ''}`);
     for (const w of s.inProgress) lines.push(`  ▶ ${w.title}: ${w.says}`);
     for (const b of s.blocked) lines.push(`  ■ ${b.title}: ${b.says}`);
     for (const q of s.waitingOnPerson) lines.push(`  ? ${q.question}`);
   }
-  return { out: lines.join('\n'), code: 0 };
+  lines.push('', 'error' in g ? `Could not check conformity: ${g.error}` : gateWords(g));
+  return { out: lines.join('\n'), code };
 }
 
 export async function runPlanVerb(verb: string, agent: Agent, p: Parsed, cwd: string): Promise<Outcome> {
