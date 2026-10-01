@@ -13,10 +13,10 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 — C2.5b: approvals as signed statements"
-  status: "C2.5a merged (#268). C2.5b built: a person's approval (window or confirmed phone) is signed with their git SSH key into the plan's approvals/ folder where git signing is set up; import verifies each record with ssh-keygen against git's allowed signers; verified counts as that person's sign-off, anything else shows can't verify with why and counts for nothing; without signing it stays local and says why. Unit (record), harness (signed-approvals 6, across two machines with real keys), browser (signed-approvals, criteria) green locally"
-  next: "Merge C2.5b when CI is green; then C2.6 (teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when), refined first"
-  blockers: none
+  step: "Wave 2 — C2.6a: teammates' plans after a pull"
+  status: "C2.5 done (#268, #269). C2.6 refined into a (teammates' plans after a pull) and b (Phase 32's own plan in CodeTrellis: a proposal for the owner). C2.6a built: a plan that first arrives through its files records who added it and in which commit, as git says, shown in the plans list, the Stack (window and phone) and get_plan; uncommitted, it says so and learns its commit later. Harness (plan-arrivals 6), browser (plan-arrivals), phone (stack) green locally"
+  next: "Merge C2.6a when CI is green; then C2.6b needs the owner's choice (keep PHASE-32-STATUS.yaml as intent imported as a plan, or replace it with the plan's files); C3 can start meanwhile"
+  blockers: "C2.6b waits on the owner's choice"
   updated: 2026-10-01
 sections:
   - title: Setup
@@ -517,6 +517,11 @@ sections:
                 title: "Approvals as signed statements: an SSH-signed record per approval when git signing is set up, verified on import against git's allowed signers"
           - id: C2.6
             title: Teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when
+            items:
+              - id: C2.6a
+                title: "Teammates' plans after a pull: who added a plan and in which commit, as git says, in the plans list, the Stack and get_plan"
+              - id: C2.6b
+                title: "Phase 32's own plan in CodeTrellis, npm run status reading through the app; the C2 done-when (owner's choice first)"
       - id: C3
         title: "A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice)"
       - id: C4

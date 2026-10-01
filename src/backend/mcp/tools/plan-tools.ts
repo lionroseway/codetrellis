@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import { planGitStatesFresh } from '../../services/item-git-state';
 import { planStatusFresh } from '../../services/plan-status';
+import { arrivalWords, getPlanArrival } from '../../services/plan-arrivals';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { resultWithMeta, authorFromExtra } from '../helpers';
@@ -84,6 +85,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         status: plan.status, projectPath: plan.projectPath,
         createdAt: plan.createdAt, updatedAt: plan.updatedAt,
         items: { total: items.length, objects: objectCount, actions: actionCount, byStatus: statusCounts },
+        // Phase 32 C2.6a — how it reached this machine, when through its files.
+        ...(arrivalFor(plan_uid) ? { arrived_from: arrivalFor(plan_uid) } : {}),
         // Phase 32 C2.4 — every item's state with its source, and the plan's status view.
         state: await statusForAgent(plan_uid),
         // Phase 32 C2.1 — what git proves about each item's branch.
@@ -662,6 +665,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
   );
 
+}
+
+/** A plan that arrived through its files: who added it and in which commit, in words. */
+function arrivalFor(planUid: string): { added_by: string | null; commit: string | null; says: string } | null {
+  const a = getPlanArrival(planUid);
+  return a ? { added_by: a.addedBy, commit: a.commit, says: arrivalWords(a) } : null;
 }
 
 /** The plan's status for an agent: the same answer as the window's and the phone's, in snake case. */

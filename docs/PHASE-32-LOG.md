@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 — C2.5b: approvals as signed statements |
-| **Status** | C2.5a merged (#268). C2.5b built: a person's approval (window or confirmed phone) is signed with their git SSH key into the plan's approvals/ folder where git signing is set up; import verifies each record with ssh-keygen against git's allowed signers; verified counts as that person's sign-off, anything else shows can't verify with why and counts for nothing; without signing it stays local and says why. Unit (record), harness (signed-approvals 6, across two machines with real keys), browser (signed-approvals, criteria) green locally |
-| **In flight** | C2.5b building on `feat/phase-32-c2-5b-signed-approvals` |
-| **Last merged** | C2.5a (#268, `92e8fed`) |
-| **Next action** | Merge C2.5b when CI is green; then C2.6 (teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when), refined first |
-| **Blockers** | none |
+| **Stage / step** | Wave 2 — C2.6a: teammates' plans after a pull |
+| **Status** | C2.5 done (#268, #269). C2.6 refined into a (teammates' plans after a pull) and b (Phase 32's own plan in CodeTrellis: a proposal for the owner). C2.6a built: a plan that first arrives through its files records who added it and in which commit, as git says, shown in the plans list, the Stack (window and phone) and get_plan; uncommitted, it says so and learns its commit later. Harness (plan-arrivals 6), browser (plan-arrivals), phone (stack) green locally |
+| **In flight** | C2.6a building on `feat/phase-32-c2-6a-teammates-plans` |
+| **Last merged** | C2.5b (#269, `1d1239c`) |
+| **Next action** | Merge C2.6a when CI is green; then C2.6b needs the owner's choice (keep PHASE-32-STATUS.yaml as intent imported as a plan, or replace it with the plan's files); C3 can start meanwhile |
+| **Blockers** | C2.6b waits on the owner's choice |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `92e8fed`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `1d1239c`, with open PRs from GitHub.
 
 ---
 
@@ -218,10 +218,12 @@
   - [x] C2.4 Status read, not written: intent in the plan's YAML, state from git, a host or the plan itself, each saying its source; no STATUS.md
     - [x] C2.4a Every item a state with its source (git, a host, or the plan with who recorded it), and one status view: progress, waiting, in progress, lineage; window, phone and get_plan (#266)
     - [x] C2.4b No state change writes a file: state leaves the plan's files, a state-only change schedules no write-through, unchanged files are not rewritten (#267)
-  - [ ] C2.5 Ticket refs in the plan files; approvals as signed statements — building
+  - [x] C2.5 Ticket refs in the plan files; approvals as signed statements
     - [x] C2.5a Ticket refs in the plan files: plan.yaml and item files name their tickets and links; import adds, cleans, never removes; lineage survives a pull (#268)
-    - [ ] C2.5b Approvals as signed statements: an SSH-signed record per approval when git signing is set up, verified on import against git's allowed signers — building
-  - [ ] C2.6 Teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when
+    - [x] C2.5b Approvals as signed statements: an SSH-signed record per approval when git signing is set up, verified on import against git's allowed signers (#269)
+  - [ ] C2.6 Teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when — building
+    - [ ] C2.6a Teammates' plans after a pull: who added a plan and in which commit, as git says, in the plans list, the Stack and get_plan — building
+    - [ ] C2.6b Phase 32's own plan in CodeTrellis, npm run status reading through the app; the C2 done-when (owner's choice first)
 - [ ] C3 A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice)
 - [ ] C4 Recurring playbooks
 - [x] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
@@ -348,9 +350,39 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | The plan's own state names who recorded it from the newest `status_changed` plan event, and the plan's state is shown in the same type as git's, teal rather than grey | Who recorded a state is what makes a plan-recorded state checkable, and the event log already holds it with the transport's author. Grey would read as less certain, which the shared-work doc rules out for a task with no branch |
 | 2026-10-01 | C2.5 is refined into C2.5a (ticket refs in the plan files) and C2.5b (approvals as signed statements). Signed approvals use the approver's git SSH signing key, verified against git's `gpg.ssh.allowedSignersFile`, not a device key | The shared-work doc said to reuse "the key the device already holds for pairing", and there is none: pairing proves possession of a per-device shared secret, and the DTLS certificates are minted afresh each launch. Git's SSH signing is what a team already trusts for commits, keeps its allowed-signers list in one place, and needs no new key management in the app |
 | 2026-10-01 | A plan file's refs are added on import, never removed, and only http(s) links are read | A file is anyone's text. Adding is what a pull should do; removing on a file's word would let an edit take a ticket away silently, and a `javascript:` or `file:` link would be one click from harm |
+| 2026-10-01 | C2.6 is refined into C2.6a (teammates' plans after a pull) and C2.6b (Phase 32's own plan in CodeTrellis). C2.6b waits on the owner: keep `PHASE-32-STATUS.yaml` as intent and import it as a plan, or replace it with the plan's files | Moving the phase's own tracker changes how every session reads the work, so it is the owner's choice, not a build step. C2.6a stands alone and needs no such choice |
+| 2026-10-01 | A pulled plan's author is who committed its `plan.yaml`, as `git log` says, never the file's own `author` field | A plan file is anyone's text; the commit is how it arrived (the authorship rule). The same reading as C1.4's skill arrivals |
 ---
 
 ## Entries
+
+### 2026-10-01: C2.6a — teammates' plans after a pull
+
+C2.5b merged (#269), so C2.5 is done. C2.6 is refined into a and b
+(decision rows); b waits on the owner's choice.
+
+- **Who added it, as git says** (`plan-arrivals.ts`). A plan that first
+  reaches this machine through its files is recorded in `plan_arrivals`
+  with the author and short sha of the last commit to its `plan.yaml`. The
+  file's own `author` field is not what is shown.
+- **Said where the plans are**: the plans list ("from Priya Shah, in
+  3f9c2e1" under the title), the Stack in the window and on the phone, and
+  `get_plan` (`arrived_from`). A plan made here says nothing of the kind.
+- **Not committed yet** reads "arrived in its files, not committed yet",
+  and learns its commit on a later import; one already known is never
+  rewritten by a later commit, which is an edit, not its arrival.
+- **Nothing is fetched**: the pull is the person's, and the plan-file
+  watcher imports what it lands.
+
+Found on the way: the watcher imports a plan folder the moment it lands,
+so a folder copied in and then committed was first seen uncommitted and
+would have said so for ever; it now learns its commit.
+
+Tests: harness `plan-arrivals.test.ts` (6: Priya's commit fast-forwarded in
+as a pull and imported; the Stack and `get_plan` say the same; Dana's own
+plan has none; uncommitted, then committed; once only); browser
+`plan-arrivals.spec.ts` (shot `plan-arrivals`); phone `stack.spec.ts` (a
+teammate's plan on the phone's Stack).
 
 ### 2026-10-01: C2.5b — approvals as signed statements
 

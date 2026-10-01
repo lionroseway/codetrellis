@@ -71,6 +71,8 @@ export interface StackPlan {
   tasks: StackTask[];
   /** Other plans this one touches (B6.3), declared or actual. */
   overlaps: StackOverlap[];
+  /** C2.6a — when it reached this machine through its files: "from Priya Shah, in 3f9c2e1". */
+  arrival?: string | null;
 }
 
 /** An open awareness signal between the two plans' lines of work. */

@@ -81,6 +81,7 @@ function PlanCard({ plan, onOpen }: { plan: StackPlan; onOpen: () => void }) {
         <Text style={styles.count}>{done}/{total}</Text>
       </View>
       {plan.ticketKey && <Text style={styles.title} numberOfLines={1}>{plan.title}</Text>}
+      {plan.arrival && <Text style={styles.arrival} numberOfLines={1} testID="stack-plan-arrival">{plan.arrival}</Text>}
       <View style={styles.bar}><View style={[styles.barFill, { width: `${pct}%` }]} /></View>
 
       {plan.overlaps.map((o) => (
@@ -115,6 +116,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#141416', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#1f1f23', borderLeftWidth: 3 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   label: { color: '#fafafa', fontSize: 15, fontWeight: '700', flexShrink: 1 },
+  arrival: { color: '#7dd3fc', fontSize: 12, marginTop: 2 },
   mono: { fontFamily: 'monospace' },
   needsYou: { color: '#fcd34d', backgroundColor: '#f59e0b1a', fontSize: 11, fontWeight: '700', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden' },
   count: { color: '#a1a1aa', fontSize: 12, fontFamily: 'monospace', marginLeft: 'auto' },
