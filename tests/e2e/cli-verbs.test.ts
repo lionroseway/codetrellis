@@ -138,6 +138,7 @@ test.describe.serial('codetrellis verbs', () => {
     fs.writeFileSync(path.join(root, 'junit.xml'), '<testsuites><testsuite name="exports" tests="2" failures="0"><testcase classname="exports" name="writes csv"/><testcase classname="exports" name="totals"/></testsuite></testsuites>');
     const rep = ct('report-tests', 'junit.xml');
     expect(rep.code, rep.err + rep.out).toBe(0);
+    expect(rep.out).toBe('2 tests, none failing.');
     const brief = ct('brief', write, '--json');
     expect(brief.code, brief.err).toBe(0);
     expect(JSON.stringify(JSON.parse(brief.out))).toContain('Write the export endpoint');

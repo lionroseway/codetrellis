@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "codetrellis start --quiet && codetrellis status; exit 0",
+            "command": "codetrellis start --share-task-state --quiet && codetrellis status; exit 0",
             "timeout": 180
           }
         ]
