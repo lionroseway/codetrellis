@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Track A — A7.3: the gate on rules, and the M7 done-when |
-| **Status** | A7.1 merged (#306); A7.2 in review (#307). A7.3 built: check_changes lists each import a change adds across a rule (since `base`, the merge base the CLI passes) and says when the rules could not be read; `codetrellis check` exits 3 on it. Harness awareness-m7 3 (two agents, one breach told once; one digest line; the CLI gate fails then passes), cli-gate wording; unit conformity |
-| **In flight** | A7.2 in review (#307) on `feat/phase-32-a7-2-rule-signals`; A7.3 in review (#308) on `feat/phase-32-a7-3-rule-gate` |
-| **Last merged** | A7.1 (#306, `8aa5820`) |
-| **Next action** | Merge A7.2 (#307), then A7.3 (#308) by the stacked flow; then B10 |
+| **Status** | A7.1 (#306) and A7.2 (#307) merged. A7.3 built: check_changes lists each import a change adds across a rule (since `base`, the merge base the CLI passes) and says when the rules could not be read; `codetrellis check` exits 3 on it. Harness awareness-m7 3 (two agents, one breach told once; one digest line; the CLI gate fails then passes), cli-gate wording; unit conformity |
+| **In flight** | A7.3 in review (#308) on `feat/phase-32-a7-3-rule-gate`; B10 in review (#309) on `feat/phase-32-b10-1-chain` |
+| **Last merged** | A7.2 (#307, `a2006f6`) |
+| **Next action** | Merge A7.3 (#308) when green; then B10.1 (#309) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `8aa5820`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `a2006f6`, with open PRs from GitHub.
 
 ---
 
@@ -122,7 +122,7 @@
   - [x] A6.6 M6 done-when and docs (#258)
 - [ ] A7 Rules — building
   - [x] A7.1 The rules in the committed config, what breaks them today, and `check_conformity` made true (#306)
-  - [ ] A7.2 `rule` signals from each workstream's import delta (#307) — in review
+  - [x] A7.2 `rule` signals from each workstream's import delta (#307)
   - [ ] A7.3 The gate (`check_changes`, `codetrellis check`) and the M7 done-when (#308) — in review
 - [ ] Follow-up: `plan-by-hand` failed once in CI when its plan workspace dropped back to the plan list while `plan/list.spec.ts` created and deleted plans on the other worker (#147). It doesn't reproduce as a pair (5/5 on base and on the branch). Find which broadcast leaves the workspace, so a person's open plan survives someone else's plan changes.
 - [ ] Follow-up: two browser tests failed once on #167 and passed on re-run: `realtime/plan-events.spec.ts:18` (a reset connection mid-POST; also 2/3 locally on the base branch) and `external-refs/refs-panel.spec.ts:77` (a fixed 3 s `isVisible`). Both are queued as separate fixes; neither touches A3.4's code.
@@ -218,7 +218,7 @@
     - [x] B9.3a Re-sequence, tell both agents, or leave it: by a person, kept with who and when (#296)
     - [x] B9.3b A new planned overlap said on approval; deciding one from the phone (#297)
   - [x] B9.4 The phone and the G3 done-when (#298)
-- [ ] B10 The record
+- [ ] B10 The record (#309) — in review
 
 ### Track C: shared ways of working
 - [x] C1 Skills on tasks
