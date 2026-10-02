@@ -66,7 +66,7 @@ export function useGraphPair(root: string | null): GraphPairState {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** What the graph is comparing, said once at the top of the canvas, with the way out. */
+/** What the graph is comparing, said once beneath the canvas, with the way out. */
 export function GraphPairBanner({ state }: { state: GraphPairState }) {
   const on = useSourceControlStore((s) => s.pairOnGraph);
   const command = useSourceControlStore((s) => s.pairResult?.command ?? null);
@@ -76,11 +76,11 @@ export function GraphPairBanner({ state }: { state: GraphPairState }) {
   return (
     <div
       data-testid="graph-pair"
-      className="absolute top-3 left-1/2 -translate-x-1/2 z-10 max-w-[70%] flex items-center gap-2 rounded-lg border border-sky-400/40 bg-background/90 px-3 py-1.5 text-[11px] text-sky-100 shadow"
+      className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 w-max max-w-[min(560px,60%)] flex items-center gap-2 rounded-lg border border-sky-400/40 bg-background/90 px-3 py-1.5 text-[11px] text-sky-100 shadow"
     >
       <GitCompareArrows size={13} className="shrink-0 text-sky-300" />
       <div className="min-w-0">
-        <div className="truncate" data-testid="graph-pair-words">
+        <div className="leading-snug" data-testid="graph-pair-words">
           {state.labels ? <>Comparing <b>{state.labels.before}</b> → <b>{state.labels.after}</b></> : 'Comparing two points'}
           {d && ` · ${plural(d.added, 'file')} added, ${d.modified} changed, ${d.removed} removed`}
           {d && state.edgesComparable && ` · ${plural(d.edgesAdded, 'import')} added, ${d.edgesRemoved} removed`}

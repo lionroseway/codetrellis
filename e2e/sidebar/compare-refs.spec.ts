@@ -140,7 +140,7 @@ test.describe('Compare two points', () => {
     await expect(panel.getByTestId('compare-from-split')).toBeChecked();
   });
 
-  test('the graph compares the same two: its marks are what differs between them, said at the top, and it stops', async ({ page }) => {
+  test('the graph compares the same two: its marks are what differs between them, said beneath it, and it stops', async ({ page }) => {
     const asked: string[] = [];
     await serve(page, asked);
     const compared: string[] = [];
