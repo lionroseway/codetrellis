@@ -51,6 +51,8 @@ test.describe.serial('Line history', () => {
     git('commit', '-qam', 'Half-even\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>');
 
     // codex works in this checkout on a task; a commit lands while its session is open.
+    // Commit times are whole seconds: start the session clearly after the person's commits.
+    await new Promise((r) => setTimeout(r, 1500));
     agent = createMcpClient({ mcpPort: h.backend.mcpPort, capabilityToken: h.backend.capabilityToken, clientName: 'codex', roots: [root] });
     await agent.connect();
     const planUid = (await h.client.createPlan({ title: 'Refunds to the cent', projectPath: root })).uid;

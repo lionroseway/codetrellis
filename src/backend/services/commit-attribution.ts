@@ -119,7 +119,8 @@ export function recordedKnowledge(projectPath: string): Knowledge {
         `SELECT session_id, agent_type FROM agent_sessions
          WHERE workstream_root = ? AND connected_at <= ? AND last_seen + ? >= ?
          ORDER BY connected_at DESC LIMIT 1`,
-        [trim(checkoutRoot), at, SESSION_GRACE_MS, at],
+        // A commit's time is whole seconds: one made in the second the session started is in it.
+        [trim(checkoutRoot), at + 999, SESSION_GRACE_MS, at],
       )[0]?.values?.[0];
       return row ? { sessionId: String(row[0]), agentType: String(row[1]) } : null;
     },
