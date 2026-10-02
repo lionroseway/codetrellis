@@ -20,7 +20,7 @@ records that — but "✗ none" is proof of a gap.
 | REST routes | 290 | 288 | 0 | 0 | 217 | 0 |
 | MCP tools | 210 | 210 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
-| Frontend components | 134 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 135 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 38 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 0 | n/a | n/a | n/a | 0 | 0 |
 
@@ -34,7 +34,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 4 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 13 | 7 | 1 | 0 | 0 |
-| 0.4g Agents and MCP | 30 | 32 | 10 | 33 | 0 | 0 |
+| 0.4g Agents and MCP | 30 | 32 | 10 | 34 | 0 | 0 |
 | 0.4h Drift, governance, review | 11 | 27 | 9 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 38 | 0 |
@@ -657,7 +657,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (134)
+## Frontend components (135)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -758,6 +758,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `layout/CodeWorkspace.tsx` |  | n/a | n/a |  | ✓ 0.5a — empty state says what to do |  |
 | g | `layout/ConnectedAgents.tsx` |  | n/a | n/a |  | ✓ 0.5a |  |
 | g | `layout/CoverageChip.tsx` |  | n/a | n/a |  | ✓ 0.5 — "imports linked" (0.5c) |  |
+| g | `layout/GraphPair.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/InspectorPanel.tsx` |  | n/a | n/a |  | ✓ 0.5a — minor: sparse file view (m21) |  |
 | g | `layout/MainCanvas.tsx` |  | n/a | n/a |  | ✓ 0.5a — major fixed: change summary covered the toolbar; now one quiet line (M1). Minor: 4-row toolbar at 1024 (m23) |  |
 | g | `layout/PlannedOverlapNotices.tsx` |  | n/a | n/a |  |  |  |

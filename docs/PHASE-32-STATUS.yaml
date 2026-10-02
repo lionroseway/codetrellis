@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track E — E2a: any ref on either side, from the Changes tab"
-  status: "B10 done (#313 merged). E1 in review (#314). E2 is split in two: E2a (the refs, any two compared file by file, from the Changes tab) and E2b (the graph compares the same two). E2a built on E1: GET /api/git/refs lists this checkout, branches, remote branches as last fetched, tags and other worktrees, each group with git's word and command; GET /api/git/refs/compare lists the files between any two, with \"from where they split\" (merge base) and the git command; a worktree's working copy is read as a tree through a copy of its own index (the checkout untouched); /api/compare and /api/file/at take the same sides. Unit git-refs 7; harness refs 6; browser compare-refs (shots)"
-  next: "Merge E1 (#314) when green, then E2a by the stacked flow; then E2b (the graph takes the same two)"
+  step: "Track E — E2b: the graph compares the same two"
+  status: "E1 (#314) and E2a (#315) in review, stacked. E2b built on E2a: in the Changes tab, \"Show on the graph\" draws the graph's marks (files added, changed, removed; imports added, removed) from /api/compare between the chosen pair, instead of its own baseline against now; a banner beneath the canvas says which two, with the counts and git's command, and stops it; changing a side redraws it; clearing the pair turns it off. Unit source-control-store 3; browser compare-refs (graph, shot compare-graph)"
+  next: "Merge E1 (#314), E2a (#315), then E2b by the stacked flow; then E3 (the evolution view)"
   blockers: "None"
   updated: 2026-10-02
 sections:
