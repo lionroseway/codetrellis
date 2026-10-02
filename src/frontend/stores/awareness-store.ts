@@ -40,20 +40,23 @@ export const useAwarenessStore = create<AwarenessState>((set, get) => ({
     if (root !== get().root) set({ root, workstreams: [], signals: [], commits: {}, loaded: false, error: null });
     const q = `project=${encodeURIComponent(root)}`;
     try {
-      // Commits are extra: failing to read them never costs the rest.
-      const commitsRead = fetch(`/api/workstreams/commits?${q}&since=${Date.now() - COMMITS_WINDOW_MS}`)
+      // Commits are extra: failing to read them never costs the rest, and
+      // neither does reading them slowly. They land when they arrive; the
+      // signals, and the count the tab shows, never wait for them.
+      void fetch(`/api/workstreams/commits?${q}&since=${Date.now() - COMMITS_WINDOW_MS}`)
         .then(async (r) => (r.ok ? ((await r.json()) as { commits?: Record<string, WorkstreamCommit[]> }).commits ?? {} : {}))
-        .catch(() => ({} as Record<string, WorkstreamCommit[]>));
+        .then((commits) => {
+          if (get().root === root && commits && typeof commits === 'object') set({ commits });
+        })
+        .catch(() => { /* the rest stands */ });
       const [ws, aw] = await Promise.all([fetch(`/api/workstreams?${q}&idle=1`), fetch(`/api/awareness?${q}`)]);
       if (!ws.ok || !aw.ok) throw new Error(`Server returned ${ws.ok ? aw.status : ws.status}`);
       const workstreams = (await ws.json()) as Workstream[];
       const body = (await aw.json()) as { signals?: AwarenessSignal[] };
-      const commits = await commitsRead;
       if (get().root !== root) return; // the project changed while this was in flight
       set({
         workstreams: Array.isArray(workstreams) ? workstreams : [],
         signals: Array.isArray(body.signals) ? body.signals : [],
-        commits: commits && typeof commits === 'object' ? commits : {},
         loaded: true, error: null,
       });
     } catch (e) {

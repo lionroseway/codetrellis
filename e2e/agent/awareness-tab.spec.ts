@@ -107,6 +107,11 @@ test.describe('Awareness tab', () => {
 
   test('from a marked chip to the tab: the digest, what needs you, both sides of each overlap', async ({ page }) => {
     await serve(page, ROOM, SIGNALS());
+    // The commits each workstream made are extra: a slow read of them never holds back the count.
+    await page.route('**/api/workstreams/commits?*', async (route) => {
+      await new Promise((r) => setTimeout(r, 30_000));
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ commits: {} }) }).catch(() => {});
+    });
     await gotoWithProject(page);
 
     // The tab says how many need you before anyone opens it.
