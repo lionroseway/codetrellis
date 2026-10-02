@@ -288,7 +288,8 @@ await harness.waitForEvent('task-updated', { taskUid, status: 'in_progress' }, {
 
 > **Now (Phase 32):** the harness runs on every pull request in `ci.yml`, in
 > four shards (`--shard=N/4`), and blocks the merge through `CI passed`, as
-> does the browser suite in three shards. The plan below is the original design.
+> does the browser suite in five (`chromium` in three, the `serial` project in
+> two, with `E2E_SPLIT=1`; Phase 32 HD4). The plan below is the original design.
 
 ### Stages
 

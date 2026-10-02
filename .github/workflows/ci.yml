@@ -35,7 +35,7 @@
 #   mobile            ~30 s     typecheck
 #   html-view         ~1 min    the sandboxed HTML view, a hostile report, real Electron
 #   harness           ~4 min    the hermetic E2E harness, 4 shards (Phase 32, below)
-#   browser           ~12 min   the e2e/ browser suite, 3 shards
+#   browser           ~12 min   the e2e/ browser suite, 5 shards (chromium 3, serial 2)
 #
 # And what does NOT:
 #
@@ -53,7 +53,8 @@
 # far under the old single-job number. If a shard nears its 30-minute
 # timeout, add shards rather than raising the timeout.
 #
-# The browser suite (e2e/) runs in three shards beside it and blocks too:
+# The browser suite (e2e/) runs in five shards beside it and blocks too
+# (chromium in three, the serial project in two, since Phase 32 HD4):
 # green on its first run here, 8.6–11.2 min a shard. See docs/E2E-HARNESS.md.
 
 name: ci
@@ -353,27 +354,40 @@ jobs:
           if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------
-  # The browser suite (e2e/), in three shards — blocking.
+  # The browser suite (e2e/), in five shards — blocking.
   #
   # It drives the real app through Vite and needs no desktop session on a
   # runner. It was added here reporting only, because it had known failures
   # the last time it ran on CI; its first run here was green in all three
   # shards (277, 265 and the rest passed, 8.6–11.2 min), so it blocks.
-  # The `serial` project is the setup project's teardown, so it runs in every
-  # shard: correct, and about three minutes a shard that could be saved.
+  #
+  # Two projects, sharded apart (Phase 32 HD4): `chromium` in three shards
+  # with two workers, and `serial` (the specs that need the backend to
+  # themselves) in two, one worker each. As setup's teardown, `serial` used to
+  # run in full in every shard, because Playwright never shards a teardown:
+  # 170 tests one at a time, three times over, which took the shards to
+  # 18–28 min by Wave 2's review. E2E_SPLIT=1 makes it an ordinary dependent
+  # of setup instead; each job has its own backend, so a serial spec still
+  # has one to itself.
   # ---------------------------------------------------------------------------
   browser:
-    name: Browser suite (${{ matrix.shard }}/3)
+    name: Browser suite (${{ matrix.label }})
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        include:
+          - { project: chromium, shard: '1/3', label: '1/3', id: 'c1' }
+          - { project: chromium, shard: '2/3', label: '2/3', id: 'c2' }
+          - { project: chromium, shard: '3/3', label: '3/3', id: 'c3' }
+          - { project: serial, shard: '1/2', label: 'serial 1/2', id: 's1' }
+          - { project: serial, shard: '2/2', label: 'serial 2/2', id: 's2' }
     env:
       # playwright.config.ts gives each run its own temp data dir and token,
       # and fails on a busy port rather than reusing a stray server.
       E2E_WORKERS: '2'
+      E2E_SPLIT: '1'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -392,8 +406,8 @@ jobs:
           git config --global user.name "CodeTrellis CI"
       - name: Install Playwright runner
         run: npx playwright install --with-deps chromium
-      - name: Browser suite, shard ${{ matrix.shard }} of 3
-        run: npx playwright test --shard=${{ matrix.shard }}/3 --reporter=list,html
+      - name: Browser suite, ${{ matrix.project }} shard ${{ matrix.shard }}
+        run: npx playwright test --project=${{ matrix.project }} --shard=${{ matrix.shard }} --reporter=list,html
       - name: What each failing page showed
         # The snapshot Playwright writes beside every failure, in the log itself.
         if: failure()
@@ -408,7 +422,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: browser-report-${{ matrix.shard }}-${{ github.run_id }}
+          name: browser-report-${{ matrix.id }}-${{ github.run_id }}
           path: |
             playwright-report/
             test-results/
@@ -424,7 +438,7 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    # `harness` (four shards) and `browser` (three) block (Phase 32).
+    # `harness` (four shards) and `browser` (five: chromium 3, serial 2) block (Phase 32).
     needs: [no-private-docs, desktop, mobile, phone, html-view, harness, browser]
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:

@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Wave 2 direction review (§1.7)"
-  status: "Track E done: E1–E6 merged (#314–#320). Wave 2 (HD1–HD3, B5–B10, A4–A7, C2–C4, Tracks D and E, #207–#320) is reviewed in the LOG: every JOURNEYS.md journey and six more run end to end as harness tests; two lessons change how stores read (one at a time) and what counts as a grant (anything reaching a host); the browser shards are the wait on every PR"
-  next: "The owner decides the proposals (HD4: browser shards and a single-flight guard; then the phase end as §7 writes it)"
+  step: "HD4a: browser shards and burst reads"
+  status: "The Wave 2 review merged (#321); the owner said yes to hardening. The serial project, setup's teardown, ran in full in every browser shard (170 tests, one at a time, three times): E2E_SPLIT=1 makes it an ordinary dependent, and CI runs chromium in three shards and serial in two, each test once. Every listener for workstreams-changed, awareness-changed and stack-changed now reads through lib/single-flight (15 listeners, 10 files), and burst-reads.test.ts fails on one that does not"
+  next: "HD4a green and merged; then HD4b (workstreams off the request path) and HD4c (CI installs, spec follow-ups); then the phase end (EXECUTION §7)"
   blockers: "None"
   updated: 2026-10-02
 sections:
@@ -308,7 +308,8 @@ sections:
       - title: "`graph/context-menu.spec.ts:38` failed on #186 with no graph at all (`.react-flow` never rendered in 15 s), the same empty-graph class as `layout-controls.spec.ts:38` on #184: a rescan on the other worker blanks every open graph. Worth fixing at the source (keep the last graph on screen while a rescan runs) rather than lengthening waits. **Fixed at the source by #195 and #196:** a scan answers \"scanning\" and every graph answer names its project; a canvas keeps its graph through another project's scan, and an empty one rescans its own."
         status: done
         followUp: true
-      - title: the browser `serial` project runs in every CI shard; run it in one, to reclaim ~3 min per PR.
+      - title: "the browser `serial` project runs in every CI shard; run it in one, to reclaim ~3 min per PR. **Fixed by HD4a:** it was setup's teardown, which Playwright never shards, so all 170 of its tests ran in every shard; CI now shards `chromium` (3) and `serial` (2) apart."
+        status: done
         followUp: true
       - title: "`e2e/golden-chain/onboarding-to-plan.spec.ts` imports `API` and never uses it, a lint error that predates #213. `npm run lint` covers `src/` only, so nothing reports it; either lint `e2e/` too or drop the import the next time the spec is touched. Dropped in #227, which touched the spec."
         status: done
@@ -356,7 +357,8 @@ sections:
         followUp: true
       - title: "`graph/canvas-rescan-wait.spec.ts:23` timed out once on B6.4's local run, waiting 30 s for `.react-flow` in `gotoWithProject` while the other worker loaded the repository's graph. It passed twice alone, and in CI on every run since #227. Watch it; if it fails in CI, the wait needs the same budget the helper gives other waits."
         followUp: true
-      - title: browser shards now take about 16–25 minutes each (up from 15–19 at the Wave 1 review). The serial project, which runs the sample-app specs since HD2, is most of the rise; see the serial-project follow-up above.
+      - title: "browser shards now take about 16–25 minutes each (up from 15–19 at the Wave 1 review). The serial project, which runs the sample-app specs since HD2, is most of the rise; see the serial-project follow-up above. **Fixed by HD4a.**"
+        status: done
         followUp: true
   - title: "Track B: observability"
     items:
@@ -524,6 +526,15 @@ sections:
             title: The evidence export
           - id: B10.5
             title: The G2 done-when and docs
+      - id: HD4
+        title: "Hardening after the Wave 2 review (owner's yes), in three parts:"
+        items:
+          - id: HD4a
+            title: "Browser shards under 20 minutes (chromium and the serial project sharded apart); every read a burst event starts runs one at a time, guarded"
+          - id: HD4b
+            title: "Listing workstreams off the request path: branch workstreams cached by ref SHA, so many remote branches never stall the window"
+          - id: HD4c
+            title: "CI installs without running native build scripts (prebuilds, checked by loading them); the open spec follow-ups fixed at their cause"
   - title: "Track C: shared ways of working"
     items:
       - id: C1

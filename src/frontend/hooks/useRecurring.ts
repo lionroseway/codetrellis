@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { RecurringSeries } from '../../shared/types/recurring';
 import { useToastStore } from '../stores/toast-store';
+import { singleFlight } from '../lib/single-flight';
 
 /**
  * Phase 32 C4.2a — the project's recurring playbooks, read again whenever one
@@ -20,7 +21,7 @@ export function useRecurring(root: string | null): { series: RecurringSeries[]; 
 
   useEffect(() => {
     void reload();
-    const run = () => { void reload(); };
+    const run = singleFlight(reload);
     window.addEventListener('recurring-changed', run);
     window.addEventListener('stack-changed', run);
     return () => {

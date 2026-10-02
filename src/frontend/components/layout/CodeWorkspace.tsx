@@ -16,6 +16,7 @@ import { openItemFromCode } from '../../lib/open-file-at';
 import { gutterMarks } from '../../lib/line-marks';
 import { lineCounts } from '@shared/lib/line-changes';
 import type { WorkstreamLineChanges } from '@shared/types';
+import { singleFlight } from '../../lib/single-flight';
 
 const CodeDiffView = lazy(() =>
   import('../inspector/CodeDiffView').then((m) => ({ default: m.CodeDiffView })),
@@ -119,13 +120,12 @@ export function CodeWorkspace() {
     });
     if (!relativePath || !root) { setLineChanges(null); return; }
     let cancelled = false;
-    const load = () => {
+    const load = singleFlight(() =>
       fetch(`/api/workstreams/changes?project=${encodeURIComponent(root)}&path=${encodeURIComponent(relativePath)}`)
         .then((r) => (r.ok ? r.json() : null))
         .then((data: { changes?: WorkstreamLineChanges[] } | null) => { if (!cancelled) setLineChanges(data?.changes ?? null); })
-        .catch(() => { if (!cancelled) setLineChanges(null); });
-    };
-    load();
+        .catch(() => { if (!cancelled) setLineChanges(null); }));
+    void load();
     window.addEventListener('awareness-changed', load);
     return () => { cancelled = true; window.removeEventListener('awareness-changed', load); };
   }, [relativePath, root]);

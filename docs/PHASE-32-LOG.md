@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Wave 2 direction review (§1.7) |
-| **Status** | Track E done: E1–E6 merged (#314–#320). Wave 2 (HD1–HD3, B5–B10, A4–A7, C2–C4, Tracks D and E, #207–#320) is reviewed in the LOG: every JOURNEYS.md journey and six more run end to end as harness tests; two lessons change how stores read (one at a time) and what counts as a grant (anything reaching a host); the browser shards are the wait on every PR |
-| **In flight** | nothing open |
+| **Stage / step** | HD4a: browser shards and burst reads |
+| **Status** | The Wave 2 review merged (#321); the owner said yes to hardening. The serial project, setup's teardown, ran in full in every browser shard (170 tests, one at a time, three times): E2E_SPLIT=1 makes it an ordinary dependent, and CI runs chromium in three shards and serial in two, each test once. Every listener for workstreams-changed, awareness-changed and stack-changed now reads through lib/single-flight (15 listeners, 10 files), and burst-reads.test.ts fails on one that does not |
+| **In flight** | HD4a building on `feat/phase-32-hd4a-shards-and-reads` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
-| **Next action** | The owner decides the proposals (HD4: browser shards and a single-flight guard; then the phase end as §7 writes it) |
+| **Next action** | HD4a green and merged; then HD4b (workstreams off the request path) and HD4c (CI installs, spec follow-ups); then the phase end (EXECUTION §7) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `7ee8f94`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `3690eb1`, with open PRs from GitHub.
 
 ---
 
@@ -134,7 +134,7 @@
 - [ ] Follow-up: on this container, several browser specs fail on the base too and pass in CI: `awareness-tab.spec` (the served signals never render), `context-menu.spec:12` and `plan/create.spec:16` (the first test of a spec on a cold start), and `graph-breakpoints`' clear toast. Worth one look at why this machine differs, so local runs can be trusted again.
 - [x] Browser robustness, 2026-09-29 (#195, #197, #198, all on base): guide Escape attached before paint; plan-to-graph right-clicks on reachable nodes; graph-breakpoints right-click on the node itself; awareness-tab told times early in their minute; plan create waits for the workspace and the save; recents never re-add a removed project after a late load; New plan opens before the list refreshes.
 - [x] Follow-up: `graph/context-menu.spec.ts:38` failed on #186 with no graph at all (`.react-flow` never rendered in 15 s), the same empty-graph class as `layout-controls.spec.ts:38` on #184: a rescan on the other worker blanks every open graph. Worth fixing at the source (keep the last graph on screen while a rescan runs) rather than lengthening waits. **Fixed at the source by #195 and #196:** a scan answers "scanning" and every graph answer names its project; a canvas keeps its graph through another project's scan, and an empty one rescans its own.
-- [ ] Follow-up: the browser `serial` project runs in every CI shard; run it in one, to reclaim ~3 min per PR.
+- [x] Follow-up: the browser `serial` project runs in every CI shard; run it in one, to reclaim ~3 min per PR. **Fixed by HD4a:** it was setup's teardown, which Playwright never shards, so all 170 of its tests ran in every shard; CI now shards `chromium` (3) and `serial` (2) apart.
 - [x] Follow-up: `e2e/golden-chain/onboarding-to-plan.spec.ts` imports `API` and never uses it, a lint error that predates #213. `npm run lint` covers `src/` only, so nothing reports it; either lint `e2e/` too or drop the import the next time the spec is touched. Dropped in #227, which touched the spec.
 - [x] Follow-up: #219 (A4.4, backend only) failed browser 3/3 on `review-regressions/pr55-ui.spec.ts:431` (the linked-ticket chip again, after #195/#196 were thought to fix it) and `golden-chain/onboarding-to-plan.spec.ts:80` (the canvas task detail never appeared, even with #213's 10 s poll; 3 of 3 locally on its own). Neither touches an A4 file. Both need the page captured before `afterEach` clears it, so the next failure shows what was on screen instead of only the missing element. **Both found.** pr55-ui was a lost click in a moving plan list, fixed in #225. onboarding-to-plan:80 failed again on #227 (482e18c), and the cause is in the spec: once the workspace is up, the item's title shows in six places (the tree, the board, the next-item strip…). `getByText('First task').first()` took whichever existed first, so with the tree not yet rendered the click landed on another list's button and no canvas detail came. The spec now finds and clicks the items inside `plan-item-tree`.
 - [x] Follow-up: `graph/node-click.spec.ts:68` failed on #224: `reachableNodes` (`e2e/helpers/setup.ts`) waited on `.react-flow__node` `.first()`, and the first node was `cluster:billingcore`, which stayed hidden on all 34 checks while others were in the DOM. **Fixed:** it waits for a visible node; the polling after it already handles layout and cover.
@@ -151,7 +151,7 @@
 - [x] Follow-up: our own late plan export was re-imported over newer state and undid an agent's claim (found in B7.4); a write is now recognised by its content (#244)
 - [ ] Follow-up: `graph/edge-visuals.spec.ts:32` clicks `getByRole('button', { name: 'Files' })`, which is not exact. In a checkout with branches it also matches the TopBar's workstream chips, whose titles say "N files changed", and fails in strict mode. It fails locally (seen on #226 and on B6.4's run) and passes in CI, which has no such branches. The fix is `exact: true`; it belongs to the next change to that spec.
 - [ ] Follow-up: `graph/canvas-rescan-wait.spec.ts:23` timed out once on B6.4's local run, waiting 30 s for `.react-flow` in `gotoWithProject` while the other worker loaded the repository's graph. It passed twice alone, and in CI on every run since #227. Watch it; if it fails in CI, the wait needs the same budget the helper gives other waits.
-- [ ] Follow-up: browser shards now take about 16–25 minutes each (up from 15–19 at the Wave 1 review). The serial project, which runs the sample-app specs since HD2, is most of the rise; see the serial-project follow-up above.
+- [x] Follow-up: browser shards now take about 16–25 minutes each (up from 15–19 at the Wave 1 review). The serial project, which runs the sample-app specs since HD2, is most of the rise; see the serial-project follow-up above. **Fixed by HD4a.**
 
 ### Track B: observability
 - [x] B1 Agent event log, refined in EXECUTION §5: done (#169, #170)
@@ -224,6 +224,10 @@
   - [x] B10.3 Signed packs, carrying the record's head (#311)
   - [x] B10.4 The evidence export (#312)
   - [x] B10.5 The G2 done-when and docs (#313)
+- [ ] HD4 Hardening after the Wave 2 review (owner's yes), in three parts: — building
+  - [ ] HD4a Browser shards under 20 minutes (chromium and the serial project sharded apart); every read a burst event starts runs one at a time, guarded — building
+  - [ ] HD4b Listing workstreams off the request path: branch workstreams cached by ref SHA, so many remote branches never stall the window
+  - [ ] HD4c CI installs without running native build scripts (prebuilds, checked by loading them); the open spec follow-ups fixed at their cause
 
 ### Track C: shared ways of working
 - [x] C1 Skills on tasks
@@ -462,6 +466,9 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-02 | E5: pull requests come through the person's own `gh`, not the review-host token (C2) | The track's rule is git and gh through the CLI; gh carries the person's own sign-in and CodeTrellis stores no token for it. Review hosts stay what they are, per task and opt-in per project. Without gh the panel says what to install, and branches work regardless |
 | 2026-10-02 | E5: git and gh run asynchronously, with prompts off (`GIT_TERMINAL_PROMPT=0`, `GH_PROMPT_DISABLED`) | A fetch can take a minute; run synchronously it would stall every other request. A remote that wants a password must fail and say so, not wait on a terminal nobody sees |
 | 2026-10-02 | E5 (found on CI): turning on keeping remotes current is a grant, the person's only (`grant-guard`); its interval is not | It has the app reach hosts on a timer, the "what it can reach" the grant rule names; an agent holding the token could otherwise turn it on with one `PUT /api/settings`. CI caught the settings surface test, which lists every section, and the check of the new section's place in the guard came with it |
+| 2026-10-02 | HD4 runs before the phase end (owner, on the Wave 2 review: "let's do any hardening we think we need") | The browser shards were the wait on every PR, and the flooding reads had come back once already |
+| 2026-10-02 | HD4: the browser suite's two projects are sharded apart (chromium 3, serial 2), not given a fourth shard | Measured first: `serial` is setup's teardown, and Playwright runs a teardown in full in every shard, so its 170 one-at-a-time tests ran three times. A fourth shard would have run them four times. Split, each test runs once, and a serial spec still has its own backend |
+| 2026-10-02 | HD4: reads started by a burst event go through one helper (`lib/single-flight`), and a structural test names any listener that does not | Two stores had it fixed by hand (E1, E2b); seven other listeners still read per event. One helper, and a test in the style of `reachable.test.ts`, so the next listener cannot forget |
 | 2026-10-02 | E6: the done-when is one harness test over the real git and backend; its pictures are the step shots already taken (changes, line-history, evolution, compare, branches) | Each surface's browser spec already walks it with its own shots; a second browser walk over the same served data would test the stand-ins, not the code. The harness test is the one that runs the whole journey for real: a worktree, an agent's session, git, a remote and gh |
 | 2026-10-02 | E3: a commit's maker is CodeTrellis's only where it knows, and says how: the commit message's `agent:` line, or seen (a replay frame recorded the commit landing during that agent's session); the git author is always shown | GitLens's author line is what people trust, so it is never replaced; timing alone would guess, so a commit with neither stays the author's. E4 widens what is known (a session's own edits) |
 | 2026-10-02 | E3: the decisions between two positions are the computer's record in that window, not filtered to the project | The record carries no project column and its payloads differ by type; saying "recorded on this computer" is true, and each decision names what it was about |
@@ -509,6 +516,34 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-02: HD4a — browser shards, and burst reads one at a time
+- **Why.** The owner said yes to the review's proposal ("let's do any
+  hardening we think we need"): the browser shards had reached 18–28
+  minutes, and reads that flood the server had been fixed twice by hand.
+  HD4 is in three parts: this one; HD4b, listing workstreams off the
+  request path (a follow-up since B3.2, sharper now that Fetch now brings
+  remote branches); HD4c, CI installs and the open spec follow-ups.
+- **The shards.** `--list` per shard showed it: every shard ran 373 tests,
+  170 of them the `serial` project, one at a time. As setup's teardown it
+  is never sharded. `E2E_SPLIT=1` (playwright.config.ts) makes it an
+  ordinary dependent of setup, and CI runs `--project=chromium` in three
+  shards (203, 203, 197 tests) and `--project=serial` in two (92, 84), each
+  job with its own backend. Every one of the 767 tests runs exactly once.
+  Locally nothing changes: without the switch, serial is still the teardown.
+- **The reads.** `lib/single-flight.ts`: a read asked for while one runs
+  becomes one more after it, with the latest arguments. Every listener for
+  `workstreams-changed`, `awareness-changed` and `stack-changed` (15 in 10
+  files) now goes through it, including seven that read per event: the
+  review queue, the workstream strip (four reads, now awaited together),
+  plan git state, plan status, the code view's line changes, play-forward
+  notices and recurring playbooks.
+- **The guard.** `src/frontend/burst-reads.test.ts` fails on any listener
+  for those events whose handler `singleFlight` did not make, and on a
+  burst event no longer bridged from the server (so a rename cannot quietly
+  end it). It failed on all 15 before the change.
+- **Tests.** Unit `single-flight.test.ts` (3), `burst-reads.test.ts` (2);
+  the browser specs for each surface touched.
 
 ### 2026-10-02: Wave 2 direction review (§1.7)
 

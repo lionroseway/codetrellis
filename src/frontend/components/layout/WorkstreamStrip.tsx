@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { GitBranch, Users, AlertTriangle, FileText, FolderPlus, ClipboardList } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
@@ -8,6 +8,7 @@ import { useUiStore } from '../../stores/ui-store';
 import { agentBadge, formatLastSeen } from './ConnectedAgents';
 import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, signatureLines, signatureWords, signalsFor, chipSeverity, signalWords, intentLines, MAX_CHIPS, MAX_LISTED_FILES } from '../../lib/workstream-strip';
 import type { AwarenessSignal, Workstream } from '@shared/types';
+import { singleFlight } from '../../lib/single-flight';
 
 /**
  * The workstreams strip (Phase 32 A1.3): one chip per line of parallel work
@@ -57,30 +58,34 @@ export function WorkstreamStrip() {
   const [open, setOpen] = useState<{ root: string | null; top: number; left: number } | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const refresh = useCallback(() => {
+  // One read at a time, all four together: the strip listens to every
+  // workstream and signal broadcast, which come in bursts (HD4).
+  const refresh = useMemo(() => singleFlight(async () => {
     if (!root) { setAll([]); setSignals([]); setTasks([]); return; }
-    fetch(`/api/workstreams?project=${encodeURIComponent(root)}`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((ws: Workstream[]) => setAll(Array.isArray(ws) ? ws : []))
-      .catch(() => {});
-    // Tasks a session is on through get_brief (A6.1): work with no folder.
-    fetch(`/api/workstreams/tasks?project=${encodeURIComponent(root)}`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((ts: TaskWorkstreamView[]) => setTasks(Array.isArray(ts) ? ts : []))
-      .catch(() => {});
-    // Folders an agent reported that are not opened (A1.7c).
-    fetch('/api/workstreams/folder-requests')
-      .then((r) => (r.ok ? r.json() : []))
-      .then((rs: FolderRequestView[]) => setRequests(Array.isArray(rs) ? rs : []))
-      .catch(() => {});
-    // What overlaps (A1.6). A failure leaves the chips as they are, unmarked.
-    fetch(`/api/awareness?project=${encodeURIComponent(root)}`)
-      .then((r) => (r.ok ? r.json() : { signals: [] }))
-      .then((body: { signals?: AwarenessSignal[] }) => setSignals(Array.isArray(body.signals) ? body.signals : []))
-      .catch(() => {});
-  }, [root]);
+    await Promise.all([
+      fetch(`/api/workstreams?project=${encodeURIComponent(root)}`)
+        .then((r) => (r.ok ? r.json() : []))
+        .then((ws: Workstream[]) => setAll(Array.isArray(ws) ? ws : []))
+        .catch(() => {}),
+      // Tasks a session is on through get_brief (A6.1): work with no folder.
+      fetch(`/api/workstreams/tasks?project=${encodeURIComponent(root)}`)
+        .then((r) => (r.ok ? r.json() : []))
+        .then((ts: TaskWorkstreamView[]) => setTasks(Array.isArray(ts) ? ts : []))
+        .catch(() => {}),
+      // Folders an agent reported that are not opened (A1.7c).
+      fetch('/api/workstreams/folder-requests')
+        .then((r) => (r.ok ? r.json() : []))
+        .then((rs: FolderRequestView[]) => setRequests(Array.isArray(rs) ? rs : []))
+        .catch(() => {}),
+      // What overlaps (A1.6). A failure leaves the chips as they are, unmarked.
+      fetch(`/api/awareness?project=${encodeURIComponent(root)}`)
+        .then((r) => (r.ok ? r.json() : { signals: [] }))
+        .then((body: { signals?: AwarenessSignal[] }) => setSignals(Array.isArray(body.signals) ? body.signals : []))
+        .catch(() => {}),
+    ]);
+  }), [root]);
 
-  useEffect(() => { refresh(); }, [refresh, sessions]);
+  useEffect(() => { void refresh(); }, [refresh, sessions]);
   // A watched folder's changed files moved (A1.4).
   useEffect(() => {
     window.addEventListener('workstreams-changed', refresh);

@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from 'react';
 import type { ItemStatus, PlanStatusView } from '@shared/lib/item-status';
+import { singleFlight } from './single-flight';
 
 export interface PlanStatus extends PlanStatusView {
   planUid: string;
@@ -24,14 +25,14 @@ export function usePlanStatus(planUid: string | null, nonce = ''): PlanStatus | 
   useEffect(() => {
     if (!planUid) { setStatus(null); return; }
     let live = true;
-    const load = async () => {
+    const load = singleFlight(async () => {
       try {
         const res = await fetch(`/api/plans/${encodeURIComponent(planUid)}/status`);
         if (!res.ok) return;
         const body = (await res.json()) as PlanStatus;
         if (live) setStatus(body);
       } catch { /* shows nothing rather than something wrong */ }
-    };
+    });
     void load();
     window.addEventListener('workstreams-changed', load);
     window.addEventListener('review-host-changed', load);
