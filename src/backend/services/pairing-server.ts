@@ -182,7 +182,7 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
       if (codeAttempts >= MAX_CODE_ATTEMPTS) {
         console.warn(`[PairingServer] ${codeAttempts} wrong pairing codes — closing the window`);
         answerReject?.(new Error('Too many incorrect pairing codes'));
-        stopPairingServer();
+        stopThis();
       }
     };
 
@@ -210,6 +210,21 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
         req.on('end', () => resolve(body));
         req.on('error', reject);
       });
+
+    /**
+     * Close this window, and only this one. Each pairing's own close (after
+     * its answer, its wrong codes, its stop) used to call stopPairingServer(),
+     * which closes whichever server is active: a second pairing started
+     * within the half second after the first answered had its new window
+     * shut under it, and its phone's answer was refused.
+     */
+    const stopThis = (): void => {
+      if (activeServer === server) {
+        stopPairingServer();
+        return;
+      }
+      try { server.closeAllConnections?.(); server.close(); } catch { /* already closed */ }
+    };
 
     const server = http.createServer((req, res) => {
       // CORS headers for all responses
@@ -422,8 +437,9 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
           answerResolve?.(answer);
 
           // Auto-close the HTTP server after successful exchange
-          // (pairing state is preserved in pairing-service)
-          setTimeout(() => stopPairingServer(), 500);
+          // (pairing state is preserved in pairing-service). This one only:
+          // another device's pairing may have opened its window meanwhile.
+          setTimeout(stopThis, 500);
         }).catch((err: Error) => {
           console.warn(`[PairingServer] Rejected answer body: ${err.message}`);
           if (!res.headersSent) {
@@ -484,7 +500,7 @@ export function startPairingServer(opts: PairingServerOpts): Promise<PairingServ
         sdpParams,
         sharedSecret,
         waitForAnswer: () => answerPromise,
-        stop: () => stopPairingServer(),
+        stop: stopThis,
       });
     });
   });
