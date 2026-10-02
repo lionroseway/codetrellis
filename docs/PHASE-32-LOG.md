@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Track B — B10.3: signed packs, carrying the record's head |
-| **Status** | B10.2 in review (#310). B10.3 built: every sign-off pack (data, page, PDF) is signed with this computer's device key in its own namespace and carries the record's head; verify says who signed it (this computer, a trusted teammate, an unknown key), whether it changed since, and whether the record it names still holds. Unit pack-seal 6, harness signoff-surface (sealed, edited, unsigned), browser signoff-pack (shots) |
-| **In flight** | B10.2 in review (#310) on `feat/phase-32-b10-2-retention`; B10.3 building on `feat/phase-32-b10-3-signed-packs` |
-| **Last merged** | B10.1 (#309, `aec597e`) |
-| **Next action** | Merge B10.2 (#310), then B10.3 by the stacked flow; then B10.4 (the evidence export) |
+| **Status** | B10.2 merged (#310). B10.3 in review (#311): every sign-off pack (data, page, PDF) is signed with this computer's device key in its own namespace and carries the record's head; verify says who signed it (this computer, a trusted teammate, an unknown key), whether it changed since, and whether the record it names still holds. Unit pack-seal 6, harness signoff-surface (sealed, edited, unsigned), browser signoff-pack (shots) |
+| **In flight** | B10.3 in review (#311) on `feat/phase-32-b10-3-signed-packs`; B10.4 in review (#312) on `feat/phase-32-b10-4-evidence`; B10.5 in review (#313) on `feat/phase-32-b10-5-g2` |
+| **Last merged** | B10.2 (#310, `087819c`) |
+| **Next action** | Merge B10.3 (#311); then B10.4 (#312) and B10.5 (#313) by the stacked flow |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `aec597e`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `087819c`, with open PRs from GitHub.
 
 ---
 
@@ -220,10 +220,10 @@
   - [x] B9.4 The phone and the G3 done-when (#298)
 - [ ] B10 The record — building
   - [x] B10.1 The chain: every kept event linked, decisions as events, verified in words (#309)
-  - [ ] B10.2 Retention you can set, and the chain still verifies (#310) — in review
-  - [ ] B10.3 Signed packs, carrying the record's head — building
-  - [ ] B10.4 The evidence export
-  - [ ] B10.5 The G2 done-when and docs
+  - [x] B10.2 Retention you can set, and the chain still verifies (#310)
+  - [ ] B10.3 Signed packs, carrying the record's head (#311) — in review
+  - [ ] B10.4 The evidence export (#312) — in review
+  - [ ] B10.5 The G2 done-when and docs (#313) — in review
 
 ### Track C: shared ways of working
 - [x] C1 Skills on tasks
