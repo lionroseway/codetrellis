@@ -3,8 +3,8 @@
  *
  * In the opened repository: a branch an agent committed on, a tag, a remote
  * branch as last fetched, another worktree with uncommitted work. Each is
- * listed by GET /api/refs with git's word and command, each pair compares
- * file by file through GET /api/refs/compare, each file reads at its side
+ * listed by GET /api/git/refs with git's word and command, each pair compares
+ * file by file through GET /api/git/refs/compare, each file reads at its side
  * through /api/file/at, and the graph's comparison (/api/compare) takes the
  * same two sides. Refs that are options, ranges or folders are refused.
  */
@@ -31,9 +31,9 @@ test.describe.serial('Any ref on either side', () => {
 
   const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, ...args], { env: ENV, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   const q = () => `project=${encodeURIComponent(root)}`;
-  const refs = async () => (await (await h.client.raw('GET', `/api/refs?${q()}`)).json()) as Listing;
+  const refs = async () => (await (await h.client.raw('GET', `/api/git/refs?${q()}`)).json()) as Listing;
   const pair = async (before: string, after: string) => {
-    const res = await h.client.raw('GET', `/api/refs/compare?${q()}&before=${encodeURIComponent(before)}&after=${encodeURIComponent(after)}`);
+    const res = await h.client.raw('GET', `/api/git/refs/compare?${q()}&before=${encodeURIComponent(before)}&after=${encodeURIComponent(after)}`);
     return { status: res.status, body: (await res.json()) as Pair & { error?: string } };
   };
   const at = async (spec: string, rel: string) =>
@@ -162,9 +162,9 @@ test.describe.serial('Any ref on either side', () => {
       expect(r.status, `${before} → ${after}`).toBe(400);
       expect(r.body.error).toMatch(/^Could not read/);
     }
-    expect((await h.client.raw('GET', `/api/refs/compare?${q()}&before=live`)).status).toBe(400);
-    expect((await h.client.raw('GET', '/api/refs')).status).toBe(400);
-    expect((await h.client.raw('GET', `/api/refs?project=${encodeURIComponent('/not/opened')}`)).status).toBe(403);
+    expect((await h.client.raw('GET', `/api/git/refs/compare?${q()}&before=live`)).status).toBe(400);
+    expect((await h.client.raw('GET', '/api/git/refs')).status).toBe(400);
+    expect((await h.client.raw('GET', `/api/git/refs?project=${encodeURIComponent('/not/opened')}`)).status).toBe(403);
     expect((await h.client.raw('GET', `/api/compare?${q()}&before=${encodeURIComponent('workstream:/etc')}&after=live`)).status).toBe(404);
   });
 });

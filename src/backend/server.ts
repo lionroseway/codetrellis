@@ -4330,7 +4330,7 @@ app.get('/api/source-control', (req, res) => {
 // differ between any two, each side said plainly and the command git would
 // use. A worktree is named by the id `listWorkstreams` gave it; refs are
 // checked before they reach git.
-app.get('/api/refs', (req, res) => {
+app.get('/api/git/refs', (req, res) => {
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
   let workstreams: ReturnType<typeof listWorkstreams> = [];
@@ -4338,7 +4338,7 @@ app.get('/api/refs', (req, res) => {
   res.json(listRefs(projectPath, workstreams));
 });
 
-app.get('/api/refs/compare', (req, res) => {
+app.get('/api/git/refs/compare', (req, res) => {
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
   const before = typeof req.query.before === 'string' ? req.query.before : '';

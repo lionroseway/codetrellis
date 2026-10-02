@@ -65,8 +65,8 @@ function pairFor(before: string, after: string) {
 async function serve(page: Page, asked: string[]) {
   const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   await page.route('**/api/source-control?*', (r) => r.fulfill(json(SC)));
-  await page.route('**/api/refs?*', (r) => r.fulfill(json(REFS)));
-  await page.route('**/api/refs/compare?*', async (r) => {
+  await page.route('**/api/git/refs?*', (r) => r.fulfill(json(REFS)));
+  await page.route('**/api/git/refs/compare?*', async (r) => {
     const u = new URL(r.request().url());
     // A comparison is read on demand; the chip shows while it is.
     await new Promise((res) => setTimeout(res, 300));

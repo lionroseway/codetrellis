@@ -42,7 +42,7 @@ export interface SourceControl {
   words: string;
 }
 
-/** Phase 32 E2: a point to compare (a ref, a worktree, this checkout), from `/api/refs`. */
+/** Phase 32 E2: a point to compare (a ref, a worktree, this checkout), from `/api/git/refs`. */
 export interface GitRef {
   spec: string;
   kind: 'checkout' | 'branch' | 'remote' | 'tag' | 'worktree' | 'commit';
@@ -193,7 +193,7 @@ export const useSourceControlStore = create<SourceControlState>((set, get) => ({
   refs: null,
   loadRefs: async (root) => {
     try {
-      const res = await fetch(`/api/refs?project=${encodeURIComponent(root)}`);
+      const res = await fetch(`/api/git/refs?project=${encodeURIComponent(root)}`);
       if (!res.ok) return;
       set({ refs: (await res.json()) as RefListing });
     } catch { /* the pickers keep what they had */ }
@@ -210,7 +210,7 @@ export const useSourceControlStore = create<SourceControlState>((set, get) => ({
     const before = effectiveBefore(pair);
     try {
       const q = `project=${encodeURIComponent(root)}&before=${encodeURIComponent(before)}&after=${encodeURIComponent(pair.after)}`;
-      const res = await fetch(`/api/refs/compare?${q}`);
+      const res = await fetch(`/api/git/refs/compare?${q}`);
       const body = await res.json().catch(() => null);
       if (mine !== pairGeneration) return;
       if (!res.ok) { set({ pairLoading: false, pairResult: null, pairError: body?.error || `Server returned ${res.status}` }); return; }

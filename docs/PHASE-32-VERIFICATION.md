@@ -17,10 +17,10 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 288 | 286 | 0 | 0 | 217 | 0 |
+| REST routes | 290 | 288 | 0 | 0 | 217 | 0 |
 | MCP tools | 210 | 210 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
-| Frontend components | 133 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 134 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 38 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 0 | n/a | n/a | n/a | 0 | 0 |
 
@@ -28,13 +28,13 @@ records that — but "✗ none" is proof of a gap.
 
 | Domain | REST | MCP | RPC | Components | Mobile | Settings |
 |---|---|---|---|---|---|---|
-| 0.4a Project and scan | 19 | 12 | 10 | 0 | 0 | 0 |
+| 0.4a Project and scan | 21 | 12 | 10 | 0 | 0 | 0 |
 | 0.4b Graph | 22 | 15 | 8 | 15 | 0 | 0 |
 | 0.4c Plans and items | 119 | 61 | 29 | 63 | 0 | 0 |
 | 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 4 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 13 | 7 | 1 | 0 | 0 |
-| 0.4g Agents and MCP | 30 | 32 | 10 | 32 | 0 | 0 |
+| 0.4g Agents and MCP | 30 | 32 | 10 | 33 | 0 | 0 |
 | 0.4h Drift, governance, review | 11 | 27 | 9 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 38 | 0 |
@@ -48,7 +48,7 @@ records that — but "✗ none" is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (288)
+## REST routes (290)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -61,6 +61,8 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/git/commits` |  | ✗ none | 1 | ✓ 0.4a: recent commits with hashes and subjects (git-integration) |  |  |
 | a | `GET /api/git/head` |  | ✗ none | 2 | ✓ 0.4a: matches status hash (git-integration) |  |  |
 | a | `GET /api/git/info` |  | ✗ none | 3 | ✓ 0.4a: branches incl. packed, other checkouts, hasCommits — from a worktree too (worktree-project; bug 16) |  |  |
+| a | `GET /api/git/refs` |  | ✗ none | 1 |  |  |  |
+| a | `GET /api/git/refs/compare` |  | ✗ none | 1 |  |  |  |
 | a | `GET /api/git/status` |  | ✗ none | 1 | ✓ 0.4a: hash and file arrays (git-integration) |  |  |
 | a | `GET /api/git/worktrees` |  | ✗ none | 2 | ✓ 0.4a: both checkouts and the other one's plans, from a worktree; unopened refused (worktree-project, misc-endpoints) |  |  |
 | a | `GET /api/health` |  | ✗ none | 3 | ✓ 0.4a: status, parser, memory (misc-endpoints, smoke) |  |  |
@@ -69,7 +71,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 198 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 199 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `DELETE /api/rules/:id` |  | ✗ none | 2 |  |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
@@ -78,7 +80,7 @@ records that — but "✗ none" is proof of a gap.
 | b | `GET /api/dependencies` |  | ✗ none | 4 | ✓ 0.4b: edges after scan (smoke, cross-system) |  |  |
 | b | `GET /api/dependencies/file` |  | ✗ none | 4 | ✓ 0.4b: matches get_dependencies; relative or absolute (graph-tools; bug 17) |  |  |
 | b | `GET /api/diff` |  | ✗ none | 6 | ✓ 0.4b: empty after scan; added/modified files, new edge, blast radius, git untracked — live, no rescan (graph-rest; bug 20) |  |  |
-| b | `GET /api/file/at` |  | ✗ none | 4 | ✓ 0.4b: content at a commit or snapshot (file-at, review-comparand-edges) |  |  |
+| b | `GET /api/file/at` |  | ✗ none | 5 | ✓ 0.4b: content at a commit or snapshot (file-at, review-comparand-edges) |  |  |
 | b | `GET /api/file/content` |  | ✗ none | 2 | ✓ 0.4b: returns the file's exact content; outside opened projects 403 (misc-endpoints, filesystem-boundary) |  |  |
 | b | `GET /api/file/overlay` |  | ✗ none | 2 | ✓ 0.4b: plan edits mapped onto lines (plan-overlay) |  |  |
 | b | `GET /api/playback` |  | ✗ none | 2 | ✓ 0.4b: discrete frames between comparands (playback) |  |  |
@@ -267,7 +269,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `POST /api/workstreams/folder-requests/:id/include` |  | ✗ none | 1 |  |  |  |
 | h | `GET /api/baseline` |  | ✗ none | 4 | ✓ 0.4h: source, dirty, capturedAt and a label that says what it is; kept across rescans (baseline); bug 29 |  |  |
 | h | `GET /api/comparands` |  | ✗ none | 6 | ✓ 0.4h: live, baseline, checkpoints by name, commits; outside a project refused (drift-review-tools), plan-review, review-confinement |  |  |
-| h | `GET /api/compare` |  | ✗ none | 6 | ✓ 0.4h: exact diffs, same-point note, commit edges not compared, 404 unknown (plan-review, compare-hash-space, compare-phantom-removals) |  |  |
+| h | `GET /api/compare` |  | ✗ none | 7 | ✓ 0.4h: exact diffs, same-point note, commit edges not compared, 404 unknown (plan-review, compare-hash-space, compare-phantom-removals) |  |  |
 | h | `GET /api/conflicts` |  | ✗ none | 4 | ✓ 0.4h: a real merge conflict with per-field ours/theirs (manifest-conflicts, worktree-project) |  |  |
 | h | `GET /api/freeze` |  | ✗ none | 4 | ✓ 0.4h: reason and until while active; inactive after lifting (review-governance-tools), cdev-phase6 |  |  |
 | h | `GET /api/freeze/changes` |  | ✗ none | 1 | ✓ 0.4k: every change newest first, with who and how it arrived; outside a project 403 (freeze-flags) |  |  |
@@ -655,7 +657,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (133)
+## Frontend components (134)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -762,6 +764,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `layout/PlanPanel.tsx` |  | n/a | n/a |  | ✓ 0.5a — major fixed: "Agent active" vs "No agents" (M3) |  |
 | g | `layout/PlayForwardBar.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/RecurringDue.tsx` |  | n/a | n/a |  |  |  |
+| g | `layout/RefPicker.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/ReplayBar.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/ReviewTab.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/Sidebar.tsx` |  | n/a | n/a |  | ✓ 0.5a |  |
