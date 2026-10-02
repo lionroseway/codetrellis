@@ -19,7 +19,7 @@
 |---|---|
 | **Stage / step** | Track E — E5: branches and pull requests |
 | **Status** | E1 (#314), E2a (#315) and E2b (#316) merged; E3 (#317) and E4 (#318) in review, stacked. E5 built on E4: GET /api/git/branches lists branches here and on the remotes as last fetched, each with upstream, ahead and behind said plainly and as git says it; Fetch now (POST /api/git/fetch) runs git fetch --all --prune and reads pull requests through the person's own gh ("needs the gh CLI" without it); Settings → Git keeps remotes current for the open project, off by default, every 5–60 min. The Changes tab's Branches and pull requests; a branch or a pull request fills Compare two points. Unit git-branches 7; harness branches 5; browser branches (shots) |
-| **In flight** | E3 in review (#317) on `feat/phase-32-e3-evolution`; E4 in review (#318) on `feat/phase-32-e4-line-history`; E5 building on `feat/phase-32-e5-branches` |
+| **In flight** | E3 in review (#317) on `feat/phase-32-e3-evolution`; E4 in review (#318) on `feat/phase-32-e4-line-history`; E5 in review (#319) on `feat/phase-32-e5-branches`; E6 in review (#320) on `feat/phase-32-e6-done-when` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
 | **Next action** | Merge E3 (#317) and E4 (#318) by the stacked flow, then E5; then E6 (the done-when) |
 | **Blockers** | None |
@@ -290,8 +290,8 @@
     - [ ] E2b The graph compares the same two: its architecture diff between the pair chosen in the Changes tab
   - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked (#317) — in review
   - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history` (#318) — in review
-  - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default — building
-  - [ ] E6 The done-when: a teammate's agent's work, traced line by line and side by side, with no plan
+  - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default (#319) — in review
+  - [ ] E6 The done-when: a teammate's agent's work, traced line by line and side by side, with no plan (#320) — in review
 
 ### Phase end
 - [ ] `main` merged in, full suite green on Node 26
@@ -461,6 +461,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-02 | E5: keeping remotes current fetches only the project open in the window, at 5, 15, 30 or 60 minutes, off by default | The owner's decision (off by default, in Settings); fetching every recent project in the background would reach hosts for work nobody is looking at. A failed try waits the interval like a success, so an unreachable remote is not retried every minute |
 | 2026-10-02 | E5: pull requests come through the person's own `gh`, not the review-host token (C2) | The track's rule is git and gh through the CLI; gh carries the person's own sign-in and CodeTrellis stores no token for it. Review hosts stay what they are, per task and opt-in per project. Without gh the panel says what to install, and branches work regardless |
 | 2026-10-02 | E5: git and gh run asynchronously, with prompts off (`GIT_TERMINAL_PROMPT=0`, `GH_PROMPT_DISABLED`) | A fetch can take a minute; run synchronously it would stall every other request. A remote that wants a password must fail and say so, not wait on a terminal nobody sees |
+| 2026-10-02 | E5 (found on CI): turning on keeping remotes current is a grant, the person's only (`grant-guard`); its interval is not | It has the app reach hosts on a timer, the "what it can reach" the grant rule names; an agent holding the token could otherwise turn it on with one `PUT /api/settings`. CI caught the settings surface test, which lists every section, and the check of the new section's place in the guard came with it |
 | 2026-10-02 | E3: a commit's maker is CodeTrellis's only where it knows, and says how: the commit message's `agent:` line, or seen (a replay frame recorded the commit landing during that agent's session); the git author is always shown | GitLens's author line is what people trust, so it is never replaced; timing alone would guess, so a commit with neither stays the author's. E4 widens what is known (a session's own edits) |
 | 2026-10-02 | E3: the decisions between two positions are the computer's record in that window, not filtered to the project | The record carries no project column and its payloads differ by type; saying "recorded on this computer" is true, and each decision names what it was about |
 | 2026-10-02 | E3: locked scrubbing is by time, not by index | Two branches have different commits; the same moment is what makes the comparison mean something (where main stood when the agent committed) |

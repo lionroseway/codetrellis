@@ -41,6 +41,7 @@ test.describe.serial('Only the person grants', () => {
       [{ device: { shareAudio: true } }, 'device.shareAudio', 'Settings → Devices'],
       [{ webhooks: { allowedHosts: ['evil.example.com'] } }, 'webhooks.allowedHosts', 'Settings → Plans'],
       [{ webhooks: { allowLoopback: true } }, 'webhooks.allowLoopback', 'Settings → Plans'],
+      [{ git: { keepRemotesCurrent: true } }, 'git.keepRemotesCurrent', 'Settings → Git'],
     ] as const) {
       const res = await h.client.raw('PUT', '/api/settings', body);
       expect(res.status, JSON.stringify(body)).toBe(403);
