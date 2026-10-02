@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Track A — A7.2: rule signals from each workstream's import delta |
-| **Status** | A7.1 in review (#306). A7.2 built: each workstream's added imports (now against its merge base, resolved with the project's resolver) checked against the rules; a high `rule` signal per workstream and rule, in the tab, digest, push, inline notices and phone; `rule` as a signal breakpoint; the card says the rule and why, each import across it, and links to Settings → Architecture rules. Unit tests, harness rule-signals 3, browser awareness-tab rule card (shot) |
-| **In flight** | A7.1 in review (#306) on `feat/phase-32-a7-1-rules`; A7.2 building on `feat/phase-32-a7-2-rule-signals` |
-| **Last merged** | C4.3b (#303, `b6ed8fe`) |
-| **Next action** | Merge A7.1 when green, bring it into A7.2, open A7.2's PR; then A7.3 (check_changes and `codetrellis check` on rules, the M7 done-when) |
+| **Status** | A7.1 merged (#306). A7.2 built: each workstream's added imports (now against its merge base, resolved with the project's resolver) checked against the rules; a high `rule` signal per workstream and rule, in the tab, digest, push, inline notices and phone; `rule` as a signal breakpoint; the card says the rule and why, each import across it, and links to Settings → Architecture rules. Unit tests, harness rule-signals 3, browser awareness-tab rule card (shot) |
+| **In flight** | A7.2 in review (#307) on `feat/phase-32-a7-2-rule-signals`; A7.3 in review (#308) on `feat/phase-32-a7-3-rule-gate` |
+| **Last merged** | A7.1 (#306, `8aa5820`) |
+| **Next action** | Merge A7.2 (#307) when green; then A7.3 (#308, (check_changes and `codetrellis check` on rules, the M7 done-when) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `b6ed8fe`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `8aa5820`, with open PRs from GitHub.
 
 ---
 
@@ -121,9 +121,9 @@
   - [x] A6.5 Sign-off packs list the signals that touched the task (#257)
   - [x] A6.6 M6 done-when and docs (#258)
 - [ ] A7 Rules — building
-  - [ ] A7.1 The rules in the committed config, what breaks them today, and `check_conformity` made true (#306) — in review
-  - [ ] A7.2 `rule` signals from each workstream's import delta — building
-  - [ ] A7.3 The gate (`check_changes`, `codetrellis check`) and the M7 done-when
+  - [x] A7.1 The rules in the committed config, what breaks them today, and `check_conformity` made true (#306)
+  - [ ] A7.2 `rule` signals from each workstream's import delta (#307) — in review
+  - [ ] A7.3 The gate (`check_changes`, `codetrellis check`) and the M7 done-when (#308) — in review
 - [ ] Follow-up: `plan-by-hand` failed once in CI when its plan workspace dropped back to the plan list while `plan/list.spec.ts` created and deleted plans on the other worker (#147). It doesn't reproduce as a pair (5/5 on base and on the branch). Find which broadcast leaves the workspace, so a person's open plan survives someone else's plan changes.
 - [ ] Follow-up: two browser tests failed once on #167 and passed on re-run: `realtime/plan-events.spec.ts:18` (a reset connection mid-POST; also 2/3 locally on the base branch) and `external-refs/refs-panel.spec.ts:77` (a fixed 3 s `isVisible`). Both are queued as separate fixes; neither touches A3.4's code.
 - [x] Follow-up: two browser tests failed once on the docs-only #184 and passed on re-run: `graph/layout-controls.spec.ts:38` (0 nodes after Tree → Map; the spec already names a rescan on the other worker as the cause of an empty graph, and polls 20 s) and `review-regressions/pr55-ui.spec.ts:431` (the linked-ticket chip never appeared, on the sample-app fixture). Neither touches a Phase 32 file; each needs its root cause found, not a longer wait. **Fixed at the source by #195 and #196:** a scan answers "scanning" and every graph answer names its project; a canvas keeps its graph through another project's scan, and an empty one rescans its own.
