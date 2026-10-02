@@ -397,6 +397,20 @@ export function watchRefs(repo: string): void {
   refWatchers.set(common, state);
 }
 
+/**
+ * Whether `folder` is already watched, by its own watcher or by the app's
+ * file watcher (the opened project). A connecting agent's folder that is runs
+ * no discovery pass: it would cost git calls on the request path for nothing.
+ */
+export function isWatchedFolder(folder: string): boolean {
+  if (isExternal(folder)) return true;
+  const target = canonical(folder);
+  for (const [f, entry] of entries) {
+    if (entry.watcher && canonical(f) === target) return true;
+  }
+  return false;
+}
+
 /** The folders being watched, for status and tests. */
 export function watchedWorkstreamFolders(): string[] {
   return [...entries].filter(([, e]) => e.watcher).map(([f]) => f).sort();

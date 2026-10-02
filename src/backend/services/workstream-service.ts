@@ -17,7 +17,7 @@ import type { AgentSessionInfo, Workstream, WorkstreamAgent, WorkstreamChanges, 
 import { listWorktrees, type Worktree } from './worktree-service';
 import { getActiveSessions } from './session-service';
 import { getIntent } from './intent-service';
-import { getChanges, syncWorkstreamWatchers, watchRefs } from './workstream-watch-service';
+import { getChanges, isWatchedFolder, syncWorkstreamWatchers, watchRefs } from './workstream-watch-service';
 import { withSymbolChanges, type SymbolParser } from './workstream-symbols';
 import { branchWorkstreamsOf, showAt } from './branch-workstreams';
 import { getEffectiveSensorConfig } from './project-config-service';
@@ -205,6 +205,10 @@ export function listWorkstreams(projectRoot: string, opts: { includeIdle?: boole
  * told of an overlap until something happened to list them.
  */
 export function discoverAround(folder: string): void {
+  // Already watched (the opened project, or a folder an earlier pass found):
+  // nothing to start. Most connections are this, and a pass is git calls on
+  // the backend's one thread.
+  if (isWatchedFolder(folder)) return;
   for (const root of listTrustedRoots()) {
     try {
       if (root !== folder && !listWorktrees(root).some((w) => w.path === folder)) continue;
