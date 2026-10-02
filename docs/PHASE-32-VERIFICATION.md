@@ -74,8 +74,8 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/git/fetch` |  | ✗ none | 1 |  |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 203 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/git/fetch` |  | ✗ none | 2 |  |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 204 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `DELETE /api/rules/:id` |  | ✗ none | 2 |  |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
@@ -131,7 +131,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `GET /api/plan-history/:planSlug/diff` |  | ✗ none | 1 | ✓ 0.4c: exercised by input-validation (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plan-history/:planSlug/search` |  | ✗ none | 1 | ✓ 0.4c-1: finds by text; missing q 400 (plan-rest) |  |  |
 | c | `GET /api/plan-templates` |  | ✗ none | 2 | ✓ 0.4c: exercised by filesystem-sinks, review-confinement (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `GET /api/plans` |  | ✗ none | 10 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans` |  | ✗ none | 11 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:planUid/channels` |  | ✗ none | 6 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:planUid/items` |  | ✗ none | 13 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 | ✓ 0.4c: exercised by full-loop (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -488,7 +488,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `open_plan` | session · write | ✗ none | 1 | ✓ 0.4g: plan opens; unknown plan refused with no toast (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `open_settings` | session · write | ✗ none | 1 | ✓ 0.4g: settings dialog opens (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `refresh_ui` | session · write | ✗ none | 1 | ✓ 0.4g: sends ui-refresh (agent-ui-tools) |  |  |
-| g | `register_session` | session · read | ✗ none | 47 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
+| g | `register_session` | session · read | ✗ none | 48 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
 | g | `screenshot` | ui · capture | ✗ none | 1 | ✓ 0.4g: refused without capture; image from the window's answer; empty answer an error (agent-ui-tools) |  |  |
 | g | `select_item` | ui · write | ✗ none | 1 | ✓ 0.4g: item selected; unknown item or wrong plan refused (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `set_active_plan` | session · write | ✗ none | 1 | ✓ 0.4g: shown and recorded as the agent's plan; unknown refused, unchanged (agent-ui-tools); bug 27 |  |  |
@@ -517,7 +517,7 @@ records that — but "✗ none" is proof of a gap.
 | h | `get_pr_draft` | review · read | ✗ none | 3 | ✓ 0.4h: title, review, acceptance criteria table and warnings; git untouched (review-governance-tools), plan-review |  |  |
 | h | `get_review_queue` | review · read | ✗ none | 2 |  |  |  |
 | h | `get_team_activity` | git · read | ✗ none | 2 | ✓ 0.4h: both manifest commits, newest first (review-governance-tools) |  |  |
-| h | `line_history` | governance · read | ✗ none | 1 |  |  |  |
+| h | `line_history` | governance · read | ✗ none | 2 |  |  |  |
 | h | `list_comparands` | review · read | ✗ none | 1 | ✓ 0.4h: live first, baseline, the named checkpoint, commits (drift-review-tools) |  |  |
 | h | `list_proposed_changes` | drift · read | ✗ none | 1 | ✓ 0.4h: one row per file spec with operation and kind (drift-review-tools) |  |  |
 | h | `reconcile` | drift · write | ✗ none | 1 | ✓ 0.4h: only this plan's deviations, checked first, in the caller's name; accepted amends the plan as them (drift-review-tools); bug 30 |  |  |
