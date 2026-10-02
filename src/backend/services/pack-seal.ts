@@ -134,7 +134,9 @@ export function checkDocumentSeal(namespace: string, noun: Noun, doc: unknown): 
     return {
       state: 'this-computer', fingerprint: seal.key, signer: null,
       record: { ...record!, state },
-      words: `Signed by this computer (${short}), and unchanged since; ${RECORD_WORDS[state]} (entry #${record!.seq}).`,
+      words: record!.seq === 0
+        ? `Signed by this computer (${short}), and unchanged since; the record was empty when it was signed.`
+        : `Signed by this computer (${short}), and unchanged since; ${RECORD_WORDS[state]} (entry #${record!.seq}).`,
     };
   }
   const teammate = getDb().exec("SELECT name FROM task_record_keys WHERE fingerprint = ? AND state = 'trusted' LIMIT 1", [seal.key])[0]?.values[0];

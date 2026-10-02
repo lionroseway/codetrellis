@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track B — B10.4: the evidence export"
-  status: "B10.2 (#310) and B10.3 (#311) merged. B10.4 in review (#312): GET /api/evidence (a plan, or a window of an opened project; JSON or the page), export_evidence (read), POST /api/evidence/verify; one package with the record's entries and the link before them (recomputable from the file alone), the frames, the stack and signals at both ends, the breakpoints and decisions in words, and the plan's sign-off pack, signed like a pack in its own namespace. Verify says who signed it, whether its chain holds, and on the computer that made it, any entry changed in the record since. From the Brief and the replay bar. Unit evidence 8, harness evidence 6, browser evidence (shots)"
-  next: "Merge B10.4 (#312), then B10.5 (#313) by the stacked flow; Track E (E1, #314) is in review"
+  step: "Track B — B10.5: the G2 done-when and docs"
+  status: "B10.2 (#310), B10.3 (#311) and B10.4 (#312) merged. B10.5 in review (#313): replay a chosen week (Timeline: \"or a week from [day]\"; the bar names the days; its evidence exports for that week); record-g2.test.ts walks G2 with the backend's clock 120 days ahead (frames, the code, the stack and the waiting call then, the Timeline's decisions with who, the record intact since that week, the week's evidence verifies, the approval edited in the database named by the record and by the evidence exported before); docs/claude/record.md. Unit test-clock 2, replay words; harness record-g2 4; browser replay-week (shots)"
+  next: "Merge B10.5 (#313) when green; B10 is then done. Then Track E: E1 (#314) is in review, then E2"
   blockers: "None"
   updated: 2026-10-02
 sections:
