@@ -252,12 +252,12 @@ export async function verifyPack(planUid: string, raw: unknown, now: Date = new 
 
 // ── The page ──────────────────────────────────────────────────────────
 
-function esc(s: string): string {
+export function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /** JSON that is safe inside a `<script type="application/json">`: no `<` survives to close it. */
-function scriptJson(value: unknown): string {
+export function scriptJson(value: unknown): string {
   return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026')
     .replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 }

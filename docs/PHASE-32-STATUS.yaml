@@ -14,8 +14,8 @@
 # and prs (PRs whose merge commit does not name the id).
 now:
   step: "Track E — E1: source control with no plan needed"
-  status: "B10.2 (#310) and B10.3 (#311) merged; B10.4 (#312) and B10.5 (#313) in review, stacked. Track E planned with the owner (2026-10-02). E1 built: the defect reproduced three ways (a committed edit, an edit in another worktree, a project in a subfolder) and fixed; the sidebar's Changes tab (this checkout, committed since you opened it, each other worktree with its agents), each file opening its diff between its group's two points; the code view says what it compares. Found on the way and fixed: a request storm of commit reads that starved the browser. Unit source-control 7 + commits cache; harness source-control 6; browser sidebar/changes (shots)"
-  next: "Open E1's PR; merge the B10 stack in order; then E2 (any ref on either side)"
+  status: "B10.2 (#310), B10.3 (#311) and B10.4 (#312) merged; B10.5 (#313) in review. Track E planned with the owner (2026-10-02). E1 built: the defect reproduced three ways (a committed edit, an edit in another worktree, a project in a subfolder) and fixed; the sidebar's Changes tab (this checkout, committed since you opened it, each other worktree with its agents), each file opening its diff between its group's two points; the code view says what it compares. Found on the way and fixed: a request storm of commit reads that starved the browser. Unit source-control 7 + commits cache; harness source-control 6; browser sidebar/changes (shots)"
+  next: "Merge B10.5 (#313), then E1 (#314), when green; then E2 (any ref on either side)"
   blockers: "None"
   updated: 2026-10-02
 sections:

@@ -114,6 +114,7 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   // ── governance-tools ────────────────────────────────────────────────
   get_freeze_status: 'read',
   verify_record: 'read',
+  export_evidence: 'read',
   set_freeze: 'write',
   check_freeze: 'read',
   exempt_plan_from_freeze: 'write',

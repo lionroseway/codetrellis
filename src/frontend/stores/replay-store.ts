@@ -23,6 +23,8 @@ interface ReplayStore {
   /** On while the person is replaying. */
   active: boolean;
   root: string | null;
+  /** Where the window starts: replay runs from here to now (B10.4 exports it). */
+  from: number | null;
   frames: ReplayFrameInfo[];
   index: number;
   /** The project at the cursor's moment; null until it is read. */
@@ -51,13 +53,14 @@ let generation = 0;
 export const useReplayStore = create<ReplayStore>((set, get) => ({
   active: false,
   root: null,
+  from: null,
   ...EMPTY,
 
   enter: async (root, from, opts) => {
     const mine = ++generation;
-    set({ active: true, root, ...EMPTY, loading: true, autoplay: opts?.catchUp ? 4 : null });
+    const since = from ?? Date.now() - REPLAY_WINDOW_MS;
+    set({ active: true, root, from: since, ...EMPTY, loading: true, autoplay: opts?.catchUp ? 4 : null });
     try {
-      const since = from ?? Date.now() - REPLAY_WINDOW_MS;
       const res = await fetch(`/api/replay/frames?project=${encodeURIComponent(root)}&from=${since}`);
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
       const frames = ((await res.json()) as { frames?: ReplayFrameInfo[] }).frames ?? [];
@@ -100,7 +103,7 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
 
   exit: () => {
     ++generation;
-    set({ active: false, root: null, ...EMPTY });
+    set({ active: false, root: null, from: null, ...EMPTY });
   },
 }));
 
