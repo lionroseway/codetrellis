@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Track E — E2a: any ref on either side, from the Changes tab |
-| **Status** | B10 done (#313 merged). E1 in review (#314). E2 is split in two: E2a (the refs, any two compared file by file, from the Changes tab) and E2b (the graph compares the same two). E2a built on E1: GET /api/git/refs lists this checkout, branches, remote branches as last fetched, tags and other worktrees, each group with git's word and command; GET /api/git/refs/compare lists the files between any two, with "from where they split" (merge base) and the git command; a worktree's working copy is read as a tree through a copy of its own index (the checkout untouched); /api/compare and /api/file/at take the same sides. Unit git-refs 7; harness refs 6; browser compare-refs (shots) |
-| **In flight** | E1 in review (#314) on `feat/phase-32-e1-source-control`; E2a building on `feat/phase-32-e2a-refs` |
+| **Status** | E1 merged (#314). E2 is split in two: E2a (the refs, any two compared file by file, from the Changes tab) and E2b (the graph compares the same two). E2a built on E1: GET /api/git/refs lists this checkout, branches, remote branches as last fetched, tags and other worktrees, each group with git's word and command; GET /api/git/refs/compare lists the files between any two, with "from where they split" (merge base) and the git command; a worktree's working copy is read as a tree through a copy of its own index (the checkout untouched); /api/compare and /api/file/at take the same sides. Unit git-refs 7; harness refs 6; browser compare-refs (shots) |
+| **In flight** | E2a in review (#315) on `feat/phase-32-e2a-refs`; E2b in review (#316) on `feat/phase-32-e2b-graph-pair`; E3 building on `feat/phase-32-e3-evolution` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
-| **Next action** | Merge E1 (#314) when green, then E2a by the stacked flow; then E2b (the graph takes the same two) |
+| **Next action** | Merge E2a (#315) when green, then E2b (#316) and E3 by the stacked flow |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `7c0623a`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `c8ac703`, with open PRs from GitHub.
 
 ---
 
@@ -284,11 +284,11 @@
 
 ### Track E: how the code got here
 - [ ] E Compare any two points, scrub each side's history, and each line's commit and agent, with no plan needed (owner's decision, 2026-10-02), refined in EXECUTION §6c: — building
-  - [ ] E1 Source control with no plan: the Changes panel (staged, unstaged, untracked; each worktree's changes), and the defect that started it (the graph showed changes, the code view no diff) (#314) — in review
+  - [ ] E1 Source control with no plan: the Changes panel (staged, unstaged, untracked; each worktree's changes), and the defect that started it (the graph showed changes, the code view no diff)
   - [ ] E2 Any ref on either side: branches local and remote, tags, a worktree's working copy, a merge base; one picker for the code view and the graph, in two: — building
-    - [ ] E2a The refs, and any two compared file by file from the Changes tab, each side said plainly and as git's command; a file opens its diff — building
-    - [ ] E2b The graph compares the same two: its architecture diff between the pair chosen in the Changes tab
-  - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked
+    - [ ] E2a The refs, and any two compared file by file from the Changes tab, each side said plainly and as git's command; a file opens its diff (#315) — in review
+    - [ ] E2b The graph compares the same two: its architecture diff between the pair chosen in the Changes tab (#316) — in review
+  - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked — building
   - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history`
   - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default
   - [ ] E6 The done-when: a teammate's agent's work, traced line by line and side by side, with no plan
