@@ -19,13 +19,13 @@
 |---|---|
 | **Stage / step** | Track C — C4.3b: an agent on each run, and the C4 done-when on two machines |
 | **Status** | C4.3a in review (#302). C4.3b built: per rule and device, Settings → Recurring playbooks starts Claude Code or Codex on each run made here (off by default, kept on this device); only the person, the schedule or a phone granted `terminal` starts one, otherwise the run says why. Runs go to the plans folder when the project shares new plans. Done-when: two laptops, one planning repository, one W40 and one agent. Unit recurring-service 14, harness recurring 10 and recurring-two-machines 5, browser 2 specs, phone recurring.spec 4 (shots) |
-| **In flight** | C4.3a in review (#302) on `feat/phase-32-c4-3a-phone-recurring`; C4.3b building on `feat/phase-32-c4-3b-agent-and-done-when` |
-| **Last merged** | C4.2b (#301, `b9bf396`) |
+| **In flight** | C4.3b in review (#303) on `feat/phase-32-c4-3b-agent-and-done-when` |
+| **Last merged** | C4.3a (#302, `27094ae`) |
 | **Next action** | Merge C4.3a, then C4.3b when green — C4 done; then A7 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `b9bf396`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `27094ae`, with open PRs from GitHub.
 
 ---
 
@@ -254,8 +254,8 @@
     - [x] C4.2a Started as it comes; asked about when it fell due while the app was closed; the series row in the plans list (#300)
     - [x] C4.2b Settings → Recurring playbooks; a run's series, period and carried tasks on the run (#301)
   - [ ] C4.3 The phone, an agent only by opt-in, and the C4 done-when — building
-    - [ ] C4.3a The phone lists the series and starts the due run (`recurring.list`, `recurring.start`) (#302) — in review
-    - [ ] C4.3b Start an agent on each run, per rule and device (off by default, needs `terminal`); the C4 done-when on two machines — building
+    - [x] C4.3a The phone lists the series and starts the due run (`recurring.list`, `recurring.start`) (#302)
+    - [ ] C4.3b Start an agent on each run, per rule and device (off by default, needs `terminal`); the C4 done-when on two machines (#303) — in review
 - [x] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
   - [x] C5.1 `workstream` on an item, inherited; `assign_workstream`; next and claim respect it (#186)
   - [x] C5.2 Start a worktree for a section; a start command for any agent (#187)
