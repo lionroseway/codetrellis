@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "HD4c: installs with scripts off, and the patches they skipped"
-  status: "HD4a (#322) and HD4b (#323) merged. HD4c: npm 11.19 still runs dependency install scripts (it only warns), so every CI job rebuilt better-sqlite3 from source, the node-gyp step that crashed #224. Every root install in CI now runs with scripts off, which also skips the root postinstall: the installer builds already did, so the Windows and Linux installers CI built carried werift without patches/ (its SCTP message size). patch-package now runs by hand after each, and scripts/check-patches.cjs proves every hunk is in node_modules, in CI, in release.sh and in a unit test"
-  next: "HD4c green and merged; then the phase end (EXECUTION §7)"
+  step: "Phase end: the final direction review"
+  status: "HD4 done (#322–#324). The phase end: `main` has nothing feat/phase-32 lacks, and the merged tree is the one CI ran green on Node 26 from a clean install (#324, dceb7fb). This review updates JOURNEYS.md with what shipped and answers §1.7 one last time"
+  next: "This review merged; then the PR feat/phase-32 → main, opened for the owner: it merges after the packaged macOS build and the mobile build are verified (each needs the owner or a device) and the owner's call on C2.6b"
   blockers: "None"
   updated: 2026-10-02
 sections:
@@ -668,6 +668,8 @@ sections:
                 title: "The done-when: a cloud session or CI job claims, reports, edits the plan and commits; the desktop shows it after a pull"
           - title: "Declared product flows checked hop by hop against the cross-system map in CI (owner's point, 2026-10-01): after Phase 32 unless pulled in"
             followUp: true
+          - title: "Installing the CLI in a cloud session or CI job takes cloning this repository and `npm ci && npm link`, because the package is not published. Publish it (to npm, or as a release asset) so a setup script needs one line. The owner's call (2026-10-02): what exists is good enough for now; after Phase 32"
+            followUp: true
   - title: "Track E: how the code got here"
     items:
       - id: E
@@ -692,8 +694,10 @@ sections:
             title: "The done-when: a teammate's agent's work, traced line by line and side by side, with no plan"
   - title: Phase end
     items:
-      - title: "`main` merged in, full suite green on Node 26"
+      - title: "`main` merged in, full suite green on Node 26 (`main` had nothing new; the merged tree is the one CI ran on #324, Node 26 from a clean install)"
+        status: done
       - title: Packaged macOS build verified (needs a person on macOS)
       - title: Mobile build verified (needs a device)
-      - title: Final direction review
+      - title: "Final direction review: JOURNEYS.md says what shipped"
+        status: done
       - title: "`feat/phase-32` → `main`"

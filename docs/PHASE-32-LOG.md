@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | HD4c: installs with scripts off, and the patches they skipped |
-| **Status** | HD4a (#322) and HD4b (#323) merged. HD4c: npm 11.19 still runs dependency install scripts (it only warns), so every CI job rebuilt better-sqlite3 from source, the node-gyp step that crashed #224. Every root install in CI now runs with scripts off, which also skips the root postinstall: the installer builds already did, so the Windows and Linux installers CI built carried werift without patches/ (its SCTP message size). patch-package now runs by hand after each, and scripts/check-patches.cjs proves every hunk is in node_modules, in CI, in release.sh and in a unit test |
-| **In flight** | HD4c in review (#324) on `feat/phase-32-hd4c-installs` |
+| **Stage / step** | Phase end: the final direction review |
+| **Status** | HD4 done (#322–#324). The phase end: `main` has nothing feat/phase-32 lacks, and the merged tree is the one CI ran green on Node 26 from a clean install (#324, dceb7fb). This review updates JOURNEYS.md with what shipped and answers §1.7 one last time |
+| **In flight** | #325 in review on `feat/phase-32-review-final` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
-| **Next action** | HD4c green and merged; then the phase end (EXECUTION §7) |
+| **Next action** | This review merged; then the PR feat/phase-32 → main, opened for the owner: it merges after the packaged macOS build and the mobile build are verified (each needs the owner or a device) and the owner's call on C2.6b |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `40b96f7`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `1e4ab2b`, with open PRs from GitHub.
 
 ---
 
@@ -225,10 +225,10 @@
   - [x] B10.3 Signed packs, carrying the record's head (#311)
   - [x] B10.4 The evidence export (#312)
   - [x] B10.5 The G2 done-when and docs (#313)
-- [ ] HD4 Hardening after the Wave 2 review (owner's yes), in three parts: — building
+- [ ] HD4 Hardening after the Wave 2 review (owner's yes), in three parts:
   - [ ] HD4a Browser shards under 20 minutes (chromium and the serial project sharded apart); every read a burst event starts runs one at a time, guarded
   - [ ] HD4b Listing workstreams off the request path: branch workstreams cached by ref SHA, so many remote branches never stall the window
-  - [ ] HD4c CI installs without running native build scripts (prebuilds, checked by loading them); the open spec follow-ups fixed at their cause (#324) — in review
+  - [ ] HD4c CI installs without running native build scripts (prebuilds, checked by loading them); the open spec follow-ups fixed at their cause
 
 ### Track C: shared ways of working
 - [x] C1 Skills on tasks
@@ -286,6 +286,7 @@
     - [ ] D1.5a Test runs travel as signed run records, grounding a teammate's run by commit; `--share-task-state` for a headless backend
     - [ ] D1.5b The done-when: a cloud session or CI job claims, reports, edits the plan and commits; the desktop shows it after a pull
   - [ ] Follow-up: Declared product flows checked hop by hop against the cross-system map in CI (owner's point, 2026-10-01): after Phase 32 unless pulled in
+  - [ ] Follow-up: Installing the CLI in a cloud session or CI job takes cloning this repository and `npm ci && npm link`, because the package is not published. Publish it (to npm, or as a release asset) so a setup script needs one line. The owner's call (2026-10-02): what exists is good enough for now; after Phase 32
 
 ### Track E: how the code got here
 - [ ] E Compare any two points, scrub each side's history, and each line's commit and agent, with no plan needed (owner's decision, 2026-10-02), refined in EXECUTION §6c:
@@ -299,10 +300,10 @@
   - [ ] E6 The done-when: a teammate's agent's work, traced line by line and side by side, with no plan
 
 ### Phase end
-- [ ] `main` merged in, full suite green on Node 26
+- [x] `main` merged in, full suite green on Node 26 (`main` had nothing new; the merged tree is the one CI ran on #324, Node 26 from a clean install)
 - [ ] Packaged macOS build verified (needs a person on macOS)
 - [ ] Mobile build verified (needs a device)
-- [ ] Final direction review
+- [x] Final direction review: JOURNEYS.md says what shipped
 - [ ] `feat/phase-32` → `main`
 
 <!-- status:end -->
@@ -473,6 +474,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-02 | HD4b: a listing works out at most 8 uncached branches inline; the rest in the background, with a broadcast when ready | Answers were already cached by ref SHA, so only the first listing was slow, but it blocked every request for seconds. A listing that leaves some branches out for a moment, then says so, is better than a window that cannot answer; a repository with a handful of branches is answered inline as before |
 | 2026-10-02 | HD4c: every root install in CI runs with scripts off, and applies `patches/` by hand | npm 11.19 runs dependency install scripts and only warns, so each job rebuilt better-sqlite3 from source (the node-gyp download that crashed #224) though both native modules ship prebuilds. The installer builds already ran scripts off, and that skipped `patch-package`: their werift was unpatched. One install line everywhere, so no runner differs; loading the modules, not running their scripts, is the check |
 | 2026-10-02 | HD4c: whether a patch is applied is checked by reading the patch, not by `git apply --check` | `git apply` refuses paths through a symlinked `node_modules` (worktrees) and needs git on the runner; reading each hunk's result from the installed file runs the same everywhere, in CI, `release.sh` and a unit test |
+| 2026-10-02 | Phase end: the PR `feat/phase-32` → `main` opens after the final review and merges only after the packaged macOS build, the mobile build and the owner's call on C2.6b | §7 puts the packaged build before the merge because only a packaged build proves the app opens its own database; the mobile surface changed (A4, B4.4); and C2.6b was kept for the phase end by the owner. CI proves the rest on every PR |
 | 2026-10-02 | E6: the done-when is one harness test over the real git and backend; its pictures are the step shots already taken (changes, line-history, evolution, compare, branches) | Each surface's browser spec already walks it with its own shots; a second browser walk over the same served data would test the stand-ins, not the code. The harness test is the one that runs the whole journey for real: a worktree, an agent's session, git, a remote and gh |
 | 2026-10-02 | E3: a commit's maker is CodeTrellis's only where it knows, and says how: the commit message's `agent:` line, or seen (a replay frame recorded the commit landing during that agent's session); the git author is always shown | GitLens's author line is what people trust, so it is never replaced; timing alone would guess, so a commit with neither stays the author's. E4 widens what is known (a session's own edits) |
 | 2026-10-02 | E3: the decisions between two positions are the computer's record in that window, not filtered to the project | The record carries no project column and its payloads differ by type; saying "recorded on this computer" is true, and each decision names what it was about |
@@ -520,6 +522,77 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-02: The final direction review (§1.7, the phase end)
+
+Phase 32 is #111–#324 on `feat/phase-32`: 200 squash merges from
+`a4665b2`. `main` has nothing the phase lacks, and the merged tree is the
+one CI ran green on #324 (Node 26, a clean install with scripts off).
+
+*Which journeys can be demonstrated end to end now?* All of them.
+JOURNEYS.md now says, for each, what shipped, the steps that built it and
+the test that walks it, and turns each old question into **Decided** (with
+its date) or **Still open**. The six journeys added during the phase are
+its section L.
+- **A correction to the Wave 2 review**: `awareness-m6` walks E1, not
+  E1–E3. E2 (two reports, two versions) is walked by `material-signals`;
+  E3 (reading outside the brief) has the unit test
+  `material-signals.test.ts` and no harness test.
+- **Shipped differently from the story**, and the journey now says so: B4
+  (main moving is a low note; agents are told only high and medium notes on
+  their next step) and A1 (the chip opens its details; the graph's
+  Workstreams overlay and "Show on graph" do the lighting up).
+- **Still open** (three): whether A2's shared chip should offer to make
+  the worktree; whether B4's note should suggest the git command; and
+  whether detect-and-report (K2) is enough for regulated teams.
+- **Not built**, each written in its journey: splitting one folder's edits
+  by agent (A2); an import that starts only in the other line of work
+  (B2, a follow-up); the item-page picker for "relies on" (I1); a deleted
+  breakpointed file (K2); C2.6b, Azure DevOps and Gitea (L1); Google Drive
+  and Dropbox detection (L2); the live view through a tunnel, remote
+  pairing and declared product flows in CI (L3).
+- **F's five rules**: the first four have tests; the fifth ("nothing leaves
+  the machine") has none of its own. It rests on the push tests,
+  `tools/spellcheck-check` and `grant-guard`, and two things can now reach
+  a host, the review host and keeping remotes current, both off until a
+  person turns them on.
+
+*What did we learn that changes the plan?*
+1. **Measure before choosing the fix.** HD4's three parts each began with
+   a number that changed the plan: a fourth browser shard would not have
+   helped, because the serial project ran in full in every shard; "cache
+   by ref SHA" was already done, and the cost was the first listing; and
+   npm 11.19 does run install scripts, which CLAUDE.md said it did not.
+2. **A build that skips a step needs a check that says so.** Installing
+   with scripts off also skipped `patch-package`, so the CI-built Windows
+   and Linux installers carried werift unpatched, silently. The check that
+   now runs on every build failed on its first Windows run, on line
+   endings, which is why it is worth having on every platform.
+3. **A stacked PR runs no CI while it conflicts with its base.** #324 sat
+   at no checks until the base was merged in. Merging the base into the
+   next PR straight after each squash keeps the stack running.
+
+*Is anything getting noisier, slower or harder to read?*
+- **Faster:** browser shards 10–18 minutes for `chromium` (three) and
+  8–12 for `serial` (two), from 18–28; harness 5–9 minutes a shard of
+  four. The first workstream listing with 133 branches is 0.5 s, from 6.1.
+- **The same:** harness 1238 tests (1237 at Wave 2), the browser suite 767,
+  lint 0 errors and 306 warnings (306).
+- **Larger:** unit tests 1954 (1941), the new ones guarding burst reads and
+  patches.
+- **Noisier in CI, still:** a cancelled run on an old head reports "CI
+  passed: failure". Each was checked; none was real.
+
+**What remains, and who:** the packaged macOS build launched once (§7.3)
+and the mobile build on a device (§7.4), each needing the owner or a
+device; C2.6b, Phase 32's own plan in CodeTrellis, which the owner kept
+for the phase end; then one PR, `feat/phase-32` → `main`. That PR opens
+after this review merges and waits for those three.
+
+**Follow-up, after the phase (the owner, 2 October):** the CLI is not
+published, so a cloud session or CI job installs it by cloning this
+repository and running `npm ci && npm link`. Publishing it would make that
+one line; what exists is good enough for now.
 
 ### 2026-10-02: HD4c — installs with scripts off, and the patches they skipped
 - **Measured first.** On a clean copy, `npm ci` (npm 11.19.1, Node 26)
