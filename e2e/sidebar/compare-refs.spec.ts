@@ -139,4 +139,51 @@ test.describe('Compare two points', () => {
     await expect(after.getByTestId('ref-picker-name')).toHaveText('main');
     await expect(panel.getByTestId('compare-from-split')).toBeChecked();
   });
+
+  test('the graph compares the same two: its marks are what differs between them, said beneath it, and it stops', async ({ page }) => {
+    const asked: string[] = [];
+    await serve(page, asked);
+    const compared: string[] = [];
+    await page.route('**/api/compare?*', async (r) => {
+      const u = new URL(r.request().url());
+      compared.push(`${u.searchParams.get('before')} → ${u.searchParams.get('after')}`);
+      await new Promise((res) => setTimeout(res, 300));
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        before: { spec: SPLIT, label: 'Where main and billing-v2 split (a1b2c3d)', fileCount: 480, edgesKnown: true },
+        after: { spec: 'commit:refs/heads/billing-v2', label: 'billing-v2', fileCount: 481, edgesKnown: true },
+        diff: {
+          addedFiles: ['src/backend/services/rounding.ts'], removedFiles: [], modifiedFiles: ['src/backend/server.ts', 'src/backend/services/git-refs.ts'],
+          addedEdges: [{ source: 'src/backend/services/git-refs.ts', target: 'src/backend/services/rounding.ts' }], removedEdges: [], blastRadius: [],
+          summary: { added: 1, removed: 0, modified: 2, edgesAdded: 1, edgesRemoved: 0 },
+        },
+        edgesComparable: true, notes: [],
+      }) });
+    });
+    await gotoWithProject(page);
+    await page.getByTestId('sidebar-changes').first().click();
+    const panel = page.getByTestId('source-control').last();
+    await panel.getByTestId('compare-pair-toggle').click();
+    const after = panel.locator('[data-testid="ref-picker"][data-side="after"]');
+    await after.getByTestId('ref-picker-open').click();
+    await after.locator('[data-testid="ref-option"][data-spec="commit:refs/heads/billing-v2"]').click();
+    await panel.getByTestId('compare-from-split').check();
+    await expect(panel.getByTestId('pair-words')).toHaveText(/^1 file differs/);
+
+    await panel.getByTestId('compare-on-graph').click();
+    await expect(panel.getByTestId('compare-on-graph')).toHaveAttribute('aria-pressed', 'true');
+    const banner = page.getByTestId('graph-pair');
+    await expect(banner.getByTestId('graph-pair-words')).toHaveText('Comparing Where main and billing-v2 split (a1b2c3d) → billing-v2 · 1 file added, 2 changed, 0 removed · 1 import added, 0 removed');
+    await expect(banner.getByTestId('graph-pair-command')).toHaveText('$ git diff main...billing-v2');
+    expect(compared).toContain(`${SPLIT} → commit:refs/heads/billing-v2`);
+    await page.screenshot({ path: shot('compare-graph') });
+
+    // Changing a side redraws it.
+    await panel.getByTestId('compare-from-split').uncheck();
+    await expect.poll(() => compared).toContain('commit:refs/heads/main → commit:refs/heads/billing-v2');
+
+    // Stopping returns the graph to its own changes.
+    await banner.getByTestId('graph-pair-stop').click();
+    await expect(page.getByTestId('graph-pair')).toHaveCount(0);
+    await expect(panel.getByTestId('compare-on-graph')).toHaveAttribute('aria-pressed', 'false');
+  });
 });

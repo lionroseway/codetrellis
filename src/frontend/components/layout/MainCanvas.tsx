@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { GraphPairBanner, useGraphPair } from './GraphPair';
 import { getAPI } from '../../bridge';
 import { fetchGraphAnswer } from '../../lib/graph-answer';
 import { preserveNodePositions } from '../../lib/preserve-node-positions';
@@ -786,6 +787,10 @@ export function MainCanvas() {
     return () => { cancelled = true; };
   }, [viewDepth, expandedNodes, depEdges]);
 
+  // Phase 32 E2b: two points chosen in the Changes tab, drawn on the graph.
+  const graphPair = useGraphPair(root);
+  const pairDiff = graphPair.diff;
+
   // Build the graph
   const workingTreeDiff = useMemo(() => mergeLiveDiff(null, diffData), [diffData]);
   const liveWorkingTreeDiff = useMemo(() => mergeLiveDiff(snapshotDiff, diffData), [snapshotDiff, diffData]);
@@ -796,6 +801,10 @@ export function MainCanvas() {
     // Play-forward (B9.2): the live graph with every active plan's planned changes, dashed.
     if (forward && depEdges.length > 0) {
       return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, null, recentlyChanged, forward.projection, layoutMode, 'planned', scopePath);
+    }
+    // Two points chosen in the Changes tab (E2b): the live graph, marked with what differs between them.
+    if (pairDiff && depEdges.length > 0) {
+      return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, pairDiff, recentlyChanged, null, layoutMode, 'diff', scopePath);
     }
     // Current/Planned mode: render from frozen snapshot
     if ((trellisMode === 'current' || trellisMode === 'planned') && currentSnapshot) {
@@ -826,13 +835,13 @@ export function MainCanvas() {
     if (depEdges.length === 0) return { nodes: [], edges: [] };
     // Plan intent on the live graph is an overlay (B3.3); the Planned view asks for it outright.
     return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, recentlyChanged, trellisMode === 'planned' || (projectionEnabled && planOverlay) ? projectionData : null, layoutMode, trellisMode, scopePath);
-  }, [replayGraph, forward, depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, liveWorkingTreeDiff, recentlyChanged, projectionData, projectionEnabled, planOverlay, layoutMode, trellisMode, currentSnapshot, scopePath]);
+  }, [replayGraph, forward, pairDiff, depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, liveWorkingTreeDiff, recentlyChanged, projectionData, projectionEnabled, planOverlay, layoutMode, trellisMode, currentSnapshot, scopePath]);
 
   // One element per id, whichever builder ran. Duplicate ids leak DOM on
   // every render; see `uniqueGraph` for how much.
   const graphData = useMemo(() => uniqueGraph(rawGraphData), [rawGraphData]);
 
-  const activeDiff = trellisMode === 'diff' ? liveWorkingTreeDiff : workingTreeDiff;
+  const activeDiff = pairDiff ?? (trellisMode === 'diff' ? liveWorkingTreeDiff : workingTreeDiff);
 
   // Phase 16.E — collect all file paths referenced by the active plan's items
   const planItemsByUid = usePlanItemsStore((s) => s.itemsByUid);
@@ -1187,6 +1196,7 @@ export function MainCanvas() {
           {testsOverlay && groundingMap?.hasResults ? ' · tests as reported by then' : ''} · replaying
         </div>
       )}
+      {replayAt === null && !playingForward && <GraphPairBanner state={graphPair} />}
       {playingForward && replayAt === null && (
         <div data-testid="play-forward-canvas" className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-10 rounded-full border border-violet-400/40 bg-background/80 px-3 py-1 text-[11px] text-violet-200 shadow">
           ◇ Playing forward · now → all plans done

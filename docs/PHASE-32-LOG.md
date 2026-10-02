@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track E — E2a: any ref on either side, from the Changes tab |
-| **Status** | E1 merged (#314). E2 is split in two: E2a (the refs, any two compared file by file, from the Changes tab) and E2b (the graph compares the same two). E2a built on E1: GET /api/git/refs lists this checkout, branches, remote branches as last fetched, tags and other worktrees, each group with git's word and command; GET /api/git/refs/compare lists the files between any two, with "from where they split" (merge base) and the git command; a worktree's working copy is read as a tree through a copy of its own index (the checkout untouched); /api/compare and /api/file/at take the same sides. Unit git-refs 7; harness refs 6; browser compare-refs (shots) |
-| **In flight** | E2a in review (#315) on `feat/phase-32-e2a-refs`; E2b in review (#316) on `feat/phase-32-e2b-graph-pair`; E3 building on `feat/phase-32-e3-evolution` |
+| **Stage / step** | Track E — E2b: the graph compares the same two |
+| **Status** | E1 (#314) and E2a (#315) merged. E2b built on E2a: in the Changes tab, "Show on the graph" draws the graph's marks (files added, changed, removed; imports added, removed) from /api/compare between the chosen pair, instead of its own baseline against now; a banner beneath the canvas says which two, with the counts and git's command, and stops it; changing a side redraws it; clearing the pair turns it off. Unit source-control-store 3; browser compare-refs (graph, shot compare-graph) |
+| **In flight** | E2b in review (#316) on `feat/phase-32-e2b-graph-pair`; E3 in review (#317) on `feat/phase-32-e3-evolution`; E4 in review (#318) on `feat/phase-32-e4-line-history` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
-| **Next action** | Merge E2a (#315) when green, then E2b (#316) and E3 by the stacked flow |
+| **Next action** | Merge E2b (#316) when green, then E3 (#317) by the stacked flow; then E4 (line history) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `c8ac703`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `8498c84`, with open PRs from GitHub.
 
 ---
 
@@ -286,10 +286,10 @@
 - [ ] E Compare any two points, scrub each side's history, and each line's commit and agent, with no plan needed (owner's decision, 2026-10-02), refined in EXECUTION §6c: — building
   - [ ] E1 Source control with no plan: the Changes panel (staged, unstaged, untracked; each worktree's changes), and the defect that started it (the graph showed changes, the code view no diff)
   - [ ] E2 Any ref on either side: branches local and remote, tags, a worktree's working copy, a merge base; one picker for the code view and the graph, in two: — building
-    - [ ] E2a The refs, and any two compared file by file from the Changes tab, each side said plainly and as git's command; a file opens its diff (#315) — in review
+    - [ ] E2a The refs, and any two compared file by file from the Changes tab, each side said plainly and as git's command; a file opens its diff
     - [ ] E2b The graph compares the same two: its architecture diff between the pair chosen in the Changes tab (#316) — in review
-  - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked — building
-  - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history`
+  - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked (#317) — in review
+  - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history` (#318) — in review
   - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default
   - [ ] E6 The done-when: a teammate's agent's work, traced line by line and side by side, with no plan
 
@@ -453,6 +453,8 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-02 | A7 is refined into three parts (EXECUTION §4): the rules and the check, rule signals from each workstream's import delta, the gate and the done-when. A rule is a path boundary (`from`, `mayNotImport`, `except`, `because`) in the committed config | One file every laptop, agent and pipeline reads; a boundary between two sets of paths is what M7 asks for ("web/ may not import db/") and covers layers without a layer model |
 | 2026-10-02 | Track E serves beginners and advanced users of git alike (owner): every surface reads two ways, a plain sentence first, then git's own word and the exact command (copyable) | The owner: "the whole idea behind this portion of work is making it so both beginners and advanced users of git can use it as their surfacing tool". Plain words alone hide what is compared from someone who knows git; git's words alone shut out someone who does not; both, together, teach the one and serve the other |
 | 2026-10-02 | E1: the defect had three causes, each fixed where it was: a committed edit (the code view compared the last commit with a clean working tree), an edit in another worktree (it read only this checkout), and a project in a subfolder of its repository (`git show <ref>:<path>` read from the repository's top, so the file "was added") | All three reproduced against a running backend before anything changed; the Changes panel names where each change is and diffs between that group's own two points, and the code view picks the same comparison for a file opened from the tree or the graph |
+| 2026-10-02 | E2b (found on CI): source-control reads run one at a time, as awareness reads do; and an awareness read that started before a person's answer never writes over it | `brief-other-work` failed once on CI: Acknowledge stayed busy for 5 s and the card read open. E1's Changes feed started a read of git for every workstreams-changed broadcast, unbounded, in every window with the sidebar shown; and a read already in flight when the person acknowledged could land after and turn the card back. Both reproduced in unit tests that fail without the change |
+| 2026-10-02 | E2b: the pair is drawn on the live graph's shape, marked from the comparison, rather than as a graph rebuilt at either side | The person's map stays where it was, so what moved between two points reads against the code they know; files only at the before side show as removed, as Diff mode shows them. Replay and play-forward still take the canvas first, and the banner says which is drawn |
 | 2026-10-02 | E2 is split in two: E2a, the refs and any two compared file by file from the Changes tab; E2b, the graph comparing the same pair | The graph has no comparison of two chosen points today (only baseline against live, and replay's frames), so drawing one is its own work; the pair, chosen once, is what both read |
 | 2026-10-02 | E2a: a working copy is compared as a tree, written through a copy of its own index (as `git stash create` does) | One diff for every kind of side (`git diff-tree` of two trees), untracked files included, and the checkout, its index and its refs untouched; it writes blobs into the object store, which `git gc` clears. Copying the index keeps its stat cache, so unchanged files are not read again |
 | 2026-10-02 | E2a: sides are full ref names (`refs/heads/x`, `refs/remotes/origin/x`, `refs/tags/x`), said as git shows them | A branch and a tag with the same name never mix; the words and the command use the short name a person types |
@@ -495,6 +497,23 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-02: E2b — the graph compares the same two
+- **Journey.** With `main` and `billing-v2` chosen from where they split,
+  Priya presses "Show on the graph". The graph marks the file added and
+  the two changed, and the import that came with them; beneath it,
+  "Comparing Where main and billing-v2 split (a1b2c3d) → billing-v2 · 1
+  file added, 2 changed, 0 removed · 1 import added, 0 removed", and
+  `$ git diff main...billing-v2`. Unticking "from where they split"
+  redraws it; the × returns the graph to its own changes.
+- **Built.** `GraphPair.tsx` (`useGraphPair`, `GraphPairBanner`); the
+  store's `pairOnGraph`; `MainCanvas` builds from the pair's diff while it
+  is shown; "Show on the graph" in the compare section.
+- **Tests.** Unit `source-control-store.test.ts` (3: from where they
+  split; a slower comparison never wins; the toggle follows the pair).
+  Harness: the graph's `/api/compare` on the same two is in
+  `refs.test.ts` (E2a). Browser `compare-refs.spec.ts` (the graph, shot
+  `compare-graph`).
 
 ### 2026-10-02: E2a — any ref on either side, from the Changes tab
 - **Journey.** In the Changes tab, Priya opens "Compare two points". It

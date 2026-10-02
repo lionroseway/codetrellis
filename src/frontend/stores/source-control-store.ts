@@ -144,11 +144,17 @@ interface SourceControlState {
   setPair: (root: string, pair: RefPair | null) => Promise<void>;
   /** Open the code view on one file between the chosen two. */
   openPairFile: (root: string, file: SourceFile) => void;
+  /** E2b: the graph draws its diff between the chosen two, instead of its own. */
+  pairOnGraph: boolean;
+  showPairOnGraph: (on: boolean) => void;
 }
 
 /** Every read is numbered; a slower earlier one never replaces a later one. */
 let generation = 0;
 let pairGeneration = 0;
+/** The source-control read in flight, and a refresh asked for while it ran. */
+let scInFlight: Promise<void> | null = null;
+let scAgain: string | null = null;
 
 export const useSourceControlStore = create<SourceControlState>((set, get) => ({
   root: null,
@@ -160,18 +166,28 @@ export const useSourceControlStore = create<SourceControlState>((set, get) => ({
   setSidebarView: (v) => set({ sidebarView: v }),
 
   refresh: async (root) => {
+    if (!root) { ++generation; scInFlight = null; scAgain = null; set({ root: null, data: null, loading: false, error: null, compare: null }); return; }
+    if (root !== get().root) set({ root, data: null, compare: null, refs: null, pair: null, pairResult: null, pairError: null, pairOnGraph: false });
+    // One read at a time, as awareness reads (E1). Every file change in any
+    // worktree broadcasts workstreams-changed; each started a read of git on
+    // the backend, unbounded, and a burst of them held the server and the
+    // browser's connections long enough that a person's own click waited.
+    // A refresh asked for while one runs becomes one more, after it.
+    if (scInFlight) { scAgain = root; return scInFlight; }
     const mine = ++generation;
-    if (!root) { set({ root: null, data: null, loading: false, error: null, compare: null }); return; }
-    if (root !== get().root) set({ root, data: null, compare: null, refs: null, pair: null, pairResult: null, pairError: null });
     set({ loading: true });
-    try {
-      const res = await fetch(`/api/source-control?project=${encodeURIComponent(root)}`);
-      const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(body?.error || `Server returned ${res.status}`);
-      if (mine === generation) set({ data: body as SourceControl, loading: false, error: null });
-    } catch (e) {
-      if (mine === generation) set({ loading: false, error: e instanceof Error ? e.message : String(e) });
-    }
+    scInFlight = (async () => {
+      try {
+        const res = await fetch(`/api/source-control?project=${encodeURIComponent(root)}`);
+        const body = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(body?.error || `Server returned ${res.status}`);
+        if (mine === generation && get().root === root) set({ data: body as SourceControl, loading: false, error: null });
+      } catch (e) {
+        if (mine === generation) set({ loading: false, error: e instanceof Error ? e.message : String(e) });
+      }
+    })();
+    try { await scInFlight; } finally { scInFlight = null; }
+    if (scAgain) { const next = scAgain; scAgain = null; await get().refresh(next); }
   },
 
   openCompare: (root, group, file) => {
@@ -199,13 +215,19 @@ export const useSourceControlStore = create<SourceControlState>((set, get) => ({
     } catch { /* the pickers keep what they had */ }
   },
 
+  pairOnGraph: false,
+  showPairOnGraph: (on) => {
+    set({ pairOnGraph: on && get().pair !== null });
+    if (on) useUiStore.getState().setWorkspaceMode('graph');
+  },
+
   pair: null,
   pairResult: null,
   pairLoading: false,
   pairError: null,
   setPair: async (root, pair) => {
     const mine = ++pairGeneration;
-    if (!pair) { set({ pair: null, pairResult: null, pairLoading: false, pairError: null }); return; }
+    if (!pair) { set({ pair: null, pairResult: null, pairLoading: false, pairError: null, pairOnGraph: false }); return; }
     set({ pair, pairLoading: true, pairError: null });
     const before = effectiveBefore(pair);
     try {

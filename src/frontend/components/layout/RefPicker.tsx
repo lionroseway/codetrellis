@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeftRight, ChevronDown, GitCompareArrows, Loader2, Search } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, GitCompareArrows, Loader2, Network, Search } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
 import {
   canSplit, useSourceControlStore, type GitRef, type RefListing, type RefPair,
@@ -133,7 +133,7 @@ function defaultPair(refs: RefListing | null): RefPair {
  */
 export function ComparePair() {
   const root = useProjectStore((s) => s.root);
-  const { refs, loadRefs, pair, pairResult, pairLoading, pairError, setPair, openPairFile, compare } = useSourceControlStore();
+  const { refs, loadRefs, pair, pairResult, pairLoading, pairError, setPair, openPairFile, compare, pairOnGraph, showPairOnGraph } = useSourceControlStore();
   const [open, setOpen] = useState(pair !== null);
 
   useEffect(() => { if (open && root) void loadRefs(root); }, [open, root, loadRefs]);
@@ -202,6 +202,16 @@ export function ComparePair() {
             <>
               <p className="text-[10.5px] leading-snug text-foreground-muted" data-testid="pair-words">{pairResult.words}</p>
               {pairResult.command && <GitCommand command={pairResult.command} className="pb-0.5" testId="pair-git-command" />}
+              <button
+                type="button"
+                onClick={() => showPairOnGraph(!pairOnGraph)}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] border ${pairOnGraph ? 'border-sky-400/50 bg-sky-400/10 text-sky-200' : 'border-border text-foreground-muted hover:text-foreground'}`}
+                title={pairOnGraph ? 'The graph shows its own changes again' : 'The graph marks what changed between these two, files and imports'}
+                aria-pressed={pairOnGraph}
+                data-testid="compare-on-graph"
+              >
+                <Network size={10} /> {pairOnGraph ? 'On the graph · stop' : 'Show on the graph'}
+              </button>
               <ul>
                 {pairResult.files.map((f) => {
                   const mark = STATUS_MARK[f.status];
