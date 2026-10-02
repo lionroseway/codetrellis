@@ -48,6 +48,7 @@ import {
 import { renditionOf, stopEngine } from '../backend/services/rendition/rendition-service';
 import { setPreviewImageScaler } from '../backend/services/mobile-approvals';
 import { buildSignoffPack, renderPackHtml } from '../backend/services/signoff-pack';
+import { sealPack } from '../backend/services/pack-seal';
 import { htmlToPdf } from './signoff-pdf';
 import { installHtmlView, closeHtmlView, pngWithReport } from './html-view';
 import { ARTEFACT_SCHEME, installArtefactTransport } from './artefact-transport';
@@ -722,7 +723,7 @@ ipcMain.handle('signoff:export-pdf', async (event, planUid: unknown) => {
   if (!mainWindow || event.sender !== mainWindow.webContents) return { ok: false, reason: 'Not allowed' };
   if (typeof planUid !== 'string' || !/^[A-Za-z0-9_-]{3,64}$/.test(planUid)) return { ok: false, reason: 'No plan' };
   try {
-    const pack = buildSignoffPack(planUid);
+    const pack = sealPack(buildSignoffPack(planUid));
     const pdf = await htmlToPdf(renderPackHtml(pack));
     const safe = pack.plan.title.replace(/[^A-Za-z0-9 _-]+/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'plan';
     const choice = await dialog.showSaveDialog(mainWindow, {

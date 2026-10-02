@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B10.2: retention you can set |
-| **Status** | B10.1 merged (#309). B10.2 built: Settings → Data → Keep the record for (14, 30, 90, 365 days, or everything), the person's only and kept in the record when changed; it governs agent events and the record (trimmed as a block, still verifying), replay frames and spans, test runs, log files and the device log. Unit retention 4 and peer-audit, harness retention 4, browser record spec (shot) |
-| **In flight** | B10.2 building on `feat/phase-32-b10-2-retention` |
-| **Last merged** | B10.1 (#309, `aec597e`) |
-| **Next action** | Open B10.2's PR and merge when green; then B10.3 (signed packs carrying the record's head) |
+| **Stage / step** | Track B — B10.3: signed packs, carrying the record's head |
+| **Status** | B10.2 merged (#310). B10.3 in review (#311): every sign-off pack (data, page, PDF) is signed with this computer's device key in its own namespace and carries the record's head; verify says who signed it (this computer, a trusted teammate, an unknown key), whether it changed since, and whether the record it names still holds. Unit pack-seal 6, harness signoff-surface (sealed, edited, unsigned), browser signoff-pack (shots) |
+| **In flight** | B10.3 in review (#311) on `feat/phase-32-b10-3-signed-packs`; B10.4 in review (#312) on `feat/phase-32-b10-4-evidence`; B10.5 in review (#313) on `feat/phase-32-b10-5-g2` |
+| **Last merged** | B10.2 (#310, `087819c`) |
+| **Next action** | Merge B10.3 (#311); then B10.4 (#312) and B10.5 (#313) by the stacked flow |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `aec597e`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `087819c`, with open PRs from GitHub.
 
 ---
 
@@ -220,10 +220,10 @@
   - [x] B9.4 The phone and the G3 done-when (#298)
 - [ ] B10 The record — building
   - [x] B10.1 The chain: every kept event linked, decisions as events, verified in words (#309)
-  - [ ] B10.2 Retention you can set, and the chain still verifies — building
-  - [ ] B10.3 Signed packs, carrying the record's head
-  - [ ] B10.4 The evidence export
-  - [ ] B10.5 The G2 done-when and docs
+  - [x] B10.2 Retention you can set, and the chain still verifies (#310)
+  - [ ] B10.3 Signed packs, carrying the record's head (#311) — in review
+  - [ ] B10.4 The evidence export (#312) — in review
+  - [ ] B10.5 The G2 done-when and docs (#313) — in review
 
 ### Track C: shared ways of working
 - [x] C1 Skills on tasks
@@ -440,6 +440,8 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | C4.2a: a scheduled start is authored `schedule` (a system author, as other app-made records are), and the run keeps who set the rule | No person or agent called; the rule a person set is the reason, and saying "schedule" never passes the app off as that person |
 | 2026-10-02 | C4.3b: an agent on each run is kept per rule on this device, never in the committed config, and set by the person only; it starts only when the run was made here by the person in the window, the schedule, or a phone granted `terminal` — from plain HTTP or a phone without it, the run is made and says why not | It starts a process on this machine, so it is the person's and this machine's, never the team's; loopback is not a person, and a phone may only cause a terminal the person allowed it. A found run starts nothing, so two laptops make one agent |
 | 2026-10-02 | A7 is refined into three parts (EXECUTION §4): the rules and the check, rule signals from each workstream's import delta, the gate and the done-when. A rule is a path boundary (`from`, `mayNotImport`, `except`, `because`) in the committed config | One file every laptop, agent and pipeline reads; a boundary between two sets of paths is what M7 asks for ("web/ may not import db/") and covers layers without a layer model |
+| 2026-10-02 | B10.3: the sign-off pack is signed with the device key task records already use (C3.1), in its own namespace (`codetrellis-signoff-pack`), never the release-manifest key; the signature covers the record's head at signing, and verifying names the signer against this computer's trust (its own key, a teammate's trusted key, or a key not known here) | One per-install key, already trusted between teammates by fingerprint, so no second trust model; a namespace keeps a task-record signature from passing as a pack's. Carrying the head ties the pack to the record: an edit to the record since shows when the pack is verified as well as in the record's own walk |
+| 2026-10-02 | B10.3: a pack signed by an unknown key is said to be unchanged but its signer not proven, never "valid" | A signature from a key nobody vouched for proves integrity, not identity; the reviewer is told to check the fingerprint with whoever sent it |
 | 2026-10-02 | B10.2: one retention window, set in Settings → Data (14, 30, 90, 365 days, or everything), governs agent events and the record, replay frames and signal spans, test runs, log files and the device log; changing it is the person's only, and is itself kept in the record | Shortening the window is how evidence is removed, so it is a grant like LAN exposure, and an auditor sees who changed it from what to what. One window, because a record that outlives its replay or its tests would answer "what happened" without "what else was going on" |
 | 2026-10-02 | B10.2: keeping everything lifts the agent events' row cap too; the device log, rewritten whole on each change and fed by networked peers, keeps at most 10,000 entries whatever the window | "Everything" must mean everything for the record; the device log's cap is what stops a peer filling the disk, so it stays, said in the window's words |
 | 2026-10-02 | B10 is refined into five parts (EXECUTION §5): the chain, retention, signed packs, the evidence export, the G2 done-when. The agent event log itself becomes the record, by a hash chain over its rows, rather than a second log | It already carries the app's decisions (B1.2) and is what the Timeline and replay read; a second log would be a second truth to keep in step |
@@ -468,6 +470,24 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-02: B10.3 — signed packs, carrying the record's head
+- **Journey.** Sam saves the Q3 board pack as a page and sends it to the
+  auditor. Months later the auditor brings it back; "Verify a pack…" says
+  "Signed by this computer (SHA256:q690LpZ7sExo…), and unchanged since; the
+  record it names is still here and unchanged (entry #1204)", then which
+  files still match. A copy someone edited so the files would look right
+  says "Changed after it was signed". A pack from Dana's computer says it
+  is hers by name once her key is trusted, and "who signed it is not
+  proven" until then.
+- **Built.** `services/pack-seal.ts` (`sealPack`, `sealBytes`, `checkSeal`),
+  the pack's `seal` and `sealedRecord`, the routes and the PDF export
+  sealing each pack, verify answering `seal`, the page saying who signed
+  it, the Brief's verify line.
+- **Tests.** Unit `pack-seal.test.ts` (6). Harness `signoff-surface.test.ts`
+  (sealed; verified here; an edited page and an unsigned one). Browser
+  `plan/signoff-pack.spec.ts` (shots `signoff-pack-sealed`,
+  `signoff-pack-forged`).
 
 ### 2026-10-02: B10.2 — retention you can set
 - **Journey.** Sam's team must keep a year of evidence. In Settings → Data

@@ -86,6 +86,7 @@ import { rulesView, setRule as setArchitectureRule, removeRule as removeArchitec
 import { startRecurringScheduler } from './services/recurring-scheduler';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
+import { sealPack, checkSeal } from './services/pack-seal';
 import { planGitStatesFresh } from './services/item-git-state';
 import { planStatusFresh } from './services/plan-status';
 import { listSignedApprovals } from './services/signed-approvals';
@@ -4670,7 +4671,8 @@ app.post('/api/plans/:uid/unlink', (req, res) => {
 
 app.get('/api/plans/:uid/signoff-pack', (req, res) => {
   try {
-    res.json(buildSignoffPack(req.params.uid));
+    // Sealed with this computer's key and the record's head (B10.3).
+    res.json(sealPack(buildSignoffPack(req.params.uid)));
   } catch (err) {
     res.status(404).json({ error: err instanceof Error ? err.message : String(err) });
   }
@@ -4678,7 +4680,7 @@ app.get('/api/plans/:uid/signoff-pack', (req, res) => {
 
 app.get('/api/plans/:uid/signoff-pack.html', (req, res) => {
   try {
-    const pack = buildSignoffPack(req.params.uid);
+    const pack = sealPack(buildSignoffPack(req.params.uid));
     const safe = pack.plan.title.replace(/[^A-Za-z0-9 _-]+/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'plan';
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     // A file to save, not a page to render inside the app's origin.
@@ -4704,7 +4706,8 @@ app.post(
         res.status(400).json({ error: err instanceof PackError ? err.message : 'That file is not a readable sign-off pack' });
         return;
       }
-      res.json(await verifyPack(req.params.uid, pack));
+      // The files still match? And the pack itself: who signed it, and unchanged since? (B10.3)
+      res.json({ ...(await verifyPack(req.params.uid, pack)), seal: checkSeal(pack) });
     } catch (err) {
       res.status(err instanceof PackError ? 400 : 500).json({ error: err instanceof Error ? err.message : String(err) });
     }

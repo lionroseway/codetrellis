@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track B — B10.2: retention you can set"
-  status: "B10.1 merged (#309). B10.2 built: Settings → Data → Keep the record for (14, 30, 90, 365 days, or everything), the person's only and kept in the record when changed; it governs agent events and the record (trimmed as a block, still verifying), replay frames and spans, test runs, log files and the device log. Unit retention 4 and peer-audit, harness retention 4, browser record spec (shot)"
-  next: "Open B10.2's PR and merge when green; then B10.3 (signed packs carrying the record's head)"
+  step: "Track B — B10.3: signed packs, carrying the record's head"
+  status: "B10.2 merged (#310). B10.3 in review (#311): every sign-off pack (data, page, PDF) is signed with this computer's device key in its own namespace and carries the record's head; verify says who signed it (this computer, a trusted teammate, an unknown key), whether it changed since, and whether the record it names still holds. Unit pack-seal 6, harness signoff-surface (sealed, edited, unsigned), browser signoff-pack (shots)"
+  next: "Merge B10.3 (#311); then B10.4 (#312) and B10.5 (#313) by the stacked flow"
   blockers: "None"
   updated: 2026-10-02
 sections:

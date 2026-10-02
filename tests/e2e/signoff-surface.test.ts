@@ -112,6 +112,11 @@ test.describe.serial('Sign-off surface', () => {
     const file = pack.files.find((f: { path: string }) => f.path === 'data/ledger.csv');
     expect(file).toMatchObject({ takenAt: 'approval' });
     expect(file.sha256).toMatch(/^[a-f0-9]{64}$/);
+    // B10.3: sealed with this computer's key, carrying the record's last entry.
+    expect(pack.seal).toMatchObject({ how: 'device' });
+    expect(pack.seal.key).toMatch(/^SHA256:[A-Za-z0-9+/]{43}$/);
+    expect(pack.sealedRecord.seq).toBeGreaterThan(0);
+    expect(pack.sealedRecord.hash).toMatch(/^[a-f0-9]{64}$/);
     expect((await h.client.raw('GET', '/api/plans/no-such-plan/signoff-pack')).status).toBe(404);
   });
 
@@ -127,6 +132,7 @@ test.describe.serial('Sign-off surface', () => {
     expect(apart).toBeGreaterThan(0);
     expect(savedPage.indexOf('EMEA revenue matches the ledger', apart)).toBeGreaterThan(apart);
     expect(savedPage).toContain('1 of 4 criteria met — 1 of them unverified (local API), listed separately');
+    expect(savedPage).toMatch(/Signed by the computer with key <code>SHA256:[A-Za-z0-9+/]{43}<\/code>, with its record at entry #\d+/);
     expect((await h.client.raw('GET', '/api/plans/no-such-plan/signoff-pack.html')).status).toBe(404);
   });
 
@@ -137,6 +143,22 @@ test.describe.serial('Sign-off surface', () => {
     expect(result.files.find((f: { path: string }) => f.path === 'data/ledger.csv').verdict).toBe('matches');
     expect(result.changed).toBe(0);
     expect(result.missing).toBe(0);
+    expect(result.seal.state).toBe('this-computer');
+    expect(result.seal.words).toMatch(/^Signed by this computer \(SHA256:.{12}…\), and unchanged since; the record it names is still here and unchanged \(entry #\d+\)\.$/);
+  });
+
+  test('a saved page edited afterwards says so, even where the edit makes the files look right; one with no seal says it is unsigned (B10.3)', async () => {
+    // Someone changes the hash the pack vouches for, so the file would "match" whatever it now holds.
+    const data = /<script type="application\/json" id="codetrellis-signoff-pack">([\s\S]*?)<\/script>/.exec(savedPage)![1];
+    const pack = JSON.parse(data);
+    pack.files[0].sha256 = 'f'.repeat(64);
+    const edited = await (await verify(planUid, JSON.stringify(pack))).json();
+    expect(edited.seal.state).toBe('changed');
+    expect(edited.seal.words).toMatch(/^Changed after it was signed: this pack no longer matches its signature \(key SHA256:.{12}…\)\.$/);
+
+    delete pack.seal;
+    const unsigned = await (await verify(planUid, JSON.stringify(pack))).json();
+    expect(unsigned.seal).toEqual({ state: 'unsigned', fingerprint: null, signer: null, record: null, words: 'This pack is not signed: it was made before packs were signed, or its signature was removed.' });
   });
 
   test('the source moves: the check fails, the worklist says stale and why, the pack no longer matches', async () => {
