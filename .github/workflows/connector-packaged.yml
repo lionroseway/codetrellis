@@ -36,6 +36,9 @@ jobs:
       - name: Install deps
         # As in build-installers.yml: the lockfile exactly, no install scripts.
         run: npm ci --ignore-scripts
+      - name: Apply patches/
+        # As in build-installers.yml: --ignore-scripts skips patch-package too.
+        run: npx patch-package && node scripts/check-patches.cjs
       - name: Install FUSE 2
         # The AppImage runtime needs libfuse2 to mount itself; ubuntu-latest
         # ships only FUSE 3.
@@ -58,6 +61,9 @@ jobs:
           cache: npm
       - name: Install deps
         run: npm ci --ignore-scripts
+      - name: Apply patches/
+        # As in build-installers.yml: --ignore-scripts skips patch-package too.
+        run: npx patch-package && node scripts/check-patches.cjs
       - name: Build the installer + portable exe
         # The same script build-installers.yml runs, so the portable launcher
         # under test is the one that ships.
