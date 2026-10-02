@@ -21,6 +21,7 @@ import { sideWords } from '@shared/lib/signal-words';
 import type { AwarenessSignal, SettableSignalState, Workstream } from '@shared/types';
 import { UnverifiedIf } from '../UnverifiedTag';
 import { BreakpointsWaiting, BreakpointsSet } from './Breakpoints';
+import { useHighlight } from '../../lib/use-highlight';
 import { PlannedOverlapNotices } from './PlannedOverlapNotices';
 import { RecurringDue } from './RecurringDue';
 import { singleFlight } from '../../lib/single-flight';
@@ -472,6 +473,7 @@ function SignalFileChips({ signal: s, workstreams }: { signal: AwarenessSignal; 
 }
 
 function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; workstreams: Workstream[]; now: number }) {
+  const pointed = useHighlight('signal', s.id);
   const answer = useAwarenessStore((st) => st.answer);
   // Answering is for now: a replayed signal is shown as it was, without actions.
   const replayed = useReplayState() !== null;
@@ -499,10 +501,13 @@ function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; 
 
   return (
     <div
+      ref={pointed.ref}
       data-testid="awareness-signal"
+      data-signal-id={s.id}
+      data-highlighted={pointed.highlighted ? 'true' : undefined}
       data-state={s.state}
       data-severity={s.severity}
-      className={`rounded-md border border-border-subtle border-l-2 ${SEVERITY_EDGE[s.severity]} bg-surface/40 px-2.5 py-2 ${quiet ? 'opacity-75' : ''}`}
+      className={`rounded-md border border-border-subtle border-l-2 ${SEVERITY_EDGE[s.severity]} bg-surface/40 px-2.5 py-2 ${quiet ? 'opacity-75' : ''}${pointed.ring}`}
     >
       <div className="flex items-center gap-1.5">
         <span className={`text-[8px] uppercase font-semibold px-1 rounded ${SEVERITY_PILL[s.severity]}`}>{s.severity}</span>

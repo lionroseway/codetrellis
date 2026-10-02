@@ -234,6 +234,14 @@ export interface UpdateSettings {
 }
 
 /** How often keeping remotes current fetches, in minutes. */
+/**
+ * The Settings window's sections, in its own order. `open_settings` takes one
+ * (an agent opening Settings where the person needs to look), and the window's
+ * own type is this list, so the two cannot drift.
+ */
+export const SETTINGS_SECTIONS = ['identity', 'appearance', 'mcp', 'plans', 'review-hosts', 'plans-folder', 'recurring', 'rules', 'shared-state', 'data', 'devices', 'power', 'sync', 'logs', 'telemetry', 'updates', 'git', 'about'] as const;
+export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
+
 export const FETCH_INTERVAL_CHOICES = [5, 15, 30, 60] as const;
 
 /** Git (Phase 32 E5): whether remotes are kept current in the background. */

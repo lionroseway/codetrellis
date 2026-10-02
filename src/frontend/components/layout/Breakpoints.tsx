@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useHighlight } from '../../lib/use-highlight';
 import { ChevronDown, ChevronRight, Pause, OctagonAlert, X, PenLine } from 'lucide-react';
 import { useReplayState } from '../../stores/replay-store';
 import { hhmm } from '../../lib/replay';
@@ -79,6 +80,7 @@ export function BreakpointsWaiting({ now: liveNow }: { now: number }) {
 }
 
 function WaitingCard({ hit, now, replayed = false }: { hit: BreakpointHit; now: number; replayed?: boolean }) {
+  const pointed = useHighlight('breakpoint', hit.ref);
   const answer = useBreakpointsStore((s) => s.answer);
   const workstreams = useAwarenessStore((s) => s.workstreams);
   const [note, setNote] = useState('');
@@ -99,8 +101,9 @@ function WaitingCard({ hit, now, replayed = false }: { hit: BreakpointHit; now: 
 
   const edge = hit.breach ? 'border-l-danger/70' : 'border-l-warning/70';
   return (
-    <div data-testid="breakpoint-waiting" data-ref={hit.ref} data-breach={hit.breach ? 'true' : 'false'}
-      className={`rounded-md border border-border-subtle border-l-2 ${edge} bg-surface/40 px-2.5 py-2`}>
+    <div ref={pointed.ref} data-testid="breakpoint-waiting" data-ref={hit.ref} data-breach={hit.breach ? 'true' : 'false'}
+      data-highlighted={pointed.highlighted ? 'true' : undefined}
+      className={`rounded-md border border-border-subtle border-l-2 ${edge} bg-surface/40 px-2.5 py-2${pointed.ring}`}>
       <div className="flex items-center gap-1.5">
         {hit.breach
           ? <span className="flex items-center gap-1 text-[8px] uppercase font-semibold px-1 rounded bg-danger/15 text-danger"><OctagonAlert size={9} /> Breach</span>
