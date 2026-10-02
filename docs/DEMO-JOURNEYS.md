@@ -115,6 +115,63 @@ Intended, setting a breakpoint, answering it) are asked for in the window;
 | `intent` | Codex declares what it will change, and the overlap with `auth-refresh` appears before any file changes |
 | `breakpoint` | the hook pauses Claude Code's edit; a steer lets it through with its note; an agent with no hook is told it breached |
 
+## A3. How the work stacks up (`observe`) — *built*
+
+Plans assigned to lines of work, read the ways a lead reads them: the Stack,
+a past moment, review and the merge order, and plans played forward.
+`npm run demo -- --group=observe`. The one person's step is re-sequencing.
+
+| Scene | Watch for |
+|---|---|
+| `stack` | "Billing v2" and "JIRA-150", codex on `billing-v2` and Claude Code on `exports`; "⚠ overlaps JIRA-150", and "Export form" waiting on "Strict validation" |
+| `replay` | the moment before Exports existed: Billing alone, its task pending with nobody on it, no signals; now, the contract is open |
+| `review-queue` | "Other work in flight" says exports will need updating; the PR draft warns while the overlap is open; `billing-v2` merges first; once Billing's task is done, Export form waits on nothing |
+| `play-forward` | "◇ planned overlap: JIRA-142 and JIRA-151 both plan to change …validators.ts"; re-sequenced with JIRA-142 first, "Add a currency field" waits on "Round VAT per line" |
+
+## A4. The record (`record`) — *built*
+
+What was asked, done, checked and decided, provably unchanged.
+`npm run demo -- --group=record`. The person approves a criterion in the Brief.
+
+| Scene | Watch for |
+|---|---|
+| `evidence` | "Intact: N entries…" before and after; codex claims, starts and submits; the criterion approved (met); the plan's signed evidence names the approval |
+| `then` | asked about the moment the task was under way: `in_progress` then, `done` now; the Timeline |
+
+## A5. How the code got here (`code-history`) — *built*
+
+No plan needed. `npm run demo -- --group=code-history`. Scrubbing file
+history, Fetch now and the pull-request list are the window's; walk them by
+hand (B8).
+
+| Scene | Watch for |
+|---|---|
+| `whose-line` | line 1 "codex, from the commit message"; line 2 "probably codex: committed while codex's session was open"; line 3 "not yet committed" |
+| `branch-compare` | `billing-v2 (line of work)` offered; "1 modified, 0 added, 0 removed"; "billing-v2 changed 1–3, in refund and halfEven, not committed" |
+
+## A6. Teams and shared rules (`teams`) — *built*
+
+A rule and a weekly playbook committed in `.codetrellis/config.json`, as a
+team shares them. `npm run demo -- --group=teams`. Starting a playbook's run
+is the person's step.
+
+| Scene | Watch for |
+|---|---|
+| `rules` | one high rule signal naming `exports-v2`, the import and the reason; Claude Code told, Codex in `auth-fix` told nothing; it clears when the import comes out |
+| `recurring` | "Weekly security review is due since Monday. Start it?", with W38 and W39 missed; starting it twice finds the same run |
+| `grounding` | "⚠ tests older than the code", and done refused with the reason; after a fresh report, done goes through |
+| `plan-status` | "building on exports-v2, not pushed" from git; "1 of 4 tasks done"; "FIN-88 → this plan → exports-v2 not pushed yet" |
+
+## A7. The phone (`phone`) — *built*
+
+What can be shown without a device; the phone itself stays B11, by hand.
+`npm run demo -- --group=phone`.
+
+| Scene | Watch for |
+|---|---|
+| `devices` | paired and connected counts that agree between `get_peer_status` and `list_paired_devices` |
+| `reach` | with a phone: a card and the plans list on it; without one, `mobile_present` answers `mobile: false` and `mobile_navigate` is refused with why |
+
 ## B. The journeys, and where each one lives
 
 ### B1. A human plans it by hand — *built*

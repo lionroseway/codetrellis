@@ -317,3 +317,76 @@ export function sampleAppRepo(name: string, worktrees: string[], seed?: (dir: st
   };
 }
 
+
+/** A small payments repository: a few files that import each other, one commit on `main`. */
+function smallPaymentsRepo(dir: string): void {
+  init(dir);
+  write(dir, 'billing/refund.ts', 'export const refund = (x: number) => Math.round(x);\n');
+  write(dir, 'billing/ledger.ts', "import { refund } from './refund';\n\nexport function post(amount: number): number {\n  return refund(amount);\n}\n");
+  write(dir, 'billing/index.ts', "export { post } from './ledger';\n");
+  write(dir, 'README.md', '# payments\n');
+  commit(dir, 'Refunds');
+}
+
+/**
+ * A payments repository for the record group: somewhere to make a plan whose
+ * evidence is exported. Its own folder, so nothing the person keeps is touched.
+ */
+export function paymentsRepo(): string {
+  const dir = path.join(base(), 'record-payments');
+  smallPaymentsRepo(dir);
+  return dir;
+}
+
+export interface AgentBranchFixture {
+  /** The person's checkout, on `main`. */
+  path: string;
+  /** The teammate's worktree, on `branch`. */
+  worktree: string;
+  branch: string;
+  /** The file the teammate's agent works on, relative to either checkout. */
+  file: string;
+  /** Write the file in the worktree and commit it there as the teammate (Sam Lee); returns the sha. */
+  commit(body: string, message: string): string;
+  /** Write the file in the worktree without committing it. */
+  write(body: string): void;
+  /** The file as it is in the worktree now. */
+  read(): string;
+}
+
+/**
+ * The Track E shape: a repository nobody planned in, with a teammate's
+ * worktree on `billing-v2` beside the person's `main`. The commits are the
+ * scene's to make, so it can open the agent's session between them (a commit
+ * made while a session is open in a checkout is attributed by timing).
+ */
+export function repoWithAgentBranch(): AgentBranchFixture {
+  const dir = path.join(base(), 'code-history');
+  smallPaymentsRepo(dir);
+  const branch = 'billing-v2';
+  const worktree = `${dir}-billing`;
+  git(dir, 'worktree', 'add', '-q', '-b', branch, worktree, 'main');
+  const file = 'billing/refund.ts';
+  const teammate = {
+    ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null',
+    GIT_AUTHOR_NAME: 'Sam Lee', GIT_AUTHOR_EMAIL: 'sam@acme.test', GIT_COMMITTER_NAME: 'Sam Lee', GIT_COMMITTER_EMAIL: 'sam@acme.test',
+  };
+  const asTeammate = (...args: string[]) => execFileSync('git', args, { cwd: worktree, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], env: teammate }).trim();
+  return {
+    path: dir,
+    worktree,
+    branch,
+    file,
+    commit(body, message) {
+      write(worktree, file, body);
+      asTeammate('commit', '-qam', message);
+      return asTeammate('rev-parse', 'HEAD');
+    },
+    write(body) {
+      write(worktree, file, body);
+    },
+    read() {
+      return fs.readFileSync(path.join(worktree, file), 'utf-8');
+    },
+  };
+}

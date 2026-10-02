@@ -6,8 +6,8 @@ that Mac, can follow it top to bottom. Nothing is uploaded until step 6, and
 step 6 only runs once steps 3–5 have passed.
 
 The order is: **build without publishing → prove the packaged app boots →
-run the demo against it → drive the new features → publish what was
-tested → the phone.** The build that is published is the build that was
+run the demo against it → check what only a person can → publish what
+was tested → the phone.** The build that is published is the build that was
 checked, because step 6 uploads the artefacts step 2 made
 (`--skip-build`), not a fresh build.
 
@@ -62,55 +62,46 @@ microphone"** (the `capture` capability) so the demo can take its pictures.
 Untick it again when the demo is done: it is off by default for a reason.
 
 ```bash
-npm run demo -- --list
-npm run demo -- --pace=fast --shots=/tmp/ct-demo-shots
-npm run demo -- --scene=brief --connector=out/connector/mcp-connector.cjs
+npm run demo -- --list                                   # every group and its scenes
+npm run demo -- --all --pace=fast --shots=/tmp/ct-demo-shots \
+  --connector=out/connector/mcp-connector.cjs
 ```
 
-- [ ] Every scene ends without an error. Watch the window, not the terminal:
-      each scene narrates itself with a card. `docs/DEMO-JOURNEYS.md` says what
-      to look for in each.
+`--all` plays the main loop, then the Phase 32 groups: `parallel` (many agents
+at once), `observe` (how the work stacks up), `record`, `code-history` (how the
+code got here), `teams` and `phone`. Each makes its own throwaway repository
+and removes it. `docs/DEMO-JOURNEYS.md` says what to watch for in every scene.
+
+- [ ] Every scene ends without an error, and the run ends with **"Nothing
+      looked wrong."** A numbered list instead is the release's to-do list:
+      each item names what it expected and what it saw.
+- [ ] Some steps are yours, and the window asks for them with a card:
+      marking an overlap Intended, setting a breakpoint and answering it,
+      approving a criterion, resequencing two plans, deciding the brief.
+      Do each when asked; the demo waits up to 3 minutes. (`--decide` only
+      works on a dev build, which serves the HTTP route it uses.)
 - [ ] `/tmp/ct-demo-shots` has one picture per scene, and each shows what its
-      caption says.
-- [ ] The `brief` scene waits for a person to decide in the window (send back
-      or approve). Decide it; `--decide` works only on a dev build.
+      caption says. A shot the window never showed is flagged, not saved.
 - [ ] Everything the demo changed on disk, it changed back: `git status` in
       `tests/fixtures/sample-app` is clean.
 
-The demo's 24 scenes predate Phase 32. Step 5 covers what Phase 32 added.
+The same Phase 32 scenes run in CI with no window
+(`tests/e2e/demo-check.test.ts`), so a failure here that CI did not see is
+about the packaged app, the window, or this machine.
 
-## 5. Drive the new features (Phase 32)
+## 5. What only a person can check
 
-Against the packaged app, with Claude Code (or any MCP agent) connected
-through the connector from `docs/recipes/mcp.json`. Use a scratch clone so
-nothing real is touched:
-
-```bash
-git clone https://github.com/lionroseway/codetrellis /tmp/ct-drive && cd /tmp/ct-drive
-git worktree add ../ct-drive-a -b drive-a && git worktree add ../ct-drive-b -b drive-b
-```
-
-Open `/tmp/ct-drive` in the app. Each row is a JOURNEYS.md journey; the test
-named proves it in CI, and this proves it in the packaged app.
-
-| # | Do | You should see | Journey |
-|---|---|---|---|
-| 1 | Start an agent in each worktree | Two chips in the top bar, each with its branch and agent; the Awareness tab lists both | A1 |
-| 2 | Have both agents edit the same function | Within seconds, an overlap in Awareness; each agent's next tool reply carries a short note naming the other line of work | B1 |
-| 3 | Mark the overlap **Intended** | It goes quiet; changing the function again does not repeat it | B5 |
-| 4 | Set a breakpoint on a file ("ask me before touching it"), then have an agent write to it | The write is held; the window asks you; approving lets it through | K1 |
-| 5 | Open the Timeline, quit the app, relaunch | Every tool call is still there, grouped by agent | Timeline |
-| 6 | Replay: scrub back ten minutes | The graph, the stack and what waited on you, as they were then | G1 |
-| 7 | Stack and Review tabs | The two lines of work, what clashes, and a merge order with reasons | H1, D2 |
-| 8 | Changes tab: compare `drive-a` with `main`; open line history on a changed file | File-by-file diff; each line's commit, author and agent | L6 |
-| 9 | Settings → Data → Record; then **Export evidence** on the replay bar, and **Verify evidence…** on the file | "Intact" with an entry count; the export names who signed it and verifies as one unbroken chain | G2 |
-| 10 | Settings → Git and Review hosts | Keeping remotes current is **off**; review hosts are **off**. Turning one on asks you, in the window | — |
-| 11 | From a terminal in the clone: `npm ci && npm link && codetrellis start && codetrellis status` (app quit first) | Headless backend starts, `status` prints what is in progress | L3 |
-| 12 | Pair the phone (step 7's build, or the store build) | Needs you, the overlap with Acknowledge / Intended / Reply, the lines of work; a high overlap pushes | C2 |
+| # | Do | You should see |
+|---|---|---|
+| 1 | Open the Timeline, quit the app, relaunch | Every tool call from step 4 is still there, a lane per agent |
+| 2 | Replay: scrub back to the middle of step 4 | The graph, the stack and what waited on you, as they were then |
+| 3 | Settings → Git and Settings → Review hosts | Keeping remotes current is **off**; review hosts are **off**; turning one on asks you, in the window |
+| 4 | Settings → Data → Record; **Export evidence** on the replay bar, then **Verify evidence…** on the file | "Intact" with an entry count; the export names who signed it and verifies as one unbroken chain |
+| 5 | Quit the app. In a clone: `npm ci && npm link && codetrellis start && codetrellis status` | A headless backend starts and `status` prints what is in progress |
+| 6 | Pair the phone (step 7's build, or the store build) | Needs you, an overlap with Acknowledge / Intended / Reply, the lines of work; a high overlap pushes |
 
 - [ ] Every row behaves as written. A row that does not is a release blocker
       until someone decides otherwise; write down what happened.
-- [ ] Clean up: `git worktree remove ../ct-drive-a ../ct-drive-b`, delete `/tmp/ct-drive`.
 
 ## 6. Publish what was tested
 
@@ -138,7 +129,7 @@ export ANDROID_HOME="$HOME/Library/Android/sdk"
 ./scripts/release-mobile.sh --platform android      # Android: build; upload by hand
 ```
 
-- [ ] Install the new build on a real phone and repeat step 5 row 12 against the released desktop.
+- [ ] Install the new build on a real phone and repeat step 5 row 6 against the released desktop.
 - [ ] Attach the APK to the GitHub release; say in the notes which phone builds are in it.
 
 ## If something fails
