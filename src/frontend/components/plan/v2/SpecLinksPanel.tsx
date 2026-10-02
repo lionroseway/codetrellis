@@ -31,21 +31,21 @@ export function SpecLinksPanel({ item }: { item: PlanItem }) {
 
   useEffect(() => {
     let live = true;
-    fetch(`/api/items/${item.uid}/spec-links`)
+    // Read again when a proposal is made, decided, or its news reaches an
+    // agent: "its agent has been told" shows as it happens, not on reopening.
+    const loadLinks = () => fetch(`/api/items/${item.uid}/spec-links`)
       .then((r) => (r.ok ? r.json() : null))
       .then((body: Links | null) => { if (live) setLinks(body); })
       .catch(() => { if (live) setLinks(null); });
-    if (item.kind === 'object') {
-      const load = () => fetch(`/api/spec-proposals?page=${encodeURIComponent(item.uid)}&status=open`)
-        .then((r) => (r.ok ? r.json() : { proposals: [] }))
-        .then((body: { proposals: Proposal[] }) => { if (live) setProposals(body.proposals ?? []); })
-        .catch(() => { /* the links still show */ });
-      void load();
-      window.addEventListener('spec-proposals-changed', load);
-      return () => { live = false; window.removeEventListener('spec-proposals-changed', load); };
-    }
-    setProposals([]);
-    return () => { live = false; };
+    const loadProposals = () => (item.kind !== 'object' ? Promise.resolve() : fetch(`/api/spec-proposals?page=${encodeURIComponent(item.uid)}&status=open`)
+      .then((r) => (r.ok ? r.json() : { proposals: [] }))
+      .then((body: { proposals: Proposal[] }) => { if (live) setProposals(body.proposals ?? []); })
+      .catch(() => { /* the links still show */ }));
+    const load = () => { void loadLinks(); void loadProposals(); };
+    if (item.kind !== 'object') setProposals([]);
+    load();
+    window.addEventListener('spec-proposals-changed', load);
+    return () => { live = false; window.removeEventListener('spec-proposals-changed', load); };
   }, [item]);
 
   if (!links) return null;
