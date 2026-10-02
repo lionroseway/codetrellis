@@ -17,11 +17,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B10.4: the evidence export |
-| **Status** | B10.2 in review (#310), B10.3 in review (#311, stacked). B10.4 built: GET /api/evidence (a plan, or a window of an opened project; JSON or the page), export_evidence (read), POST /api/evidence/verify; one package with the record's entries and the link before them (recomputable from the file alone), the frames, the stack and signals at both ends, the breakpoints and decisions in words, and the plan's sign-off pack, signed like a pack in its own namespace. Verify says who signed it, whether its chain holds, and on the computer that made it, any entry changed in the record since. From the Brief and the replay bar. Unit evidence 8, harness evidence 6, browser evidence (shots) |
-| **In flight** | B10.2 in review (#310) on `feat/phase-32-b10-2-retention`; B10.3 in review (#311) on `feat/phase-32-b10-3-signed-packs`; B10.4 building on `feat/phase-32-b10-4-evidence` |
+| **Stage / step** | Track B — B10.5: the G2 done-when and docs |
+| **Status** | B10.2 (#310), B10.3 (#311) and B10.4 (#312) in review, stacked. B10.5 built: replay a chosen week (Timeline: "or a week from [day]"; the bar names the days; its evidence exports for that week); record-g2.test.ts walks G2 with the backend's clock 120 days ahead (frames, the code, the stack and the waiting call then, the Timeline's decisions with who, the record intact since that week, the week's evidence verifies, the approval edited in the database named by the record and by the evidence exported before); docs/claude/record.md. Unit test-clock 2, replay words; harness record-g2 4; browser replay-week (shots) |
+| **In flight** | B10.2 in review (#310) on `feat/phase-32-b10-2-retention`; B10.3 in review (#311) on `feat/phase-32-b10-3-signed-packs`; B10.4 in review (#312) on `feat/phase-32-b10-4-evidence`; B10.5 building on `feat/phase-32-b10-5-g2` |
 | **Last merged** | B10.1 (#309, `aec597e`) |
-| **Next action** | Merge B10.2 (#310), then B10.3 (#311) and B10.4 by the stacked flow; then B10.5 (the G2 done-when and docs/claude/record.md) |
+| **Next action** | Merge #310, #311, #312 and B10.5 in order by the stacked flow; B10 is then done. Then the review |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
@@ -222,8 +222,8 @@
   - [x] B10.1 The chain: every kept event linked, decisions as events, verified in words (#309)
   - [ ] B10.2 Retention you can set, and the chain still verifies (#310) — in review
   - [ ] B10.3 Signed packs, carrying the record's head (#311) — in review
-  - [ ] B10.4 The evidence export — building
-  - [ ] B10.5 The G2 done-when and docs
+  - [ ] B10.4 The evidence export (#312) — in review
+  - [ ] B10.5 The G2 done-when and docs — building
 
 ### Track C: shared ways of working
 - [x] C1 Skills on tasks
@@ -440,6 +440,8 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | C4.2a: a scheduled start is authored `schedule` (a system author, as other app-made records are), and the run keeps who set the rule | No person or agent called; the rule a person set is the reason, and saying "schedule" never passes the app off as that person |
 | 2026-10-02 | C4.3b: an agent on each run is kept per rule on this device, never in the committed config, and set by the person only; it starts only when the run was made here by the person in the window, the schedule, or a phone granted `terminal` — from plain HTTP or a phone without it, the run is made and says why not | It starts a process on this machine, so it is the person's and this machine's, never the team's; loopback is not a person, and a phone may only cause a terminal the person allowed it. A found run starts nothing, so two laptops make one agent |
 | 2026-10-02 | A7 is refined into three parts (EXECUTION §4): the rules and the check, rule signals from each workstream's import delta, the gate and the done-when. A rule is a path boundary (`from`, `mayNotImport`, `except`, `because`) in the committed config | One file every laptop, agent and pipeline reads; a boundary between two sets of paths is what M7 asks for ("web/ may not import db/") and covers layers without a layer model |
+| 2026-10-02 | B10.5: "months later" is tested by moving the backend's clock (`CODETRELLIS_CLOCK_OFFSET_MS`, `Date.now()` and `new Date()` both), not by backdating rows | Backdating writes rows no code path writes, and skips what the months do: retention, pruning, the record's time. A moved clock runs the real code at the later date, so the year's retention is what keeps the week |
+| 2026-10-02 | B10.5: replay takes a chosen week, not only the last two hours or since the last visit | G2 starts with "sets the cursor to that week"; without a way to choose it, the journey had no first step. The week's evidence exports from the same bar |
 | 2026-10-02 | B10.4: an evidence export carries every record entry in its window, whichever project it was about, with the link before the window, rather than only the project's entries | The chain only recomputes over consecutive links; leaving out other projects' entries would leave gaps nobody outside could check. The record is the computer's, not one project's, and the docs say so; the frames, the stack and the signals are the project's |
 | 2026-10-02 | B10.4: verifying an export on the computer that made it compares every entry against that computer's record, and names any changed, removed or relinked since; entries retention removed since are said, and do not fail it | The G2 question is "has anything changed since we exported this?": the file alone shows the file is intact, only the record shows the database has not been edited since. Retention removing old entries is policy, not tampering |
 | 2026-10-02 | B10.3: the sign-off pack is signed with the device key task records already use (C3.1), in its own namespace (`codetrellis-signoff-pack`), never the release-manifest key; the signature covers the record's head at signing, and verifying names the signer against this computer's trust (its own key, a teammate's trusted key, or a key not known here) | One per-install key, already trusted between teammates by fingerprint, so no second trust model; a namespace keeps a task-record signature from passing as a pack's. Carrying the head ties the pack to the record: an edit to the record since shows when the pack is verified as well as in the record's own walk |
@@ -472,6 +474,25 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-02: B10.5 — the G2 done-when, and the record's docs
+- **Journey.** Months later an auditor asks about the refunds change. On
+  the Timeline, Sam chooses "or a week from 2 Mar": the bar says
+  "Replaying 2 Mar 09:14 → 6 Mar 17:40", the moment shows the claim that
+  waited on a person, the graph is the code then, and the stack has both
+  plans under way. Settings → Data says the record is intact since that
+  week. "Export evidence" on the bar saves the week, and verifying it says
+  it holds. Someone edits the approval in the database: the record names
+  the entry, and so does the evidence exported before.
+- **Built.** Replay a chosen week (`ReplayStart`, the store's `to`,
+  `weekFrom`, `whenWords`/`dayWords`); the bar's evidence names the week;
+  the compact verdict on the bar; the seal says when the record was empty;
+  `services/test-clock.ts`; `docs/claude/record.md` (linked from
+  CLAUDE.md).
+- **Tests.** Unit `test-clock.test.ts` (2), `replay.test.ts` (days),
+  `pack-seal.test.ts` (empty record). Harness `record-g2.test.ts` (4).
+  Browser `agent/replay-week.spec.ts` (shots `replay-week-start`,
+  `replay-week`).
 
 ### 2026-10-02: B10.4 — the evidence export
 - **Journey.** The auditor asks what happened while the refunds plan was
