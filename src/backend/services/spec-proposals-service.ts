@@ -353,9 +353,17 @@ function noticeText(p: SpecProposal, mine: RelianceIn[]): string {
  * reaches each session once. Never throws: a notice must not break the tool
  * call it rides on.
  */
-export function proposalNoticeFor(sessionId: string, agentType: string | null, now = Date.now()): string | null {
+export function proposalNoticeFor(
+  sessionId: string,
+  agentType: string | null,
+  now = Date.now(),
+  /** The tasks whose agent was just told their spec changed, so the window can say so at once. */
+  onTold?: (itemUids: string[]) => void,
+): string | null {
   try {
-    const later = [specChangedNotice(sessionId, now), outcomeNotice(sessionId, now)].filter((x): x is string => !!x);
+    const changed = specChangedNotice(sessionId, now);
+    if (changed && changed.items.length > 0) onTold?.(changed.items);
+    const later = [changed?.text ?? null, outcomeNotice(sessionId, now)].filter((x): x is string => !!x);
     const holds = rows('SELECT 1 FROM plan_items WHERE assignee_session = ? LIMIT 1', [sessionId]).length > 0;
     const unread = !holds ? [] : rows(
       `SELECT uid FROM spec_proposals s WHERE s.status = 'open' AND (s.session_id IS NULL OR s.session_id != ?)
@@ -549,14 +557,15 @@ export function specChangedFor(itemUid: string): Array<{ proposalUid: string; pa
     });
 }
 
-/** "Spec changed" notices for the tasks this session holds, marked told. */
-function specChangedNotice(sessionId: string, now: number): string | null {
+/** "Spec changed" notices for the tasks this session holds, marked told, with which tasks. */
+function specChangedNotice(sessionId: string, now: number): { text: string; items: string[] } | null {
   const flags = rows(
     `SELECT f.item_uid, f.proposal_uid, i.title FROM spec_change_flags f JOIN plan_items i ON i.uid = f.item_uid
       WHERE f.read_at IS NULL AND i.assignee_session = ? ORDER BY f.created_at`,
     [sessionId],
   );
   if (flags.length === 0) return null;
+  const items = [...new Set(flags.map((f) => f[0] as string))];
   const parts = flags.map(([itemUid, proposalUid, title]) => {
     getDb().run('UPDATE spec_change_flags SET read_at = ?, read_by_session = ? WHERE item_uid = ? AND proposal_uid = ?', [now, sessionId, itemUid, proposalUid]);
     const p = getProposal(proposalUid as string);
@@ -569,7 +578,7 @@ function specChangedNotice(sessionId: string, now: number): string | null {
       'Work to the new text; get_spec_links shows the page.',
     ].join('\n');
   }).filter((x): x is string => !!x);
-  return parts.length ? ['── CodeTrellis: spec changed ──', parts.join('\n\n')].join('\n') : null;
+  return parts.length ? { text: ['── CodeTrellis: spec changed ──', parts.join('\n\n')].join('\n'), items } : null;
 }
 
 /** The proposing session told how its proposals were decided, once each. */
