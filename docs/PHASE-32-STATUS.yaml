@@ -14,8 +14,8 @@
 # and prs (PRs whose merge commit does not name the id).
 now:
   step: "Track B — B10.4: the evidence export"
-  status: "B10.2 in review (#310), B10.3 in review (#311, stacked). B10.4 built: GET /api/evidence (a plan, or a window of an opened project; JSON or the page), export_evidence (read), POST /api/evidence/verify; one package with the record's entries and the link before them (recomputable from the file alone), the frames, the stack and signals at both ends, the breakpoints and decisions in words, and the plan's sign-off pack, signed like a pack in its own namespace. Verify says who signed it, whether its chain holds, and on the computer that made it, any entry changed in the record since. From the Brief and the replay bar. Unit evidence 8, harness evidence 6, browser evidence (shots)"
-  next: "Merge B10.2 (#310), then B10.3 (#311) and B10.4 by the stacked flow; then B10.5 (the G2 done-when and docs/claude/record.md)"
+  status: "B10.2 (#310) and B10.3 (#311) merged. B10.4 in review (#312): GET /api/evidence (a plan, or a window of an opened project; JSON or the page), export_evidence (read), POST /api/evidence/verify; one package with the record's entries and the link before them (recomputable from the file alone), the frames, the stack and signals at both ends, the breakpoints and decisions in words, and the plan's sign-off pack, signed like a pack in its own namespace. Verify says who signed it, whether its chain holds, and on the computer that made it, any entry changed in the record since. From the Brief and the replay bar. Unit evidence 8, harness evidence 6, browser evidence (shots)"
+  next: "Merge B10.4 (#312), then B10.5 (#313) by the stacked flow; Track E (E1, #314) is in review"
   blockers: "None"
   updated: 2026-10-02
 sections:

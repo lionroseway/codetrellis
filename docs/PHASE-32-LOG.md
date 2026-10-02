@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Track B — B10.4: the evidence export |
-| **Status** | B10.2 in review (#310), B10.3 in review (#311, stacked). B10.4 built: GET /api/evidence (a plan, or a window of an opened project; JSON or the page), export_evidence (read), POST /api/evidence/verify; one package with the record's entries and the link before them (recomputable from the file alone), the frames, the stack and signals at both ends, the breakpoints and decisions in words, and the plan's sign-off pack, signed like a pack in its own namespace. Verify says who signed it, whether its chain holds, and on the computer that made it, any entry changed in the record since. From the Brief and the replay bar. Unit evidence 8, harness evidence 6, browser evidence (shots) |
-| **In flight** | B10.2 in review (#310) on `feat/phase-32-b10-2-retention`; B10.3 in review (#311) on `feat/phase-32-b10-3-signed-packs`; B10.4 building on `feat/phase-32-b10-4-evidence` |
-| **Last merged** | B10.1 (#309, `aec597e`) |
-| **Next action** | Merge B10.2 (#310), then B10.3 (#311) and B10.4 by the stacked flow; then B10.5 (the G2 done-when and docs/claude/record.md) |
+| **Status** | B10.2 (#310) and B10.3 (#311) merged. B10.4 in review (#312): GET /api/evidence (a plan, or a window of an opened project; JSON or the page), export_evidence (read), POST /api/evidence/verify; one package with the record's entries and the link before them (recomputable from the file alone), the frames, the stack and signals at both ends, the breakpoints and decisions in words, and the plan's sign-off pack, signed like a pack in its own namespace. Verify says who signed it, whether its chain holds, and on the computer that made it, any entry changed in the record since. From the Brief and the replay bar. Unit evidence 8, harness evidence 6, browser evidence (shots) |
+| **In flight** | B10.4 in review (#312) on `feat/phase-32-b10-4-evidence`; B10.5 in review (#313) on `feat/phase-32-b10-5-g2`; #314 in review on `feat/phase-32-e1-source-control` |
+| **Last merged** | B10.3 (#311, `e415975`) |
+| **Next action** | Merge B10.4 (#312), then B10.5 (#313) by the stacked flow; Track E (E1, #314) is in review |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `aec597e`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `e415975`, with open PRs from GitHub.
 
 ---
 
@@ -220,10 +220,10 @@
   - [x] B9.4 The phone and the G3 done-when (#298)
 - [ ] B10 The record — building
   - [x] B10.1 The chain: every kept event linked, decisions as events, verified in words (#309)
-  - [ ] B10.2 Retention you can set, and the chain still verifies (#310) — in review
-  - [ ] B10.3 Signed packs, carrying the record's head (#311) — in review
-  - [ ] B10.4 The evidence export — building
-  - [ ] B10.5 The G2 done-when and docs
+  - [x] B10.2 Retention you can set, and the chain still verifies (#310)
+  - [x] B10.3 Signed packs, carrying the record's head (#311)
+  - [ ] B10.4 The evidence export (#312) — in review
+  - [ ] B10.5 The G2 done-when and docs (#313) — in review
 
 ### Track C: shared ways of working
 - [x] C1 Skills on tasks
