@@ -13,7 +13,10 @@ import { execFileSync } from 'node:child_process';
 
 process.env.CODETRELLIS_WORKSTREAM_DEBOUNCE_MS = '100';
 
-import { parseForEachRef, selectBranchWorkstreams, branchWorkstreamsOf, showAt, listBranchRefs, parseRawZ, isMergedInto, type BranchRef } from './branch-workstreams';
+import {
+  parseForEachRef, selectBranchWorkstreams, branchWorkstreamsOf, showAt, listBranchRefs, parseRawZ, isMergedInto,
+  resetBranchWorkstreamCache, branchWorkstreamsWarmed, setBranchWorkstreamsWarmedListener, type BranchRef,
+} from './branch-workstreams';
 import { watchRefs, setRefsChangedListener, stopWorkstreamWatchers } from './workstream-watch-service';
 
 const BASE_ENV = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' };
@@ -227,5 +230,33 @@ describe('merged by content, not ancestry (bug 53)', () => {
     assert.equal(isMergedInto([{ path: 'a.ts', blob: '1'.repeat(40) }, { path: 'gone.ts', blob: null }], main), true);
     assert.equal(isMergedInto([{ path: 'a.ts', blob: '1'.repeat(40) }, { path: 'b.ts', blob: '2'.repeat(40) }], main), false);
     assert.equal(isMergedInto([], main), false);
+  });
+});
+
+describe('many branches: off the request path (HD4b)', () => {
+  test('past the inline budget, the rest are worked out in the background, the same answer, and told once', async () => {
+    const inline = branchWorkstreamsOf(repo, opts());
+    resetBranchWorkstreamCache();
+    const told: string[] = [];
+    setBranchWorkstreamsWarmedListener((r) => { told.push(r); });
+    try {
+      // Nothing inline: the first answer leaves the branches out rather than block.
+      assert.deepEqual(branchWorkstreamsOf(repo, opts({ inline: 0 })), []);
+      await branchWorkstreamsWarmed(repo);
+      assert.deepEqual(told, [repo]);
+      const warmed = branchWorkstreamsOf(repo, opts({ inline: 0 }));
+      assert.deepEqual(
+        warmed.map((b) => [b.short, b.changes.files.map((f) => `${f.status} ${f.path}`)]).sort(),
+        inline.map((b) => [b.short, b.changes.files.map((f) => `${f.status} ${f.path}`)]).sort(),
+      );
+      assert.deepEqual(told, [repo], 'nothing left to work out, so nothing more to tell');
+    } finally {
+      setBranchWorkstreamsWarmedListener(() => {});
+    }
+  });
+
+  test('within the budget, a branch is answered inline, as before', () => {
+    resetBranchWorkstreamCache();
+    assert.deepEqual(branchWorkstreamsOf(repo, opts({ inline: 8 })).map((b) => b.short).sort(), ['feature-a', 'origin/cloud-agent']);
   });
 });

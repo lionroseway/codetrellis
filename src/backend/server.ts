@@ -62,6 +62,7 @@ import { listWorkstreams, setClaudeSessionSource, setSymbolParser, getSymbolPars
 import { resolveSection, cleanBranch, workstreamOfBranch, whereWorked, worktreeDirFor, usableBase } from './services/section-workstreams';
 import { suggestSectionBranch } from '../shared/lib/branch-name';
 import { setWorkstreamChangesListener, setRefsChangedListener } from './services/workstream-watch-service';
+import { setBranchWorkstreamsWarmedListener } from './services/branch-workstreams';
 import { refreshSignals, listSignals, setAwarenessListener, setSignalState } from './services/awareness-service';
 import { withTold, setNoticeListener } from './services/awareness-notices';
 import { recordReply, withReplies, cleanReply, setReplyReadListener, MAX_REPLY } from './services/awareness-replies';
@@ -723,6 +724,13 @@ setRefsChangedListener((repo) => {
   scheduleSignalRefresh();
   // B5.1: a checkout whose HEAD moved has had a commit land; replay takes a frame.
   noteRefsChanged();
+});
+
+// Branches worked out off the request path (HD4b) are ready: the window reads
+// again, as when a branch moves.
+setBranchWorkstreamsWarmedListener((repo) => {
+  broadcast('workstreams-changed', { root: repo, refs: true });
+  scheduleSignalRefresh();
 });
 
 // Signals follow the footprints (A1.6): recomputed shortly after a

@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | HD4a: browser shards and burst reads |
-| **Status** | The Wave 2 review merged (#321); the owner said yes to hardening. The serial project, setup's teardown, ran in full in every browser shard (170 tests, one at a time, three times): E2E_SPLIT=1 makes it an ordinary dependent, and CI runs chromium in three shards and serial in two, each test once. Every listener for workstreams-changed, awareness-changed and stack-changed now reads through lib/single-flight (15 listeners, 10 files), and burst-reads.test.ts fails on one that does not |
-| **In flight** | HD4a building on `feat/phase-32-hd4a-shards-and-reads` |
+| **Stage / step** | HD4b: workstreams off the request path |
+| **Status** | HD4a merged (#322). HD4b: the first listing of a repository with many recent branches blocked the server for seconds (6.1 s with 133 remote branches, measured): about six git calls per branch, one after another. Past INLINE_BRANCHES (8) uncached branches, the rest are worked out off the request path by non-blocking git, four at a time, and workstreams-changed says when they are ready: 540 ms for the first listing, the rest in about 4 s with the server answering throughout |
+| **In flight** | HD4b in review (#323) on `feat/phase-32-hd4b-workstreams`; HD4c in review (#324) on `feat/phase-32-hd4c-installs` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
-| **Next action** | HD4a green and merged; then HD4b (workstreams off the request path) and HD4c (CI installs, spec follow-ups); then the phase end (EXECUTION §7) |
+| **Next action** | HD4b green and merged; then HD4c (CI installs, spec follow-ups); then the phase end (EXECUTION §7) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `3690eb1`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `af704ca`, with open PRs from GitHub.
 
 ---
 
@@ -127,7 +127,7 @@
 - [ ] Follow-up: `plan-by-hand` failed once in CI when its plan workspace dropped back to the plan list while `plan/list.spec.ts` created and deleted plans on the other worker (#147). It doesn't reproduce as a pair (5/5 on base and on the branch). Find which broadcast leaves the workspace, so a person's open plan survives someone else's plan changes.
 - [ ] Follow-up: two browser tests failed once on #167 and passed on re-run: `realtime/plan-events.spec.ts:18` (a reset connection mid-POST; also 2/3 locally on the base branch) and `external-refs/refs-panel.spec.ts:77` (a fixed 3 s `isVisible`). Both are queued as separate fixes; neither touches A3.4's code.
 - [x] Follow-up: two browser tests failed once on the docs-only #184 and passed on re-run: `graph/layout-controls.spec.ts:38` (0 nodes after Tree → Map; the spec already names a rescan on the other worker as the cause of an empty graph, and polls 20 s) and `review-regressions/pr55-ui.spec.ts:431` (the linked-ticket chip never appeared, on the sample-app fixture). Neither touches a Phase 32 file; each needs its root cause found, not a longer wait. **Fixed at the source by #195 and #196:** a scan answers "scanning" and every graph answer names its project; a canvas keeps its graph through another project's scan, and an empty one rescans its own.
-- [ ] Follow-up: listing workstreams in a clone with many recent remote branches is slow: 133 remote refs made the first `/api/workstreams` take 11.6 s and each later one about 1.2 s, all synchronous in the Express process, while the window polls it. Found locally during B3.2 (it stalled "Add to plan"); CI's single-branch checkout never sees it. Cache branch workstreams by ref SHA and move the git work off the request path.
+- [x] Follow-up: listing workstreams in a clone with many recent remote branches is slow: 133 remote refs made the first `/api/workstreams` take 11.6 s and each later one about 1.2 s, all synchronous in the Express process, while the window polls it. Found locally during B3.2 (it stalled "Add to plan"); CI's single-branch checkout never sees it. Cache branch workstreams by ref SHA and move the git work off the request path. **Fixed by HD4b:** answers were already cached by ref SHA, so the cost was the first listing (6.1 s on 133 branches, measured); past 8 uncached branches the rest are worked out in the background without blocking, and a broadcast says when (540 ms, then about 4 s in the background).
 - [ ] Follow-up: `graph/context-menu.spec.ts:49` failed on #188 with the canvas still on "Building dependency graph…" after 15 s (the scan had finished; laying out the whole repository beside a second worker was slow). `gotoWithProject` now waits 30 s for the canvas (#188). That covers the slow-layout case only; the blank-graph-on-rescan case below still needs its fix at the source.
 - [x] Follow-up: with another project scanned, about 20 extra nodes appear on a canvas showing its own graph (seen writing graph-own-project.spec, #196). Probably another endpoint answering for whichever project was scanned last (`/api/diff`'s working-tree ghosts): the same one-project-at-a-time class as #195, on a different route. **Fixed by HD1:** it was `/api/diff`: after another project's scan it diffed that project's files against this one and sent them, 45 added and 45 removed on the sample app.
 - [ ] Follow-up: `agent/workstream-strip.spec.ts:89` failed once on #205 (653c3e1): the chip read `[expanded]`, but `workstream-popover` never appeared and the test ran out of its 30 s (36.1 s; its siblings took about 9 s). Nothing in #205 touches the strip; it passed on the previous commit, locally 18 of 18 twice, and on the one re-run. Its cause is not found: the failure snapshot CI prints is cut at 20 KB, before the end of `<body>` where the popover is portalled. Next time it fails, keep the whole error context (raise the `head -c` limit in CI for that file). **Failed again on #212** (browser 1/3) beside `graph/edge-visuals.spec.ts:32`, both at 30 s. `edge-visuals` counts edges after a fixed `waitForTimeout(2000)` three times over; that class (a fixed wait, then a count) is what `onboarding-to-plan` had until #213 polled it. Poll both specs on what they wait for.
@@ -225,9 +225,9 @@
   - [x] B10.4 The evidence export (#312)
   - [x] B10.5 The G2 done-when and docs (#313)
 - [ ] HD4 Hardening after the Wave 2 review (owner's yes), in three parts: — building
-  - [ ] HD4a Browser shards under 20 minutes (chromium and the serial project sharded apart); every read a burst event starts runs one at a time, guarded — building
-  - [ ] HD4b Listing workstreams off the request path: branch workstreams cached by ref SHA, so many remote branches never stall the window
-  - [ ] HD4c CI installs without running native build scripts (prebuilds, checked by loading them); the open spec follow-ups fixed at their cause
+  - [ ] HD4a Browser shards under 20 minutes (chromium and the serial project sharded apart); every read a burst event starts runs one at a time, guarded
+  - [ ] HD4b Listing workstreams off the request path: branch workstreams cached by ref SHA, so many remote branches never stall the window (#323) — in review
+  - [ ] HD4c CI installs without running native build scripts (prebuilds, checked by loading them); the open spec follow-ups fixed at their cause (#324) — in review
 
 ### Track C: shared ways of working
 - [x] C1 Skills on tasks
@@ -469,6 +469,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-02 | HD4 runs before the phase end (owner, on the Wave 2 review: "let's do any hardening we think we need") | The browser shards were the wait on every PR, and the flooding reads had come back once already |
 | 2026-10-02 | HD4: the browser suite's two projects are sharded apart (chromium 3, serial 2), not given a fourth shard | Measured first: `serial` is setup's teardown, and Playwright runs a teardown in full in every shard, so its 170 one-at-a-time tests ran three times. A fourth shard would have run them four times. Split, each test runs once, and a serial spec still has its own backend |
 | 2026-10-02 | HD4: reads started by a burst event go through one helper (`lib/single-flight`), and a structural test names any listener that does not | Two stores had it fixed by hand (E1, E2b); seven other listeners still read per event. One helper, and a test in the style of `reachable.test.ts`, so the next listener cannot forget |
+| 2026-10-02 | HD4b: a listing works out at most 8 uncached branches inline; the rest in the background, with a broadcast when ready | Answers were already cached by ref SHA, so only the first listing was slow, but it blocked every request for seconds. A listing that leaves some branches out for a moment, then says so, is better than a window that cannot answer; a repository with a handful of branches is answered inline as before |
 | 2026-10-02 | E6: the done-when is one harness test over the real git and backend; its pictures are the step shots already taken (changes, line-history, evolution, compare, branches) | Each surface's browser spec already walks it with its own shots; a second browser walk over the same served data would test the stand-ins, not the code. The harness test is the one that runs the whole journey for real: a worktree, an agent's session, git, a remote and gh |
 | 2026-10-02 | E3: a commit's maker is CodeTrellis's only where it knows, and says how: the commit message's `agent:` line, or seen (a replay frame recorded the commit landing during that agent's session); the git author is always shown | GitLens's author line is what people trust, so it is never replaced; timing alone would guess, so a commit with neither stays the author's. E4 widens what is known (a session's own edits) |
 | 2026-10-02 | E3: the decisions between two positions are the computer's record in that window, not filtered to the project | The record carries no project column and its payloads differ by type; saying "recorded on this computer" is true, and each decision names what it was about |
@@ -516,6 +517,26 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-02: HD4b — workstreams off the request path
+- **Measured first.** A clone with 133 recent remote branches: the first
+  `listWorkstreams` took 6.1 s, every later one about 40 ms. Answers were
+  already cached by (branch head, main head), so the follow-up's "cache by
+  ref SHA" was done; the cost was the first listing's roughly 800 git
+  calls, run one after another in the Express process while the window
+  waited on it.
+- **Built.** `branchWorkstreamsOf` works out at most `INLINE_BRANCHES` (8)
+  uncached branches inline and leaves the rest to a warmer: the same git
+  reads through `execFile`, four at a time, filling the same cache. When it
+  is done, `setBranchWorkstreamsWarmedListener` broadcasts
+  `workstreams-changed` (`refs: true`), and the window reads again, one read
+  at a time since HD4a. After: 540 ms for the first listing, the other 125
+  branches in about 4 s with the event loop free, then about 45 ms a
+  listing with all 134.
+- **Tests.** Unit `branch-workstreams.test.ts` (+2: past the budget the rest
+  arrive in the background, the same answer, told once; within it, inline
+  as before). Harness `many-branches.test.ts` (12 branches: every one
+  arrives with a broadcast, each with its changes; three runs).
 
 ### 2026-10-02: HD4a — browser shards, and burst reads one at a time
 - **Why.** The owner said yes to the review's proposal ("let's do any

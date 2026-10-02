@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "HD4a: browser shards and burst reads"
-  status: "The Wave 2 review merged (#321); the owner said yes to hardening. The serial project, setup's teardown, ran in full in every browser shard (170 tests, one at a time, three times): E2E_SPLIT=1 makes it an ordinary dependent, and CI runs chromium in three shards and serial in two, each test once. Every listener for workstreams-changed, awareness-changed and stack-changed now reads through lib/single-flight (15 listeners, 10 files), and burst-reads.test.ts fails on one that does not"
-  next: "HD4a green and merged; then HD4b (workstreams off the request path) and HD4c (CI installs, spec follow-ups); then the phase end (EXECUTION §7)"
+  step: "HD4b: workstreams off the request path"
+  status: "HD4a merged (#322). HD4b: the first listing of a repository with many recent branches blocked the server for seconds (6.1 s with 133 remote branches, measured): about six git calls per branch, one after another. Past INLINE_BRANCHES (8) uncached branches, the rest are worked out off the request path by non-blocking git, four at a time, and workstreams-changed says when they are ready: 540 ms for the first listing, the rest in about 4 s with the server answering throughout"
+  next: "HD4b green and merged; then HD4c (CI installs, spec follow-ups); then the phase end (EXECUTION §7)"
   blockers: "None"
   updated: 2026-10-02
 sections:
@@ -292,7 +292,8 @@ sections:
       - title: "two browser tests failed once on the docs-only #184 and passed on re-run: `graph/layout-controls.spec.ts:38` (0 nodes after Tree → Map; the spec already names a rescan on the other worker as the cause of an empty graph, and polls 20 s) and `review-regressions/pr55-ui.spec.ts:431` (the linked-ticket chip never appeared, on the sample-app fixture). Neither touches a Phase 32 file; each needs its root cause found, not a longer wait. **Fixed at the source by #195 and #196:** a scan answers \"scanning\" and every graph answer names its project; a canvas keeps its graph through another project's scan, and an empty one rescans its own."
         status: done
         followUp: true
-      - title: "listing workstreams in a clone with many recent remote branches is slow: 133 remote refs made the first `/api/workstreams` take 11.6 s and each later one about 1.2 s, all synchronous in the Express process, while the window polls it. Found locally during B3.2 (it stalled \"Add to plan\"); CI's single-branch checkout never sees it. Cache branch workstreams by ref SHA and move the git work off the request path."
+      - title: "listing workstreams in a clone with many recent remote branches is slow: 133 remote refs made the first `/api/workstreams` take 11.6 s and each later one about 1.2 s, all synchronous in the Express process, while the window polls it. Found locally during B3.2 (it stalled \"Add to plan\"); CI's single-branch checkout never sees it. Cache branch workstreams by ref SHA and move the git work off the request path. **Fixed by HD4b:** answers were already cached by ref SHA, so the cost was the first listing (6.1 s on 133 branches, measured); past 8 uncached branches the rest are worked out in the background without blocking, and a broadcast says when (540 ms, then about 4 s in the background)."
+        status: done
         followUp: true
       - title: '`graph/context-menu.spec.ts:49` failed on #188 with the canvas still on "Building dependency graph…" after 15 s (the scan had finished; laying out the whole repository beside a second worker was slow). `gotoWithProject` now waits 30 s for the canvas (#188). That covers the slow-layout case only; the blank-graph-on-rescan case below still needs its fix at the source.'
         followUp: true
