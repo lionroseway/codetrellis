@@ -66,6 +66,20 @@ test.describe('UI tools against the window', () => {
     await expect(page.getByRole('dialog', { name: 'CodeTrellis guide' })).toBeVisible();
   });
 
+  test('navigate_to opens each tab of the side panel, and ui_ready says which is showing', async ({ page }) => {
+    // The demo's Phase 32 scenes need to put Awareness, the Stack, Review and
+    // the Changes tab in front of a person, and to check a picture of one is
+    // a picture of that one.
+    await gotoWithProject(page);
+    for (const [target, testId] of [['awareness', 'awareness-tab'], ['stack', 'stack-tab'], ['review', 'review-tab'], ['changes', 'source-control']] as const) {
+      const res = await client.callTool('navigate_to', { target });
+      expect(res.isError, res.content?.[0]?.text).toBeFalsy();
+      await expect(page.getByTestId(testId)).toBeVisible({ timeout: 10_000 });
+      const ready = JSON.parse((await client.callTool('ui_ready', {})).content[0].text);
+      expect(ready.planPanelTab).toBe(target);
+    }
+  });
+
   test('a wrong uid changes nothing on screen, and the agent is told', async ({ page, request }) => {
     const seeded = await seedPlan(request, { title: TITLE, actions: [{ title: 'Stay on this' }] });
     await gotoWithProject(page);

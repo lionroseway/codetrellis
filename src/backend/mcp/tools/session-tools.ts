@@ -105,7 +105,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
     {
       description: 'Navigate the CodeTrellis UI to a specific view. Use this to show the user what you are working on — open the plan workspace, switch to graph view, enable split view, open the Brief on a task, or open a file you cite at the place you cite.',
       inputSchema: {
-        target: z.enum(['plan', 'graph', 'split', 'timeline', 'code', 'brief', 'artefact']).describe('"plan" = plan workspace, "graph" = dependency graph, "split" = plan + graph side-by-side, "timeline" = plan workspace with the activity/event feed open, "code" = the code reader on a file, "brief" = the Brief (the plan as tasks, materials and what good looks like), "artefact" = a recorded file in the viewer, at a locator'),
+        target: z.enum(['plan', 'graph', 'split', 'timeline', 'code', 'brief', 'artefact', 'awareness', 'stack', 'review', 'changes']).describe('"plan" = plan workspace, "graph" = dependency graph, "split" = plan + graph side-by-side, "timeline" = plan workspace with the activity/event feed open, "code" = the code reader on a file, "brief" = the Brief (the plan as tasks, materials and what good looks like), "artefact" = a recorded file in the viewer, at a locator, "awareness" / "stack" / "review" / "changes" = that tab of the side panel (overlaps and what needs the person; how the work stacks up; what to merge first; source control)'),
         plan_uid: z.string().optional().describe('If navigating to plan/split/timeline, which plan to show. If omitted, keeps the current active plan.'),
         // `code` was missing entirely, so an agent could show someone the
         // graph, a plan, a split and a timeline — and never the code,

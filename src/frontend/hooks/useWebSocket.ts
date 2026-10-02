@@ -281,6 +281,10 @@ export function useWebSocket() {
                 }
                 useUiStore.getState().setWorkspaceMode('plan');
               })();
+            } else if (target === 'awareness' || target === 'stack' || target === 'review' || target === 'changes') {
+              // A tab of the side panel, opened as a person's click on it
+              // would: the panel shows if it was hidden.
+              useUiStore.getState().openPlanPanelTab(target);
             } else if (target === 'graph') {
               useUiStore.getState().setWorkspaceMode('graph');
             } else if (target === 'code') {
@@ -774,6 +778,8 @@ export function useWebSocket() {
 
                 let projectOpen = false;
                 let workspaceMode = 'unknown';
+                // The side panel's tab, when the panel is showing; null when hidden.
+                let planPanelTab: string | null = null;
                 let scanStatus = 'unknown';
                 let graphNodes = 0;
                 let openFile: string | null = null;
@@ -790,6 +796,8 @@ export function useWebSocket() {
                   const { useGraphStore } = await import('../stores/graph-store');
                   projectOpen = useProjectStore.getState().tabs.length > 0;
                   workspaceMode = useUiStore.getState().workspaceMode;
+                  const ui = useUiStore.getState();
+                  planPanelTab = ui.agentPanelVisible ? ui.planPanelTab : null;
                   // `scanStatus` gates the edge fetch, and `graphNodes` is
                   // what actually reached the canvas. Reporting both turns
                   // "the graph is empty" from a symptom into a diagnosis:
@@ -873,6 +881,7 @@ export function useWebSocket() {
                       blockedBy: blocking,
                       projectOpen,
                       workspaceMode,
+                      planPanelTab,
                       scanStatus,
                       graphNodes,
                       openFile,

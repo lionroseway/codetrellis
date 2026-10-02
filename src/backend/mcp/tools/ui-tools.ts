@@ -20,7 +20,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
     {
       description:
         'Is the CodeTrellis window actually usable right now? Reports whether the app shell is mounted, '
-        + 'whether a blocking dialog covers it, whether a project is open, which workspace is showing, '
+        + 'whether a blocking dialog covers it, whether a project is open, which workspace and side-panel tab are showing, '
         + 'which file or recorded file is on screen, and which acceptance criteria are visible and in what state. '
         + 'Call this before driving the UI: every other tool answers from the backend and will happily '
         + 'succeed while the window shows something else entirely.',
