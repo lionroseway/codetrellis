@@ -128,11 +128,12 @@ function PositionCard({ side, history, index, onIndex, loading, error }: {
   );
 }
 
-export function EvolutionView({ root, relativePath }: { root: string; relativePath: string }) {
+export function EvolutionView({ root, relativePath, start }: { root: string; relativePath: string; start?: { left: string; right: string } | null }) {
   const pair = useSourceControlStore((s) => s.pair);
   const loadRefs = useSourceControlStore((s) => s.loadRefs);
-  // Starts from the two points chosen in the Changes tab, when there are; this checkout otherwise.
-  const [specs, setSpecs] = useState<Record<Side, string>>(() => ({ left: pair?.before ?? 'live', right: pair?.after ?? 'live' }));
+  // Starts where it was asked to (a line's commit, E4), else from the two points
+  // chosen in the Changes tab, else this checkout.
+  const [specs, setSpecs] = useState<Record<Side, string>>(() => start ?? { left: pair?.before ?? 'live', right: pair?.after ?? 'live' });
   const [index, setIndex] = useState<Record<Side, number | null>>({ left: null, right: null });
   const [locked, setLocked] = useState(false);
   const left = useHistory(root, specs.left, relativePath);
