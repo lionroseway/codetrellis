@@ -244,7 +244,7 @@ export const observeGroup: Group = {
         await claim(c, claude, vatTask, 'claude-code');
         await claim(c, codex, currencyTask, 'codex');
 
-        // No control in the window or on the phone approves a plan; an agent can (see the group's report).
+        // The window and the phone have no Approve control for a plan yet, so the demo sets it (to fix before 0.2.0).
         await c.say('Both approved', 'The lead approves both plans. Nothing has been written yet.');
         for (const uid of [vat, currency]) await c.call('update_plan', { plan_uid: uid, status: 'approved' });
         for (const uid of [vat, currency]) {
