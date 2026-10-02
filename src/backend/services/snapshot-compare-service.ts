@@ -9,6 +9,7 @@ import { getParseableExtensions, parseVirtualFile } from './ast-parser';
 import { getResolverForLanguage } from './resolvers';
 import { commitEdges, type CommitEdgeDeps } from './commit-edges';
 import { workstreamBranches } from './workstream-service';
+import { mergeBase, parseMergeBase, sideLabel, treeOf, worktreesForCompare } from './git-refs';
 import { isSafeGitRef } from './git-safety';
 import { projectRelative } from './trusted-roots';
 import { readTextWithin, resolveWithin, ConfinementError } from './confined-fs';
@@ -264,6 +265,22 @@ function edgeDeps(projectPath: string): CommitEdgeDeps {
   };
 }
 
+/** A commit or tree as a comparand: its files from `git ls-tree`, its edges rebuilt from the opened graph. */
+function fromGitObject(spec: string, label: string, object: string, projectPath: string): ResolvedComparand | null {
+  let commit: ReturnType<typeof commitSnapshot>;
+  try {
+    commit = commitSnapshot(projectPath, object);
+  } catch {
+    return null;
+  }
+  if (!commit) return null;
+  const { snapshot, oids } = commit;
+  const edges = commitEdges({ projectPath, files: snapshot.files, oids, live: liveSnapshot(projectPath) }, edgeDeps(projectPath));
+  if (!edges.ok) return { spec, label, snapshot, edgesKnown: false, edgesNote: edges.reason };
+  snapshot.edges = edges.edges;
+  return { spec, label, snapshot, edgesKnown: true };
+}
+
 /**
  * Resolve a comparand spec to a snapshot. Null when it names something
  * that does not exist — an unknown checkpoint, an unreachable ref.
@@ -298,18 +315,26 @@ export function resolveComparand(spec: string, projectPath: string): ResolvedCom
     // a ref like `--upload-pack=…` produced a 500 "Internal server error" where
     // the neighbouring `commit:deadbeef` produced a clean 404 with a reason.
     // Refusing input is not an internal error, and saying so is more useful.
-    let commit: ReturnType<typeof commitSnapshot>;
-    try {
-      commit = commitSnapshot(projectPath, ref);
-    } catch {
-      return null;
-    }
-    if (!commit) return null;
-    const { snapshot, oids } = commit;
-    const edges = commitEdges({ projectPath, files: snapshot.files, oids, live: liveSnapshot(projectPath) }, edgeDeps(projectPath));
-    if (!edges.ok) return { spec, label: `Commit ${ref}`, snapshot, edgesKnown: false, edgesNote: edges.reason };
-    snapshot.edges = edges.edges;
-    return { spec, label: `Commit ${ref}`, snapshot, edgesKnown: true };
+    // A full ref name (E2: `refs/remotes/origin/x`) is said as git shows it.
+    const label = ref.startsWith('refs/') ? sideLabel(projectPath, spec, []) : `Commit ${ref}`;
+    return fromGitObject(spec, label, ref, projectPath);
+  }
+
+  // Phase 32 E2: where two refs split, and another worktree's working copy
+  // (a tree of its files now), so the graph compares what the code view does.
+  if (spec.startsWith('merge-base:')) {
+    const mb = parseMergeBase(spec);
+    const sha = mb ? mergeBase(projectPath, mb.a, mb.b) : null;
+    if (!sha) return null;
+    return fromGitObject(spec, sideLabel(projectPath, spec, []), sha, projectPath);
+  }
+  if (spec.startsWith('workstream:')) {
+    // The worktrees git lists, read only: `listWorkstreams` is the discovery
+    // pass and starts watchers, which a comparison must not.
+    const workstreams = worktreesForCompare(projectPath);
+    const tree = treeOf(projectPath, spec, workstreams);
+    if (!tree) return null;
+    return fromGitObject(spec, sideLabel(projectPath, spec, workstreams), tree, projectPath);
   }
 
   return null;
@@ -576,6 +601,15 @@ export function readFileAt(
     }
   }
 
+  // Where two refs split (E2): the file at their merge base.
+  if (spec.startsWith('merge-base:')) {
+    const mb = parseMergeBase(spec);
+    const sha = mb ? mergeBase(projectPath, mb.a, mb.b) : null;
+    if (!sha) return { ok: false, content: null, label: spec, unavailable: 'These two share no history, or one of them is not here.' };
+    const read = readFileAt(`commit:${sha}`, projectPath, relativePath);
+    return { ...read, label: sideLabel(projectPath, spec, []) };
+  }
+
   if (spec === 'baseline' || spec.startsWith('checkpoint:')) {
     return {
       ok: false,
@@ -592,5 +626,5 @@ export function readFileAt(
 
 /** Whether a comparand can supply file CONTENTS, as opposed to a file list. */
 export function canSupplyContent(spec: string): boolean {
-  return spec === 'live' || spec === 'index' || spec === 'none' || spec.startsWith('commit:');
+  return spec === 'live' || spec === 'index' || spec === 'none' || spec.startsWith('commit:') || spec.startsWith('merge-base:') || spec.startsWith('workstream:');
 }
