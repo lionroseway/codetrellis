@@ -179,8 +179,13 @@ export function EvolutionView({ root, relativePath }: { root: string; relativePa
     return () => { cancelled = true; };
   }, [span]);
 
-  const label = (h: History | null, p: FilePosition | undefined) =>
-    !h || !p ? '' : p.kind === 'working' ? `${h.label}, now` : `${h.label} · ${p.short}`;
+  // A commit on a working copy's side is that checkout's, not the working copy's.
+  const label = (h: History | null, p: FilePosition | undefined) => {
+    if (!h || !p) return '';
+    if (p.kind === 'working') return `${h.label}, now`;
+    const where = h.label === 'Your working copy' ? 'This checkout' : h.label.replace(/, its working copy$/, '');
+    return `${where} · ${p.short}`;
+  };
 
   return (
     <div className="space-y-2" data-testid="evolution">
