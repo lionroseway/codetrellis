@@ -14,8 +14,8 @@
 # and prs (PRs whose merge commit does not name the id).
 now:
   step: "Track E — E5: branches and pull requests"
-  status: "E1 (#314), E2a (#315) and E2b (#316) merged; E3 (#317) and E4 (#318) in review, stacked. E5 built on E4: GET /api/git/branches lists branches here and on the remotes as last fetched, each with upstream, ahead and behind said plainly and as git says it; Fetch now (POST /api/git/fetch) runs git fetch --all --prune and reads pull requests through the person's own gh (\"needs the gh CLI\" without it); Settings → Git keeps remotes current for the open project, off by default, every 5–60 min. The Changes tab's Branches and pull requests; a branch or a pull request fills Compare two points. Unit git-branches 7; harness branches 5; browser branches (shots)"
-  next: "Merge E3 (#317) and E4 (#318) by the stacked flow, then E5; then E6 (the done-when)"
+  status: "E1 (#314), E2a (#315), E2b (#316), E3 (#317) and E4 (#318) merged. E5 built on E4: GET /api/git/branches lists branches here and on the remotes as last fetched, each with upstream, ahead and behind said plainly and as git says it; Fetch now (POST /api/git/fetch) runs git fetch --all --prune and reads pull requests through the person's own gh (\"needs the gh CLI\" without it); Settings → Git keeps remotes current for the open project, off by default, every 5–60 min. The Changes tab's Branches and pull requests; a branch or a pull request fills Compare two points. Unit git-branches 7; harness branches 5; browser branches (shots)"
+  next: "Merge E5 (#319) when green, then E6 (#320) by the stacked flow; then the review"
   blockers: "None"
   updated: 2026-10-02
 sections:

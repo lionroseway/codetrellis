@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Track E — E5: branches and pull requests |
-| **Status** | E1 (#314), E2a (#315) and E2b (#316) merged; E3 (#317) and E4 (#318) in review, stacked. E5 built on E4: GET /api/git/branches lists branches here and on the remotes as last fetched, each with upstream, ahead and behind said plainly and as git says it; Fetch now (POST /api/git/fetch) runs git fetch --all --prune and reads pull requests through the person's own gh ("needs the gh CLI" without it); Settings → Git keeps remotes current for the open project, off by default, every 5–60 min. The Changes tab's Branches and pull requests; a branch or a pull request fills Compare two points. Unit git-branches 7; harness branches 5; browser branches (shots) |
-| **In flight** | E3 in review (#317) on `feat/phase-32-e3-evolution`; E4 in review (#318) on `feat/phase-32-e4-line-history`; E5 in review (#319) on `feat/phase-32-e5-branches`; E6 in review (#320) on `feat/phase-32-e6-done-when` |
+| **Status** | E1 (#314), E2a (#315), E2b (#316), E3 (#317) and E4 (#318) merged. E5 built on E4: GET /api/git/branches lists branches here and on the remotes as last fetched, each with upstream, ahead and behind said plainly and as git says it; Fetch now (POST /api/git/fetch) runs git fetch --all --prune and reads pull requests through the person's own gh ("needs the gh CLI" without it); Settings → Git keeps remotes current for the open project, off by default, every 5–60 min. The Changes tab's Branches and pull requests; a branch or a pull request fills Compare two points. Unit git-branches 7; harness branches 5; browser branches (shots) |
+| **In flight** | E5 in review (#319) on `feat/phase-32-e5-branches`; E6 in review (#320) on `feat/phase-32-e6-done-when` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
-| **Next action** | Merge E3 (#317) and E4 (#318) by the stacked flow, then E5; then E6 (the done-when) |
+| **Next action** | Merge E5 (#319) when green, then E6 (#320) by the stacked flow; then the review |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `bce3097`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `edbf9c5`, with open PRs from GitHub.
 
 ---
 
@@ -288,8 +288,8 @@
   - [ ] E2 Any ref on either side: branches local and remote, tags, a worktree's working copy, a merge base; one picker for the code view and the graph, in two:
     - [ ] E2a The refs, and any two compared file by file from the Changes tab, each side said plainly and as git's command; a file opens its diff
     - [ ] E2b The graph compares the same two: its architecture diff between the pair chosen in the Changes tab
-  - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked (#317) — in review
-  - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history` (#318) — in review
+  - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked
+  - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history`
   - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default (#319) — in review
   - [ ] E6 The done-when: a teammate's agent's work, traced line by line and side by side, with no plan (#320) — in review
 
