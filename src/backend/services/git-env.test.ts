@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { quietGitLocks } from './git-env';
+import { quietGitLocks, refreshIndexOccasionally, REFRESH_EVERY_MS } from './git-env';
 
 function repoWithStaleIndex(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-git-env-'));
@@ -53,4 +53,30 @@ test('with it, `git status` reads without rewriting the index; without it, the s
   const was = indexStamp(loud);
   execFileSync('git', ['-C', loud, 'status', '--porcelain'], { env: { ...process.env, GIT_OPTIONAL_LOCKS: '1' } });
   assert.notEqual(indexStamp(loud), was, 'the control: an ordinary status writes the index back');
+});
+
+test('the index is refreshed now and then, so lock-free reads of a fresh checkout stop re-hashing it', () => {
+  const dir = repoWithStaleIndex();
+  const env: NodeJS.ProcessEnv = { ...process.env, GIT_OPTIONAL_LOCKS: '0' };
+  const before = indexStamp(dir);
+  assert.equal(refreshIndexOccasionally(dir, 1_000_000), true);
+  const refreshed = indexStamp(dir);
+  assert.notEqual(refreshed, before, 'written once, by the refresh');
+  // A lock-free status after it has nothing stale to re-hash or write.
+  execFileSync('git', ['-C', dir, 'status', '--porcelain'], { env });
+  assert.equal(indexStamp(dir), refreshed);
+  // Not again within the window; again after it.
+  assert.equal(refreshIndexOccasionally(dir, 1_000_000 + REFRESH_EVERY_MS - 1), false);
+  assert.equal(refreshIndexOccasionally(dir, 1_000_000 + REFRESH_EVERY_MS), true);
+});
+
+test('when someone else holds the index lock, the refresh gives way and leaves their lock alone', () => {
+  const dir = repoWithStaleIndex();
+  const lock = path.join(dir, '.git', 'index.lock');
+  fs.writeFileSync(lock, '');
+  const before = indexStamp(dir);
+  assert.equal(refreshIndexOccasionally(dir, 5_000_000), true);
+  assert.equal(indexStamp(dir), before);
+  assert.equal(fs.existsSync(lock), true);
+  assert.equal(refreshIndexOccasionally('/nonexistent/folder', 5_000_000), true, 'not a checkout: no throw');
 });
