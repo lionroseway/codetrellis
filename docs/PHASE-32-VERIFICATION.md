@@ -17,10 +17,10 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 293 | 291 | 0 | 0 | 217 | 0 |
+| REST routes | 295 | 293 | 0 | 0 | 217 | 0 |
 | MCP tools | 211 | 211 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
-| Frontend components | 137 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 138 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 38 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 0 | n/a | n/a | n/a | 0 | 0 |
 
@@ -28,13 +28,13 @@ records that — but "✗ none" is proof of a gap.
 
 | Domain | REST | MCP | RPC | Components | Mobile | Settings |
 |---|---|---|---|---|---|---|
-| 0.4a Project and scan | 23 | 12 | 10 | 0 | 0 | 0 |
+| 0.4a Project and scan | 25 | 12 | 10 | 0 | 0 | 0 |
 | 0.4b Graph | 22 | 15 | 8 | 15 | 0 | 0 |
 | 0.4c Plans and items | 119 | 61 | 29 | 63 | 0 | 0 |
 | 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 4 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 13 | 7 | 1 | 0 | 0 |
-| 0.4g Agents and MCP | 31 | 32 | 10 | 36 | 0 | 0 |
+| 0.4g Agents and MCP | 31 | 32 | 10 | 37 | 0 | 0 |
 | 0.4h Drift, governance, review | 11 | 28 | 9 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 38 | 0 |
@@ -48,7 +48,7 @@ records that — but "✗ none" is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (293)
+## REST routes (295)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -58,13 +58,14 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/fs/browse` |  | ✗ none | 2 | ✓ 0.4a: lists a home dir; / /etc /var refused (misc-endpoints, filesystem-boundary) |  |  |
 | a | `GET /api/git/branch` |  | ✗ none | 2 | ✓ 0.4a: main checkout and linked worktree (git-integration, worktree-project; bug 16) |  |  |
 | a | `GET /api/git/branch-tip` |  | ✗ none | 2 | ✓ 0.4a: tip equals HEAD; option-like refs refused (git-integration) |  |  |
+| a | `GET /api/git/branches` |  | ✗ none | 1 |  |  |  |
 | a | `GET /api/git/commits` |  | ✗ none | 1 | ✓ 0.4a: recent commits with hashes and subjects (git-integration) |  |  |
 | a | `GET /api/git/file-history` |  | ✗ none | 1 |  |  |  |
 | a | `GET /api/git/head` |  | ✗ none | 2 | ✓ 0.4a: matches status hash (git-integration) |  |  |
 | a | `GET /api/git/info` |  | ✗ none | 3 | ✓ 0.4a: branches incl. packed, other checkouts, hasCommits — from a worktree too (worktree-project; bug 16) |  |  |
 | a | `GET /api/git/line-history` |  | ✗ none | 1 |  |  |  |
 | a | `GET /api/git/refs` |  | ✗ none | 1 |  |  |  |
-| a | `GET /api/git/refs/compare` |  | ✗ none | 1 |  |  |  |
+| a | `GET /api/git/refs/compare` |  | ✗ none | 2 |  |  |  |
 | a | `GET /api/git/status` |  | ✗ none | 1 | ✓ 0.4a: hash and file arrays (git-integration) |  |  |
 | a | `GET /api/git/worktrees` |  | ✗ none | 2 | ✓ 0.4a: both checkouts and the other one's plans, from a worktree; unopened refused (worktree-project, misc-endpoints) |  |  |
 | a | `GET /api/health` |  | ✗ none | 3 | ✓ 0.4a: status, parser, memory (misc-endpoints, smoke) |  |  |
@@ -73,7 +74,8 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 202 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/git/fetch` |  | ✗ none | 1 |  |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 203 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `DELETE /api/rules/:id` |  | ✗ none | 2 |  |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
@@ -323,7 +325,7 @@ records that — but "✗ none" is proof of a gap.
 | k | `GET /api/plans-folder` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/power/status` |  | ✗ none | 2 | ✓ 0.4j: same as the phone's power.status (phone-channels-projects) |  |  |
 | k | `GET /api/review-host` |  | ✗ none | 1 |  |  |  |
-| k | `GET /api/settings` |  | ✗ none | 13 | ✓ 0.4k: every section; what was saved comes back after a restart (settings-surface) |  |  |
+| k | `GET /api/settings` |  | ✗ none | 14 | ✓ 0.4k: every section; what was saved comes back after a restart (settings-surface) |  |  |
 | k | `GET /api/settings/first-run-check` |  | ✗ none | 3 | ✓ 0.4k: incomplete, then complete once saved, with the identity (settings-surface) |  |  |
 | k | `GET /api/shared-task-state` |  | ✗ none | 3 |  |  |  |
 | k | `GET /api/updates/download/status` |  | ✗ none | 1 | ✓ 0.4k: idle and complete before anything is downloaded (update-download) |  |  |
@@ -336,7 +338,7 @@ records that — but "✗ none" is proof of a gap.
 | k | `PUT /api/plans-folder` |  | ✗ none | 1 |  |  |  |
 | k | `PUT /api/review-host` |  | ✗ none | 2 |  |  |  |
 | k | `PUT /api/review-host/token` |  | ✗ none | 2 |  |  |  |
-| k | `PUT /api/settings` |  | 1 | 27 | ✓ 0.4k: partial saves keep siblings (nested too), hosts normalised, windows told; every field checked, a bad value 400 with the reason and nothing stored (settings-surface); phone-safe subset from the phone (phone-channels-projects) |  |  |
+| k | `PUT /api/settings` |  | 1 | 28 | ✓ 0.4k: partial saves keep siblings (nested too), hosts normalised, windows told; every field checked, a bad value 400 with the reason and nothing stored (settings-surface); phone-safe subset from the phone (phone-channels-projects) |  |  |
 | k | `PUT /api/shared-task-state` |  | ✗ none | 4 |  |  |  |
 | l | `DELETE /api/system-docs/:uid` |  | ✗ none | 2 | ✓ 0.4j: removed, desktop told; unknown 404 not ok:false (phone-terminals-sysdocs) |  |  |
 | l | `GET /api/system-docs` |  | ✗ none | 4 | ✓ 0.4l: same as list_system_docs; outside a project refused (sysdocs-intake, phone-terminals-sysdocs) |  |  |
@@ -661,7 +663,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (137)
+## Frontend components (138)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -758,6 +760,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `layout/AgentPulse.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/AgentTurns.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/AwarenessTab.tsx` |  | n/a | n/a |  |  |  |
+| g | `layout/BranchesPanel.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/Breakpoints.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/CodeWorkspace.tsx` |  | n/a | n/a |  | ✓ 0.5a — empty state says what to do |  |
 | g | `layout/ConnectedAgents.tsx` |  | n/a | n/a |  | ✓ 0.5a |  |

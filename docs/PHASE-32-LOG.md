@@ -17,11 +17,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track E — E4: line history |
-| **Status** | E1 (#314), E2a (#315) and E2b (#316) merged; E3 (#317) in review. E4 built on E3: GET /api/git/line-history and MCP line_history give each line's commit and git author (git blame), attributed from what CodeTrellis knows with how (commit-attribution: the commit message's agent line or an agent's Co-Authored-By trailer; seen when it landed; timing, while an agent's session was open in this checkout, said as probably), with the session, task and plan; the code view's Line history column and card (to Evolution at that commit, replay at that moment, the task). The evolution view uses the same attribution. Unit commit-attribution and line-history 6, line-history lib 2; harness line-history 4; browser line-history (shot) |
-| **In flight** | E3 in review (#317) on `feat/phase-32-e3-evolution`; E4 in review (#318) on `feat/phase-32-e4-line-history` |
+| **Stage / step** | Track E — E5: branches and pull requests |
+| **Status** | E1 (#314), E2a (#315) and E2b (#316) merged; E3 (#317) and E4 (#318) in review, stacked. E5 built on E4: GET /api/git/branches lists branches here and on the remotes as last fetched, each with upstream, ahead and behind said plainly and as git says it; Fetch now (POST /api/git/fetch) runs git fetch --all --prune and reads pull requests through the person's own gh ("needs the gh CLI" without it); Settings → Git keeps remotes current for the open project, off by default, every 5–60 min. The Changes tab's Branches and pull requests; a branch or a pull request fills Compare two points. Unit git-branches 7; harness branches 5; browser branches (shots) |
+| **In flight** | E3 in review (#317) on `feat/phase-32-e3-evolution`; E4 in review (#318) on `feat/phase-32-e4-line-history`; E5 building on `feat/phase-32-e5-branches` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
-| **Next action** | Merge E3 (#317) when green, then E4 (#318) by the stacked flow; then E5 (branches and pull requests) |
+| **Next action** | Merge E3 (#317) and E4 (#318) by the stacked flow, then E5; then E6 (the done-when) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
@@ -290,7 +290,7 @@
     - [ ] E2b The graph compares the same two: its architecture diff between the pair chosen in the Changes tab
   - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked (#317) — in review
   - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history` (#318) — in review
-  - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default
+  - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default — building
   - [ ] E6 The done-when: a teammate's agent's work, traced line by line and side by side, with no plan
 
 ### Phase end
@@ -457,6 +457,10 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-02 | E4: timing is a third way of knowing, said as "probably": a commit made while an agent's session was open in the same checkout, never for a commit read from a ref | It is how most agents' commits are made (by the agent, in its checkout) and nothing else says so when the message does not; a person in that checkout could have committed too, so the word and the gutter's "?" say it is a guess. A ref belongs to no checkout, so timing does not apply there. Commit times are whole seconds, so a commit in the second a session started counts as in it (found when the harness test failed only when the two fell in the same second) |
 | 2026-10-02 | E4: an agent's `Co-Authored-By:` trailer counts as the commit message naming it; a person as co-author does not | Claude Code and others write the trailer; matching agent names only keeps a pair-programming colleague from being called an agent |
 | 2026-10-02 | E4: one attribution module (`commit-attribution`) for the evolution view and line history | The two showed the same commit; two rules would have named different makers for it |
+| 2026-10-02 | E5: listing branches is local and never reaches a host; Fetch now and the keeper are the only things that do, and each fetch reads the pull requests through gh in the same go | "Network only when asked" (owner): the panel says when it was last fetched, so as-of data is never passed off as current. One fetch, one gh read: a person who asks for the remotes gets the pull requests that go with them |
+| 2026-10-02 | E5: keeping remotes current fetches only the project open in the window, at 5, 15, 30 or 60 minutes, off by default | The owner's decision (off by default, in Settings); fetching every recent project in the background would reach hosts for work nobody is looking at. A failed try waits the interval like a success, so an unreachable remote is not retried every minute |
+| 2026-10-02 | E5: pull requests come through the person's own `gh`, not the review-host token (C2) | The track's rule is git and gh through the CLI; gh carries the person's own sign-in and CodeTrellis stores no token for it. Review hosts stay what they are, per task and opt-in per project. Without gh the panel says what to install, and branches work regardless |
+| 2026-10-02 | E5: git and gh run asynchronously, with prompts off (`GIT_TERMINAL_PROMPT=0`, `GH_PROMPT_DISABLED`) | A fetch can take a minute; run synchronously it would stall every other request. A remote that wants a password must fail and say so, not wait on a terminal nobody sees |
 | 2026-10-02 | E3: a commit's maker is CodeTrellis's only where it knows, and says how: the commit message's `agent:` line, or seen (a replay frame recorded the commit landing during that agent's session); the git author is always shown | GitLens's author line is what people trust, so it is never replaced; timing alone would guess, so a commit with neither stays the author's. E4 widens what is known (a session's own edits) |
 | 2026-10-02 | E3: the decisions between two positions are the computer's record in that window, not filtered to the project | The record carries no project column and its payloads differ by type; saying "recorded on this computer" is true, and each decision names what it was about |
 | 2026-10-02 | E3: locked scrubbing is by time, not by index | Two branches have different commits; the same moment is what makes the comparison mean something (where main stood when the agent committed) |
@@ -503,6 +507,33 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-02: E5 — branches and pull requests
+- **Journey.** Priya opens the Changes tab's "Branches and pull
+  requests": "Last fetched 2 h ago", `$ git fetch --all --prune` beneath.
+  Her `billing-v2` reads "2 commits not pushed yet" with git's
+  `ahead 2`; `spike` "Only here: not pushed anywhere yet". She presses
+  Fetch now: "Fetched origin just now."; her `main` is now "1 commit on
+  origin/main not here yet" (`behind 1`), the teammate's
+  `origin/refunds-agent` appears ("no branch here follows it"), and under
+  Pull requests, read through gh: "#7 Refunds, by the agent · Open, waiting
+  on review · refunds-agent into main · teammate". Compare fills "Compare
+  two points" with main and the agent's branch, from where they split. The
+  line beneath Fetch now says remotes are as last fetched and opens
+  Settings → Git, where keeping them current is off; she turns it on, every
+  30 minutes. Without gh the pull requests say what to install.
+- **Built.** `services/git-branches.ts` (`listBranches`, `fetchRemotes`,
+  `readPullRequests`, the keeper), `GET /api/git/branches`,
+  `POST /api/git/fetch` (broadcasts `git-remotes-changed`); settings
+  `git.keepRemotesCurrent` (off) and `git.everyMinutes`; the keeper starts
+  with the backend; `stores/branches-store.ts`; `BranchesPanel` in the
+  Changes tab; Settings → Git.
+- **Tests.** Unit `git-branches.test.ts` (7: ahead and behind; a push seen
+  after a fetch; a fetch that fails; one fetch for two asks; gh's pull
+  requests through a stand-in, kept when gh later fails; gh's answers;
+  the keeper and the settings). Harness `branches.test.ts` (5, gh a
+  stand-in script; and gh absent). Browser `sidebar/branches.spec.ts`
+  (shots `branches`, `branches-settings`).
 
 ### 2026-10-02: E4 — line history
 - **Journey.** A line in `README.md` looks wrong. Priya turns on Line

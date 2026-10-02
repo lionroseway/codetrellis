@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track E — E4: line history"
-  status: "E1 (#314), E2a (#315) and E2b (#316) merged; E3 (#317) in review. E4 built on E3: GET /api/git/line-history and MCP line_history give each line's commit and git author (git blame), attributed from what CodeTrellis knows with how (commit-attribution: the commit message's agent line or an agent's Co-Authored-By trailer; seen when it landed; timing, while an agent's session was open in this checkout, said as probably), with the session, task and plan; the code view's Line history column and card (to Evolution at that commit, replay at that moment, the task). The evolution view uses the same attribution. Unit commit-attribution and line-history 6, line-history lib 2; harness line-history 4; browser line-history (shot)"
-  next: "Merge E3 (#317) when green, then E4 (#318) by the stacked flow; then E5 (branches and pull requests)"
+  step: "Track E — E5: branches and pull requests"
+  status: "E1 (#314), E2a (#315) and E2b (#316) merged; E3 (#317) and E4 (#318) in review, stacked. E5 built on E4: GET /api/git/branches lists branches here and on the remotes as last fetched, each with upstream, ahead and behind said plainly and as git says it; Fetch now (POST /api/git/fetch) runs git fetch --all --prune and reads pull requests through the person's own gh (\"needs the gh CLI\" without it); Settings → Git keeps remotes current for the open project, off by default, every 5–60 min. The Changes tab's Branches and pull requests; a branch or a pull request fills Compare two points. Unit git-branches 7; harness branches 5; browser branches (shots)"
+  next: "Merge E3 (#317) and E4 (#318) by the stacked flow, then E5; then E6 (the done-when)"
   blockers: "None"
   updated: 2026-10-02
 sections:
