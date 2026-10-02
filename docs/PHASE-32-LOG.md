@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Phase end: the final direction review |
-| **Status** | HD4 done (#322–#324). The phase end: `main` has nothing feat/phase-32 lacks, and the merged tree is the one CI ran green on Node 26 from a clean install (#324, dceb7fb). This review updates JOURNEYS.md with what shipped and answers §1.7 one last time |
-| **In flight** | #325 in review on `feat/phase-32-review-final` |
+| **Stage / step** | Phase 32 into main (#326), and the 0.1.18 release |
+| **Status** | The final direction review merged (#325). The owner's decisions (2 October): merge into main now; release as 0.1.18, fixing what users find before 0.2.0; build, demo, drive and verify on the release machine before anything is uploaded (docs/releases/RUNBOOK.md); C2.6b left as a follow-up |
+| **In flight** | nothing open |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
-| **Next action** | This review merged; then the PR feat/phase-32 → main, opened for the owner: it merges after the packaged macOS build and the mobile build are verified (each needs the owner or a device) and the owner's call on C2.6b |
+| **Next action** | #326 merged; the demo walks every Phase 32 feature, in groups; then the release machine follows the runbook |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `1e4ab2b`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `6d8fe07`, with open PRs from GitHub.
 
 ---
 
@@ -250,7 +250,7 @@
     - [x] C2.5b Approvals as signed statements: an SSH-signed record per approval when git signing is set up, verified on import against git's allowed signers (#269)
   - [ ] C2.6 Teammates' plans after a pull; Phase 32's own plan moved into CodeTrellis; done-when — building
     - [x] C2.6a Teammates' plans after a pull: who added a plan and in which commit, as git says, in the plans list, the Stack and get_plan (#270)
-    - [ ] C2.6b Phase 32's own plan in CodeTrellis, npm run status reading through the app; the C2 done-when (at the phase end: the owner keeps the current way of working until then)
+    - [ ] C2.6b Phase 32's own plan in CodeTrellis, npm run status reading through the app; the C2 done-when (at the phase end: the owner keeps the current way of working until then). Left as a follow-up after Phase 32 (the owner, 2 October)
 - [x] C3 A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice), refined in EXECUTION §6:
   - [x] C3.1 Task state as records in the project's files: one new file per change, one writer each, read from all; a teammate's state says whose record and that it is unverified; off until the person turns it on (#271)
   - [x] C3.2 A real disagreement is a signal: people acting at once are named on the task and in the inbox until one decides (#272)

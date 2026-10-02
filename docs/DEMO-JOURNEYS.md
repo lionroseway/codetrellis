@@ -16,16 +16,23 @@ does what it says.
 ## How to run
 
 ```bash
-npm run demo                      # everything, normal pace
+npm run demo                      # the main loop, normal pace
+npm run demo -- --list            # every group and its scenes
+npm run demo -- --group=main      # one group, or several: --group=a,b
+npm run demo -- --all             # every group, in order
 npm run demo -- --pace=slow       # long enough to read each card
-npm run demo -- --scene=review    # one scene
-npm run demo -- --list            # what exists
+npm run demo -- --scene=review    # one scene, from any group
 npm run demo -- --project=/path   # against another codebase
 npm run demo -- --port=19433      # a second instance moved the MCP port
 npm run demo -- --shots=/tmp/ct   # save a screenshot per scene
 npm run demo -- --scene=brief --decide           # decide for the person (dev build only)
 npm run demo -- --scene=brief --connector=out/connector/mcp-connector.cjs
 ```
+
+Scenes come in groups, one module per group under `scripts/demo/groups/`,
+listed in `scripts/demo/registry.ts`. Each group has a section here whose
+heading names it, with one row per scene;
+`src/backend/demo-catalogue.test.ts` fails when the two differ.
 
 If another CodeTrellis is already running, the second one moves off
 :19432 and :3001 and says so in its log — pass `--port` and `--api-port`
@@ -49,11 +56,11 @@ in the journey that owns it, not in a backlog here.
 
 ---
 
-## A. The main loop — *built*
+## A. The main loop (`main`) — *built*
 
 One cross-cutting change through Go, C# and Ruby, then the journeys that
 are about the repository rather than the code. This is `npm run demo` —
-24 scenes.
+25 scenes, in `scripts/demo/groups/main.ts`.
 
 | Scene | Watch for |
 |---|---|
@@ -270,6 +277,11 @@ performance.
 
 - **A journey is a piece of work, not a tool call.** If it cannot be
   described as something a person wanted to get done, it belongs in a test.
+- **A new area gets its own group.** One module under
+  `scripts/demo/groups/`, registered in `registry.ts`, with its own section
+  here (the heading names the group's id) and a row per scene. A group
+  that needs a fixture makes it in `scripts/demo-fixtures.ts` and removes
+  it when it ends.
 - **Say what to watch for.** A scene with no `watch` line is a scene nobody
   can verify by eye.
 - **Flag, do not fail.** These are verification aids. A scene that notices
