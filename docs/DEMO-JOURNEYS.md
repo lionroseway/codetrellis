@@ -16,16 +16,23 @@ does what it says.
 ## How to run
 
 ```bash
-npm run demo                      # everything, normal pace
+npm run demo                      # the main loop, normal pace
+npm run demo -- --list            # every group and its scenes
+npm run demo -- --group=main      # one group, or several: --group=a,b
+npm run demo -- --all             # every group, in order
 npm run demo -- --pace=slow       # long enough to read each card
-npm run demo -- --scene=review    # one scene
-npm run demo -- --list            # what exists
+npm run demo -- --scene=review    # one scene, from any group
 npm run demo -- --project=/path   # against another codebase
 npm run demo -- --port=19433      # a second instance moved the MCP port
 npm run demo -- --shots=/tmp/ct   # save a screenshot per scene
 npm run demo -- --scene=brief --decide           # decide for the person (dev build only)
 npm run demo -- --scene=brief --connector=out/connector/mcp-connector.cjs
 ```
+
+Scenes come in groups, one module per group under `scripts/demo/groups/`,
+listed in `scripts/demo/registry.ts`. Each group has a section here whose
+heading names it, with one row per scene;
+`src/backend/demo-catalogue.test.ts` fails when the two differ.
 
 If another CodeTrellis is already running, the second one moves off
 :19432 and :3001 and says so in its log — pass `--port` and `--api-port`
@@ -49,11 +56,11 @@ in the journey that owns it, not in a backlog here.
 
 ---
 
-## A. The main loop — *built*
+## A. The main loop (`main`) — *built*
 
 One cross-cutting change through Go, C# and Ruby, then the journeys that
 are about the repository rather than the code. This is `npm run demo` —
-24 scenes.
+25 scenes, in `scripts/demo/groups/main.ts`.
 
 | Scene | Watch for |
 |---|---|
@@ -88,6 +95,82 @@ capability granted in Settings → MCP Server, and `graph` needs the window
 open. Run headless and both flag themselves, saying which.
 
 ---
+
+## A2. Many agents at once (`parallel`) — *built*
+
+Phase 32's awareness, on a throwaway git copy of the sample app with three
+worktrees (`auth-refresh`, `billing-v2`, `checkout-fix`) and two agents bound
+to them by their MCP roots: Codex in `billing-v2`, Claude Code in
+`checkout-fix`. `npm run demo -- --group=parallel`. A person's steps (marking
+Intended, setting a breakpoint, answering it) are asked for in the window;
+`--decide` takes them through the desktop's HTTP route on a dev build.
+`tests/e2e/demo-check.test.ts` runs the group with no window in CI.
+
+| Scene | Watch for |
+|---|---|
+| `lines` | two chips in the top bar, each with its branch and its agent; each agent sees only its own line as `yours` |
+| `overlap` | one **high** overlap naming `isValidEmail`; `check_footprint` names the other side; the card is marked in Awareness; it clears when one reverts |
+| `contract` | a body-only change tells nobody; a new parameter tells Claude Code on its next call, once, as information; its card is marked in Awareness |
+| `intended` | marked Intended, the overlap goes quiet and a body edit does not wake it |
+| `intent` | Codex declares what it will change, and the overlap with `auth-refresh` appears before any file changes |
+| `breakpoint` | the hook pauses Claude Code's edit, marked in Needs you; a steer lets it through with its note; an agent with no hook is told it breached |
+
+## A3. How the work stacks up (`observe`) — *built*
+
+Plans assigned to lines of work, read the ways a lead reads them: the Stack,
+a past moment, review and the merge order, and plans played forward.
+`npm run demo -- --group=observe`. The one person's step is re-sequencing.
+
+| Scene | Watch for |
+|---|---|
+| `stack` | "Billing v2" and "JIRA-150", codex on `billing-v2` and Claude Code on `exports`; "⚠ overlaps JIRA-150", and "Export form" waiting on "Strict validation" |
+| `replay` | the window replays from the moment before Exports existed, at 4×: Billing alone, its task pending with nobody on it, no signals; back to live, the contract is open |
+| `review-queue` | "Other work in flight" says exports will need updating; the PR draft warns while the overlap is open; `billing-v2` merges first; once Billing's task is done, Export form waits on nothing |
+| `play-forward` | play-forward on: "◇ planned overlap: JIRA-142 and JIRA-151 both plan to change …validators.ts"; then in Stack, re-sequenced with JIRA-142 first, "Add a currency field" waits on "Round VAT per line" |
+
+## A4. The record (`record`) — *built*
+
+What was asked, done, checked and decided, provably unchanged.
+`npm run demo -- --group=record`. The person approves a criterion in the Brief.
+
+| Scene | Watch for |
+|---|---|
+| `evidence` | "Intact: N entries…" before and after; codex claims, starts and submits; the criterion approved (met); the plan's signed evidence names the approval; Settings → Data shown, then closed |
+| `then` | asked about the moment the task was under way: `in_progress` then, `done` now; the Timeline |
+
+## A5. How the code got here (`code-history`) — *built*
+
+No plan needed. `npm run demo -- --group=code-history`. Scrubbing file
+history, Fetch now and the pull-request list are the window's; walk them by
+hand (B8).
+
+| Scene | Watch for |
+|---|---|
+| `whose-line` | line 1 "codex, from the commit message"; line 2 "probably codex: committed while codex's session was open"; line 3 "not yet committed", and in the sidebar's Changes |
+| `branch-compare` | `billing-v2 (line of work)` offered; "1 modified, 0 added, 0 removed"; "billing-v2 changed 1–3, in refund and halfEven, not committed" |
+
+## A6. Teams and shared rules (`teams`) — *built*
+
+A rule and a weekly playbook committed in `.codetrellis/config.json`, as a
+team shares them. `npm run demo -- --group=teams`. Starting a playbook's run
+is the person's step.
+
+| Scene | Watch for |
+|---|---|
+| `rules` | one high rule signal naming `exports-v2`, the import and the reason; Claude Code told, Codex in `auth-fix` told nothing; Settings → Rules shown, then closed; it clears when the import comes out |
+| `recurring` | "Weekly security review is due since Monday. Start it?", with W38 and W39 missed; starting it twice finds the same run; Settings → Recurring playbooks shown, then closed |
+| `grounding` | "⚠ tests older than the code", and done refused with the reason; after a fresh report, done goes through |
+| `plan-status` | "building on exports-v2, not pushed" from git; "1 of 4 tasks done"; "FIN-88 → this plan → exports-v2 not pushed yet" |
+
+## A7. The phone (`phone`) — *built*
+
+What can be shown without a device; the phone itself stays B11, by hand.
+`npm run demo -- --group=phone`.
+
+| Scene | Watch for |
+|---|---|
+| `devices` | paired and connected counts that agree between `get_peer_status` and `list_paired_devices`; Settings → Devices shown, then closed |
+| `reach` | with a phone: a card and the plans list on it; without one, `mobile_present` answers `mobile: false` and `mobile_navigate` is refused with why |
 
 ## B. The journeys, and where each one lives
 
@@ -270,6 +353,11 @@ performance.
 
 - **A journey is a piece of work, not a tool call.** If it cannot be
   described as something a person wanted to get done, it belongs in a test.
+- **A new area gets its own group.** One module under
+  `scripts/demo/groups/`, registered in `registry.ts`, with its own section
+  here (the heading names the group's id) and a row per scene. A group
+  that needs a fixture makes it in `scripts/demo-fixtures.ts` and removes
+  it when it ends.
 - **Say what to watch for.** A scene with no `watch` line is a scene nobody
   can verify by eye.
 - **Flag, do not fail.** These are verification aids. A scene that notices

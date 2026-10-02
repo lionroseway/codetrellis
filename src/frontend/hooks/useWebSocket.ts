@@ -6,6 +6,9 @@ import { useToastStore } from '../stores/toast-store';
 import { useProjectStore } from '../stores/project-store';
 import { useTerminalStore } from '../stores/terminal-store';
 import { useUiStore } from '../stores/ui-store';
+import { useReplayStore } from '../stores/replay-store';
+import { usePlayForwardStore } from '../stores/play-forward-store';
+import { useSourceControlStore } from '../stores/source-control-store';
 import { useArtefactViewStore } from '../stores/artefact-view-store';
 import type { AgentEvent } from '../../shared/types';
 
@@ -269,6 +272,11 @@ export function useWebSocket() {
             // close it — otherwise "show the brief" leaves the brief under
             // the file the agent opened last, and nothing on screen changes.
             const navigation = ++navigationRef.current;
+            // Pointing at one card, or at nothing: every navigation says which.
+            const signalId = payload?.signalId as string | undefined;
+            const breakpointRef = payload?.breakpointRef as string | undefined;
+            useUiStore.getState().setHighlight(signalId ? { kind: 'signal', id: signalId, at: Date.now() }
+              : breakpointRef ? { kind: 'breakpoint', id: breakpointRef, at: Date.now() } : null);
             if (target !== 'artefact') useArtefactViewStore.getState().close();
             if (target === 'plan' || target === 'plans') {
               // Await setActivePlan so activePlanUid is set before the
@@ -281,6 +289,28 @@ export function useWebSocket() {
                 }
                 useUiStore.getState().setWorkspaceMode('plan');
               })();
+            } else if (target === 'awareness' || target === 'stack' || target === 'review') {
+              // A tab of the side panel, opened as a person's click on it
+              // would: the panel shows if it was hidden.
+              useUiStore.getState().openPlanPanelTab(target);
+            } else if (target === 'replay' || target === 'play-forward' || target === 'live') {
+              // Replay from a moment (optionally catching up at 4×), the plans
+              // played forward, or back to now: what the replay bar and the
+              // Play-forward button do.
+              const root = useProjectStore.getState().root;
+              if (target === 'live') {
+                useReplayStore.getState().exit();
+                usePlayForwardStore.getState().exit();
+              } else if (root && target === 'play-forward') {
+                void usePlayForwardStore.getState().enter(root);
+              } else if (root) {
+                usePlayForwardStore.getState().exit();
+                void useReplayStore.getState().enter(root, payload?.from as number | undefined, { catchUp: payload?.speed === 4, to: payload?.to as number | undefined });
+              }
+            } else if (target === 'changes') {
+              // The sidebar's Changes view: source control, with no plan.
+              useSourceControlStore.getState().setSidebarView('changes');
+              useUiStore.getState().showSidebar();
             } else if (target === 'graph') {
               useUiStore.getState().setWorkspaceMode('graph');
             } else if (target === 'code') {
@@ -774,6 +804,15 @@ export function useWebSocket() {
 
                 let projectOpen = false;
                 let workspaceMode = 'unknown';
+                // The side panel's tab, when the panel is showing; null when hidden.
+                let planPanelTab: string | null = null;
+                // Replay, play-forward and the sidebar's view: where in time and
+                // which view a screenshot is of. `highlighted` is the card an
+                // agent pointed at, when it is on screen.
+                let replay: { active: boolean; frames: number; index: number; autoplay: number | null; at: number | null } | null = null;
+                let playForward = false;
+                let sidebarView: string | null = null;
+                let highlighted: { kind: string; id: string } | null = null;
                 let scanStatus = 'unknown';
                 let graphNodes = 0;
                 let openFile: string | null = null;
@@ -790,6 +829,16 @@ export function useWebSocket() {
                   const { useGraphStore } = await import('../stores/graph-store');
                   projectOpen = useProjectStore.getState().tabs.length > 0;
                   workspaceMode = useUiStore.getState().workspaceMode;
+                  const ui = useUiStore.getState();
+                  planPanelTab = ui.agentPanelVisible ? ui.planPanelTab : null;
+                  const r = useReplayStore.getState();
+                  replay = r.active ? { active: true, frames: r.frames.length, index: r.index, autoplay: r.autoplay, at: r.frames[r.index]?.at ?? null } : null;
+                  playForward = usePlayForwardStore.getState().active;
+                  sidebarView = ui.sidebarVisible ? useSourceControlStore.getState().sidebarView : null;
+                  if (ui.highlight) {
+                    const sel = ui.highlight.kind === 'signal' ? `[data-signal-id="${CSS.escape(ui.highlight.id)}"]` : `[data-testid="breakpoint-waiting"][data-ref="${CSS.escape(ui.highlight.id)}"]`;
+                    if (document.querySelector(`${sel}[data-highlighted="true"]`)) highlighted = { kind: ui.highlight.kind, id: ui.highlight.id };
+                  }
                   // `scanStatus` gates the edge fetch, and `graphNodes` is
                   // what actually reached the canvas. Reporting both turns
                   // "the graph is empty" from a symptom into a diagnosis:
@@ -873,6 +922,12 @@ export function useWebSocket() {
                       blockedBy: blocking,
                       projectOpen,
                       workspaceMode,
+                      planPanelTab,
+                      replay,
+                      playForward,
+                      sidebarView,
+                      settingsSection: document.querySelector('[data-settings-section]')?.getAttribute('data-settings-section') ?? null,
+                      highlighted,
                       scanStatus,
                       graphNodes,
                       openFile,
@@ -1018,7 +1073,11 @@ export function useWebSocket() {
 
           // --- Settings modal (MCP open_settings tool) ---
           if (type === 'ui-open-settings') {
-            window.dispatchEvent(new CustomEvent('open-settings'));
+            // At a section when the agent names one, as the app's own links do.
+            window.dispatchEvent(new CustomEvent('open-settings', payload?.section ? { detail: { section: payload.section } } : undefined));
+          }
+          if (type === 'ui-close-settings') {
+            window.dispatchEvent(new CustomEvent('close-settings'));
           }
 
           // --- A plan's budget changed (set_budget, the chip, an acknowledgement) ---

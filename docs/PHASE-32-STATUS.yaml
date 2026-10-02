@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Phase end: the final direction review"
-  status: "HD4 done (#322–#324). The phase end: `main` has nothing feat/phase-32 lacks, and the merged tree is the one CI ran green on Node 26 from a clean install (#324, dceb7fb). This review updates JOURNEYS.md with what shipped and answers §1.7 one last time"
-  next: "This review merged; then the PR feat/phase-32 → main, opened for the owner: it merges after the packaged macOS build and the mobile build are verified (each needs the owner or a device) and the owner's call on C2.6b"
+  step: "Phase 32 into main (#326), and the 0.1.18 release"
+  status: "The final direction review merged (#325). The owner's decisions (2 October): merge into main now; release as 0.1.18, fixing what users find before 0.2.0; build, demo, drive and verify on the release machine before anything is uploaded (docs/releases/RUNBOOK.md); C2.6b left as a follow-up"
+  next: "#326 merged; the demo walks every Phase 32 feature, in groups; then the release machine follows the runbook"
   blockers: "None"
   updated: 2026-10-02
 sections:
@@ -589,7 +589,7 @@ sections:
               - id: C2.6a
                 title: "Teammates' plans after a pull: who added a plan and in which commit, as git says, in the plans list, the Stack and get_plan"
               - id: C2.6b
-                title: "Phase 32's own plan in CodeTrellis, npm run status reading through the app; the C2 done-when (at the phase end: the owner keeps the current way of working until then)"
+                title: "Phase 32's own plan in CodeTrellis, npm run status reading through the app; the C2 done-when (at the phase end: the owner keeps the current way of working until then). Left as a follow-up after Phase 32 (the owner, 2 October)"
       - id: C3
         title: "A shared plans folder, carried by git or a cloud-synced folder (one writer per file, only ever added, signed; teammates' material reads by choice), refined in EXECUTION §6:"
         items:

@@ -627,6 +627,7 @@ All sensor-emitted events have \`authorType: 'sensor'\` and a \`payload.source\`
 |------|-------------|
 | \`ui_ready()\` | **Call this first.** Is the window usable — shell mounted, nothing blocking it? Every other tool answers from the backend and will succeed happily while the user is looking at something else |
 | \`navigate_to(target, plan_uid?, file_path?, line?, item_uid?, attachment_uid?, locator?)\` | Switch to plan / graph / split / timeline / code / brief view, or open a recorded file. For \`code\`, pass \`file_path\` (and optionally \`line\`); for \`brief\`, optionally \`item_uid\` for the task; for \`artefact\`, \`attachment_uid\` and the \`locator\` you cite |
+| \`navigate_to(target: 'replay', 'play-forward', 'live' or 'changes', from?, to?, speed?)\` | Show the project as it was from \`from\` (played at 4× with \`speed: 4\`), every active plan played forward, back to now, or the sidebar's Changes. With \`awareness\`, \`signal_id\` or \`breakpoint_ref\` scrolls to that card and marks it. Showing only: none of these decides anything |
 | \`open_plan(plan_uid, split_view?)\` | Open a specific plan |
 | \`select_item(item_uid, plan_uid?)\` | Navigate to a specific item in the plan tree |
 | \`navigate_item_back()\` | Go back in item selection history (Cmd+[) |
@@ -634,7 +635,8 @@ All sensor-emitted events have \`authorType: 'sensor'\` and a \`payload.source\`
 | \`toggle_panel(panel)\` | Show/hide sidebar / inspector / terminal / plans / split / channel / activity / history |
 | \`toggle_activity_drawer()\` | Toggle the activity/comment feed drawer |
 | \`open_history_drawer(item_uid)\` | Open version history for a specific item |
-| \`open_settings()\` | Open the settings modal |
+| \`open_settings(section?)\` | Open the settings modal, at a section when named |
+| \`close_settings()\` | Close it again, as Escape does |
 | \`open_mcp_guide()\` | Open the MCP connection guide |
 | \`refresh_ui()\` | Force UI refresh |
 | \`open_project(path)\` | Open and scan a project directory |
@@ -1196,7 +1198,8 @@ plan time-travel rail; \`navigate_to('timeline')\` opens the plan activity feed.
 
 | Tool | Effect on screen |
 |------|-----------------|
-| \`open_settings()\` | Settings modal pops up |
+| \`open_settings(section?)\` | Settings modal pops up, at that section |
+| \`close_settings()\` | Settings modal closes |
 | \`open_mcp_guide()\` | MCP connection guide pops up |
 
 ### Narration (Agent Presence Pane)

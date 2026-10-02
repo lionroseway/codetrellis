@@ -24,6 +24,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { makeWorkbook, makeDocx, makePdf } from '../src/backend/services/material-reader/fixtures.test-helper';
+import { copyFixtureTemplate } from '../tests/harness/fixture';
 
 let root: string | null = null;
 
@@ -250,4 +251,142 @@ export function repoWithPlanConflict(): ConflictFixture {
   }
 
   return { path: dir, manifest };
+}
+
+export interface ParallelFixture {
+  /** The main checkout (branch `main`). */
+  path: string;
+  /** Each worktree's folder, by name; its branch has the same name. */
+  trees: Record<string, string>;
+  /**
+   * Replace `from` with `to` in a file of one worktree (or `main`). Throws
+   * when `from` is not there: an edit that changes nothing is a scene not
+   * happening, which is how the main loop's `work` scene once lied.
+   */
+  edit(tree: string, rel: string, from: string, to: string): void;
+  /** Put one worktree's files back as committed. */
+  reset(tree: string): void;
+  /** Put every worktree back as committed. */
+  resetAll(): void;
+  /** Commit what a worktree has changed. */
+  commit(tree: string, message: string): string;
+}
+
+/**
+ * The sample app as a git repository with a worktree per line of work, for
+ * the parallel, observe and teams groups: real folders, real branches, the
+ * same app the harness tests use. Each worktree is a branch off `main`
+ * named as given. Removed with the other fixtures; nothing touches the
+ * person's own repositories.
+ */
+export function sampleAppRepo(name: string, worktrees: string[], seed?: (dir: string) => void): ParallelFixture {
+  const dir = path.join(base(), name);
+  copyFixtureTemplate(dir);
+  init(dir);
+  seed?.(dir);
+  commit(dir, 'The sample app');
+  const trees: Record<string, string> = { main: dir };
+  for (const wt of worktrees) {
+    trees[wt] = `${dir}-${wt}`;
+    git(dir, 'worktree', 'add', '-q', trees[wt], '-b', wt);
+  }
+  const at = (tree: string) => {
+    const t = trees[tree];
+    if (!t) throw new Error(`no worktree called "${tree}"`);
+    return t;
+  };
+  return {
+    path: dir,
+    trees,
+    edit(tree, rel, from, to) {
+      const abs = path.join(at(tree), rel);
+      const was = fs.readFileSync(abs, 'utf-8');
+      if (!was.includes(from)) throw new Error(`${tree}: ${rel} does not contain the text the scene changes`);
+      fs.writeFileSync(abs, was.replace(from, to));
+    },
+    reset(tree) {
+      git(at(tree), 'checkout', '--', '.');
+      git(at(tree), 'clean', '-fdq');
+    },
+    resetAll() {
+      for (const t of Object.keys(trees)) this.reset(t);
+    },
+    commit(tree, message) {
+      return commit(at(tree), message);
+    },
+  };
+}
+
+
+/** A small payments repository: a few files that import each other, one commit on `main`. */
+function smallPaymentsRepo(dir: string): void {
+  init(dir);
+  write(dir, 'billing/refund.ts', 'export const refund = (x: number) => Math.round(x);\n');
+  write(dir, 'billing/ledger.ts', "import { refund } from './refund';\n\nexport function post(amount: number): number {\n  return refund(amount);\n}\n");
+  write(dir, 'billing/index.ts', "export { post } from './ledger';\n");
+  write(dir, 'README.md', '# payments\n');
+  commit(dir, 'Refunds');
+}
+
+/**
+ * A payments repository for the record group: somewhere to make a plan whose
+ * evidence is exported. Its own folder, so nothing the person keeps is touched.
+ */
+export function paymentsRepo(): string {
+  const dir = path.join(base(), 'record-payments');
+  smallPaymentsRepo(dir);
+  return dir;
+}
+
+export interface AgentBranchFixture {
+  /** The person's checkout, on `main`. */
+  path: string;
+  /** The teammate's worktree, on `branch`. */
+  worktree: string;
+  branch: string;
+  /** The file the teammate's agent works on, relative to either checkout. */
+  file: string;
+  /** Write the file in the worktree and commit it there as the teammate (Sam Lee); returns the sha. */
+  commit(body: string, message: string): string;
+  /** Write the file in the worktree without committing it. */
+  write(body: string): void;
+  /** The file as it is in the worktree now. */
+  read(): string;
+}
+
+/**
+ * The Track E shape: a repository nobody planned in, with a teammate's
+ * worktree on `billing-v2` beside the person's `main`. The commits are the
+ * scene's to make, so it can open the agent's session between them (a commit
+ * made while a session is open in a checkout is attributed by timing).
+ */
+export function repoWithAgentBranch(): AgentBranchFixture {
+  const dir = path.join(base(), 'code-history');
+  smallPaymentsRepo(dir);
+  const branch = 'billing-v2';
+  const worktree = `${dir}-billing`;
+  git(dir, 'worktree', 'add', '-q', '-b', branch, worktree, 'main');
+  const file = 'billing/refund.ts';
+  const teammate = {
+    ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null',
+    GIT_AUTHOR_NAME: 'Sam Lee', GIT_AUTHOR_EMAIL: 'sam@acme.test', GIT_COMMITTER_NAME: 'Sam Lee', GIT_COMMITTER_EMAIL: 'sam@acme.test',
+  };
+  const asTeammate = (...args: string[]) => execFileSync('git', args, { cwd: worktree, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], env: teammate }).trim();
+  return {
+    path: dir,
+    worktree,
+    branch,
+    file,
+    commit(body, message) {
+      write(worktree, file, body);
+      asTeammate('commit', '-qam', message);
+      return asTeammate('rev-parse', 'HEAD');
+    },
+    write(body) {
+      write(worktree, file, body);
+    },
+    read() {
+      return fs.readFileSync(path.join(worktree, file), 'utf-8');
+    },
+  };
 }

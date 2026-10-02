@@ -419,8 +419,13 @@ export function TopBar() {
       if (section) setSettingsSection(section);
       setSettingsOpen(true);
     };
+    const close = () => setSettingsOpen(false);
     window.addEventListener('open-settings', handler);
-    return () => window.removeEventListener('open-settings', handler);
+    window.addEventListener('close-settings', close);
+    return () => {
+      window.removeEventListener('open-settings', handler);
+      window.removeEventListener('close-settings', close);
+    };
   }, []);
 
   return (
