@@ -340,6 +340,31 @@ export function noteRefsChanged(): void {
 export interface FrameQuery { from?: number; to?: number; limit?: number; newestFirst?: boolean }
 
 /** A project's frames between two times, oldest first (or newest first). */
+/**
+ * Who CodeTrellis saw working when each of these commits landed (Phase 32
+ * E3): the agent and session a commit frame recorded beside it, by full sha.
+ */
+export function framesByCommit(projectPath: string, shas: readonly string[]): Map<string, { agentType: string | null; sessionId: string | null; workstreamRoot: string | null }> {
+  const out = new Map<string, { agentType: string | null; sessionId: string | null; workstreamRoot: string | null }>();
+  const wanted = shas.filter((s) => /^[0-9a-f]{40,64}$/.test(s));
+  for (let i = 0; i < wanted.length; i += 200) {
+    const batch = wanted.slice(i, i + 200);
+    const rows = getDb().exec(
+      `SELECT commit_sha, agent_type, session_id, workstream_root FROM trellis_snapshots
+       WHERE snapshot_type = 'frame' AND project_path = ? AND commit_sha IN (${batch.map(() => '?').join(',')})
+       ORDER BY created_at ASC`,
+      [trimRoot(projectPath), ...batch],
+    )[0]?.values ?? [];
+    for (const r of rows as unknown[][]) {
+      const prior = out.get(r[0] as string);
+      // The frame that named an agent wins over one that did not.
+      if (prior?.agentType && !r[1]) continue;
+      out.set(r[0] as string, { agentType: (r[1] as string | null) ?? null, sessionId: (r[2] as string | null) ?? null, workstreamRoot: (r[3] as string | null) ?? null });
+    }
+  }
+  return out;
+}
+
 export function listFrames(projectPath: string, q: FrameQuery = {}): ReplayFrame[] {
   const where = [`t.snapshot_type = 'frame'`, 't.project_path = ?'];
   const params: Array<string | number> = [trimRoot(projectPath)];

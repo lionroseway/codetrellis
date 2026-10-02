@@ -54,7 +54,7 @@ import { listBreakpoints, getBreakpoint, setBreakpoint, clearBreakpoint, listHit
 import { verifyRecord } from './services/record-chain';
 import { startAgentEventLog, recordDecision, pruneAgentEvents, listAgentEvents, setEventPublisher, setRecordedListener, actingSession, workstreamOfItem, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
 import { stateAt } from './services/replay-state';
-import { startReplayFrames, pruneFrames, setHeldProject, setFramePublisher, noteAgentActivity, requestFrame, noteRefsChanged, seedHeads, listFrames, DEFAULT_FRAME_LIMIT } from './services/replay-frames';
+import { startReplayFrames, pruneFrames, setHeldProject, setFramePublisher, noteAgentActivity, requestFrame, noteRefsChanged, seedHeads, listFrames, framesByCommit, DEFAULT_FRAME_LIMIT } from './services/replay-frames';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
@@ -78,6 +78,7 @@ import * as budgetService from './services/budget-service';
 import { compareSnapshots, listComparands, readFileAt } from './services/snapshot-compare-service';
 import { sourceControl, projectPrefix } from './services/source-control';
 import { diffCommand, filesBetween, listRefs, sideLabel, worktreesForCompare } from './services/git-refs';
+import { fileHistory, FileHistoryError } from './services/file-history';
 import { reviewPlan, renderReviewMarkdown } from './services/plan-review-service';
 import { reviewQueue } from './services/review-queue-service';
 import { buildStack } from './services/stack-service';
@@ -90,7 +91,7 @@ import { startRecurringScheduler } from './services/recurring-scheduler';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
 import { sealPack, checkSeal } from './services/pack-seal';
-import { buildEvidence, sealEvidence, renderEvidenceHtml, verifyEvidence, evidenceFromText, EvidenceError } from './services/evidence';
+import { buildEvidence, sealEvidence, renderEvidenceHtml, verifyEvidence, evidenceFromText, EvidenceError, decisionsBetween } from './services/evidence';
 import { planGitStatesFresh } from './services/item-git-state';
 import { planStatusFresh } from './services/plan-status';
 import { listSignedApprovals } from './services/signed-approvals';
@@ -4359,6 +4360,43 @@ app.get('/api/git/refs/compare', (req, res) => {
     words: n === 0
       ? `${labels.before} and ${said(labels.after)} have the same files.`
       : `${n}${result.truncated ? '+' : ''} file${n === 1 ? ' differs' : 's differ'} between ${said(labels.before)} and ${said(labels.after)}.`,
+  });
+});
+
+// Phase 32 E3: a file's positions on one side (its working copy, then each
+// commit that changed it, following renames), each with its git author and
+// what CodeTrellis knows of who made it; and the decisions recorded between
+// two moments, for what was decided between two commits.
+app.get('/api/git/file-history', (req, res) => {
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  const at = typeof req.query.at === 'string' && req.query.at ? req.query.at : 'live';
+  const rel = typeof req.query.path === 'string' ? req.query.path : '';
+  if (!rel || rel.startsWith('-') || rel.startsWith(':') || path.isAbsolute(rel) || rel.split(/[\\/]/).includes('..')) {
+    res.status(400).json({ error: 'A path relative to the project is required.' });
+    return;
+  }
+  try {
+    res.json(fileHistory(projectPath, at, rel, worktreesForCompare(projectPath), (shas) => framesByCommit(projectPath, shas)));
+  } catch (err) {
+    if (err instanceof FileHistoryError) { res.status(400).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+app.get('/api/record/decisions', (req, res) => {
+  const from = Number(req.query.from);
+  const to = Number(req.query.to);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from > to) {
+    res.status(400).json({ error: 'from and to are times in ms, from no later than to.' });
+    return;
+  }
+  const decisions = decisionsBetween(from, to);
+  res.json({
+    from, to, decisions,
+    words: decisions.length === 0
+      ? 'Nothing was decided on this computer between these two moments.'
+      : `${decisions.length} decision${decisions.length === 1 ? '' : 's'} recorded on this computer between these two moments.`,
   });
 });
 
