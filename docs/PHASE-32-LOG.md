@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track E — E5: branches and pull requests |
-| **Status** | E1 (#314), E2a (#315), E2b (#316), E3 (#317) and E4 (#318) merged. E5 built on E4: GET /api/git/branches lists branches here and on the remotes as last fetched, each with upstream, ahead and behind said plainly and as git says it; Fetch now (POST /api/git/fetch) runs git fetch --all --prune and reads pull requests through the person's own gh ("needs the gh CLI" without it); Settings → Git keeps remotes current for the open project, off by default, every 5–60 min. The Changes tab's Branches and pull requests; a branch or a pull request fills Compare two points. Unit git-branches 7; harness branches 5; browser branches (shots) |
-| **In flight** | E5 in review (#319) on `feat/phase-32-e5-branches`; E6 in review (#320) on `feat/phase-32-e6-done-when` |
+| **Stage / step** | Wave 2 direction review (§1.7) |
+| **Status** | Track E done: E1–E6 merged (#314–#320). Wave 2 (HD1–HD3, B5–B10, A4–A7, C2–C4, Tracks D and E, #207–#320) is reviewed in the LOG: every JOURNEYS.md journey and six more run end to end as harness tests; two lessons change how stores read (one at a time) and what counts as a grant (anything reaching a host); the browser shards are the wait on every PR |
+| **In flight** | E6 in review (#320) on `feat/phase-32-e6-done-when` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
-| **Next action** | Merge E5 (#319) when green, then E6 (#320) by the stacked flow; then the review |
+| **Next action** | The owner decides the proposals (HD4: browser shards and a single-flight guard; then the phase end as §7 writes it) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `edbf9c5`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `141c7f8`, with open PRs from GitHub.
 
 ---
 
@@ -290,7 +290,7 @@
     - [ ] E2b The graph compares the same two: its architecture diff between the pair chosen in the Changes tab
   - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked
   - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history`
-  - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default (#319) — in review
+  - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default
   - [ ] E6 The done-when: a teammate's agent's work, traced line by line and side by side, with no plan (#320) — in review
 
 ### Phase end
@@ -508,6 +508,84 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-02: Wave 2 direction review (§1.7)
+
+Wave 2 is HD1–HD3, B5–B10, A4–A7, C2–C4, Track D and Track E: #207–#320.
+
+*Which journeys can be demonstrated end to end now?* Every journey in
+JOURNEYS.md, each by a harness test that runs it on a real backend, and
+six that are not in it:
+- **G1** "what happened while I was in that meeting?" (`replay-state`,
+  B5.4); **G2** the auditor's question, months later (`record-g2`);
+  **G3** playing the plans forward (`play-forward-g3`).
+- **C2** on the phone (`awareness-m4`); **D1–D3** review, the merge order
+  and the PR that tells the story (`awareness-m5`).
+- **H1** the lead's morning view (`awareness-h1`); **I1** the spec is
+  wrong (`conferring-i1`); **E1–E3** work that isn't code
+  (`awareness-m6`).
+- **J1** "done" on stale tests (`stale-done`); **J2** watching coverage
+  land (`grounding-replay`).
+- Not in JOURNEYS.md: team status through git, with any host or none
+  (C2: `plan-status`, `plan-state-writes`, `signed-approvals`); a shared plans
+  folder on git or OneDrive (`shared-folder-journey`); the CLI in a
+  session and a pipeline (`done-when-d`); recurring playbooks on two
+  machines (`recurring-two-machines`); architecture rules (`awareness-m7`);
+  and how the code got here, with no plan (`history-e`).
+- Wave 1's fourteen still run; nothing is left "in part".
+
+*What did we learn that changes the plan?*
+1. **Scope grew by two tracks, by the owner's asks**: the CLI (Track D,
+   1 October) and how the code got here (Track E, 2 October). Each was
+   refined into steps before building and landed whole; neither moved
+   anything already planned.
+2. **A read started by a broadcast must run one at a time.** It came up
+   twice: the awareness store (E1, found by a browser test hanging after
+   another spec) and the source-control store (E2b, found on CI). Every
+   file change in any worktree broadcasts, so an unbounded read per
+   broadcast held the server and the browser's connections long enough
+   that a person's own click waited. Both are fixed with tests that fail
+   without the fix; nothing yet stops the next store doing the same.
+3. **Anything that reaches a host is a grant.** E5's keeper fetches on a
+   timer, and CI's settings test caught the new section before the grant
+   rule did. It is in `grant-guard` now; the rule held because the
+   settings surface lists every section.
+4. **Background git must never lock.** The watcher's `git status` took
+   `index.lock` and broke the person's own commits 51 times in 150 (#308).
+   Reads are lock-free now, with the index refreshed at most every ten
+   minutes.
+5. **Time is a test input.** Commit times are whole seconds (E4), "months
+   later" moves the backend's clock rather than backdating rows (B10.5),
+   and a recurring run falls due between two ticks (C4). Each was found
+   by a test failing once.
+6. **Owner decisions arrived quickly when asked as choices.** C3's three
+   questions, Track D and Track E were answered the same day; the steps
+   that waited (C2.6b) were moved to the phase end rather than held.
+
+*Is anything getting noisier, slower or harder to read?*
+- **Slower:** harness 1237 tests (814 at Wave 1), about 5–7 minutes per
+  shard of four; the browser suite 767 tests (717), 18–28 minutes per
+  shard of three (15–19). The longest shard is now the wait on every PR.
+- **Noisier in CI:** a pushed head cancels the last run, and the
+  cancelled run reports "CI passed: failure". Each was checked, and none
+  was a real failure; real ones in Wave 2 were each fixed at their cause.
+- **Quieter for the person:** keeping remotes current is off unless
+  turned on; Track E reads git on demand with a loading chip, never in the
+  background.
+- **Harder to read:** lint warnings 306, up from 303 at Wave 1; unit tests
+  1941.
+
+**Proposed for the phase end** (the owner decides; EXECUTION §2 and §7
+change in the same PR as the answer):
+- **HD4, before the phase end:** a fourth browser shard, or the serial
+  sample-app project split out, so no shard runs past about 20 minutes;
+  and a structural test that every store read started by a window event
+  goes through one single-flight path, as `reachable.test.ts` guards
+  rendering.
+- **Then the phase end as written** (§7): `main` merged in, the full
+  suite on Node 26 from a clean `npm ci`, C2.6b (Phase 32's own plan in
+  CodeTrellis), the packaged macOS build and the mobile build (each needs
+  you or a device), the final direction review, and one PR to `main`.
 
 ### 2026-10-02: E5 — branches and pull requests
 - **Journey.** Priya opens the Changes tab's "Branches and pull
