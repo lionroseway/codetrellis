@@ -32,7 +32,7 @@ import { markDirty } from './persistence';
 import { getItem, updateItem } from './plan-item-service';
 import { appendPlanEvent } from './plan-event-service';
 import { answerHit, getHit, specBreakpointOn } from './breakpoint-service';
-import { recordBreakpointEvent } from './agent-event-log';
+import { recordBreakpointEvent, recordDecision } from './agent-event-log';
 import { pushForBreakpoint } from './push-notification-service';
 import { getPlan } from './plan-service';
 import { postChannelEvent } from './channel-event-service';
@@ -540,6 +540,11 @@ export function decideProposal(input: DecideInput, by: { author: string; authorT
      WHERE uid = ? AND status = 'open'`,
     [accept ? 'accepted' : 'rejected', now, by.author, by.authorType, note, input.decision === 'amend' ? text : null, p.uid],
   );
+  // Kept in the record as it happens: the row is the latest state only (B10.1).
+  recordDecision('spec_decided', {
+    proposalUid: p.uid, planUid: p.planUid, pageUid: p.pageUid, section: p.section, decision: input.decision,
+    ...(note ? { note: note.slice(0, 200) } : {}), author: by.author, authorType: by.authorType,
+  }, by.authorType === 'agent' ? by.author : by.authorType);
   if (p.hitRef) {
     answerHit({ ref: p.hitRef, decision: accept ? 'continue' : 'stop', note: note ?? (input.decision === 'amend' ? 'Accepted with changes.' : null), by: by.author, byType: by.authorType, now });
     getDb().run(`UPDATE breakpoints SET cleared_at = ?, cleared_by = ?, cleared_by_type = ? WHERE kind = 'proposal' AND target = ? AND cleared_at IS NULL`, [now, by.author, by.authorType, p.uid]);

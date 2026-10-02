@@ -72,3 +72,12 @@ test('a signal breakpoint names the signal; a release by CodeTrellis is never sa
   assert.equal(released.text, 'CodeTrellis let claiming “Invoice currency” through: The signal was answered in Awareness.');
   assert.ok(!/^You|Someone/.test(released.text));
 });
+
+test('a person\'s decisions kept in the record read as what they did (B10.1)', () => {
+  const at = { id: 'app-1', timestamp: 1, source: 'app' as const };
+  assert.equal(phraseEvent({ ...at, type: 'signal_answered', payload: { kind: 'stale-base', state: 'intended', actorType: 'human', channel: 'desktop' } }).text, 'You marked a stale base signal intended');
+  assert.equal(phraseEvent({ ...at, type: 'signal_answered', payload: { kind: 'rule', state: 'acknowledged', actorType: 'human', channel: 'phone' } }).text, 'You acknowledged a rule signal, from the phone');
+  assert.equal(phraseEvent({ ...at, type: 'spec_decided', payload: { decision: 'amend', section: 'Refunds', authorType: 'human' } }).text, 'You accepted a proposed spec change to “Refunds”, with changes');
+  assert.equal(phraseEvent({ ...at, type: 'rule_changed', payload: { change: 'set', from: 'web/', mayNotImport: 'db/', authorType: 'unverified' } }).text, 'Someone over the local API set the architecture rule “web/ may not import db/”');
+  assert.equal(phraseEvent({ ...at, type: 'rule_changed', payload: { change: 'stopped', ruleId: 'web-not-db', authorType: 'human' } }).text, 'You stopped the architecture rule web-not-db');
+});

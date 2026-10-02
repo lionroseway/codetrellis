@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { AwarenessSignal, SettableSignalState, SignalState, SignalStateBy, Workstream } from '../../shared/types';
 import { getDb } from './database';
+import { recordDecision } from './agent-event-log';
 import { markDirty } from './persistence';
 import { isSafeGitRef } from './git-safety';
 import { listWorkstreams } from './workstream-service';
@@ -332,6 +333,12 @@ export function setSignalState(
     [state, JSON.stringify(by), now, id, projectRoot],
   );
   markDirty();
+  // The row keeps only the latest answer; the record keeps each (B10.1).
+  recordDecision('signal_answered', {
+    signalId: id, kind: signal.kind, severity: signal.severity, state, projectRoot,
+    workstreams: signal.workstreams, summary: signal.summary.slice(0, 200),
+    actor: by.actor, actorType: by.actorType, channel: by.channel,
+  }, by.actorType);
   onChanged(projectRoot);
   const { reopened: _was, ...rest } = signal;
   return { ...rest, state, stateBy: by, stateAt: now };

@@ -38,6 +38,7 @@ import { SharedTaskStateSection } from './SharedTaskStateSection';
 import { PlansFolderSection } from './PlansFolderSection';
 import { RecurringSection } from './RecurringSection';
 import { ArchitectureRulesSection } from './ArchitectureRulesSection';
+import { RecordSection } from './RecordSection';
 import { AddToClaudeCode } from './AddToClaudeCode';
 import { AddToGeminiCli } from './AddToGeminiCli';
 
@@ -1133,6 +1134,8 @@ function DataSection({
       <p className="text-[10px] text-foreground-subtle">
         Takes effect when CodeTrellis restarts; until then it keeps using the current directory.
       </p>
+
+      <RecordSection />
     </>
   );
 }

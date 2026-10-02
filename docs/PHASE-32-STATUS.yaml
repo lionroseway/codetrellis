@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track A — A7.3: the gate on rules, and the M7 done-when"
-  status: "A7.1 (#306) and A7.2 (#307) merged. A7.3 built: check_changes lists each import a change adds across a rule (since `base`, the merge base the CLI passes) and says when the rules could not be read; `codetrellis check` exits 3 on it. Harness awareness-m7 3 (two agents, one breach told once; one digest line; the CLI gate fails then passes), cli-gate wording; unit conformity"
-  next: "Merge A7.3 (#308) when green; then B10.1 (#309)"
+  step: "Track B — B10.1: the record as a hash chain"
+  status: "A7 done: A7.1 (#306), A7.2 (#307), A7.3 (#308) merged. B10 refined in five parts. B10.1 built: every kept agent event linked into a hash chain as it is written; signal answers, spec decisions and rule changes kept as events; verifyRecord names what changed, was removed, relinked or added around it; GET /api/record, verify_record, Settings → Data → The record. Unit record-chain 8, harness record 4, browser settings/record 2 (shots)"
+  next: "Merge B10.1 (#309) when green; then B10.2 (retention you can set)"
   blockers: "None"
   updated: 2026-10-02
 sections:
@@ -513,6 +513,17 @@ sections:
             title: "The phone and the G3 done-when"
       - id: B10
         title: The record
+        items:
+          - id: B10.1
+            title: "The chain: every kept event linked, decisions as events, verified in words"
+          - id: B10.2
+            title: Retention you can set, and the chain still verifies
+          - id: B10.3
+            title: Signed packs, carrying the record's head
+          - id: B10.4
+            title: The evidence export
+          - id: B10.5
+            title: The G2 done-when and docs
   - title: "Track C: shared ways of working"
     items:
       - id: C1

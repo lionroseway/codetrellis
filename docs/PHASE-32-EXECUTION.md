@@ -821,6 +821,43 @@ zone: "◇ planned overlap: JIRA-142 and JIRA-150 both plan to change
 `sales-2026.xlsx`, said in words in the Stack. Sam re-sequences JIRA-150 to
 wait on JIRA-142, and the zone reads sequenced, before anyone writes code.
 
+### B10: The record
+
+Refined 2026-10-02 (observability doc §11, JOURNEYS G2, CURRENT-STATE
+"Tamper evidence"). A reviewer takes any piece of work and sees what was
+asked, done, checked, decided, and what else was happening, and can trust
+that none of it was changed afterwards. What exists: decisions with who,
+when, device and file hashes; sign-off packs that re-hash their files; the
+agent event log (B1), which already carries the app's own decisions. What
+does not: audit rows are plain rows, several decisions (a breakpoint
+answer, a spec decision, a signal's state) overwrite their row, the pack
+is unsigned, every window is a 14-day constant, and nothing bundles a
+moment's evidence.
+
+- **The log is the record.** Every event the agent event log keeps gets a
+  link in a hash chain as it is written; decisions that only overwrote a
+  row become events too. One chain, not a second log beside the first.
+- **Retention trims a block, never a hole.** The oldest links go together
+  and the anchor moves, so what is kept still verifies, and says since when.
+- **A hash chain alone proves nothing to someone who can rewrite the
+  database.** The signed pack and the evidence export carry the chain's
+  head, which pins everything before it.
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| B10.1 | The chain: `record_chain` (one link per agent event: digest of the event as written, hash over the link before), linked as each event is written; the events kept before it linked once when the record begins; the oldest pruned as one block with `record_anchor`; `verifyRecord` names each entry changed, removed, relinked or added around the record, in words. Signal answers, spec-proposal decisions and rule changes kept as events (`signal_answered`, `spec_decided`, `rule_changed`), with who from the transport, phrased on the Timeline. `GET /api/record`, `verify_record` (`read`), Settings → Data → The record | unit `record-chain.test.ts` (intact; changed, removed, forged, relinked; the workstream stamped later is not a change; retention and the anchor; a late event trimmed with its neighbours; the record begins once); harness `record.test.ts` (an agent's call and a person's rule both kept; REST and MCP agree; after a restart it goes on; a tool call edited in the database while closed is named); browser `settings/record.spec.ts` (intact; changed, by entry; shots) |
+| B10.2 | Retention you can set: Settings → Data → "Keep the record" (14, 30, 90, 365 days, or everything), the person's; it governs agent events (and so the record), replay frames, signal spans, test cases, log files and the device audit log, which becomes time-bound too; what is kept says since when; trimming keeps the chain verifiable | unit; harness (a shorter window trims, the record still verifies; set only by the person); browser (shot) |
+| B10.3 | Signed packs: the sign-off pack signed with this install's key (its own namespace) and carrying the record's head at signing; verifying says signed by this install, by a teammate's trusted key, by an unknown key, or changed after signing; the pack's page says which | unit; harness (signed, verified, a changed byte refused, an unknown key said); browser (shot) |
+| B10.4 | The evidence export: for a plan or a window of time, one signed package (JSON and a page) with the record's entries and the links to recompute them, the replay frames, the stack and signals at the start and end, breakpoints and decisions, and the sign-off pack. From the replay bar and the plan; `GET /api/evidence`, `export_evidence` (`read`), `POST /api/evidence/verify` | unit; harness (exported, verified, tampered refused); browser (shots) |
+| B10.5 | The G2 done-when and docs: months later (a clock moved forward), a reviewer sets the cursor to the week a payment change was built; the stack, the graph and the timeline show it, the record verifies, the evidence export of that week verifies, and a change made to the database since is named; `docs/claude/record.md` | harness `record-g2.test.ts`; browser (shots) |
+
+**Journey (G2).** Months later an auditor asks: "When this payment change
+was built, what else was going on, and who approved what?" Sam sets the
+cursor to that week: the stack shows what was in flight, the graph the code
+as it was, the Timeline the breakpoints and decisions, each with who.
+Settings → Data says the record is intact since March. He exports the
+week's evidence, signed, and the auditor verifies it on their own machine.
+
 ### C1: Skills on plans and tasks
 
 | Sub-step | Delivers | Tests |

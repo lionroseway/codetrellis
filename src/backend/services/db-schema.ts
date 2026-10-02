@@ -198,6 +198,26 @@ export const SCHEMA_PLANS_CORE = `
   CREATE INDEX IF NOT EXISTS idx_agent_events_session ON agent_events(session_id, at);
   CREATE INDEX IF NOT EXISTS idx_agent_events_workstream ON agent_events(workstream_root, at);
 
+  -- Phase 32 B10.1: the record. One link per agent event, each hashing the
+  -- one before it, so a change, a removal or a forged row is found by
+  -- walking it (record-chain.ts). The anchor is the last link retention
+  -- trimmed, so what is kept still verifies.
+  CREATE TABLE IF NOT EXISTS record_chain (
+    seq INTEGER PRIMARY KEY,
+    event_id TEXT NOT NULL UNIQUE,
+    linked_at INTEGER NOT NULL,
+    digest TEXT NOT NULL,
+    prev TEXT NOT NULL,
+    hash TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_record_chain_linked ON record_chain(linked_at);
+  CREATE TABLE IF NOT EXISTS record_anchor (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    through_seq INTEGER NOT NULL,
+    hash TEXT NOT NULL,
+    at INTEGER NOT NULL
+  );
+
   -- Phase 32 C1.3: proof a skill was used on a task. Claude Code records each
   -- skill it loads as a Skill tool call; the watcher stores one row per task
   -- that a Claude Code session in the same workstream is working. Kept with

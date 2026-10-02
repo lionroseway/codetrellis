@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A7.3: the gate on rules, and the M7 done-when |
-| **Status** | A7.1 (#306) and A7.2 (#307) merged. A7.3 built: check_changes lists each import a change adds across a rule (since `base`, the merge base the CLI passes) and says when the rules could not be read; `codetrellis check` exits 3 on it. Harness awareness-m7 3 (two agents, one breach told once; one digest line; the CLI gate fails then passes), cli-gate wording; unit conformity |
-| **In flight** | A7.3 in review (#308) on `feat/phase-32-a7-3-rule-gate`; B10 in review (#309) on `feat/phase-32-b10-1-chain` |
-| **Last merged** | A7.2 (#307, `a2006f6`) |
-| **Next action** | Merge A7.3 (#308) when green; then B10.1 (#309) |
+| **Stage / step** | Track B — B10.1: the record as a hash chain |
+| **Status** | A7 done: A7.1 (#306), A7.2 (#307), A7.3 (#308) merged. B10 refined in five parts. B10.1 built: every kept agent event linked into a hash chain as it is written; signal answers, spec decisions and rule changes kept as events; verifyRecord names what changed, was removed, relinked or added around it; GET /api/record, verify_record, Settings → Data → The record. Unit record-chain 8, harness record 4, browser settings/record 2 (shots) |
+| **In flight** | B10.1 in review (#309) on `feat/phase-32-b10-1-chain` |
+| **Last merged** | A7.3 (#308, `ca54a32`) |
+| **Next action** | Merge B10.1 (#309) when green; then B10.2 (retention you can set) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `a2006f6`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `ca54a32`, with open PRs from GitHub.
 
 ---
 
@@ -120,10 +120,10 @@
   - [x] A6.4 Other work affected on the Brief, in get_brief, the inbox and the phone (#256)
   - [x] A6.5 Sign-off packs list the signals that touched the task (#257)
   - [x] A6.6 M6 done-when and docs (#258)
-- [ ] A7 Rules — building
+- [x] A7 Rules
   - [x] A7.1 The rules in the committed config, what breaks them today, and `check_conformity` made true (#306)
   - [x] A7.2 `rule` signals from each workstream's import delta (#307)
-  - [ ] A7.3 The gate (`check_changes`, `codetrellis check`) and the M7 done-when (#308) — in review
+  - [x] A7.3 The gate (`check_changes`, `codetrellis check`) and the M7 done-when (#308)
 - [ ] Follow-up: `plan-by-hand` failed once in CI when its plan workspace dropped back to the plan list while `plan/list.spec.ts` created and deleted plans on the other worker (#147). It doesn't reproduce as a pair (5/5 on base and on the branch). Find which broadcast leaves the workspace, so a person's open plan survives someone else's plan changes.
 - [ ] Follow-up: two browser tests failed once on #167 and passed on re-run: `realtime/plan-events.spec.ts:18` (a reset connection mid-POST; also 2/3 locally on the base branch) and `external-refs/refs-panel.spec.ts:77` (a fixed 3 s `isVisible`). Both are queued as separate fixes; neither touches A3.4's code.
 - [x] Follow-up: two browser tests failed once on the docs-only #184 and passed on re-run: `graph/layout-controls.spec.ts:38` (0 nodes after Tree → Map; the spec already names a rescan on the other worker as the cause of an empty graph, and polls 20 s) and `review-regressions/pr55-ui.spec.ts:431` (the linked-ticket chip never appeared, on the sample-app fixture). Neither touches a Phase 32 file; each needs its root cause found, not a longer wait. **Fixed at the source by #195 and #196:** a scan answers "scanning" and every graph answer names its project; a canvas keeps its graph through another project's scan, and an empty one rescans its own.
@@ -218,7 +218,12 @@
     - [x] B9.3a Re-sequence, tell both agents, or leave it: by a person, kept with who and when (#296)
     - [x] B9.3b A new planned overlap said on approval; deciding one from the phone (#297)
   - [x] B9.4 The phone and the G3 done-when (#298)
-- [ ] B10 The record (#309) — in review
+- [ ] B10 The record — building
+  - [ ] B10.1 The chain: every kept event linked, decisions as events, verified in words (#309) — in review
+  - [ ] B10.2 Retention you can set, and the chain still verifies
+  - [ ] B10.3 Signed packs, carrying the record's head
+  - [ ] B10.4 The evidence export
+  - [ ] B10.5 The G2 done-when and docs
 
 ### Track C: shared ways of working
 - [x] C1 Skills on tasks
@@ -435,6 +440,9 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | C4.2a: a scheduled start is authored `schedule` (a system author, as other app-made records are), and the run keeps who set the rule | No person or agent called; the rule a person set is the reason, and saying "schedule" never passes the app off as that person |
 | 2026-10-02 | C4.3b: an agent on each run is kept per rule on this device, never in the committed config, and set by the person only; it starts only when the run was made here by the person in the window, the schedule, or a phone granted `terminal` — from plain HTTP or a phone without it, the run is made and says why not | It starts a process on this machine, so it is the person's and this machine's, never the team's; loopback is not a person, and a phone may only cause a terminal the person allowed it. A found run starts nothing, so two laptops make one agent |
 | 2026-10-02 | A7 is refined into three parts (EXECUTION §4): the rules and the check, rule signals from each workstream's import delta, the gate and the done-when. A rule is a path boundary (`from`, `mayNotImport`, `except`, `because`) in the committed config | One file every laptop, agent and pipeline reads; a boundary between two sets of paths is what M7 asks for ("web/ may not import db/") and covers layers without a layer model |
+| 2026-10-02 | B10 is refined into five parts (EXECUTION §5): the chain, retention, signed packs, the evidence export, the G2 done-when. The agent event log itself becomes the record, by a hash chain over its rows, rather than a second log | It already carries the app's decisions (B1.2) and is what the Timeline and replay read; a second log would be a second truth to keep in step |
+| 2026-10-02 | B10.1: links are numbered as written and carry a time that never goes backwards; retention trims the oldest block and moves an anchor; the workstream (stamped later when a session binds) is not in the digest; an unlinked event after the record began is reported, never taken in | A late watcher event stamped earlier must not leave a hole when the window trims; adopting the workstream is derivation, not what was done; linking strays at each start would launder a forged row |
+| 2026-10-02 | B10.1: decisions kept only as a row's latest state (a signal answered, a spec proposal decided, a rule set or stopped) are now events, with who from the transport | The row is overwritten by the next answer; the record keeps each one, in order |
 | 2026-10-02 | A7.3: `check_changes` takes `base`, the commit the work started from, and the CLI passes the branch's merge base; without it the last commit is the base | The gate must agree with the signal: only what this work adds is its own. The CLI already knows the merge base; an agent checking its uncommitted edits needs nothing more |
 | 2026-10-02 | A7.3: when the project's imports cannot be read here, the gate says the rules were not checked, and does not fail or pass on them | A gate that passed rules it never read would certify a breach; one that failed would block every job on a backend holding another project. Saying so is the honest third answer |
 | 2026-10-02 | A7.2: a rule signal is high, and holding an agent on one stays an opt-in signal breakpoint on "rule" | Breakpoints hold only on high signals; a rule is the team's written decision, so an import across it needs a person as much as two agents on one function. The person chooses whether it also holds the agent |
@@ -459,6 +467,24 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 
 ## Entries
 
+### 2026-10-02: B10.1 — the record as a hash chain
+- **Journey.** Sam opens Settings → Data: "Intact: 1,204 entries since
+  2026-09-18 match the chain", with the latest entry's hash. If someone had
+  changed a tool call in the database while the app was closed, it would
+  say "Changed after it was written: #512 (tool call by codex,
+  2026-09-20): its content changed after it was written", and list it.
+  Answering a signal, deciding a spec proposal or setting a rule now shows
+  on the Timeline and is kept in the record with who.
+- **Built.** `services/record-chain.ts` (`linkEvent`, `beginRecord`,
+  `trimRecord`, `verifyRecord`), `record_chain` and `record_anchor`, the
+  event log linking each event and pruning through the chain,
+  `recordDecision` for signal answers, spec decisions and rule changes, their
+  Timeline phrasing, `GET /api/record`, `verify_record` (`read`), Settings →
+  Data → The record.
+- **Tests.** Unit `record-chain.test.ts` (8), `agent-event-log.test.ts`
+  (pruning in written order), `tool-phrasing.test.ts`. Harness
+  `record.test.ts` (4, a restart and a database edited while closed). Browser
+  `settings/record.spec.ts` (2, shots `record-intact`, `record-changed`).
 ### 2026-10-02: A7.3 — the gate, and the M7 done-when
 - **Journey.** Two agents work at once. The one on exports-v2 adds
   `from app.config import DATABASE_URL` to the users routes, across the

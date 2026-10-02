@@ -50,7 +50,8 @@ import { skillProof, skillUseSources, sourceOf } from './services/skill-use-serv
 import { pendingArrivals, planArrivals, acceptArrival, type SkillArrival } from './services/skill-arrival-service';
 import { releaseSettled } from './services/signal-breakpoints';
 import { listBreakpoints, getBreakpoint, setBreakpoint, clearBreakpoint, listHits, getHit, answerHit, cleanNote, BreakpointError, DECISIONS } from './services/breakpoint-service';
-import { startAgentEventLog, listAgentEvents, setEventPublisher, setRecordedListener, actingSession, workstreamOfItem, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
+import { verifyRecord } from './services/record-chain';
+import { startAgentEventLog, recordDecision, listAgentEvents, setEventPublisher, setRecordedListener, actingSession, workstreamOfItem, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
 import { stateAt } from './services/replay-state';
 import { startReplayFrames, setHeldProject, setFramePublisher, noteAgentActivity, requestFrame, noteRefsChanged, seedHeads, listFrames, DEFAULT_FRAME_LIMIT } from './services/replay-frames';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
@@ -802,6 +803,12 @@ app.get('/api/agent-events', (req, res) => {
       limit: num(req.query.limit) ?? AGENT_EVENTS_DEFAULT_LIMIT,
     }),
   });
+});
+
+// Phase 32 B10.1: the record, walked: whether every kept agent event still
+// matches its link in the hash chain, and if not, which ones and how.
+app.get('/api/record', (_req, res) => {
+  res.json(verifyRecord());
 });
 
 // Phase 32 B5.1: a project's replay frames between two times, oldest
@@ -2693,6 +2700,8 @@ app.put('/api/rules/:id', (req, res) => {
     const b = (req.body ?? {}) as Record<string, unknown>;
     const rule = setArchitectureRule(projectRoot, { id: req.params.id, from: b.from, mayNotImport: b.mayNotImport, except: b.except, because: b.because }, changedBy(req));
     broadcast('rules-changed', { project: projectRoot });
+    const person = personFrom(req);
+    recordDecision('rule_changed', { projectRoot, ruleId: rule.id, change: 'set', from: rule.from, mayNotImport: rule.mayNotImport, except: rule.except, because: rule.because, author: person.author, authorType: person.authorType }, person.authorType);
     // A7.2 — work in flight is checked against the new rule at once.
     try { refreshSignals(projectRoot); } catch (err) { console.warn('[Awareness] refresh failed:', err); }
     res.json({ rule, view: rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)).find((v) => v.rule.id === rule.id) });
@@ -2709,6 +2718,8 @@ app.delete('/api/rules/:id', (req, res) => {
   try {
     removeArchitectureRule(projectRoot, req.params.id);
     broadcast('rules-changed', { project: projectRoot });
+    const person = personFrom(req);
+    recordDecision('rule_changed', { projectRoot, ruleId: req.params.id, change: 'stopped', author: person.author, authorType: person.authorType }, person.authorType);
     try { refreshSignals(projectRoot); } catch (err) { console.warn('[Awareness] refresh failed:', err); }
     res.json({ removed: req.params.id });
   } catch (err) {
