@@ -30,3 +30,33 @@ test('anything that is not a commit record is left out', () => {
   assert.deepEqual(parseCommits(''), []);
   assert.deepEqual(parseCommits(`not a sha${US}x${US}y${RS}`), []);
 });
+
+test('kept by head (E1): asked again with the same head, git is not run again; a new head is read afresh', async () => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { execFileSync } = await import('node:child_process');
+  const { commitsByWorkstream, forgetKeptCommits } = await import('./workstream-commits');
+  forgetKeptCommits();
+  const env = { ...process.env, GIT_AUTHOR_NAME: 'Sam Lee', GIT_AUTHOR_EMAIL: 'sam@acme.test', GIT_COMMITTER_NAME: 'Sam Lee', GIT_COMMITTER_EMAIL: 'sam@acme.test' };
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-wc-'));
+  const git = (...a: string[]) => execFileSync('git', ['-C', dir, ...a], { env, encoding: 'utf8' }).trim();
+  git('init', '-q', '-b', 'main');
+  fs.writeFileSync(path.join(dir, 'a.txt'), '1\n');
+  git('add', '-A'); git('commit', '-qm', 'One');
+  const ws = (head: string) => [{ root: dir, branch: 'main', head, main: true, shape: 'worktree', idle: false, agents: [], changes: { base: null, files: [], truncated: false } }] as never;
+  const since = Date.now() - 60_000;
+  const head1 = git('rev-parse', 'HEAD');
+  assert.deepEqual(commitsByWorkstream(ws(head1), since)[dir].map((c) => c.subject), ['One']);
+
+  // With git gone, the same head still answers: it was kept.
+  fs.renameSync(path.join(dir, '.git'), path.join(dir, '.git-away'));
+  assert.deepEqual(commitsByWorkstream(ws(head1), since + 1)[dir].map((c) => c.subject), ['One']);
+  fs.renameSync(path.join(dir, '.git-away'), path.join(dir, '.git'));
+
+  // A commit lands: a new head is read afresh.
+  fs.writeFileSync(path.join(dir, 'a.txt'), '2\n');
+  git('commit', '-qam', 'Two');
+  assert.deepEqual(commitsByWorkstream(ws(git('rev-parse', 'HEAD')), since)[dir].map((c) => c.subject), ['Two', 'One']);
+  forgetKeptCommits();
+});

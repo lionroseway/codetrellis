@@ -76,10 +76,42 @@ export function commitsOf(w: Workstream, mainPath: string, sinceMs: number): Wor
 }
 
 /** Every workstream's own commits since `sinceMs`, by root. */
-export function commitsByWorkstream(workstreams: readonly Workstream[], sinceMs: number): Record<string, WorkstreamCommit[]> {
+/**
+ * One workstream's commits change only when its head or its merge base
+ * moves, so each is kept, by both, and reused (Phase 32 E1): the window
+ * asked on every file change in any worktree, and each answer was a `git
+ * log` per workstream, synchronously, seconds on a repository with many
+ * branches, while the requests piled up behind it. A kept answer is reused
+ * for a window that starts no earlier than the one it was read for, and for
+ * at most KEEP_MS (a head without a sha, the main checkout's, can move
+ * unseen).
+ */
+const KEEP_MS = 60_000;
+const kept = new Map<string, { at: number; sinceMs: number; commits: WorkstreamCommit[] }>();
+
+function keyOf(w: Workstream): string | null {
+  const head = w.head && SHA.test(w.head) ? w.head : null;
+  return head ? `${w.root}\u0000${head}\u0000${w.changes?.base ?? ''}` : null;
+}
+
+export function commitsByWorkstream(workstreams: readonly Workstream[], sinceMs: number, now = Date.now()): Record<string, WorkstreamCommit[]> {
   const main = workstreams.find((w) => w.main);
   const out: Record<string, WorkstreamCommit[]> = {};
   if (!main) return out;
-  for (const w of workstreams) out[w.root] = commitsOf(w, main.root, sinceMs);
+  for (const w of workstreams) {
+    const key = keyOf(w);
+    const hit = key ? kept.get(key) : undefined;
+    if (hit && now - hit.at < KEEP_MS && hit.sinceMs <= sinceMs) {
+      out[w.root] = hit.commits.filter((c) => c.at >= sinceMs);
+      continue;
+    }
+    const commits = commitsOf(w, main.root, sinceMs);
+    if (key) kept.set(key, { at: now, sinceMs, commits });
+    out[w.root] = commits;
+  }
+  if (kept.size > 500) kept.clear();
   return out;
 }
+
+/** Test seam: forget what was kept. */
+export function forgetKeptCommits(): void { kept.clear(); }

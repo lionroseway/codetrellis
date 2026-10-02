@@ -75,6 +75,7 @@ import { exportDatabase } from './services/database';
 import * as planService from './services/plan-service';
 import * as budgetService from './services/budget-service';
 import { compareSnapshots, listComparands, readFileAt } from './services/snapshot-compare-service';
+import { sourceControl, projectPrefix } from './services/source-control';
 import { reviewPlan, renderReviewMarkdown } from './services/plan-review-service';
 import { reviewQueue } from './services/review-queue-service';
 import { buildStack } from './services/stack-service';
@@ -4232,7 +4233,8 @@ app.get('/api/file/at', (req, res) => {
     // Another workstream's copy (Phase 32 B3.2): chosen among the ones this
     // project's repository has, read inside that workstream's own folder.
     if (at.startsWith('workstream:')) {
-      const copy = readWorkstreamCopy(listWorkstreams(owningRoot, { includeIdle: true }), at.slice('workstream:'.length), relativePath);
+      // Its paths are from its repository's top: a project in a subfolder adds where it sits (E1).
+      const copy = readWorkstreamCopy(listWorkstreams(owningRoot, { includeIdle: true }), at.slice('workstream:'.length), `${projectPrefix(projectPath)}${relativePath}`);
       if (!copy) { res.status(404).json({ error: `No workstream ${at.slice('workstream:'.length)} in this project.` }); return; }
       res.json({ ok: true, content: copy.content, label: copy.label });
       return;
@@ -4305,6 +4307,21 @@ app.get('/api/file/overlay', (req, res) => {
 // Any two points, not just "live vs the pinned baseline". Making the
 // comparands explicit is most of what makes Diff mode legible: the
 // chrome can finally state what it is showing.
+// Phase 32 E1: what has changed in an opened project, by where, as an
+// editor's source control tab lists it: staged, unstaged, untracked,
+// committed since the graph's baseline, and each other worktree or branch,
+// each group with the two points its files are diffed between. No plan.
+app.get('/api/source-control', (req, res) => {
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  const trimRoot = (p: string) => p.replace(/[\\/]+$/, '');
+  const baseline = getBaseline();
+  const baselineCommit = baseline && baseline.projectPath && trimRoot(baseline.projectPath) === trimRoot(projectPath) ? baseline.commitHash ?? null : null;
+  let workstreams: ReturnType<typeof listWorkstreams> = [];
+  try { workstreams = listWorkstreams(projectPath, { includeIdle: false }); } catch { /* not a repository: the service says so */ }
+  res.json(sourceControl(projectPath, baselineCommit, workstreams));
+});
+
 app.get('/api/comparands', (req, res) => {
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;

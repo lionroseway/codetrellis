@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B10.2: retention you can set |
-| **Status** | B10.1 merged (#309). B10.2 built: Settings → Data → Keep the record for (14, 30, 90, 365 days, or everything), the person's only and kept in the record when changed; it governs agent events and the record (trimmed as a block, still verifying), replay frames and spans, test runs, log files and the device log. Unit retention 4 and peer-audit, harness retention 4, browser record spec (shot) |
-| **In flight** | B10.2 building on `feat/phase-32-b10-2-retention` |
-| **Last merged** | B10.1 (#309, `aec597e`) |
-| **Next action** | Open B10.2's PR and merge when green; then B10.3 (signed packs carrying the record's head) |
+| **Stage / step** | Track E — E1: source control with no plan needed |
+| **Status** | B10.2 merged (#310); B10.3 (#311), B10.4 (#312), B10.5 (#313) in review, stacked. Track E planned with the owner (2026-10-02). E1 built: the defect reproduced three ways (a committed edit, an edit in another worktree, a project in a subfolder) and fixed; the sidebar's Changes tab (this checkout, committed since you opened it, each other worktree with its agents), each file opening its diff between its group's two points; the code view says what it compares. Found on the way and fixed: a request storm of commit reads that starved the browser. Unit source-control 7 + commits cache; harness source-control 6; browser sidebar/changes (shots) |
+| **In flight** | B10.3 in review (#311) on `feat/phase-32-b10-3-signed-packs`; B10.4 in review (#312) on `feat/phase-32-b10-4-evidence`; B10.5 in review (#313) on `feat/phase-32-b10-5-g2`; E1 building on `feat/phase-32-e1-source-control` |
+| **Last merged** | B10.2 (#310, `087819c`) |
+| **Next action** | Open E1's PR; merge the B10 stack in order; then E2 (any ref on either side) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `aec597e`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `087819c`, with open PRs from GitHub.
 
 ---
 
@@ -220,10 +220,10 @@
   - [x] B9.4 The phone and the G3 done-when (#298)
 - [ ] B10 The record — building
   - [x] B10.1 The chain: every kept event linked, decisions as events, verified in words (#309)
-  - [ ] B10.2 Retention you can set, and the chain still verifies — building
-  - [ ] B10.3 Signed packs, carrying the record's head
-  - [ ] B10.4 The evidence export
-  - [ ] B10.5 The G2 done-when and docs
+  - [x] B10.2 Retention you can set, and the chain still verifies (#310)
+  - [ ] B10.3 Signed packs, carrying the record's head (#311) — in review
+  - [ ] B10.4 The evidence export (#312) — in review
+  - [ ] B10.5 The G2 done-when and docs (#313) — in review
 
 ### Track C: shared ways of working
 - [x] C1 Skills on tasks
@@ -281,6 +281,15 @@
     - [ ] D1.5a Test runs travel as signed run records, grounding a teammate's run by commit; `--share-task-state` for a headless backend
     - [ ] D1.5b The done-when: a cloud session or CI job claims, reports, edits the plan and commits; the desktop shows it after a pull
   - [ ] Follow-up: Declared product flows checked hop by hop against the cross-system map in CI (owner's point, 2026-10-01): after Phase 32 unless pulled in
+
+### Track E: how the code got here
+- [ ] E Compare any two points, scrub each side's history, and each line's commit and agent, with no plan needed (owner's decision, 2026-10-02), refined in EXECUTION §6c: — building
+  - [ ] E1 Source control with no plan: the Changes panel (staged, unstaged, untracked; each worktree's changes), and the defect that started it (the graph showed changes, the code view no diff) — building
+  - [ ] E2 Any ref on either side: branches local and remote, tags, a worktree's working copy, a merge base; one picker for the code view and the graph
+  - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked
+  - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history`
+  - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default
+  - [ ] E6 The done-when: a teammate's agent's work, traced line by line and side by side, with no plan
 
 ### Phase end
 - [ ] `main` merged in, full suite green on Node 26
@@ -440,6 +449,11 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | C4.2a: a scheduled start is authored `schedule` (a system author, as other app-made records are), and the run keeps who set the rule | No person or agent called; the rule a person set is the reason, and saying "schedule" never passes the app off as that person |
 | 2026-10-02 | C4.3b: an agent on each run is kept per rule on this device, never in the committed config, and set by the person only; it starts only when the run was made here by the person in the window, the schedule, or a phone granted `terminal` — from plain HTTP or a phone without it, the run is made and says why not | It starts a process on this machine, so it is the person's and this machine's, never the team's; loopback is not a person, and a phone may only cause a terminal the person allowed it. A found run starts nothing, so two laptops make one agent |
 | 2026-10-02 | A7 is refined into three parts (EXECUTION §4): the rules and the check, rule signals from each workstream's import delta, the gate and the done-when. A rule is a path boundary (`from`, `mayNotImport`, `except`, `because`) in the committed config | One file every laptop, agent and pipeline reads; a boundary between two sets of paths is what M7 asks for ("web/ may not import db/") and covers layers without a layer model |
+| 2026-10-02 | E1: the defect had three causes, each fixed where it was: a committed edit (the code view compared the last commit with a clean working tree), an edit in another worktree (it read only this checkout), and a project in a subfolder of its repository (`git show <ref>:<path>` read from the repository's top, so the file "was added") | All three reproduced against a running backend before anything changed; the Changes panel names where each change is and diffs between that group's own two points, and the code view picks the same comparison for a file opened from the tree or the graph |
+| 2026-10-02 | E1: the awareness store reads one at a time and reads commits only when a head moved or every 30 s; the backend keeps each workstream's commits by head and merge base | Found by the E1 browser test hanging after another spec: every file change in any worktree started three reads with no limit, the commit reads (a `git log` per workstream, synchronous, seconds each) piled up two dozen deep, and the browser's six connections to the app filled, so even the diff editor's code could not load. The likely cause of #310's Awareness count failure too |
+| 2026-10-02 | Track E joins Phase 32 before the review (owner): compare any two points with no plan, in the graph and the code view; a file at two refs side by side, each side scrubbing its own commits; each line's commit and author as GitLens shows them, with the agent, session, task and plan where CodeTrellis knows them | It surfaces the process behind the current state to someone outside the work, which is most of what CodeTrellis is for, and it starts from a defect the owner saw: the graph showed changes, the code view no diff, with no plan |
+| 2026-10-02 | Track E: git and gh run by the backend through the CLI, nothing sent anywhere; keeping remotes current is a setting, off by default; "Fetch now" is always there | The owner: "on the whole we still aren't doing any telemetry, what we do is powered by the CLI". A background fetch is the app reaching the network on its own, so it is the person's choice, and the app says when it last fetched |
+| 2026-10-02 | Track E: the git author is always shown; CodeTrellis's attribution (agent, session, task, plan) is added on top with how it knows (seen, trailer, timing) | GitLens is the widely adopted model (owner); the git author is what everyone else sees, and an attribution that cannot say how it knows reads as fact when it may be a guess |
 | 2026-10-02 | B10.2: one retention window, set in Settings → Data (14, 30, 90, 365 days, or everything), governs agent events and the record, replay frames and signal spans, test runs, log files and the device log; changing it is the person's only, and is itself kept in the record | Shortening the window is how evidence is removed, so it is a grant like LAN exposure, and an auditor sees who changed it from what to what. One window, because a record that outlives its replay or its tests would answer "what happened" without "what else was going on" |
 | 2026-10-02 | B10.2: keeping everything lifts the agent events' row cap too; the device log, rewritten whole on each change and fed by networked peers, keeps at most 10,000 entries whatever the window | "Everything" must mean everything for the record; the device log's cap is what stops a peer filling the disk, so it stays, said in the window's words |
 | 2026-10-02 | B10 is refined into five parts (EXECUTION §5): the chain, retention, signed packs, the evidence export, the G2 done-when. The agent event log itself becomes the record, by a hash chain over its rows, rather than a second log | It already carries the app's decisions (B1.2) and is what the Timeline and replay read; a second log would be a second truth to keep in step |
@@ -468,6 +482,34 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-02: E1 — source control with no plan, and the defect that started Track E
+- **Journey.** Priya opens a repository with no plan. The sidebar's Changes
+  tab says "1 file changed in this checkout; 1 file committed since you
+  opened it; work in 1 other worktree or branch", and lists them as an
+  editor's source control tab does: this checkout's changes, what was
+  committed since she opened it, and `billing-v2`, a worktree codex works
+  in. Picking `refund.ts` there opens its diff, "Where it left main
+  (a1b2c3d)" against "billing-v2", with what the two sides are said above
+  it. A file she opens from the tree that changed says how ("Committed
+  since you opened the project") with "Show the diff".
+- **The defect.** Reproduced three ways against a running backend before
+  anything changed (a committed edit; an edit in another worktree; a
+  project in a subfolder of its repository) and fixed for each.
+- **Found on the way.** A request storm: every file change in any
+  worktree started three reads with no limit, and the commit reads piled
+  up until the browser could load nothing else. Fixed in the awareness
+  store (one read at a time; commits when a head moved or every 30 s) and
+  the backend (each workstream's commits kept by head).
+- **Built.** `services/source-control.ts`, `GET /api/source-control`;
+  `readFileAt` reads `index` and `none`, and paths relative to the project
+  at a commit; the Changes tab (`SourceControlPanel`,
+  `source-control-store`); the code view follows a pick, picks the same
+  comparison itself, and says what it compares; the commits cache.
+- **Tests.** Unit `source-control.test.ts` (7), `workstream-commits.test.ts`
+  (cache). Harness `source-control.test.ts` (6: the three causes; the
+  groups; refusals). Browser `sidebar/changes.spec.ts` (shots
+  `changes-panel`, `changes-diff-worktree`, `changes-chip`).
 
 ### 2026-10-02: B10.2 — retention you can set
 - **Journey.** Sam's team must keep a year of evidence. In Settings → Data
