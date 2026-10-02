@@ -19,13 +19,13 @@
 |---|---|
 | **Stage / step** | Wave 2 direction review (§1.7) |
 | **Status** | Track E done: E1–E6 merged (#314–#320). Wave 2 (HD1–HD3, B5–B10, A4–A7, C2–C4, Tracks D and E, #207–#320) is reviewed in the LOG: every JOURNEYS.md journey and six more run end to end as harness tests; two lessons change how stores read (one at a time) and what counts as a grant (anything reaching a host); the browser shards are the wait on every PR |
-| **In flight** | E6 in review (#320) on `feat/phase-32-e6-done-when` |
+| **In flight** | nothing open |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
 | **Next action** | The owner decides the proposals (HD4: browser shards and a single-flight guard; then the phase end as §7 writes it) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `141c7f8`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `7ee8f94`, with open PRs from GitHub.
 
 ---
 
@@ -283,7 +283,7 @@
   - [ ] Follow-up: Declared product flows checked hop by hop against the cross-system map in CI (owner's point, 2026-10-01): after Phase 32 unless pulled in
 
 ### Track E: how the code got here
-- [ ] E Compare any two points, scrub each side's history, and each line's commit and agent, with no plan needed (owner's decision, 2026-10-02), refined in EXECUTION §6c: — building
+- [ ] E Compare any two points, scrub each side's history, and each line's commit and agent, with no plan needed (owner's decision, 2026-10-02), refined in EXECUTION §6c:
   - [ ] E1 Source control with no plan: the Changes panel (staged, unstaged, untracked; each worktree's changes), and the defect that started it (the graph showed changes, the code view no diff)
   - [ ] E2 Any ref on either side: branches local and remote, tags, a worktree's working copy, a merge base; one picker for the code view and the graph, in two:
     - [ ] E2a The refs, and any two compared file by file from the Changes tab, each side said plainly and as git's command; a file opens its diff
@@ -291,7 +291,7 @@
   - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked
   - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history`
   - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default
-  - [ ] E6 The done-when: a teammate's agent's work, traced line by line and side by side, with no plan (#320) — in review
+  - [ ] E6 The done-when: a teammate's agent's work, traced line by line and side by side, with no plan
 
 ### Phase end
 - [ ] `main` merged in, full suite green on Node 26
@@ -462,6 +462,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-02 | E5: pull requests come through the person's own `gh`, not the review-host token (C2) | The track's rule is git and gh through the CLI; gh carries the person's own sign-in and CodeTrellis stores no token for it. Review hosts stay what they are, per task and opt-in per project. Without gh the panel says what to install, and branches work regardless |
 | 2026-10-02 | E5: git and gh run asynchronously, with prompts off (`GIT_TERMINAL_PROMPT=0`, `GH_PROMPT_DISABLED`) | A fetch can take a minute; run synchronously it would stall every other request. A remote that wants a password must fail and say so, not wait on a terminal nobody sees |
 | 2026-10-02 | E5 (found on CI): turning on keeping remotes current is a grant, the person's only (`grant-guard`); its interval is not | It has the app reach hosts on a timer, the "what it can reach" the grant rule names; an agent holding the token could otherwise turn it on with one `PUT /api/settings`. CI caught the settings surface test, which lists every section, and the check of the new section's place in the guard came with it |
+| 2026-10-02 | E6: the done-when is one harness test over the real git and backend; its pictures are the step shots already taken (changes, line-history, evolution, compare, branches) | Each surface's browser spec already walks it with its own shots; a second browser walk over the same served data would test the stand-ins, not the code. The harness test is the one that runs the whole journey for real: a worktree, an agent's session, git, a remote and gh |
 | 2026-10-02 | E3: a commit's maker is CodeTrellis's only where it knows, and says how: the commit message's `agent:` line, or seen (a replay frame recorded the commit landing during that agent's session); the git author is always shown | GitLens's author line is what people trust, so it is never replaced; timing alone would guess, so a commit with neither stays the author's. E4 widens what is known (a session's own edits) |
 | 2026-10-02 | E3: the decisions between two positions are the computer's record in that window, not filtered to the project | The record carries no project column and its payloads differ by type; saying "recorded on this computer" is true, and each decision names what it was about |
 | 2026-10-02 | E3: locked scrubbing is by time, not by index | Two branches have different commits; the same moment is what makes the comparison mean something (where main stood when the agent committed) |
@@ -586,6 +587,22 @@ change in the same PR as the answer):
   suite on Node 26 from a clean `npm ci`, C2.6b (Phase 32's own plan in
   CodeTrellis), the packaged macOS build and the mobile build (each needs
   you or a device), the final direction review, and one PR to `main`.
+### 2026-10-02: E6 — the done-when
+- **Journey.** A repository nobody planned in; codex works on
+  `billing-v2` in a worktree of it. With no plan, Priya sees its change in
+  the Changes panel under the worktree, with codex named. A line reads
+  oddly ("banker's rounding"): its history is "Half-even", Sam Lee's
+  commit, "probably codex: committed while codex's session was open in this
+  checkout", with the session. The line above it is "Round to the cent",
+  codex from the commit message. The evolution view puts the file on
+  `billing-v2` beside the file on main: three positions on the left, one
+  on the right, each read at its point. After Fetch now, the branch it
+  pushed and pull request #12, open and waiting on review, show, and its
+  Compare lists the file.
+- **Tests.** Harness `history-e.test.ts` (4), stable over three repeats
+  with `branches.test.ts`. Pictures: the Track E shots (changes-*,
+  compare-*, evolution*, line-history, branches*).
+- **Track E is done.**
 
 ### 2026-10-02: E5 — branches and pull requests
 - **Journey.** Priya opens the Changes tab's "Branches and pull
