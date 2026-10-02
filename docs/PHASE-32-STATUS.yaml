@@ -668,6 +668,8 @@ sections:
                 title: "The done-when: a cloud session or CI job claims, reports, edits the plan and commits; the desktop shows it after a pull"
           - title: "Declared product flows checked hop by hop against the cross-system map in CI (owner's point, 2026-10-01): after Phase 32 unless pulled in"
             followUp: true
+          - title: "Installing the CLI in a cloud session or CI job takes cloning this repository and `npm ci && npm link`, because the package is not published. Publish it (to npm, or as a release asset) so a setup script needs one line. The owner's call (2026-10-02): what exists is good enough for now; after Phase 32"
+            followUp: true
   - title: "Track E: how the code got here"
     items:
       - id: E

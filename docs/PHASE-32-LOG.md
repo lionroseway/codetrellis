@@ -19,7 +19,7 @@
 |---|---|
 | **Stage / step** | Phase end: the final direction review |
 | **Status** | HD4 done (#322–#324). The phase end: `main` has nothing feat/phase-32 lacks, and the merged tree is the one CI ran green on Node 26 from a clean install (#324, dceb7fb). This review updates JOURNEYS.md with what shipped and answers §1.7 one last time |
-| **In flight** | nothing open |
+| **In flight** | #325 in review on `feat/phase-32-review-final` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
 | **Next action** | This review merged; then the PR feat/phase-32 → main, opened for the owner: it merges after the packaged macOS build and the mobile build are verified (each needs the owner or a device) and the owner's call on C2.6b |
 | **Blockers** | None |
@@ -286,6 +286,7 @@
     - [ ] D1.5a Test runs travel as signed run records, grounding a teammate's run by commit; `--share-task-state` for a headless backend
     - [ ] D1.5b The done-when: a cloud session or CI job claims, reports, edits the plan and commits; the desktop shows it after a pull
   - [ ] Follow-up: Declared product flows checked hop by hop against the cross-system map in CI (owner's point, 2026-10-01): after Phase 32 unless pulled in
+  - [ ] Follow-up: Installing the CLI in a cloud session or CI job takes cloning this repository and `npm ci && npm link`, because the package is not published. Publish it (to npm, or as a release asset) so a setup script needs one line. The owner's call (2026-10-02): what exists is good enough for now; after Phase 32
 
 ### Track E: how the code got here
 - [ ] E Compare any two points, scrub each side's history, and each line's commit and agent, with no plan needed (owner's decision, 2026-10-02), refined in EXECUTION §6c:
@@ -587,6 +588,11 @@ and the mobile build on a device (§7.4), each needing the owner or a
 device; C2.6b, Phase 32's own plan in CodeTrellis, which the owner kept
 for the phase end; then one PR, `feat/phase-32` → `main`. That PR opens
 after this review merges and waits for those three.
+
+**Follow-up, after the phase (the owner, 2 October):** the CLI is not
+published, so a cloud session or CI job installs it by cloning this
+repository and running `npm ci && npm link`. Publishing it would make that
+one line; what exists is good enough for now.
 
 ### 2026-10-02: HD4c — installs with scripts off, and the patches they skipped
 - **Measured first.** On a clean copy, `npm ci` (npm 11.19.1, Node 26)
