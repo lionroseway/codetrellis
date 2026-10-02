@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track E — E6: the done-when"
-  status: "E1 to E5 merged (#314–#319). E6 built on E5: harness history-e.test.ts walks the journey with no plan, on real git: an agent's worktree in the Changes panel; a surprising line's commit, git author, agent and session; its file on billing-v2 beside main, each side's positions; after Fetch now, the pushed branch and its pull request, whose pair compares. Stable over three repeats. With E6, Track E is done"
-  next: "Merge E6 (#320) when green; Track E is then done. Then the review"
+  step: "Wave 2 direction review (§1.7)"
+  status: "Track E done: E1–E6 merged (#314–#320). Wave 2 (HD1–HD3, B5–B10, A4–A7, C2–C4, Tracks D and E, #207–#320) is reviewed in the LOG: every JOURNEYS.md journey and six more run end to end as harness tests; two lessons change how stores read (one at a time) and what counts as a grant (anything reaching a host); the browser shards are the wait on every PR"
+  next: "The owner decides the proposals (HD4: browser shards and a single-flight guard; then the phase end as §7 writes it)"
   blockers: "None"
   updated: 2026-10-02
 sections:
