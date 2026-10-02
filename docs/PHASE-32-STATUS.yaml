@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track B — B10.5: the G2 done-when and docs"
-  status: "B10.2 (#310), B10.3 (#311) and B10.4 (#312) merged. B10.5 in review (#313): replay a chosen week (Timeline: \"or a week from [day]\"; the bar names the days; its evidence exports for that week); record-g2.test.ts walks G2 with the backend's clock 120 days ahead (frames, the code, the stack and the waiting call then, the Timeline's decisions with who, the record intact since that week, the week's evidence verifies, the approval edited in the database named by the record and by the evidence exported before); docs/claude/record.md. Unit test-clock 2, replay words; harness record-g2 4; browser replay-week (shots)"
-  next: "Merge B10.5 (#313) when green; B10 is then done. Then Track E: E1 (#314) is in review, then E2"
+  step: "Track E — E1: source control with no plan needed"
+  status: "B10 done: B10.2 (#310), B10.3 (#311), B10.4 (#312) and B10.5 (#313) merged. Track E planned with the owner (2026-10-02). E1 built: the defect reproduced three ways (a committed edit, an edit in another worktree, a project in a subfolder) and fixed; the sidebar's Changes tab (this checkout, committed since you opened it, each other worktree with its agents), each file opening its diff between its group's two points; the code view says what it compares. Found on the way and fixed: a request storm of commit reads that starved the browser. Unit source-control 7 + commits cache; harness source-control 6; browser sidebar/changes (shots)"
+  next: "Merge E1 (#314) when green; then E2 (any ref on either side), E2a stacked on E1"
   blockers: "None"
   updated: 2026-10-02
 sections:
@@ -651,6 +651,23 @@ sections:
                 title: "The done-when: a cloud session or CI job claims, reports, edits the plan and commits; the desktop shows it after a pull"
           - title: "Declared product flows checked hop by hop against the cross-system map in CI (owner's point, 2026-10-01): after Phase 32 unless pulled in"
             followUp: true
+  - title: "Track E: how the code got here"
+    items:
+      - id: E
+        title: "Compare any two points, scrub each side's history, and each line's commit and agent, with no plan needed (owner's decision, 2026-10-02), refined in EXECUTION §6c:"
+        items:
+          - id: E1
+            title: "Source control with no plan: the Changes panel (staged, unstaged, untracked; each worktree's changes), and the defect that started it (the graph showed changes, the code view no diff)"
+          - id: E2
+            title: "Any ref on either side: branches local and remote, tags, a worktree's working copy, a merge base; one picker for the code view and the graph"
+          - id: E3
+            title: "The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked"
+          - id: E4
+            title: "Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history`"
+          - id: E5
+            title: "Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default"
+          - id: E6
+            title: "The done-when: a teammate's agent's work, traced line by line and side by side, with no plan"
   - title: Phase end
     items:
       - title: "`main` merged in, full suite green on Node 26"

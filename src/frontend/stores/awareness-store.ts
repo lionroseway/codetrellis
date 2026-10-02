@@ -37,31 +37,16 @@ export const useAwarenessStore = create<AwarenessState>((set, get) => ({
 
   refresh: async (root) => {
     if (!root) { set({ root: null, workstreams: [], signals: [], commits: {}, loaded: false, error: null }); return; }
-    if (root !== get().root) set({ root, workstreams: [], signals: [], commits: {}, loaded: false, error: null });
-    const q = `project=${encodeURIComponent(root)}`;
-    try {
-      // Commits are extra: failing to read them never costs the rest, and
-      // neither does reading them slowly. They land when they arrive; the
-      // signals, and the count the tab shows, never wait for them.
-      void fetch(`/api/workstreams/commits?${q}&since=${Date.now() - COMMITS_WINDOW_MS}`)
-        .then(async (r) => (r.ok ? ((await r.json()) as { commits?: Record<string, WorkstreamCommit[]> }).commits ?? {} : {}))
-        .then((commits) => {
-          if (get().root === root && commits && typeof commits === 'object') set({ commits });
-        })
-        .catch(() => { /* the rest stands */ });
-      const [ws, aw] = await Promise.all([fetch(`/api/workstreams?${q}&idle=1`), fetch(`/api/awareness?${q}`)]);
-      if (!ws.ok || !aw.ok) throw new Error(`Server returned ${ws.ok ? aw.status : ws.status}`);
-      const workstreams = (await ws.json()) as Workstream[];
-      const body = (await aw.json()) as { signals?: AwarenessSignal[] };
-      if (get().root !== root) return; // the project changed while this was in flight
-      set({
-        workstreams: Array.isArray(workstreams) ? workstreams : [],
-        signals: Array.isArray(body.signals) ? body.signals : [],
-        loaded: true, error: null,
-      });
-    } catch (e) {
-      if (get().root === root) set({ loaded: true, error: e instanceof Error ? e.message : String(e) });
-    }
+    if (root !== get().root) { commitsReadAt = 0; commitsHeads = ''; set({ root, workstreams: [], signals: [], commits: {}, loaded: false, error: null }); }
+    // One read at a time (Phase 32 E1). Every file change in any worktree
+    // broadcasts workstreams-changed, and each used to start three reads at
+    // once, unbounded: the browser's six connections filled with commit
+    // reads, each seconds of git on the backend, and nothing else loaded.
+    // A refresh asked for while one runs becomes one more, after it.
+    if (inFlight) { again = root; return inFlight; }
+    inFlight = readOnce(root, set, get);
+    try { await inFlight; } finally { inFlight = null; }
+    if (again) { const next = again; again = null; await get().refresh(next); }
   },
 
   answer: async (id, state) => {
@@ -102,3 +87,48 @@ export const useAwarenessStore = create<AwarenessState>((set, get) => ({
     }
   },
 }));
+
+/** The read in flight, and a refresh asked for while it ran. */
+let inFlight: Promise<void> | null = null;
+let again: string | null = null;
+/** Commits change when a workstream commits, not on every file change: read at most this often. */
+const COMMITS_EVERY_MS = 30_000;
+let commitsReadAt = 0;
+let commitsInFlight = false;
+/** The workstreams' heads when commits were last read: a head that moved means a commit landed. */
+let commitsHeads = '';
+
+async function readOnce(root: string, set: (s: Partial<AwarenessState>) => void, get: () => AwarenessState): Promise<void> {
+  const q = `project=${encodeURIComponent(root)}`;
+  try {
+    const [ws, aw] = await Promise.all([fetch(`/api/workstreams?${q}&idle=1`), fetch(`/api/awareness?${q}`)]);
+    if (!ws.ok || !aw.ok) throw new Error(`Server returned ${ws.ok ? aw.status : ws.status}`);
+    const workstreams = (await ws.json()) as Workstream[];
+    const body = (await aw.json()) as { signals?: AwarenessSignal[] };
+    if (get().root !== root) return; // the project changed while this was in flight
+    const list = Array.isArray(workstreams) ? workstreams : [];
+    set({ workstreams: list, signals: Array.isArray(body.signals) ? body.signals : [], loaded: true, error: null });
+    // Commits are extra: failing to read them never costs the rest, and
+    // neither does reading them slowly; they land when they arrive. Read
+    // when a workstream's head moved (a commit landed) or every
+    // COMMITS_EVERY_MS, and never two at once.
+    const heads = list.map((w) => `${w.root}@${w.head ?? ''}`).sort().join('|');
+    if (!commitsInFlight && (heads !== commitsHeads || Date.now() - commitsReadAt >= COMMITS_EVERY_MS)) {
+      commitsInFlight = true;
+      commitsReadAt = Date.now();
+      commitsHeads = heads;
+      void fetch(`/api/workstreams/commits?${q}&since=${Date.now() - COMMITS_WINDOW_MS}`)
+        .then(async (r) => (r.ok ? ((await r.json()) as { commits?: Record<string, WorkstreamCommit[]> }).commits ?? {} : {}))
+        .then((commits) => {
+          if (get().root === root && commits && typeof commits === 'object') set({ commits });
+        })
+        .catch(() => { commitsHeads = ''; /* read again next time */ })
+        .finally(() => { commitsInFlight = false; });
+    }
+  } catch (e) {
+    if (get().root === root) set({ loaded: true, error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/** Test seam: forget what is in flight and when commits were read. */
+export function resetAwarenessReads(): void { inFlight = null; again = null; commitsReadAt = 0; commitsInFlight = false; commitsHeads = ''; }

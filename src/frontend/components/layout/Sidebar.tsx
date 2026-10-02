@@ -1,3 +1,5 @@
+import { SourceControlPanel, useSourceControlFeed, changesCount } from './SourceControlPanel';
+import { useSourceControlStore } from '../../stores/source-control-store';
 import { Search, ChevronRight, ChevronDown, Folder, FolderOpen, FileCode, FileJson, FileText, Package } from 'lucide-react';
 import { useUiStore } from '../../stores/ui-store';
 import { useProjectStore } from '../../stores/project-store';
@@ -300,16 +302,42 @@ export function Sidebar() {
   }, [planStatesByPath]);
   const displayTree = filterTree(treeWithGitEntries, searchQuery);
 
+  const view = useSourceControlStore((s) => s.sidebarView);
+  const setView = useSourceControlStore((s) => s.setSidebarView);
+  useSourceControlFeed(visible ? root : null);
+  const changed = changesCount(useSourceControlStore((s) => s.data?.groups));
+
   if (!visible) return null;
 
   return (
     <div className="glass-panel flex flex-col border-r h-full overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-border-subtle">
-        <span className="text-[10px] font-semibold text-foreground-subtle uppercase tracking-[0.1em]">
-          Explorer
-        </span>
+      {/* Phase 32 E1: the files, or what has changed (source control, no plan needed). */}
+      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border-subtle" role="tablist" aria-label="Sidebar view">
+        {(['files', 'changes'] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            role="tab"
+            aria-selected={view === v}
+            onClick={() => setView(v)}
+            data-testid={`sidebar-${v}`}
+            className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold uppercase tracking-[0.1em] transition-colors ${
+              view === v ? 'bg-accent-muted text-accent' : 'text-foreground-subtle hover:text-foreground'
+            }`}
+          >
+            {v === 'files' ? 'Explorer' : 'Changes'}
+            {v === 'changes' && changed > 0 && (
+              <span className="normal-case tracking-normal px-1.5 rounded-full bg-white/[0.08] text-[9.5px] tabular-nums" data-testid="sidebar-changes-count">{changed}</span>
+            )}
+          </button>
+        ))}
       </div>
 
+      {view === 'changes' ? (
+        <div className="flex-1 overflow-y-auto">
+          <SourceControlPanel />
+        </div>
+      ) : (<>
       <div className="px-2 py-1.5">
         <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-surface border border-border rounded-lg focus-within:border-accent-glow focus-within:shadow-[0_0_8px_rgba(59,130,246,0.1)] transition-all">
           <Search size={12} className="text-foreground-subtle shrink-0" />
@@ -350,7 +378,9 @@ export function Sidebar() {
         ))}
       </div>
 
-      {planLegendStates.length > 0 && (
+      </>)}
+
+      {view === 'files' && planLegendStates.length > 0 && (
         <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 px-3 py-2 border-t border-border-subtle">
           {planLegendStates.map((st) => (
             <span key={st} className="flex items-center gap-1 text-[10px] text-foreground-subtle">

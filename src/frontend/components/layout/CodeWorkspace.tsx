@@ -1,5 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { FileCode, GitCompare, Code2, History, X } from 'lucide-react';
+import { useSourceControlStore, groupOfFile, changeWords } from '../../stores/source-control-store';
+import { GitCommand } from './SourceControlPanel';
 import { useProjectStore } from '../../stores/project-store';
 import { useUiStore } from '../../stores/ui-store';
 import { CodePreview, type FileContent } from '../inspector/CodePreview';
@@ -118,6 +120,22 @@ export function CodeWorkspace() {
     return () => { cancelled = true; window.removeEventListener('awareness-changed', load); };
   }, [relativePath, root]);
 
+  // Phase 32 E1: a comparison picked in the Changes panel, for this file;
+  // otherwise where this file's change is, so the diff is the one the graph
+  // and the panel mean (an agent's commit since the baseline, not this
+  // checkout's clean working tree against its last commit).
+  const sourceControl = useSourceControlStore((s) => s.data);
+  const pickedCompare = useSourceControlStore((s) => s.compare);
+  const clearCompare = useSourceControlStore((s) => s.clearCompare);
+  const picked = pickedCompare && pickedCompare.path === relativePath ? pickedCompare : null;
+  const changeGroup = useMemo(() => groupOfFile(sourceControl, relativePath), [sourceControl, relativePath]);
+  useEffect(() => {
+    if (pickedCompare && pickedCompare.path !== relativePath) clearCompare();
+  }, [relativePath, pickedCompare, clearCompare]);
+  useEffect(() => {
+    if (picked) { setCompareWith(null); setMode('diff'); }
+  }, [picked]);
+
   const workMarks = useMemo(
     () => (lineChanges ? gutterMarks(lineChanges, root, (c) => c.branch ?? c.workstream.split(/[\\/]/).pop() ?? c.workstream) : null),
     [lineChanges, root],
@@ -183,7 +201,14 @@ export function CodeWorkspace() {
    */
   const diffBefore = showTimeline && frames[frameIndex]
     ? frames[frameIndex].spec
-    : defaultBefore;
+    // Committed since the baseline and clean now: against the baseline's commit, or there is nothing to see.
+    : changeGroup?.kind === 'since-opened' ? changeGroup.before
+      : defaultBefore;
+  const diffSides = picked && !showTimeline
+    ? { before: picked.before, after: picked.after, labels: picked.labels, words: `${picked.title}: ${picked.words}`, command: picked.command }
+    : compareWith
+      ? null
+      : { before: diffBefore, after: 'live', labels: undefined as { before: string; after: string } | undefined, words: null as string | null, command: null as string | null };
 
   if (!root) {
     return (
@@ -243,6 +268,23 @@ export function CodeWorkspace() {
         </button>
       </div>
 
+      {relativePath && mode === 'read' && changeGroup && (
+        <div className="px-3 py-1 border-b border-border-subtle flex items-center gap-2 text-[10.5px]" data-testid="code-changed-chip">
+          <span className="text-amber-300">●</span>
+          <span className="text-foreground-muted truncate">{changeWords(changeGroup)}</span>
+          <button
+            type="button"
+            className="shrink-0 text-accent hover:underline"
+            onClick={() => {
+              const f = changeGroup.files.find((x) => x.path === relativePath);
+              if (f && root) useSourceControlStore.getState().openCompare(root, changeGroup, f);
+            }}
+          >
+            Show the diff
+          </button>
+        </div>
+      )}
+
       {relativePath && workMarks && (
         <CodeWorkstreamStrip
           marks={workMarks}
@@ -293,19 +335,26 @@ export function CodeWorkspace() {
             }}
           />
         ) : (
+          <>
+          {/* What is compared with what, said before the editor loads. */}
+          {diffSides?.words && (
+            <p className="text-[10.5px] text-foreground-muted" data-testid="code-compare-words">{diffSides.words}</p>
+          )}
+          {diffSides?.command && <GitCommand command={diffSides.command} className="mb-2" testId="code-git-command" />}
           <Suspense
             fallback={<div className="text-[10.5px] text-foreground-subtle">Loading the diff editor…</div>}
           >
-            <CodeDiffView
-              projectPath={root}
-              relativePath={relativePath}
-              // Compare with another workstream's copy (B3.2): both sides
-              // named, theirs before and this copy after.
-              before={compareWith ? `workstream:${compareWith.id}` : diffBefore}
-              after="live"
-              labels={compareWith ? { after: ownName ? `this copy (${ownName})` : 'this copy' } : undefined}
-            />
+              <CodeDiffView
+                projectPath={root}
+                relativePath={relativePath}
+                // Compare with another workstream's copy (B3.2): both sides
+                // named, theirs before and this copy after.
+                before={compareWith ? `workstream:${compareWith.id}` : diffSides!.before}
+                after={compareWith ? 'live' : diffSides!.after}
+                labels={compareWith ? { after: ownName ? `this copy (${ownName})` : 'this copy' } : diffSides?.labels}
+              />
           </Suspense>
+          </>
         )}
       </div>
     </div>

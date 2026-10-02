@@ -1083,6 +1083,69 @@ test results and the question. A CI job on the pull request runs
 `codetrellis status --json` and fails while a breakpoint holds a path it
 changed.
 
+## 6c. Track E: how the code got here (owner's decision, 2026-10-02)
+
+The owner's ask: in any opened repository, with a plan or without, in the
+graph or the code view, compare any two points (commits, branches,
+worktrees, local or remote), side by side, and scrub through each side's
+history; see each line's commit, as GitLens does; and where CodeTrellis
+knows it, which agent, session, task and plan a change belongs to. It is
+how someone outside a piece of work (a teammate's agent, a person off the
+plan) sees the process that led to the current state. And the defect that
+started it: someone edited, the graph showed the changes, the code view
+showed no diff, and there was no plan.
+
+Rules for the whole track:
+
+- **No plan is needed.** Everything works in an opened project with no
+  plan; a plan only adds what it knows.
+- **For beginners and advanced users of git alike** (owner, 2026-10-02):
+  every surface reads two ways at once. A plain sentence first, so nobody
+  needs git's vocabulary ("Changed, not staged", "Where it left main");
+  git's own word beside it and the exact command beneath it (`unstaged`,
+  `git diff`), so an advanced user sees precisely what is compared and can
+  run it, and a beginner learns git by using the app. Shas, refs and
+  commands are always one glance away and never the only words.
+- **Git is the source of truth, through the CLI.** Every read is `git` (and
+  `gh` for pull requests) run by the backend with `execFile`, never a shell
+  and never a client library talking to a host. Nothing is sent anywhere:
+  no telemetry.
+- **Network only when asked.** "Fetch now" is a person's action. Keeping
+  remotes current in the background is a setting, Settings → Git, **off by
+  default** (owner's decision, 2026-10-02), with its interval and when it
+  last fetched. Off, remote branches are as last fetched and say when.
+- **The git author is always shown**, as GitLens does. CodeTrellis adds
+  what it knows on top (the agent, session, task, plan, a criterion that
+  cites the line) and says how it knows: seen (it recorded the edit or the
+  commit), from the commit's trailer, or from timing (the commit landed in
+  that worktree during the session).
+- **On demand.** Line history (`git blame`) and a file's commits are read
+  when asked, cached by path and commit, with a small loading chip.
+- **Security.** A ref from a request is checked (`isSafeGitRef`) and
+  resolved inside the opened project; a worktree is named by the id
+  `listWorkstreams` gave it, never a folder from the request; file reads
+  go through the confined-file helper.
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| E1 | **Source control, no plan needed.** Reproduce the defect first (graph shows changes, code view no diff, no plan). A Changes panel on the left of the code view, as in an editor's source control tab: this checkout's staged, unstaged and untracked files, then each other worktree or branch with its changed files against where it left main; a file opens its diff against the right side (this checkout's HEAD; a workstream's merge base), the graph's changed files open the same diff; `GET /api/source-control` | unit; harness (the defect reproduced and fixed; staged, unstaged, untracked; a worktree's changes); browser (shots) |
+| E2 | **Any ref on either side.** Comparands gain local branches, remote-tracking branches, tags, a worktree's working copy and the merge base of two refs; one picker for the code view and the graph, whose architecture diff takes the same two | unit (ref specs, refused refs); harness (each kind, both surfaces); browser (shots) |
+| E3 | **The evolution view.** Two panes, each a file at a ref; each has its own scrubber over the commits that touched the file on that ref (following renames), or both scrub locked together; the diff is between the two positions; each position has a commit card: message, author, time, and what CodeTrellis knows (agent, session, task, plan, the decisions in the record between the two commits) | unit; harness (a file's history on two branches, renames); browser (shots) |
+| E4 | **Line history.** A blame gutter and the current line's annotation, as GitLens; a hover card with the commit, the git author, and what CodeTrellis adds with how it knows; jumps to the commit in the evolution view, to replay at that moment, to the task. MCP `line_history` (`read`): who wrote this line and why | unit (attribution: seen, trailer, timing, git author only); harness; browser (shots) |
+| E5 | **Branches and pull requests.** A refs panel: local and remote branches, when each last changed, ahead and behind, upstream; pull requests and their state through `gh` when it is installed and signed in ("needs the gh CLI" otherwise); Fetch now; Settings → Git: keep remotes current (off by default; interval; last fetched) | unit; harness (fetch from a local bare remote; gh absent); browser (settings, panel, shots) |
+| E6 | **The done-when.** In a repository with no plan, a teammate's agent has been working on a branch in a worktree. Without a plan, the person sees its changes in the Changes panel, finds a surprising line, and its history names the commit, the agent and the session; the evolution view puts their file beside the same file on main and scrubs both; after Fetch now, the branch they pushed and its pull request show | harness `history-e.test.ts`; browser (shots) |
+
+**Journey (E).** Priya opens a repository she did not plan in; a
+teammate's agent has been working in a worktree. The Changes panel lists
+what it changed, by file, before anyone made a plan. A line in
+`refunds.ts` looks wrong: its history says "codex · 3 days ago · Round to
+the cent (4a1b2c3)", seen by CodeTrellis in session s-bill on the task
+"Round refunds". She opens the evolution view with the file on
+`billing-v2` on the left and on `main` on the right, scrubs the left back
+through its five commits and sees the rounding change arrive with the
+decision that approved it. "Fetch now" brings the branch the teammate
+pushed and its pull request, open and waiting on review.
+
 ## 7. Phase end
 
 1. Merge `main` into `feat/phase-32`, and resolve conflicts.

@@ -536,11 +536,33 @@ export function readFileAt(
     }
   }
 
+  // Nothing on this side: the file is new (untracked, or in a repository with no commit yet).
+  if (spec === 'none') return { ok: true, content: null, label: 'Nothing' };
+
+  // What is staged (Phase 32 E1): the index, the "before" of unstaged changes.
+  if (spec === 'index') {
+    try {
+      const content = execFileSync('git', ['show', `:./${relativePath}`], {
+        cwd: projectPath,
+        encoding: 'utf-8',
+        maxBuffer: 16 * 1024 * 1024,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      return { ok: true, content, label: 'Staged' };
+    } catch {
+      return { ok: true, content: null, label: 'Staged' };
+    }
+  }
+
   if (spec.startsWith('commit:')) {
     const ref = spec.slice('commit:'.length);
     assertSafeGitRef(ref, 'file comparand');
     try {
-      const content = execFileSync('git', ['show', `${ref}:${relativePath}`], {
+      // `./` makes the path relative to the project, not to the repository's
+      // top: in a project that is a subfolder of its repository, `<ref>:path`
+      // named a file that is not there, and the whole file read as added
+      // (Phase 32 E1).
+      const content = execFileSync('git', ['show', `${ref}:./${relativePath}`], {
         cwd: projectPath,
         encoding: 'utf-8',
         maxBuffer: 16 * 1024 * 1024,
@@ -570,5 +592,5 @@ export function readFileAt(
 
 /** Whether a comparand can supply file CONTENTS, as opposed to a file list. */
 export function canSupplyContent(spec: string): boolean {
-  return spec === 'live' || spec.startsWith('commit:');
+  return spec === 'live' || spec === 'index' || spec === 'none' || spec.startsWith('commit:');
 }
