@@ -160,7 +160,8 @@ so each step is usable by itself, and so the clearest value lands early.
   → A0 → A1 → A2 → A3 → B1 → B2 → C1 → B4 → C5 → B3 → A8 → A2.7 → review
   → HD1 → HD2 → B5 → A4 → A5 → B6 → B7 → A6 → C2.1 → HD3 → C2.2–C2.6a → C3.1–C3.2 → B8.1–B8.3a
   → C3.3–C3.6 → D1 → B8.3b → B8.4 → B9 → C4 → A7 → B10 → E1–E6 → review → HD4
-  → phase-end: main merged in, full suite, packaged build, merge to main
+  → phase-end: main merged in, full suite, final review, then (the owner) packaged
+    and mobile builds and C2.6b, and the merge to main
 ```
 
 A2 and A3 ran ahead of B1 (see the log's decisions). C5, B3's line
