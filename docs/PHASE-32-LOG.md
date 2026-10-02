@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Track E — E3: the evolution view |
-| **Status** | E1 (#314), E2a (#315) and E2b (#316) in review, stacked. E3 built on E2b: GET /api/git/file-history lists a file's positions on any side (its working copy, then each commit that changed it, following renames, at the path it had then), each with the git author and what CodeTrellis knows of who made it (from the commit message, or seen when it landed in a recorded session); GET /api/record/decisions lists the record's decisions between two moments. The code view's Evolution: two sides, each any point, each with a scrubber over its own commits and a card, a lock that moves the other side to the same moment, the decisions between the two, and the diff between the positions (renames read at each side's path). Unit file-history 6, evolution 3; harness file-history 5; browser evolution (shots) |
-| **In flight** | E1 in review (#314) on `feat/phase-32-e1-source-control`; E2a in review (#315) on `feat/phase-32-e2a-refs`; E2b in review (#316) on `feat/phase-32-e2b-graph-pair`; E3 building on `feat/phase-32-e3-evolution` |
+| **Status** | E1 (#314) and E2a (#315) merged; E2b (#316) in review. E3 built on E2b: GET /api/git/file-history lists a file's positions on any side (its working copy, then each commit that changed it, following renames, at the path it had then), each with the git author and what CodeTrellis knows of who made it (from the commit message, or seen when it landed in a recorded session); GET /api/record/decisions lists the record's decisions between two moments. The code view's Evolution: two sides, each any point, each with a scrubber over its own commits and a card, a lock that moves the other side to the same moment, the decisions between the two, and the diff between the positions (renames read at each side's path). Unit file-history 6, evolution 3; harness file-history 5; browser evolution (shots) |
+| **In flight** | E2b in review (#316) on `feat/phase-32-e2b-graph-pair`; E3 in review (#317) on `feat/phase-32-e3-evolution` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
-| **Next action** | Merge E1, E2a, E2b, then E3 by the stacked flow; then E4 (line history) |
+| **Next action** | Merge E2b (#316), then E3 (#317) by the stacked flow; then E4 (line history) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `7c0623a`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `8498c84`, with open PRs from GitHub.
 
 ---
 
@@ -284,11 +284,11 @@
 
 ### Track E: how the code got here
 - [ ] E Compare any two points, scrub each side's history, and each line's commit and agent, with no plan needed (owner's decision, 2026-10-02), refined in EXECUTION §6c: — building
-  - [ ] E1 Source control with no plan: the Changes panel (staged, unstaged, untracked; each worktree's changes), and the defect that started it (the graph showed changes, the code view no diff) (#314) — in review
+  - [ ] E1 Source control with no plan: the Changes panel (staged, unstaged, untracked; each worktree's changes), and the defect that started it (the graph showed changes, the code view no diff)
   - [ ] E2 Any ref on either side: branches local and remote, tags, a worktree's working copy, a merge base; one picker for the code view and the graph, in two: — building
-    - [ ] E2a The refs, and any two compared file by file from the Changes tab, each side said plainly and as git's command; a file opens its diff (#315) — in review
+    - [ ] E2a The refs, and any two compared file by file from the Changes tab, each side said plainly and as git's command; a file opens its diff
     - [ ] E2b The graph compares the same two: its architecture diff between the pair chosen in the Changes tab (#316) — in review
-  - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked — building
+  - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked (#317) — in review
   - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history`
   - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default
   - [ ] E6 The done-when: a teammate's agent's work, traced line by line and side by side, with no plan
