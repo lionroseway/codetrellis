@@ -5,8 +5,9 @@
  */
 import type { Group } from './types';
 import { mainGroup } from './groups/main';
+import { parallelGroup } from './groups/parallel';
 
-export const GROUPS: Group[] = [mainGroup];
+export const GROUPS: Group[] = [mainGroup, parallelGroup];
 
 /** The group `npm run demo` runs when none is named. */
 export const DEFAULT_GROUP = 'main';

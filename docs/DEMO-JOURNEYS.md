@@ -96,6 +96,25 @@ open. Run headless and both flag themselves, saying which.
 
 ---
 
+## A2. Many agents at once (`parallel`) — *built*
+
+Phase 32's awareness, on a throwaway git copy of the sample app with three
+worktrees (`auth-refresh`, `billing-v2`, `checkout-fix`) and two agents bound
+to them by their MCP roots: Codex in `billing-v2`, Claude Code in
+`checkout-fix`. `npm run demo -- --group=parallel`. A person's steps (marking
+Intended, setting a breakpoint, answering it) are asked for in the window;
+`--decide` takes them through the desktop's HTTP route on a dev build.
+`tests/e2e/demo-check.test.ts` runs the group with no window in CI.
+
+| Scene | Watch for |
+|---|---|
+| `lines` | two chips in the top bar, each with its branch and its agent; each agent sees only its own line as `yours` |
+| `overlap` | one **high** overlap naming `isValidEmail`; `check_footprint` names the other side; it clears when one reverts |
+| `contract` | a body-only change tells nobody; a new parameter tells Claude Code on its next call, once, as information |
+| `intended` | marked Intended, the overlap goes quiet and a body edit does not wake it |
+| `intent` | Codex declares what it will change, and the overlap with `auth-refresh` appears before any file changes |
+| `breakpoint` | the hook pauses Claude Code's edit; a steer lets it through with its note; an agent with no hook is told it breached |
+
 ## B. The journeys, and where each one lives
 
 ### B1. A human plans it by hand — *built*

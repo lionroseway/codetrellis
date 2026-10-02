@@ -24,6 +24,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { makeWorkbook, makeDocx, makePdf } from '../src/backend/services/material-reader/fixtures.test-helper';
+import { copyFixtureTemplate } from '../tests/harness/fixture';
 
 let root: string | null = null;
 
@@ -251,3 +252,68 @@ export function repoWithPlanConflict(): ConflictFixture {
 
   return { path: dir, manifest };
 }
+
+export interface ParallelFixture {
+  /** The main checkout (branch `main`). */
+  path: string;
+  /** Each worktree's folder, by name; its branch has the same name. */
+  trees: Record<string, string>;
+  /**
+   * Replace `from` with `to` in a file of one worktree (or `main`). Throws
+   * when `from` is not there: an edit that changes nothing is a scene not
+   * happening, which is how the main loop's `work` scene once lied.
+   */
+  edit(tree: string, rel: string, from: string, to: string): void;
+  /** Put one worktree's files back as committed. */
+  reset(tree: string): void;
+  /** Put every worktree back as committed. */
+  resetAll(): void;
+  /** Commit what a worktree has changed. */
+  commit(tree: string, message: string): string;
+}
+
+/**
+ * The sample app as a git repository with a worktree per line of work, for
+ * the parallel, observe and teams groups: real folders, real branches, the
+ * same app the harness tests use. Each worktree is a branch off `main`
+ * named as given. Removed with the other fixtures; nothing touches the
+ * person's own repositories.
+ */
+export function sampleAppRepo(name: string, worktrees: string[], seed?: (dir: string) => void): ParallelFixture {
+  const dir = path.join(base(), name);
+  copyFixtureTemplate(dir);
+  init(dir);
+  seed?.(dir);
+  commit(dir, 'The sample app');
+  const trees: Record<string, string> = { main: dir };
+  for (const wt of worktrees) {
+    trees[wt] = `${dir}-${wt}`;
+    git(dir, 'worktree', 'add', '-q', trees[wt], '-b', wt);
+  }
+  const at = (tree: string) => {
+    const t = trees[tree];
+    if (!t) throw new Error(`no worktree called "${tree}"`);
+    return t;
+  };
+  return {
+    path: dir,
+    trees,
+    edit(tree, rel, from, to) {
+      const abs = path.join(at(tree), rel);
+      const was = fs.readFileSync(abs, 'utf-8');
+      if (!was.includes(from)) throw new Error(`${tree}: ${rel} does not contain the text the scene changes`);
+      fs.writeFileSync(abs, was.replace(from, to));
+    },
+    reset(tree) {
+      git(at(tree), 'checkout', '--', '.');
+      git(at(tree), 'clean', '-fdq');
+    },
+    resetAll() {
+      for (const t of Object.keys(trees)) this.reset(t);
+    },
+    commit(tree, message) {
+      return commit(at(tree), message);
+    },
+  };
+}
+

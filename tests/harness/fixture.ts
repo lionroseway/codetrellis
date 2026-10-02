@@ -121,6 +121,16 @@ export function prepareFixture(testName: string): PreparedFixture {
  * on "exactly one system doc", looking precisely like a regression in
  * the code under test. A fixture must start from what is committed.
  */
+/**
+ * Copy the sample app's committed files (no `.git`, `node_modules` or
+ * `.codetrellis`) into `dst`. The demo's parallel scenes use it too
+ * (`scripts/demo-fixtures.ts`), so both work on the same app.
+ */
+export function copyFixtureTemplate(dst: string): void {
+  fs.mkdirSync(dst, { recursive: true });
+  copyDir(FIXTURE_TEMPLATE, dst);
+}
+
 function copyDir(src: string, dst: string): void {
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
     if (entry.name === '.git' || entry.name === 'node_modules') continue;
