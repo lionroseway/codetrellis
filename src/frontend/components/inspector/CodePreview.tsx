@@ -1,3 +1,4 @@
+import { hunkAt, hunkLabel, type LineHistoryData } from '../../lib/line-history';
 import { useEffect, useMemo, useState, useCallback, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { Highlight, themes } from 'prism-react-renderer';
@@ -62,9 +63,21 @@ interface Props {
    * its merge base, and other workstreams' changes. Absent, no column.
    */
   workMarks?: GutterMarks | null;
+  /**
+   * Phase 32 E4 — line history: who wrote each run of lines, in a column
+   * beside the line numbers; choosing a run opens its card.
+   */
+  lineHistory?: LineHistoryGutter | null;
 }
 
-export function CodePreview({ content, error, highlightLine, onClose, overlay, onOpenItem, workMarks }: Props) {
+/** Line history for the gutter: the runs, the chosen line, and how to choose one. */
+export interface LineHistoryGutter {
+  data: LineHistoryData;
+  chosenLine: number | null;
+  onChoose: (line: number) => void;
+}
+
+export function CodePreview({ content, error, highlightLine, onClose, overlay, onOpenItem, workMarks, lineHistory }: Props) {
 
   if (error) {
     return (
@@ -89,6 +102,7 @@ export function CodePreview({ content, error, highlightLine, onClose, overlay, o
       overlay={overlay}
       onOpenItem={onOpenItem}
       workMarks={workMarks}
+      lineHistory={lineHistory}
     />
   );
 }
@@ -100,6 +114,7 @@ function CodePreviewInner({
   overlay,
   onOpenItem,
   workMarks,
+  lineHistory,
 }: {
   content: FileContent;
   highlightLine?: number;
@@ -107,6 +122,7 @@ function CodePreviewInner({
   overlay?: FileOverlay | null;
   onOpenItem?: (itemUid: string, planUid: string) => void;
   workMarks?: GutterMarks | null;
+  lineHistory?: LineHistoryGutter | null;
 }) {
   /**
    * Scroll the highlighted line into view.
@@ -224,6 +240,7 @@ function CodePreviewInner({
                     fileClaim={overlay?.fileLevel?.[0]}
                       onOpenItem={onOpenItem}
                       work={workMarks ? { own: workMarks.own.get(lineNum), others: workMarks.others.get(lineNum) } : undefined}
+                      blame={lineHistory ? blameCell(lineHistory, lineNum) : undefined}
                     />
                   </Fragment>
                 );
@@ -498,6 +515,7 @@ function LineRow({
   fileClaim,
   onOpenItem,
   work,
+  blame,
 }: {
   lineNum: number;
   annotation: LineAnnotation | undefined;
@@ -514,6 +532,8 @@ function LineRow({
   onOpenItem?: (itemUid: string, planUid: string) => void;
   /** Phase 32 B3.2 — present when the workstream gutter is shown. */
   work?: { own?: GutterMark[]; others?: GutterMark[] };
+  /** Phase 32 E4 — present when line history is shown. */
+  blame?: BlameCell;
 }) {
   const lineProps = getLineProps({ line });
   const marker = planMarkers && planMarkers.length > 0 ? planMarkers[0] : null;
@@ -581,6 +601,23 @@ function LineRow({
           another workstream changes. Who, which lines, which function and
           whether it is committed are in words on hover. */}
       {work && <WorkGutter own={work.own} others={work.others} />}
+      {/* Phase 32 E4 — line history: who wrote this run of lines, on its first line. */}
+      {blame && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); blame.onChoose(); }}
+          className={`select-none w-48 shrink-0 truncate text-left px-1.5 text-[10px] font-sans leading-snug border-r border-white/[0.04] ${
+            blame.chosen ? 'bg-sky-400/10 text-sky-200' : blame.agent ? 'text-accent/80 hover:text-accent' : 'text-foreground-subtle hover:text-foreground'
+          } ${blame.first ? '' : 'text-transparent hover:text-transparent'}`}
+          title={blame.title}
+          aria-label={blame.first ? `Line history: ${blame.title}` : undefined}
+          tabIndex={blame.first ? 0 : -1}
+          data-testid="blame-cell"
+          data-first={blame.first ? 'true' : undefined}
+        >
+          {blame.first ? blame.text : '·'}
+        </button>
+      )}
       {/* line number */}
       <span className="select-none text-foreground-subtle/50 w-10 text-right pr-2 shrink-0 border-r border-white/[0.04]">
         {lineNum}
@@ -731,4 +768,20 @@ function driftBadgeMeta(status: DriftStatus): { label: string; icon: typeof Aler
     default:
       return null;
   }
+}
+
+/** One line's cell in the line-history column. */
+interface BlameCell { first: boolean; text: string; title: string; chosen: boolean; agent: boolean; onChoose: () => void }
+
+function blameCell(g: LineHistoryGutter, line: number): BlameCell | undefined {
+  const hunk = hunkAt(g.data, line);
+  if (!hunk) return undefined;
+  const text = hunkLabel(g.data, hunk);
+  const c = hunk.sha ? g.data.commits[hunk.sha] : null;
+  const chosen = g.chosenLine != null && g.chosenLine >= hunk.start && g.chosenLine <= hunk.end;
+  return {
+    first: line === hunk.start, text, chosen, agent: Boolean(c?.attribution),
+    title: c ? `${c.subject} · ${c.author} · ${c.short}${c.attribution ? ` · ${c.attribution.words}` : ''}` : text,
+    onChoose: () => g.onChoose(hunk.start),
+  };
 }

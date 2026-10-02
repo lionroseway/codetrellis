@@ -12,6 +12,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { agentOfBody, fileHistory, FileHistoryError, parseFileLog } from './file-history';
 import type { Workstream } from '../../shared/types';
+import { NO_KNOWLEDGE } from './commit-attribution';
 
 const ENV = { ...process.env, GIT_AUTHOR_NAME: 'Sam Lee', GIT_AUTHOR_EMAIL: 'sam@acme.test', GIT_COMMITTER_NAME: 'Sam Lee', GIT_COMMITTER_EMAIL: 'sam@acme.test' };
 const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, ...args], { env: ENV, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -76,9 +77,12 @@ test('this checkout: the working copy on top, then every commit that changed the
 test('a commit CodeTrellis saw land while an agent worked is attributed to it, said as seen', () => {
   const dir = repo();
   const head = git(dir, 'rev-parse', 'HEAD');
-  const h = fileHistory(dir, 'commit:refs/heads/main', 'src/refund.ts', [], (shas) => {
-    assert.ok(shas.includes(head));
-    return new Map([[head, { agentType: 'claude-code', sessionId: 's-bill', workstreamRoot: '/work/acme-billing' }]]);
+  const h = fileHistory(dir, 'commit:refs/heads/main', 'src/refund.ts', [], {
+    ...NO_KNOWLEDGE,
+    seenBy: (shas) => {
+      assert.ok(shas.includes(head));
+      return new Map([[head, { agentType: 'claude-code', sessionId: 's-bill', workstreamRoot: '/work/acme-billing' }]]);
+    },
   });
   // A branch has no working copy: commits only.
   assert.equal(h.positions[0].kind, 'commit');

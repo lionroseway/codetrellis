@@ -26,19 +26,13 @@ import path from 'node:path';
 import type { Workstream } from '../../shared/types';
 import { isSafeGitRef } from './git-safety';
 import { findWorkstream, mergeBase, parseMergeBase, shortRefName, sideLabel } from './git-refs';
+import { agentFromMessage, attributeCommits, NO_KNOWLEDGE, type Attribution, type Knowledge } from './commit-attribution';
+
+export type { Attribution } from './commit-attribution';
 
 /** At most this many commits per side; older ones are said to exist. */
 export const MAX_POSITIONS = 200;
 const SHA = /^[0-9a-f]{7,64}$/;
-
-export interface Attribution {
-  agent: string;
-  /** How CodeTrellis knows. */
-  how: 'commit message' | 'seen';
-  /** Said plainly, with how. */
-  words: string;
-  sessionId?: string | null;
-}
 
 export interface FilePosition {
   /** What `/api/file/at` reads for this position. */
@@ -78,25 +72,25 @@ export interface FileHistory {
 export class FileHistoryError extends Error {}
 
 /** Where a side's history starts: a commit, and the working copy above it when it has one. */
-function startOf(projectRoot: string, spec: string, workstreams: readonly Workstream[]): { commit: string; working: string | null; name: string } {
-  if (spec === 'live' || spec === 'index') return { commit: 'HEAD', working: spec, name: 'HEAD' };
+function startOf(projectRoot: string, spec: string, workstreams: readonly Workstream[]): { commit: string; working: string | null; name: string; checkout: string | null } {
+  if (spec === 'live' || spec === 'index') return { commit: 'HEAD', working: spec, name: 'HEAD', checkout: projectRoot };
   if (spec.startsWith('commit:')) {
     const ref = spec.slice('commit:'.length);
     if (!isSafeGitRef(ref)) throw new FileHistoryError(`“${ref}” is not a ref this app passes to git.`);
-    return { commit: ref, working: null, name: shortRefName(ref) };
+    return { commit: ref, working: null, name: shortRefName(ref), checkout: null };
   }
   const mb = parseMergeBase(spec);
   if (mb) {
     const sha = mergeBase(projectRoot, mb.a, mb.b);
     if (!sha) throw new FileHistoryError(`${shortRefName(mb.a)} and ${shortRefName(mb.b)} share no history here.`);
-    return { commit: sha, working: null, name: sha.slice(0, 7) };
+    return { commit: sha, working: null, name: sha.slice(0, 7), checkout: null };
   }
   if (spec.startsWith('workstream:')) {
     const w = findWorkstream(workstreams, spec.slice('workstream:'.length));
     if (!w) throw new FileHistoryError('No such worktree in this project.');
     const head = w.head && SHA.test(w.head) ? w.head : null;
     if (!head) throw new FileHistoryError(`${w.branch ?? path.basename(w.root)} has no commit yet.`);
-    return { commit: head, working: w.root.startsWith('branch:') ? null : spec, name: w.branch ?? head.slice(0, 7) };
+    return { commit: head, working: w.root.startsWith('branch:') ? null : spec, name: w.branch ?? head.slice(0, 7), checkout: w.root.startsWith('branch:') ? null : w.root };
   }
   throw new FileHistoryError(`Unknown side “${spec}”.`);
 }
@@ -126,22 +120,21 @@ export function parseFileLog(out: string): Array<Omit<FilePosition, 'attribution
   return rows;
 }
 
-/** The `agent:` line CodeTrellis's own commits carry. */
+/** The agent a commit message names, if any (see `commit-attribution`). */
 export function agentOfBody(body: string): string | null {
-  const m = body.match(/^agent:\s*(\S+)/m);
-  return m ? m[1] : null;
+  return agentFromMessage(body)?.agent ?? null;
 }
 
 /**
- * A file's positions on one side, newest first. `seenBy` names, by full
- * sha, the agent and session CodeTrellis recorded when a commit landed.
+ * A file's positions on one side, newest first, each commit attributed
+ * from what CodeTrellis recorded (`know`).
  */
 export function fileHistory(
   projectRoot: string,
   spec: string,
   relativePath: string,
   workstreams: readonly Workstream[],
-  seenBy: (shas: string[]) => Map<string, { agentType: string | null; sessionId: string | null; workstreamRoot: string | null }> = () => new Map(),
+  know: Knowledge = NO_KNOWLEDGE,
 ): FileHistory {
   const start = startOf(projectRoot, spec, workstreams);
   let out: string;
@@ -156,7 +149,7 @@ export function fileHistory(
   const rows = parseFileLog(out);
   const truncated = rows.length > MAX_POSITIONS;
   const kept = rows.slice(0, MAX_POSITIONS);
-  const seen = seenBy(kept.map((r) => r.sha as string));
+  const attributed = attributeCommits(kept.map((r) => ({ sha: r.sha as string, at: r.at as number, body: r.body })), start.checkout, know);
 
   const positions: FilePosition[] = [];
   if (start.working) {
@@ -166,17 +159,8 @@ export function fileHistory(
     });
   }
   for (const r of kept) {
-    const { body, ...row } = r;
-    const fromMessage = agentOfBody(body);
-    const frame = seen.get(r.sha as string);
-    const attribution: Attribution | null = fromMessage
-      ? { agent: fromMessage, how: 'commit message', words: `${fromMessage}, from the commit message`, sessionId: frame?.sessionId ?? null }
-      : frame?.agentType
-        ? {
-          agent: frame.agentType, how: 'seen', sessionId: frame.sessionId,
-          words: `${frame.agentType}, seen: it landed while CodeTrellis recorded ${frame.agentType}'s session${frame.workstreamRoot ? ` in ${path.basename(frame.workstreamRoot)}` : ''}`,
-        }
-        : null;
+    const { body: _body, ...row } = r;
+    const attribution = attributed.get(r.sha as string) ?? null;
     positions.push({ ...row, spec: `commit:${r.sha}`, kind: 'commit', attribution });
   }
 

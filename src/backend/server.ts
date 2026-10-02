@@ -54,7 +54,7 @@ import { listBreakpoints, getBreakpoint, setBreakpoint, clearBreakpoint, listHit
 import { verifyRecord } from './services/record-chain';
 import { startAgentEventLog, recordDecision, pruneAgentEvents, listAgentEvents, setEventPublisher, setRecordedListener, actingSession, workstreamOfItem, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
 import { stateAt } from './services/replay-state';
-import { startReplayFrames, pruneFrames, setHeldProject, setFramePublisher, noteAgentActivity, requestFrame, noteRefsChanged, seedHeads, listFrames, framesByCommit, DEFAULT_FRAME_LIMIT } from './services/replay-frames';
+import { startReplayFrames, pruneFrames, setHeldProject, setFramePublisher, noteAgentActivity, requestFrame, noteRefsChanged, seedHeads, listFrames, DEFAULT_FRAME_LIMIT } from './services/replay-frames';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
@@ -79,6 +79,8 @@ import { compareSnapshots, listComparands, readFileAt } from './services/snapsho
 import { sourceControl, projectPrefix } from './services/source-control';
 import { diffCommand, filesBetween, listRefs, sideLabel, worktreesForCompare } from './services/git-refs';
 import { fileHistory, FileHistoryError } from './services/file-history';
+import { recordedKnowledge, isProjectRelativePath } from './services/commit-attribution';
+import { lineHistory, LineHistoryError } from './services/line-history';
 import { reviewPlan, renderReviewMarkdown } from './services/plan-review-service';
 import { reviewQueue } from './services/review-queue-service';
 import { buildStack } from './services/stack-service';
@@ -4372,14 +4374,31 @@ app.get('/api/git/file-history', (req, res) => {
   if (!projectPath) return;
   const at = typeof req.query.at === 'string' && req.query.at ? req.query.at : 'live';
   const rel = typeof req.query.path === 'string' ? req.query.path : '';
-  if (!rel || rel.startsWith('-') || rel.startsWith(':') || path.isAbsolute(rel) || rel.split(/[\\/]/).includes('..')) {
+  if (!isProjectRelativePath(rel)) {
     res.status(400).json({ error: 'A path relative to the project is required.' });
     return;
   }
   try {
-    res.json(fileHistory(projectPath, at, rel, worktreesForCompare(projectPath), (shas) => framesByCommit(projectPath, shas)));
+    res.json(fileHistory(projectPath, at, rel, worktreesForCompare(projectPath), recordedKnowledge(projectPath)));
   } catch (err) {
     if (err instanceof FileHistoryError) { res.status(400).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+// Phase 32 E4: who wrote each line of a file, as GitLens shows it (the git
+// author always), with what CodeTrellis knows of why: the agent, how it
+// knows, the session and the task and plan it worked on.
+app.get('/api/git/line-history', (req, res) => {
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  const at = typeof req.query.at === 'string' && req.query.at ? req.query.at : 'live';
+  const rel = typeof req.query.path === 'string' ? req.query.path : '';
+  if (!isProjectRelativePath(rel)) { res.status(400).json({ error: 'A path relative to the project is required.' }); return; }
+  try {
+    res.json(lineHistory(projectPath, at, rel, worktreesForCompare(projectPath), recordedKnowledge(projectPath)));
+  } catch (err) {
+    if (err instanceof LineHistoryError) { res.status(400).json({ error: err.message }); return; }
     throw err;
   }
 });

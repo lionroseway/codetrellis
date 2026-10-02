@@ -1,5 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { FileCode, GitBranch, GitCompare, Code2, History, X } from 'lucide-react';
+import { FileCode, GitBranch, GitCompare, Code2, History, Loader2, UserRound, X } from 'lucide-react';
+import { LineHistoryCard } from './LineHistoryCard';
+import { hunkAt, type LineHistoryData } from '../../lib/line-history';
+import { useReplayStore } from '../../stores/replay-store';
 import { EvolutionView } from './EvolutionView';
 import { useSourceControlStore, groupOfFile, changeWords } from '../../stores/source-control-store';
 import { GitCommand } from './SourceControlPanel';
@@ -59,6 +62,12 @@ export function CodeWorkspace() {
   const [notes, setNotes] = useState<string[]>([]);
   const [frameIndex, setFrameIndex] = useState(0);
   const [showTimeline, setShowTimeline] = useState(false);
+  // Phase 32 E4 — line history: on or off, read on demand, and the run chosen for its card.
+  const [lineHistoryOn, setLineHistoryOn] = useState(false);
+  const [lineHistory, setLineHistory] = useState<{ path: string; loading: boolean; error: string | null; data: LineHistoryData | null }>({ path: '', loading: false, error: null, data: null });
+  const [chosenLine, setChosenLine] = useState<number | null>(null);
+  // Where Evolution starts when the line card opens it at a commit.
+  const [evolutionStart, setEvolutionStart] = useState<{ left: string; right: string } | null>(null);
 
   // A node id is not a path — see `resolveSelectedFile`, which holds the
   // rule for all four kinds because two of them used to be wrong here.
@@ -211,6 +220,25 @@ export function CodeWorkspace() {
       ? null
       : { before: diffBefore, after: 'live', labels: undefined as { before: string; after: string } | undefined, words: null as string | null, command: null as string | null };
 
+  useEffect(() => {
+    setChosenLine(null);
+    if (!lineHistoryOn || !root || !relativePath) return;
+    let cancelled = false;
+    setLineHistory({ path: relativePath, loading: true, error: null, data: null });
+    fetch(`/api/git/line-history?project=${encodeURIComponent(root)}&path=${encodeURIComponent(relativePath)}&at=live`)
+      .then(async (r) => {
+        const body = await r.json().catch(() => null);
+        if (cancelled) return;
+        setLineHistory(r.ok
+          ? { path: relativePath, loading: false, error: null, data: body as LineHistoryData }
+          : { path: relativePath, loading: false, error: body?.error || `Server returned ${r.status}`, data: null });
+      })
+      .catch((e) => { if (!cancelled) setLineHistory({ path: relativePath, loading: false, error: e instanceof Error ? e.message : String(e), data: null }); });
+    return () => { cancelled = true; };
+  }, [lineHistoryOn, root, relativePath]);
+  const lineData = lineHistory.path === relativePath ? lineHistory.data : null;
+  const chosenHunk = lineData && chosenLine != null ? hunkAt(lineData, chosenLine) : null;
+
   if (!root) {
     return (
       <div className="h-full flex items-center justify-center text-[11px] text-foreground-subtle">
@@ -261,6 +289,18 @@ export function CodeWorkspace() {
           data-testid="code-evolution"
         >
           <GitBranch size={10} /> Evolution
+        </button>
+        {/* Phase 32 E4: who wrote each line, as git blame does, and what CodeTrellis knows. */}
+        <button
+          onClick={() => { setLineHistoryOn((v) => !v); setMode('read'); }}
+          className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] transition-colors ${
+            lineHistoryOn && mode === 'read' ? 'bg-accent/10 text-accent' : 'text-foreground-subtle hover:text-foreground'
+          }`}
+          title="Who wrote each line, and why (git blame)"
+          aria-pressed={lineHistoryOn}
+          data-testid="code-line-history"
+        >
+          <UserRound size={10} /> Line history
         </button>
         <button
           onClick={() => setShowTimeline((v) => !v)}
@@ -324,13 +364,42 @@ export function CodeWorkspace() {
             against any point in the project's history.
           </div>
         ) : mode === 'evolution' ? (
-          <EvolutionView root={root} relativePath={relativePath} />
+          <EvolutionView key={evolutionStart ? `${evolutionStart.left}|${evolutionStart.right}` : 'pair'} root={root} relativePath={relativePath} start={evolutionStart} />
         ) : mode === 'read' ? (
+          <>
+          {lineHistoryOn && (lineHistory.loading || lineHistory.error || lineData) && (
+            <div className="mb-1.5 flex items-center gap-2 text-[10px] text-foreground-subtle" data-testid="line-history-status">
+              {lineHistory.loading && <><Loader2 size={10} className="animate-spin" /> Reading who wrote each line…</>}
+              {lineHistory.error && <span className="text-danger">{lineHistory.error}</span>}
+              {lineData && !lineHistory.loading && (
+                <>
+                  <span data-testid="line-history-words">
+                    {lineData.hunks.length} run{lineData.hunks.length === 1 ? '' : 's'} of lines from {Object.keys(lineData.commits).length} commit{Object.keys(lineData.commits).length === 1 ? '' : 's'}
+                    {lineData.uncommitted ? `; ${lineData.uncommitted} line${lineData.uncommitted === 1 ? '' : 's'} not yet committed` : ''}. Choose a run to see who and why.
+                  </span>
+                  <GitCommand command={lineData.command} className="" testId="line-history-command" />
+                </>
+              )}
+            </div>
+          )}
+          {lineData && chosenHunk && (
+            <LineHistoryCard
+              data={lineData}
+              hunk={chosenHunk}
+              onClose={() => setChosenLine(null)}
+              onEvolution={(sha) => { setEvolutionStart({ left: `commit:${sha}`, right: 'live' }); setMode('evolution'); }}
+              onReplay={(at) => { void useReplayStore.getState().enter(root, at - 30 * 60_000, { to: at + 30 * 60_000 }); }}
+              onOpenTask={(planUid, itemUid) => {
+                void openItemFromCode(planUid, itemUid, { filePath: selectedNode!, line: chosenHunk.start, label: selectedNode!.split('/').pop() ?? 'the file' });
+              }}
+            />
+          )}
           <CodePreview
             content={content}
             error={error}
             overlay={overlay}
             workMarks={workMarks}
+            lineHistory={lineData ? { data: lineData, chosenLine, onChoose: setChosenLine } : null}
             // The banner has always been a button. Nothing ever gave it
             // anything to do, so "Rework the ledger wants this file" had
             // hover feedback and no behaviour — worse than not looking
@@ -348,6 +417,7 @@ export function CodeWorkspace() {
               });
             }}
           />
+          </>
         ) : (
           <>
           {/* What is compared with what, said before the editor loads. */}
