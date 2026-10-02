@@ -543,7 +543,10 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   `release.sh` runs the check before packaging macOS. `edge-visuals.spec.ts`
   clicks `Files` exactly and polls where it slept.
 - **Tests.** Unit `tools/patches/check-patches.test.ts` (the repository's
-  patches are applied; an unapplied one is named). Browser
+  patches are applied; an unapplied one is named; CRLF on either side
+  still matches, which Windows needed: its checkout gives `patches/` CRLF
+  endings, and the first run of #324 refused a patch patch-package had
+  just applied). Browser
   `graph/edge-visuals.spec.ts`, 3 of 3 locally in a checkout with branches,
   where the loose match used to fail.
 

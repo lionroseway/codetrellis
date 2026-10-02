@@ -19,7 +19,9 @@ function parsePatch(text) {
   const files = [];
   let file = null;
   let hunk = null;
-  for (const line of text.split('\n')) {
+  // \r?\n: a Windows checkout gives patches/ CRLF line endings, and the
+  // installed file may have either; neither changes what was applied.
+  for (const line of text.split(/\r?\n/)) {
     if (line.startsWith('+++ ')) {
       file = { path: line.slice(4).replace(/^b\//, '').trim(), hunks: [] };
       files.push(file);
@@ -43,7 +45,7 @@ function unapplied(patchText, root) {
     const abs = path.join(root, f.path);
     let body;
     try { body = fs.readFileSync(abs, 'utf8'); } catch { missing.push(`${f.path} (not installed)`); continue; }
-    const lines = body.split('\n');
+    const lines = body.split(/\r?\n/);
     for (const h of f.hunks) {
       if (!containsBlock(lines, h)) { missing.push(f.path); break; }
     }
