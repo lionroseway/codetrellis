@@ -19,13 +19,13 @@
 |---|---|
 | **Stage / step** | Track E — E1: source control with no plan needed |
 | **Status** | B10.2 merged (#310); B10.3 (#311), B10.4 (#312), B10.5 (#313) in review, stacked. Track E planned with the owner (2026-10-02). E1 built: the defect reproduced three ways (a committed edit, an edit in another worktree, a project in a subfolder) and fixed; the sidebar's Changes tab (this checkout, committed since you opened it, each other worktree with its agents), each file opening its diff between its group's two points; the code view says what it compares. Found on the way and fixed: a request storm of commit reads that starved the browser. Unit source-control 7 + commits cache; harness source-control 6; browser sidebar/changes (shots) |
-| **In flight** | B10.3 in review (#311) on `feat/phase-32-b10-3-signed-packs`; B10.4 in review (#312) on `feat/phase-32-b10-4-evidence`; B10.5 in review (#313) on `feat/phase-32-b10-5-g2`; E1 building on `feat/phase-32-e1-source-control` |
-| **Last merged** | B10.2 (#310, `087819c`) |
+| **In flight** | B10.4 in review (#312) on `feat/phase-32-b10-4-evidence`; B10.5 in review (#313) on `feat/phase-32-b10-5-g2`; E1 in review (#314) on `feat/phase-32-e1-source-control` |
+| **Last merged** | B10.3 (#311, `e415975`) |
 | **Next action** | Open E1's PR; merge the B10 stack in order; then E2 (any ref on either side) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `087819c`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `e415975`, with open PRs from GitHub.
 
 ---
 
@@ -221,7 +221,7 @@
 - [ ] B10 The record — building
   - [x] B10.1 The chain: every kept event linked, decisions as events, verified in words (#309)
   - [x] B10.2 Retention you can set, and the chain still verifies (#310)
-  - [ ] B10.3 Signed packs, carrying the record's head (#311) — in review
+  - [x] B10.3 Signed packs, carrying the record's head (#311)
   - [ ] B10.4 The evidence export (#312) — in review
   - [ ] B10.5 The G2 done-when and docs (#313) — in review
 
@@ -284,7 +284,7 @@
 
 ### Track E: how the code got here
 - [ ] E Compare any two points, scrub each side's history, and each line's commit and agent, with no plan needed (owner's decision, 2026-10-02), refined in EXECUTION §6c: — building
-  - [ ] E1 Source control with no plan: the Changes panel (staged, unstaged, untracked; each worktree's changes), and the defect that started it (the graph showed changes, the code view no diff) — building
+  - [ ] E1 Source control with no plan: the Changes panel (staged, unstaged, untracked; each worktree's changes), and the defect that started it (the graph showed changes, the code view no diff) (#314) — in review
   - [ ] E2 Any ref on either side: branches local and remote, tags, a worktree's working copy, a merge base; one picker for the code view and the graph
   - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked
   - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history`
@@ -449,6 +449,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | C4.2a: a scheduled start is authored `schedule` (a system author, as other app-made records are), and the run keeps who set the rule | No person or agent called; the rule a person set is the reason, and saying "schedule" never passes the app off as that person |
 | 2026-10-02 | C4.3b: an agent on each run is kept per rule on this device, never in the committed config, and set by the person only; it starts only when the run was made here by the person in the window, the schedule, or a phone granted `terminal` — from plain HTTP or a phone without it, the run is made and says why not | It starts a process on this machine, so it is the person's and this machine's, never the team's; loopback is not a person, and a phone may only cause a terminal the person allowed it. A found run starts nothing, so two laptops make one agent |
 | 2026-10-02 | A7 is refined into three parts (EXECUTION §4): the rules and the check, rule signals from each workstream's import delta, the gate and the done-when. A rule is a path boundary (`from`, `mayNotImport`, `except`, `because`) in the committed config | One file every laptop, agent and pipeline reads; a boundary between two sets of paths is what M7 asks for ("web/ may not import db/") and covers layers without a layer model |
+| 2026-10-02 | Track E serves beginners and advanced users of git alike (owner): every surface reads two ways, a plain sentence first, then git's own word and the exact command (copyable) | The owner: "the whole idea behind this portion of work is making it so both beginners and advanced users of git can use it as their surfacing tool". Plain words alone hide what is compared from someone who knows git; git's words alone shut out someone who does not; both, together, teach the one and serve the other |
 | 2026-10-02 | E1: the defect had three causes, each fixed where it was: a committed edit (the code view compared the last commit with a clean working tree), an edit in another worktree (it read only this checkout), and a project in a subfolder of its repository (`git show <ref>:<path>` read from the repository's top, so the file "was added") | All three reproduced against a running backend before anything changed; the Changes panel names where each change is and diffs between that group's own two points, and the code view picks the same comparison for a file opened from the tree or the graph |
 | 2026-10-02 | E1: the awareness store reads one at a time and reads commits only when a head moved or every 30 s; the backend keeps each workstream's commits by head and merge base | Found by the E1 browser test hanging after another spec: every file change in any worktree started three reads with no limit, the commit reads (a `git log` per workstream, synchronous, seconds each) piled up two dozen deep, and the browser's six connections to the app filled, so even the diff editor's code could not load. The likely cause of #310's Awareness count failure too |
 | 2026-10-02 | Track E joins Phase 32 before the review (owner): compare any two points with no plan, in the graph and the code view; a file at two refs side by side, each side scrubbing its own commits; each line's commit and author as GitLens shows them, with the agent, session, task and plan where CodeTrellis knows them | It surfaces the process behind the current state to someone outside the work, which is most of what CodeTrellis is for, and it starts from a defect the owner saw: the graph showed changes, the code view no diff, with no plan |
@@ -489,9 +490,11 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   opened it; work in 1 other worktree or branch", and lists them as an
   editor's source control tab does: this checkout's changes, what was
   committed since she opened it, and `billing-v2`, a worktree codex works
-  in. Picking `refund.ts` there opens its diff, "Where it left main
-  (a1b2c3d)" against "billing-v2", with what the two sides are said above
-  it. A file she opens from the tree that changed says how ("Committed
+  in. Each group reads two ways: a plain title ("Changed, not staged")
+  with git's word beside it (`unstaged`) and the command beneath it
+  (`$ git diff`, copyable). Picking `refund.ts` there opens its diff,
+  "Where it left main (a1b2c3d)" against "billing-v2", with what the two
+  sides are and the command that shows the same diff above it. A file she opens from the tree that changed says how ("Committed
   since you opened the project") with "Show the diff".
 - **The defect.** Reproduced three ways against a running backend before
   anything changed (a committed edit; an edit in another worktree; a

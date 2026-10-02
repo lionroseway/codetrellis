@@ -51,6 +51,13 @@ export interface SourceGroup {
   after: string;
   /** What each side is called above the diff. */
   labels: { before: string; after: string };
+  /**
+   * The same thing as git says it (Track E: beginners and advanced users
+   * alike). `term` is git's word for the group, beside its plain title;
+   * `command` lists what the group shows, to run or to learn from; a
+   * file's own diff is `command` plus `-- <path>`.
+   */
+  git: { term: string | null; command: string };
   files: SourceFile[];
   /** More files changed than are listed. */
   truncated?: boolean;
@@ -150,9 +157,9 @@ export function sourceControl(projectRoot: string, baselineCommit: string | null
   const at = head ? `${branch ?? 'HEAD'} ${head.sha}` : 'no commit yet';
   try {
     const { staged, changes, untracked } = parsePorcelain(git(project, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', '.']), prefix);
-    if (staged.length) groups.push({ id: 'staged', kind: 'staged', title: 'Staged', words: `Staged for the next commit, against ${at}`, before: headSpec, after: 'index', labels: { before: `Last commit (${head?.sha ?? 'none'})`, after: 'Staged' }, files: staged.slice(0, MAX_FILES), truncated: staged.length > MAX_FILES || undefined });
-    if (changes.length) groups.push({ id: 'changes', kind: 'changes', title: 'Changes', words: 'Not staged: the working tree against what is staged', before: 'index', after: 'live', labels: { before: 'Staged', after: 'Working tree' }, files: changes.slice(0, MAX_FILES), truncated: changes.length > MAX_FILES || undefined });
-    if (untracked.length) groups.push({ id: 'untracked', kind: 'untracked', title: 'Untracked', words: 'New files git does not track yet', before: 'none', after: 'live', labels: { before: 'Nothing (new file)', after: 'Working tree' }, files: untracked.slice(0, MAX_FILES), truncated: untracked.length > MAX_FILES || undefined });
+    if (staged.length) groups.push({ id: 'staged', kind: 'staged', title: 'Ready to commit', words: `Staged: these go into the next commit. Compared with the last commit (${at})`, git: { term: 'staged', command: 'git diff --cached' }, before: headSpec, after: 'index', labels: { before: `Last commit (${head?.sha ?? 'none'})`, after: 'Staged' }, files: staged.slice(0, MAX_FILES), truncated: staged.length > MAX_FILES || undefined });
+    if (changes.length) groups.push({ id: 'changes', kind: 'changes', title: 'Changed, not staged', words: 'Edited but not yet staged for a commit. Compared with what is staged', git: { term: 'unstaged', command: 'git diff' }, before: 'index', after: 'live', labels: { before: 'Staged', after: 'Working tree' }, files: changes.slice(0, MAX_FILES), truncated: changes.length > MAX_FILES || undefined });
+    if (untracked.length) groups.push({ id: 'untracked', kind: 'untracked', title: 'New files', words: 'Files git is not tracking yet, so there is nothing earlier to compare them with', git: { term: 'untracked', command: 'git status --untracked-files' }, before: 'none', after: 'live', labels: { before: 'Nothing (new file)', after: 'Working tree' }, files: untracked.slice(0, MAX_FILES), truncated: untracked.length > MAX_FILES || undefined });
   } catch { /* status unreadable: the rest still answers */ }
 
   // Committed since the graph's baseline: an agent that commits leaves the
@@ -163,7 +170,7 @@ export function sourceControl(projectRoot: string, baselineCommit: string | null
       if (commits > 0) {
         const files = parseNameStatus(git(project, ['diff', '--name-status', '-z', '-M', baselineCommit, 'HEAD', '--', '.']), prefix);
         const base = baselineCommit.slice(0, 7);
-        if (files.length) groups.push({ id: 'since-opened', kind: 'since-opened', title: 'Committed since you opened it', words: `${count(commits, 'commit')} since ${base}, when the graph's baseline was taken`, before: `commit:${baselineCommit}`, after: 'commit:HEAD', labels: { before: `When you opened it (${base})`, after: `Last commit (${head.sha})` }, files: files.slice(0, MAX_FILES), truncated: files.length > MAX_FILES || undefined });
+        if (files.length) groups.push({ id: 'since-opened', kind: 'since-opened', title: 'Committed since you opened it', words: `${count(commits, 'commit')} since ${base}, when the graph's baseline was taken`, git: { term: null, command: `git diff ${base}..HEAD` }, before: `commit:${baselineCommit}`, after: 'commit:HEAD', labels: { before: `When you opened it (${base})`, after: `Last commit (${head.sha})` }, files: files.slice(0, MAX_FILES), truncated: files.length > MAX_FILES || undefined });
       }
     } catch { /* the baseline's commit is gone (rewritten history): nothing to say */ }
   }
@@ -188,6 +195,13 @@ export function sourceControl(projectRoot: string, baselineCommit: string | null
       words: `${where === 'worktree' ? 'A worktree' : 'A branch'} with ${count(inside.length, 'changed file')} since it left main${agents.length ? `, worked on by ${agents.join(' and ')}` : ''}`,
       before: base && isSafeGitRef(base) ? `commit:${base}` : 'none', after: `workstream:${w.root}`,
       labels: { before: base ? `Where it left main (${base.slice(0, 7)})` : 'Nothing', after: name },
+      git: {
+        term: where,
+        // A worktree's working copy, committed or not; a branch's own commits.
+        command: where === 'worktree'
+          ? `git -C ${w.root} diff ${base ? base.slice(0, 7) : 'HEAD'}`
+          : `git diff ${base ? base.slice(0, 7) : 'main'}...${w.branch ?? name}`,
+      },
       files: inside.map((f) => ({ path: f.path, status: f.status, ...(f.from ? { from: f.from } : {}) })),
       truncated: w.changes.truncated || undefined,
       workstream: { id: w.root, branch: w.branch, agents },

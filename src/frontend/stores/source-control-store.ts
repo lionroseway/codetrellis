@@ -26,6 +26,8 @@ export interface SourceGroup {
   before: string;
   after: string;
   labels: { before: string; after: string };
+  /** The same as git says it: its term, and the command that lists it. */
+  git: { term: string | null; command: string };
   files: SourceFile[];
   truncated?: boolean;
   workstream?: { id: string; branch: string | null; agents: string[] };
@@ -48,6 +50,8 @@ export interface PickedCompare {
   before: string;
   after: string;
   labels: { before: string; after: string };
+  /** This file's diff as a git command, for whoever wants to run it. */
+  command: string;
   /** What the two sides are, for the code view's header. */
   title: string;
   words: string;
@@ -99,6 +103,7 @@ export const useSourceControlStore = create<SourceControlState>((set, get) => ({
     set({
       compare: {
         path: file.path, groupId: group.id, before: group.before, after: group.after, labels: group.labels,
+        command: group.kind === 'untracked' ? `git status --untracked-files -- ${file.path}` : `${group.git.command} -- ${file.path}`,
         title: group.kind === 'workstream' ? `${group.title} · since it left main` : group.title,
         words: group.words,
       },
@@ -120,9 +125,9 @@ export function groupOfFile(data: SourceControl | null, relativePath: string | n
 /** What a group's change is called on its own (the code view's "Changed" chip). */
 export function changeWords(group: SourceGroup): string {
   switch (group.kind) {
-    case 'staged': return 'Staged for the next commit';
-    case 'changes': return 'Changed in this checkout, not staged';
-    case 'untracked': return 'New, not yet tracked by git';
+    case 'staged': return 'Ready to commit (staged)';
+    case 'changes': return 'Changed, not staged';
+    case 'untracked': return 'New file, not yet tracked by git';
     case 'since-opened': return 'Committed since you opened the project';
     default: return `Changed in ${group.title}${group.workstream?.agents.length ? ` by ${group.workstream.agents.join(' and ')}` : ''}`;
   }

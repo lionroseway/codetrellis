@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { FileCode, GitCompare, Code2, History, X } from 'lucide-react';
 import { useSourceControlStore, groupOfFile, changeWords } from '../../stores/source-control-store';
+import { GitCommand } from './SourceControlPanel';
 import { useProjectStore } from '../../stores/project-store';
 import { useUiStore } from '../../stores/ui-store';
 import { CodePreview, type FileContent } from '../inspector/CodePreview';
@@ -204,10 +205,10 @@ export function CodeWorkspace() {
     : changeGroup?.kind === 'since-opened' ? changeGroup.before
       : defaultBefore;
   const diffSides = picked && !showTimeline
-    ? { before: picked.before, after: picked.after, labels: picked.labels, words: `${picked.title}: ${picked.words}` }
+    ? { before: picked.before, after: picked.after, labels: picked.labels, words: `${picked.title}: ${picked.words}`, command: picked.command }
     : compareWith
       ? null
-      : { before: diffBefore, after: 'live', labels: undefined as { before: string; after: string } | undefined, words: null as string | null };
+      : { before: diffBefore, after: 'live', labels: undefined as { before: string; after: string } | undefined, words: null as string | null, command: null as string | null };
 
   if (!root) {
     return (
@@ -337,8 +338,9 @@ export function CodeWorkspace() {
           <>
           {/* What is compared with what, said before the editor loads. */}
           {diffSides?.words && (
-            <p className="mb-2 text-[10.5px] text-foreground-muted" data-testid="code-compare-words">{diffSides.words}</p>
+            <p className="text-[10.5px] text-foreground-muted" data-testid="code-compare-words">{diffSides.words}</p>
           )}
+          {diffSides?.command && <GitCommand command={diffSides.command} className="mb-2" testId="code-git-command" />}
           <Suspense
             fallback={<div className="text-[10.5px] text-foreground-subtle">Loading the diff editor…</div>}
           >

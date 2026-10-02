@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { ChevronDown, ChevronRight, GitBranch, GitCommitHorizontal, RefreshCw } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Copy, GitBranch, GitCommitHorizontal, RefreshCw } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
 import { useSourceControlStore, type SourceChangeStatus, type SourceGroup } from '../../stores/source-control-store';
 
@@ -50,6 +50,30 @@ export function useSourceControlFeed(root: string | null) {
   }, [root, refresh, refreshVersion]);
 }
 
+/**
+ * The git command that lists what a group shows (Track E: beginners and
+ * advanced users alike). Small and quiet, to learn from or to copy.
+ */
+export function GitCommand({ command, className = 'px-5 pb-1', testId = 'sc-git-command' }: { command: string; className?: string; testId?: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className={`flex items-center gap-1 ${className}`}>
+      <code className="truncate font-mono text-[9.5px] text-foreground-subtle/80" data-testid={testId} title={command}>$ {command}</code>
+      <button
+        type="button"
+        className="shrink-0 p-0.5 rounded text-foreground-subtle hover:text-foreground"
+        title="Copy the command"
+        aria-label="Copy the command"
+        onClick={() => {
+          void navigator.clipboard?.writeText(command).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }).catch(() => {});
+        }}
+      >
+        {copied ? <Check size={9} /> : <Copy size={9} />}
+      </button>
+    </div>
+  );
+}
+
 function Group({ group, root, local }: { group: SourceGroup; root: string; local: boolean }) {
   const [open, setOpen] = useState(true);
   const compare = useSourceControlStore((s) => s.compare);
@@ -66,6 +90,9 @@ function Group({ group, root, local }: { group: SourceGroup; root: string; local
         {open ? <ChevronDown size={11} className="shrink-0" /> : <ChevronRight size={11} className="shrink-0" />}
         {Icon && <Icon size={11} className="shrink-0 text-foreground-subtle" />}
         <span className="truncate" data-testid="sc-group-title">{group.title}</span>
+        {group.git.term && (
+          <span className="shrink-0 font-mono text-[9px] px-1 rounded bg-white/[0.05] text-foreground-subtle" data-testid="sc-git-term" title="What git calls it">{group.git.term}</span>
+        )}
         {group.workstream?.agents.length ? (
           <span className="truncate text-[9.5px] text-accent/80">{group.workstream.agents.join(', ')}</span>
         ) : null}
@@ -74,7 +101,8 @@ function Group({ group, root, local }: { group: SourceGroup; root: string; local
       </button>
       {open && (
         <div>
-          {!local && <p className="px-5 pb-1 text-[9.5px] text-foreground-subtle" data-testid="sc-group-words">{group.words}</p>}
+          <p className="px-5 text-[9.5px] text-foreground-subtle" data-testid="sc-group-words">{group.words}.</p>
+          <GitCommand command={group.git.command} />
           <ul>
             {group.files.map((f) => {
               const mark = STATUS_MARK[f.status];

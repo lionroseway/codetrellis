@@ -65,6 +65,12 @@ test('this checkout: staged, unstaged and untracked, each with the two sides tha
     ['changes', 'index', 'live', ['modified a.ts']],
     ['untracked', 'none', 'live', ['untracked new.ts']],
   ]);
+  // Read two ways: a plain title for anyone, git's own word and command beside it.
+  assert.deepEqual(sc.groups.map((g) => [g.title, g.git.term, g.git.command]), [
+    ['Ready to commit', 'staged', 'git diff --cached'],
+    ['Changed, not staged', 'unstaged', 'git diff'],
+    ['New files', 'untracked', 'git status --untracked-files'],
+  ]);
   // Each side reads what it says.
   assert.equal(readFileAt('commit:HEAD', dir, 'a.ts').content, 'a1\n');
   assert.equal(readFileAt('index', dir, 'a.ts').content, 'a2\n');
@@ -82,6 +88,7 @@ test('the defect, case A: an agent committed its edit; the working tree is clean
   const g = sc.groups.find((x) => x.kind === 'since-opened')!;
   assert.deepEqual([g.before, g.after, g.files], [`commit:${baseline}`, 'commit:HEAD', [{ path: 'refund.ts', status: 'modified' }]]);
   assert.equal(g.words, `1 commit since ${baseline.slice(0, 7)}, when the graph's baseline was taken`);
+  assert.deepEqual(g.git, { term: null, command: `git diff ${baseline.slice(0, 7)}..HEAD` });
   assert.notEqual(readFileAt(g.before, dir, 'refund.ts').content, readFileAt(g.after, dir, 'refund.ts').content);
   assert.equal(sc.words, '1 file committed since you opened it.');
 });
@@ -101,6 +108,7 @@ test('the defect, case B: an agent works in another worktree; its files are list
   assert.equal(sc.groups[0].words, 'A worktree with 1 changed file since it left main, worked on by codex');
   assert.deepEqual(sc.groups[0].workstream, { id: `${dir}-billing`, branch: 'billing-v2', agents: ['codex'] });
   assert.deepEqual(sc.groups[0].labels, { before: `Where it left main (${base.slice(0, 7)})`, after: 'billing-v2' });
+  assert.deepEqual(sc.groups[0].git, { term: 'worktree', command: `git -C ${dir}-billing diff ${base.slice(0, 7)}` });
 });
 
 test('the defect, case C: a project in a subfolder of its repository reads its files at a commit, and lists only its own changes', () => {

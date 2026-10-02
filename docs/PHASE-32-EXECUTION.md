@@ -1099,6 +1099,13 @@ Rules for the whole track:
 
 - **No plan is needed.** Everything works in an opened project with no
   plan; a plan only adds what it knows.
+- **For beginners and advanced users of git alike** (owner, 2026-10-02):
+  every surface reads two ways at once. A plain sentence first, so nobody
+  needs git's vocabulary ("Changed, not staged", "Where it left main");
+  git's own word beside it and the exact command beneath it (`unstaged`,
+  `git diff`), so an advanced user sees precisely what is compared and can
+  run it, and a beginner learns git by using the app. Shas, refs and
+  commands are always one glance away and never the only words.
 - **Git is the source of truth, through the CLI.** Every read is `git` (and
   `gh` for pull requests) run by the backend with `execFile`, never a shell
   and never a client library talking to a host. Nothing is sent anywhere:
