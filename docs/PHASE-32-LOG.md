@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Track E — E6: the done-when |
-| **Status** | E1 (#314), E2a (#315), E2b (#316), E3 (#317) and E4 (#318) merged; E5 (#319) in review. E6 built on E5: harness history-e.test.ts walks the journey with no plan, on real git: an agent's worktree in the Changes panel; a surprising line's commit, git author, agent and session; its file on billing-v2 beside main, each side's positions; after Fetch now, the pushed branch and its pull request, whose pair compares. Stable over three repeats. With E6, Track E is done |
-| **In flight** | E5 in review (#319) on `feat/phase-32-e5-branches`; E6 in review (#320) on `feat/phase-32-e6-done-when` |
+| **Status** | E1 to E5 merged (#314–#319). E6 built on E5: harness history-e.test.ts walks the journey with no plan, on real git: an agent's worktree in the Changes panel; a surprising line's commit, git author, agent and session; its file on billing-v2 beside main, each side's positions; after Fetch now, the pushed branch and its pull request, whose pair compares. Stable over three repeats. With E6, Track E is done |
+| **In flight** | E6 in review (#320) on `feat/phase-32-e6-done-when` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
-| **Next action** | Merge E5 (#319), then E6 (#320) by the stacked flow; then the review |
+| **Next action** | Merge E6 (#320) when green; Track E is then done. Then the review |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `edbf9c5`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `141c7f8`, with open PRs from GitHub.
 
 ---
 
@@ -290,7 +290,7 @@
     - [ ] E2b The graph compares the same two: its architecture diff between the pair chosen in the Changes tab
   - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked
   - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history`
-  - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default (#319) — in review
+  - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default
   - [ ] E6 The done-when: a teammate's agent's work, traced line by line and side by side, with no plan (#320) — in review
 
 ### Phase end
