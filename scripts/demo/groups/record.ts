@@ -111,7 +111,7 @@ export const recordGroup: Group = {
         if (e.window.plan?.uid !== plan.uid) c.flag(`the evidence should be for the plan "${PLAN}"; it is for ${e.window.plan?.title ?? 'a window with no plan'}`);
         const approval = e.decisions.find((d) => d.type === 'criterion_decided');
         if (!approval) c.flag(`the evidence should name the approval; its decisions are ${e.decisions.map((d) => d.words).join('; ') || 'none'}`);
-        else if (!approval.words.includes(`Approved “${CRITERION}”`)) c.flag(`the evidence should say Approved “${CRITERION}”; it says "${approval.words}"`);
+        else if (![`You approved “${CRITERION}”`, `Someone over the local API approved “${CRITERION}”`].includes(approval.words)) c.flag(`the evidence should say who approved “${CRITERION}”; it says "${approval.words}"`);
         else console.log(`    #${approval.seq} ${approval.words}`);
 
         await c.say('Still intact', 'The record grew by everything that just happened, and every entry still matches the chain.');

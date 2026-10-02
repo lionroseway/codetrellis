@@ -149,7 +149,8 @@ test.describe.serial('G2: months later, the week a payment change was built', ()
     const res = await client.raw('GET', `/api/evidence?${q()}&from=${weekFrom}&to=${weekTo}&format=html`);
     expect(res.status).toBe(200);
     evidencePage = await res.text();
-    expect(evidencePage).toContain('Approved “Refunds round half-even to the cent”');
+    // Who approved it, as the record's other decisions say (plain HTTP here, so not "You").
+    expect(evidencePage).toContain('Someone over the local API approved “Refunds round half-even to the cent”');
     expect(evidencePage).toContain('Paused at a breakpoint before claiming “Round refunds half-even”');
     const c = (await (await verify(evidencePage)).json()) as Check;
     expect(c.ok, c.words).toBe(true);

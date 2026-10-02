@@ -64,10 +64,15 @@ test.describe.serial('Any agent: the journeys with no hook', () => {
   test('workstreams and signals: it sees its own worktree, the other one, and the overlap between them', async () => {
     edit(billing, IN_ORDER, "errors.push('amount must be above zero');");
     edit(exportsDir, IN_ORDER, "errors.push('amount must be a number above zero');");
-    const listed = await answer(codex, 'list_workstreams', {}) as { workstreams: Array<{ root: string; branch: string; yours: boolean }> };
+    // Each agent's worktree is watched from when it connected, so the listing
+    // follows the edits after the watcher's debounce, as with the window open.
+    let listed = { workstreams: [] as Array<{ root: string; branch: string; yours: boolean }> };
+    await expect.poll(async () => {
+      listed = await answer(codex, 'list_workstreams', {}) as typeof listed;
+      return listed.workstreams.map((w) => w.branch);
+    }, { timeout: 15_000 }).toEqual(expect.arrayContaining(['billing-v2', 'exports']));
     const mine = listed.workstreams.find((w) => w.yours);
     expect(same(mine?.root, billing)).toBe(true);
-    expect(listed.workstreams.map((w) => w.branch)).toEqual(expect.arrayContaining(['billing-v2', 'exports']));
 
     let aware: { your_workstream: string; signals: Array<{ kind: string; subject: { file?: string; symbol?: string } }> } = { your_workstream: '', signals: [] };
     await expect.poll(async () => {

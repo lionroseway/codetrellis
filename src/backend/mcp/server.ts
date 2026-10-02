@@ -37,6 +37,7 @@ import { replyNoticeFor } from '../services/awareness-replies';
 import { proposalNoticeFor } from '../services/spec-proposals-service';
 import { plannedOverlapNoticeFor } from '../services/planned-overlap-actions';
 import { candidateWorkstreamRoots, firstWorkstreamRoot, matchWorkstreamRoot } from '../services/workstream-binding';
+import { discoverAround } from '../services/workstream-service';
 import { fileURLToPath } from 'node:url';
 import * as budgetService from '../services/budget-service';
 import * as taskAttachmentsService from '../services/task-attachments-service';
@@ -828,6 +829,8 @@ export async function startMcpServer(): Promise<void> {
         const terminal = hint.hostTerminal && terminalService.getTerminal(hint.hostTerminal) ? hint.hostTerminal : null;
         if (root || terminal) sessionService.bindSession(sessionId, root, terminal);
         bound = root !== null;
+        // Its line of work is watched from now, not from the next listing.
+        if (root) setImmediate(() => discoverAround(root));
         // A folder no trusted root covers may be a clone of the opened repo
         // (A1.7c). Nothing is read from it: it is shown to the person, who
         // decides whether to include it.
@@ -852,6 +855,7 @@ export async function startMcpServer(): Promise<void> {
             if (!root) return;
             sessionService.bindSession(sessionId, root);
             broadcast('mcp-session-changed', { reason: 'bound', sessionId });
+            setImmediate(() => discoverAround(root));
           }).catch(() => { /* a client that cannot answer stays unbound */ })
             .finally(() => { if (pendingBindings.get(sessionId) === lookup) pendingBindings.delete(sessionId); });
           pendingBindings.set(sessionId, lookup);

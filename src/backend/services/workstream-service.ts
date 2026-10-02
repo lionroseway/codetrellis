@@ -195,6 +195,25 @@ export function listWorkstreams(projectRoot: string, opts: { includeIdle?: boole
 }
 
 /**
+ * A session has just bound to `folder` (Phase 32 A1.1). Run the discovery
+ * pass for each trusted repository it is a working tree of, so its watchers
+ * and its neighbours' start now.
+ *
+ * Watchers used to start only when something listed the lines of work (the
+ * window's strip, `list_workstreams`). With no window, an agent that
+ * connected and edited was watched by nobody, and the agent beside it was not
+ * told of an overlap until something happened to list them.
+ */
+export function discoverAround(folder: string): void {
+  for (const root of listTrustedRoots()) {
+    try {
+      if (root !== folder && !listWorktrees(root).some((w) => w.path === folder)) continue;
+      listWorkstreams(root, { includeIdle: true });
+    } catch { /* discovery is best-effort; a connection never waits on it */ }
+  }
+}
+
+/**
  * The branches of the lines of work, for a picker (Phase 32 A5.1): each
  * linked worktree's branch, then each branch with committed work and no
  * checkout here. Git reads only. Unlike `listWorkstreams` it starts no

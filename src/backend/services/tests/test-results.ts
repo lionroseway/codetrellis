@@ -103,16 +103,26 @@ export function ingestTestReport(
     .map((c) => ({ label: testLabel(c), result: c.result, message: c.message }));
 
   const db = getDb();
-  const known = db.exec(`SELECT ${REPORT_COLS} FROM test_reports WHERE project_root = ? AND sha256 = ?`, [projectRoot, sha256])[0]?.values[0];
-  if (known) return { report: reportRow(known), already: true, failing, truncated: parsed.truncated };
-
   const ranAt = Math.round(st.mtimeMs);
   const t = parsed.totals;
-  db.run(
-    `INSERT INTO test_reports (project_root, path, sha256, tests, passed, failed, errors, skipped, ran_at, reported_at, reported_by, reported_by_type)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [projectRoot, rel, sha256, t.tests, t.passed, t.failed, t.errors, t.skipped, ranAt, now, by.author, by.authorType],
-  );
+  const known = db.exec(`SELECT ${REPORT_COLS} FROM test_reports WHERE project_root = ? AND sha256 = ?`, [projectRoot, sha256])[0]?.values[0];
+  // The same bytes from the same run: nothing new. The same bytes written by
+  // a later run (a runner that stamps no time, on code whose results did not
+  // change) are a new run, and used to keep the first run's time, so tests
+  // re-run on the code as it is now still read as older than the code.
+  if (known && ranAt <= reportRow(known).ranAt) return { report: reportRow(known), already: true, failing, truncated: parsed.truncated };
+  if (known) {
+    db.run(
+      'UPDATE test_reports SET path = ?, ran_at = ?, reported_at = ?, reported_by = ?, reported_by_type = ? WHERE id = ?',
+      [rel, ranAt, now, by.author, by.authorType, reportRow(known).id],
+    );
+  } else {
+    db.run(
+      `INSERT INTO test_reports (project_root, path, sha256, tests, passed, failed, errors, skipped, ran_at, reported_at, reported_by, reported_by_type)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [projectRoot, rel, sha256, t.tests, t.passed, t.failed, t.errors, t.skipped, ranAt, now, by.author, by.authorType],
+    );
+  }
   const id = Number(db.exec('SELECT id FROM test_reports WHERE project_root = ? AND sha256 = ?', [projectRoot, sha256])[0].values[0][0]);
   // B8.4b: the report's own cases, for what the tests said at a past moment.
   // Kept as long as replay frames are.

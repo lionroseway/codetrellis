@@ -19,11 +19,13 @@ test('a spec document, an item\'s description, and one re-read from the plan fil
 
 test('a criterion approved or sent back, and a check run (B2.2)', () => {
   const ev = (type: AgentEvent['type'], payload: Record<string, unknown>): AgentEvent => ({ id: 'e', timestamp: 1, source: 'app', type, payload });
-  assert.deepEqual(phraseEvent(ev('criterion_decided', { text: 'Old tokens are refused', decision: 'approved' })), {
-    text: 'Approved “Old tokens are refused”', intent: 'write', tool: null, mutating: true,
+  assert.deepEqual(phraseEvent(ev('criterion_decided', { text: 'Old tokens are refused', decision: 'approved', actorType: 'human', channel: 'desktop' })), {
+    text: 'You approved “Old tokens are refused”', intent: 'write', tool: null, mutating: true,
   });
-  const back = phraseEvent(ev('criterion_decided', { text: 'Rotation is logged', decision: 'sent_back' }));
-  assert.equal(back.text, 'Sent back “Rotation is logged”');
+  const back = phraseEvent(ev('criterion_decided', { text: 'Rotation is logged', decision: 'sent_back', actorType: 'human', channel: 'phone' }));
+  assert.equal(back.text, 'You sent back “Rotation is logged”, from the phone');
+  // Over plain HTTP it says so, as the record's other decisions do.
+  assert.equal(phraseEvent(ev('criterion_decided', { text: 'Rotation is logged', decision: 'approved', actorType: 'unverified' })).text, 'Someone over the local API approved “Rotation is logged”');
   assert.equal(back.intent, 'error');
   assert.equal(phraseEvent(ev('check_run', { passed: 3, failed: 0 })).text, 'Checked criteria: all 3 passing');
   const failing = phraseEvent(ev('check_run', { passed: 1, failed: 2 }));

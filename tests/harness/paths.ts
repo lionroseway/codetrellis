@@ -43,7 +43,17 @@ export const TMP_ROOT = path.resolve(REPO_ROOT, 'tests', '_tmp');
  * passed through `slugify()`.
  */
 export function tmpDirFor(testId: string): string {
-  return path.resolve(TMP_ROOT, testId);
+  // Per process: two runs of the same test from one checkout at once used to
+  // share one folder, and each wiped the other's (found running the demo's
+  // check beside itself). The suffix is how global setup tells a live run's
+  // folder from a dead one's.
+  return path.resolve(TMP_ROOT, `${testId}-p${process.pid}`);
+}
+
+/** The process a tmp dir belongs to, from its name, or null for an old-style name. */
+export function ownerOfTmpDir(name: string): number | null {
+  const m = /-p(\d+)$/.exec(name);
+  return m ? Number(m[1]) : null;
 }
 
 export function slugify(s: string): string {

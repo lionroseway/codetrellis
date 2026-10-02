@@ -68,8 +68,13 @@ test.describe.serial('Awareness signals', () => {
   test('both worktrees editing the same function is a high collision, naming it', async () => {
     edit(auth, /return EMAIL_RE\.test\(email\);/, 'return EMAIL_RE.test(email.trim());');
     edit(billing, /return EMAIL_RE\.test\(email\);/, 'return email.length > 3 && EMAIL_RE.test(email);');
-    const s = await signals();
-    expect(s.map((x) => `${x.severity} ${x.kind} ${x.subject.file}#${x.subject.symbol}`)).toEqual([`high collision ${REL}#isValidEmail`]);
+    // The agent's worktree is watched from when it connected, so its answer
+    // follows the edit after the watcher's debounce, as with the window open.
+    let s: Signal[] = [];
+    await expect.poll(async () => {
+      s = await signals();
+      return s.map((x) => `${x.severity} ${x.kind} ${x.subject.file}#${x.subject.symbol}`);
+    }, { timeout: 15_000 }).toEqual([`high collision ${REL}#isValidEmail`]);
     expect(s[0].summary).toBe(`\`auth-refresh\` and \`billing-v2\` both change ${REL} → isValidEmail`);
     expect(s[0].workstreams.map((w) => [same(w, auth), same(w, billing)])).toEqual([[true, false], [false, true]]);
     expect(s[0].state).toBe('open');
