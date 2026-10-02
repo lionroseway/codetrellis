@@ -80,6 +80,10 @@ and removes it. `docs/DEMO-JOURNEYS.md` says what to watch for in every scene.
       approving a criterion, resequencing two plans, deciding the brief.
       Do each when asked; the demo waits up to 3 minutes. (`--decide` only
       works on a dev build, which serves the HTTP route it uses.)
+- [ ] The demo moves the window itself: replay plays at 4× and returns to
+      live, play-forward opens and closes, Settings opens at a section and
+      closes again, and Awareness marks the card a scene is about. If the
+      window is left in replay or with Settings open, that is a finding.
 - [ ] `/tmp/ct-demo-shots` has one picture per scene, and each shows what its
       caption says. A shot the window never showed is flagged, not saved.
 - [ ] Everything the demo changed on disk, it changed back: `git status` in
