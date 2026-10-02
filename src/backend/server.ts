@@ -4350,12 +4350,14 @@ app.get('/api/refs/compare', (req, res) => {
   if (!result.ok) { res.status(400).json({ error: result.error }); return; }
   const labels = { before: sideLabel(projectPath, before, workstreams), after: sideLabel(projectPath, after, workstreams) };
   const n = result.files.length;
+  // Inside a sentence the app's own words start lower case; a branch keeps its name.
+  const said = (l: string) => (/^(Where|Your|Last|Staged|Tag|Nothing|Commit) /.test(l) ? l[0].toLowerCase() + l.slice(1) : l);
   res.json({
     before, after, labels, files: result.files, truncated: result.truncated,
     command: diffCommand(before, after, workstreams, undefined),
     words: n === 0
-      ? `${labels.before} and ${labels.after} have the same files.`
-      : `${n}${result.truncated ? '+' : ''} file${n === 1 ? '' : 's'} differ between ${labels.before} and ${labels.after}.`,
+      ? `${labels.before} and ${said(labels.after)} have the same files.`
+      : `${n}${result.truncated ? '+' : ''} file${n === 1 ? ' differs' : 's differ'} between ${said(labels.before)} and ${said(labels.after)}.`,
   });
 });
 
