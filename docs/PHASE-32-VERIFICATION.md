@@ -236,7 +236,7 @@ records that — but "✗ none" is proof of a gap.
 | f | `POST /api/presence/reply` |  | ✗ none | 1 | ✓ 0.4f: reaches the waiting agent once and is not re-queued; 400 without text (presence-channels; bug 25) |  |  |
 | f | `POST /api/screenshot-response` |  | ✗ none | 2 | ✓ 0.4f: the renderer's answer resolves the waiting request tool by nonce (graph-tools) |  |  |
 | g | `DELETE /api/breakpoints/:id` |  | ✗ none | 4 |  |  |  |
-| g | `GET /api/agent-events` |  | ✗ none | 8 |  |  |  |
+| g | `GET /api/agent-events` |  | ✗ none | 9 |  |  |  |
 | g | `GET /api/agent/status` |  | ✗ none | 3 | ✓ 0.4g: the session watcher's state, nothing more (misc-endpoints) |  |  |
 | g | `GET /api/awareness` |  | ✗ none | 27 |  |  |  |
 | g | `GET /api/breakpoint-hits` |  | ✗ none | 4 |  |  |  |
@@ -246,7 +246,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `GET /api/mcp/status` |  | ✗ none | 1 | ✓ 0.4g: running on the agents' port with connected agents counted (sessions) |  |  |
 | g | `GET /api/plans/:uid/budget/changes` |  | ✗ none | 1 | ✓ 0.4g: every change newest first, with channel and flag; no-op changes not recorded; unknown plan 404 (agent-ui-tools) |  |  |
 | g | `GET /api/plans/:uid/budget/check` |  | ✗ none | 1 | ✓ 0.4g: agrees with check_budget; unknown plan 404 (agent-ui-tools); bug 27 |  |  |
-| g | `GET /api/record` |  | ✗ none | 1 |  |  |  |
+| g | `GET /api/record` |  | ✗ none | 2 |  |  |  |
 | g | `GET /api/sensors/doc-check` |  | ✗ none | 1 | ✓ 0.4g: needs an opened project (400 / 403); nothing stale without docs (agent-ui-tools) — stale docs in 0.4l |  |  |
 | g | `GET /api/sessions` |  | ✗ none | 8 | ✓ 0.4g: a connected agent appears with its type and plan (sessions, agent-ui-tools) |  |  |
 | g | `GET /api/workstreams` |  | ✗ none | 24 |  |  |  |
@@ -315,7 +315,7 @@ records that — but "✗ none" is proof of a gap.
 | k | `GET /api/plans-folder` |  | ✗ none | 1 |  |  |  |
 | k | `GET /api/power/status` |  | ✗ none | 2 | ✓ 0.4j: same as the phone's power.status (phone-channels-projects) |  |  |
 | k | `GET /api/review-host` |  | ✗ none | 1 |  |  |  |
-| k | `GET /api/settings` |  | ✗ none | 11 | ✓ 0.4k: every section; what was saved comes back after a restart (settings-surface) |  |  |
+| k | `GET /api/settings` |  | ✗ none | 12 | ✓ 0.4k: every section; what was saved comes back after a restart (settings-surface) |  |  |
 | k | `GET /api/settings/first-run-check` |  | ✗ none | 3 | ✓ 0.4k: incomplete, then complete once saved, with the identity (settings-surface) |  |  |
 | k | `GET /api/shared-task-state` |  | ✗ none | 3 |  |  |  |
 | k | `GET /api/updates/download/status` |  | ✗ none | 1 | ✓ 0.4k: idle and complete before anything is downloaded (update-download) |  |  |
@@ -328,7 +328,7 @@ records that — but "✗ none" is proof of a gap.
 | k | `PUT /api/plans-folder` |  | ✗ none | 1 |  |  |  |
 | k | `PUT /api/review-host` |  | ✗ none | 2 |  |  |  |
 | k | `PUT /api/review-host/token` |  | ✗ none | 2 |  |  |  |
-| k | `PUT /api/settings` |  | 1 | 24 | ✓ 0.4k: partial saves keep siblings (nested too), hosts normalised, windows told; every field checked, a bad value 400 with the reason and nothing stored (settings-surface); phone-safe subset from the phone (phone-channels-projects) |  |  |
+| k | `PUT /api/settings` |  | 1 | 25 | ✓ 0.4k: partial saves keep siblings (nested too), hosts normalised, windows told; every field checked, a bad value 400 with the reason and nothing stored (settings-surface); phone-safe subset from the phone (phone-channels-projects) |  |  |
 | k | `PUT /api/shared-task-state` |  | ✗ none | 4 |  |  |  |
 | l | `DELETE /api/system-docs/:uid` |  | ✗ none | 2 | ✓ 0.4j: removed, desktop told; unknown 404 not ok:false (phone-terminals-sysdocs) |  |  |
 | l | `GET /api/system-docs` |  | ✗ none | 4 | ✓ 0.4l: same as list_system_docs; outside a project refused (sysdocs-intake, phone-terminals-sysdocs) |  |  |

@@ -39,7 +39,7 @@ import { markDirty } from './persistence';
 import { currentBranch } from './git-checkout';
 import { readLiveGraph, type TrellisSnapshotData } from './trellis-service';
 import { watchRefs } from './workstream-watch-service';
-import { RETENTION_DAYS } from './agent-event-log';
+import { retentionCutoff } from './retention';
 import { TURN_GAP_MS } from '../../shared/lib/turn-gap';
 
 export type FrameReason = 'turn-end' | 'status' | 'commit';
@@ -377,7 +377,9 @@ export function listFrames(projectPath: string, q: FrameQuery = {}): ReplayFrame
 
 /** Drop frames older than the retention window that no kept frame points at. */
 export function pruneFrames(now = Date.now()): number {
-  const cutoff = now - RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  // The window the person set (B10.2); keeping everything prunes nothing.
+  const cutoff = retentionCutoff(now);
+  if (cutoff === null) return 0;
   const db = getDb();
   const before = Number(db.exec(`SELECT COUNT(*) FROM trellis_snapshots WHERE snapshot_type = 'frame'`)[0]?.values[0]?.[0]) || 0;
   db.run(

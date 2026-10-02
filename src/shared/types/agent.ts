@@ -32,7 +32,9 @@ export type AgentEventType =
   /** A person decided a spec proposal: accepted, amended or rejected (Phase 32 B10.1). */
   | 'spec_decided'
   /** A person set or stopped an architecture rule (Phase 32 B10.1). */
-  | 'rule_changed';
+  | 'rule_changed'
+  /** A person changed how long the record is kept (Phase 32 B10.2). */
+  | 'retention_changed';
 
 export interface AgentEvent {
   id: string;

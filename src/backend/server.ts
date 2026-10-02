@@ -51,9 +51,9 @@ import { pendingArrivals, planArrivals, acceptArrival, type SkillArrival } from 
 import { releaseSettled } from './services/signal-breakpoints';
 import { listBreakpoints, getBreakpoint, setBreakpoint, clearBreakpoint, listHits, getHit, answerHit, cleanNote, BreakpointError, DECISIONS } from './services/breakpoint-service';
 import { verifyRecord } from './services/record-chain';
-import { startAgentEventLog, recordDecision, listAgentEvents, setEventPublisher, setRecordedListener, actingSession, workstreamOfItem, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
+import { startAgentEventLog, recordDecision, pruneAgentEvents, listAgentEvents, setEventPublisher, setRecordedListener, actingSession, workstreamOfItem, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
 import { stateAt } from './services/replay-state';
-import { startReplayFrames, setHeldProject, setFramePublisher, noteAgentActivity, requestFrame, noteRefsChanged, seedHeads, listFrames, DEFAULT_FRAME_LIMIT } from './services/replay-frames';
+import { startReplayFrames, pruneFrames, setHeldProject, setFramePublisher, noteAgentActivity, requestFrame, noteRefsChanged, seedHeads, listFrames, DEFAULT_FRAME_LIMIT } from './services/replay-frames';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
@@ -165,7 +165,8 @@ import * as terminalService from './services/terminal-service';
 import * as powerService from './services/power-service';
 import * as terminalHistoryService from './services/terminal-history-service';
 import * as planImportService from './services/plan-import-service';
-import { tailLog, getCurrentLogPath, getLogDir, isWritingLogFile } from './services/logger';
+import { tailLog, getCurrentLogPath, getLogDir, isWritingLogFile, setLogRetention, pruneOldLogs } from './services/logger';
+import { retentionDays, retentionWords } from './services/retention';
 import {
   getUpdateState,
   checkForUpdate,
@@ -5196,6 +5197,22 @@ app.put('/api/settings', (req, res) => {
   if (before.mcp.port !== next.mcp.port) {
     broadcast('mcp-port-config-changed', { configuredPort: next.mcp.port });
   }
+  // B10.2 — a new retention window applies at once, and is itself kept in
+  // the record: shortening it is what removes evidence.
+  if (before.data.retentionDays !== next.data.retentionDays) {
+    const person = personFrom(req);
+    recordDecision('retention_changed', {
+      from: before.data.retentionDays, to: next.data.retentionDays,
+      fromWords: retentionWords(before.data.retentionDays), toWords: retentionWords(next.data.retentionDays),
+      author: person.author, authorType: person.authorType,
+    }, person.authorType);
+    setLogRetention(next.data.retentionDays);
+    try {
+      pruneAgentEvents();
+      pruneFrames();
+      if (next.data.retentionDays !== null) pruneOldLogs(getLogDir(), new Date(), next.data.retentionDays);
+    } catch (err) { console.warn('[Retention] applying the new window failed:', err); }
+  }
   // Phase 19 — live-toggle the LAN listener when the user changes it.
   //
   // Without this, turning exposure OFF would leave :19480 bound until the
@@ -6157,6 +6174,8 @@ export async function initializeBackend(): Promise<void> {
 
   // Phase 32 B1: keep every agent event that is broadcast, from here on.
   // This launch's token is masked if a tool argument ever carries it.
+  // How long things are kept is the person's (B10.2); the log files learn it here.
+  setLogRetention(retentionDays());
   startAgentEventLog(addBroadcastTarget, () => [getCapabilityToken()]);
   // B1.2: what the app records itself (a spec body edited) goes out the same way.
   setEventPublisher(broadcast);

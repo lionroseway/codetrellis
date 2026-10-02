@@ -21,7 +21,7 @@ import { getDb } from '../database';
 import { markDirty } from '../persistence';
 import { readFileWithin, resolveWithin, ConfinementError } from '../confined-fs';
 import { parseJUnit, testLabel, type TestCase, type TestResult } from './junit';
-import { RETENTION_DAYS } from '../agent-event-log';
+import { retentionCutoff } from '../retention';
 
 export const MAX_REPORT_BYTES = 20 * 1024 * 1024;
 
@@ -116,10 +116,13 @@ export function ingestTestReport(
   const id = Number(db.exec('SELECT id FROM test_reports WHERE project_root = ? AND sha256 = ?', [projectRoot, sha256])[0].values[0][0]);
   // B8.4b: the report's own cases, for what the tests said at a past moment.
   // Kept as long as replay frames are.
-  db.run(
-    'DELETE FROM test_report_cases WHERE report_id IN (SELECT id FROM test_reports WHERE project_root = ? AND reported_at < ?)',
-    [projectRoot, now - RETENTION_DAYS * 86_400_000],
-  );
+  const cutoff = retentionCutoff(now);
+  if (cutoff !== null) {
+    db.run(
+      'DELETE FROM test_report_cases WHERE report_id IN (SELECT id FROM test_reports WHERE project_root = ? AND reported_at < ?)',
+      [projectRoot, cutoff],
+    );
+  }
   for (const c of parsed.cases) {
     db.run(
       `INSERT OR REPLACE INTO test_report_cases (report_id, test_key, suite, classname, name, file, result, duration_ms, message)

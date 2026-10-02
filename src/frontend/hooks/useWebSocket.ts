@@ -251,9 +251,9 @@ export function useWebSocket() {
           }
           if (type === 'settings-changed') {
             // Another window saved settings. Settings panel re-reads
-            // on open; if it's currently open, the user may want to
-            // reload — but we don't have a clean push channel into
-            // SettingsModal yet. Future: dispatch a window event.
+            // on open; sections that follow a setting listen here
+            // (the record re-walks after its window changes, B10.2).
+            window.dispatchEvent(new CustomEvent('settings-changed'));
           }
 
           // --- Agent pulse — visual cue that an agent drove a UI change ---

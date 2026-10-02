@@ -58,11 +58,35 @@ describe('recording', () => {
     assert.equal(audit.listPeerAudit()[0].alias, 'Old name');
   });
 
-  test('is bounded — a networked peer must not be able to fill the disk', () => {
-    for (let i = 0; i < 2500; i++) audit.recordPeerAudit(entry({ method: `m${i}` }));
-    const all = audit.listPeerAudit({ limit: 2000 });
-    assert.ok(all.length <= 2000, `capped, got ${all.length}`);
-    assert.equal(all[0].method, 'm2499', 'and it is the OLDEST that is dropped');
+  test('is bounded — a networked peer must not be able to fill the disk', async () => {
+    const { DEVICE_LOG_CAP } = await import('./retention');
+    for (let i = 0; i < DEVICE_LOG_CAP + 500; i++) audit.recordPeerAudit(entry({ method: `m${i}` }));
+    const all = audit.listPeerAudit({ limit: DEVICE_LOG_CAP + 500 });
+    assert.equal(all.length, DEVICE_LOG_CAP, 'capped');
+    assert.equal(all[0].method, `m${DEVICE_LOG_CAP + 499}`);
+    assert.equal(all[all.length - 1].method, 'm500', 'and it is the OLDEST that is dropped');
+  });
+
+  test('entries older than the retention window go; keeping everything keeps them (B10.2)', async () => {
+    const { updateSettings, getSettings } = await import('./settings-service');
+    const old = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString();
+    const recent = new Date().toISOString();
+    const file = path.join(tmp, 'peer-audit.json');
+    const write = () => fs.writeFileSync(file, JSON.stringify([{ ...entry({ method: 'old' }), at: old }, { ...entry({ method: 'recent' }), at: recent }]));
+    const was = getSettings().data;
+    try {
+      updateSettings({ data: { ...was, retentionDays: 14 } });
+      write();
+      audit._resetAuditCache();
+      assert.deepEqual(audit.listPeerAudit().map((e) => e.method), ['recent']);
+
+      updateSettings({ data: { ...was, retentionDays: null } });
+      write();
+      audit._resetAuditCache();
+      assert.deepEqual(audit.listPeerAudit().map((e) => e.method), ['recent', 'old']);
+    } finally {
+      updateSettings({ data: was });
+    }
   });
 });
 

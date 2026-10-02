@@ -139,7 +139,18 @@ export interface DataSettings {
    * - `'full'`: entire pantry (DB minus machine-local exclusions).
    */
   personalSyncMode: PersonalSyncMode;
+  /**
+   * Phase 32 B10.2 — how long the record and the activity around it are
+   * kept, in days: agent events (and so the record), replay snapshots,
+   * signal spans, test runs, log files and the device log. `null` keeps
+   * everything. One of `RETENTION_CHOICES`; the person's to set.
+   */
+  retentionDays: RetentionDays;
 }
+
+/** The choices for `data.retentionDays` (B10.2); `null` keeps everything. */
+export const RETENTION_CHOICES = [14, 30, 90, 365, null] as const;
+export type RetentionDays = (typeof RETENTION_CHOICES)[number];
 
 /**
  * Session-persistence plan / Track A — independent triggers for the
@@ -275,6 +286,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     dataDirOverride: '',
     personalSyncPath: '',
     personalSyncMode: 'none',
+    retentionDays: 14,
   },
   device: {
     deviceName: '',  // '' = auto-detect from os.hostname()

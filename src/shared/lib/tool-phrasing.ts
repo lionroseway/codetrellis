@@ -362,6 +362,11 @@ export function phraseEvent(event: AgentEvent, vocabulary: PhraseVocabulary = 'c
     const amended = payload.decision === 'amend' ? ', with changes' : '';
     return { text: `${whoDid(payload.authorType)} ${said[String(payload.decision)] ?? 'decided'} a proposed spec change${section}${amended}`, intent: payload.decision === 'reject' ? 'error' : 'write', tool: null, mutating: true };
   }
+  if (event.type === 'retention_changed') {
+    const words = (v: unknown) => (typeof v === 'string' && v ? v : 'another window');
+    const shorter = typeof payload.to === 'number' && (payload.from === null || (typeof payload.from === 'number' && payload.to < payload.from));
+    return { text: `${whoDid(payload.authorType)} changed how long the record is kept, from ${words(payload.fromWords)} to ${words(payload.toWords)}`, intent: shorter ? 'error' : 'write', tool: null, mutating: true };
+  }
   if (event.type === 'rule_changed') {
     const rule = typeof payload.from === 'string' && typeof payload.mayNotImport === 'string' ? ` “${payload.from} may not import ${payload.mayNotImport}”` : ` ${String(payload.ruleId ?? '')}`;
     return { text: `${whoDid(payload.authorType)} ${payload.change === 'stopped' ? 'stopped' : 'set'} the architecture rule${rule}`, intent: 'write', tool: null, mutating: true };

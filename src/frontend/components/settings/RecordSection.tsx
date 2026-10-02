@@ -39,7 +39,13 @@ export function RecordSection() {
     }
   }, []);
 
-  useEffect(() => { void verify(); }, [verify]);
+  useEffect(() => {
+    void verify();
+    // A new retention window trims the record at once (B10.2): walk it again.
+    const again = () => { void verify(); };
+    window.addEventListener('settings-changed', again);
+    return () => window.removeEventListener('settings-changed', again);
+  }, [verify]);
 
   return (
     <div data-testid="record-section" className="mt-5 pt-4 border-t border-white/[0.06] space-y-2">
