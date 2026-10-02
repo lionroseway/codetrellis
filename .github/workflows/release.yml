@@ -78,7 +78,8 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # Scripts off, patches by hand: see ci.yml (Phase 32 HD4c).
+        run: npm ci --ignore-scripts && npx patch-package && node scripts/check-patches.cjs
 
       # rpm tooling for the Linux runner — `dpkg-deb` is preinstalled
       # on ubuntu-latest, but rpmbuild is not.

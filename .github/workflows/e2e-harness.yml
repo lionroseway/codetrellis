@@ -64,7 +64,8 @@ jobs:
           cache: npm
 
       - name: Install
-        run: npm ci
+        # Scripts off, patches by hand: see ci.yml (Phase 32 HD4c).
+        run: npm ci --ignore-scripts && npx patch-package && node scripts/check-patches.cjs
 
       # Guard against the failure that made this suite look flaky for months.
       # A wrong-architecture better_sqlite3.node makes every backend-booting

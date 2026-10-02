@@ -128,8 +128,17 @@ jobs:
       # `npm ci` and not `npm install`: CI installs exactly the lockfile, and
       # fails if package.json and the lockfile disagree. That disagreement is
       # worth failing on — it means someone edited one without the other.
+      #
+      # --ignore-scripts on every root install (Phase 32 HD4c). npm 11.19 still
+      # runs dependency install scripts, only warning that it will stop: so
+      # better-sqlite3 rebuilt from source on every job, downloading Node's
+      # headers, and on #224 node-gyp crashed doing it before any test ran.
+      # better-sqlite3 and node-pty load from their prebuilds (checked below
+      # and by the harness), esbuild from its platform package, and the
+      # grammars' .wasm files are committed. The root postinstall is a script
+      # too, so patch-package is run by hand and check-patches proves it.
       - name: Install
-        run: npm ci
+        run: npm ci --ignore-scripts && npx patch-package && node scripts/check-patches.cjs
 
       - name: Typecheck
         run: npm run typecheck
@@ -240,7 +249,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - name: Install
-        run: npm ci
+        run: npm ci --ignore-scripts && npx patch-package && node scripts/check-patches.cjs
       - name: Install mobile dependencies
         run: npm ci --prefix mobile
       - name: Install Playwright runner
@@ -279,7 +288,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - name: Install
-        run: npm ci && node node_modules/electron/install.js
+        run: npm ci --ignore-scripts && npx patch-package && node scripts/check-patches.cjs && node node_modules/electron/install.js
       - name: Allow Chromium's sandbox its user namespaces
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - name: Hostile report
@@ -323,7 +332,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - name: Install
-        run: npm ci
+        run: npm ci --ignore-scripts && npx patch-package && node scripts/check-patches.cjs
       # A wrong-architecture native binding fails every backend-booting test at
       # once and reads as flakiness. Fail here with the fix instead.
       - name: Verify native binding
@@ -395,7 +404,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - name: Install
-        run: npm ci
+        run: npm ci --ignore-scripts && npx patch-package && node scripts/check-patches.cjs
       - name: Verify native binding
         run: |
           node -e "const B=require('better-sqlite3');new B(':memory:').exec('create table t(a)');console.log('better-sqlite3 OK on',process.version,process.arch)" \

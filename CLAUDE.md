@@ -207,12 +207,18 @@ a tagged candidate and on packaged artifacts.
   longer the reflex.** v13 ships per-platform prebuilds under
   `node_modules/better-sqlite3/prebuilds/`, and there is no
   `build/Release/*.node` to inspect — the `file` check above applies to
-  v11 only. This matters because **npm 11.19+ does not run install
-  scripts by default**: `npm ci` prints an `install-scripts` warning and
-  skips `better-sqlite3`'s `node-gyp rebuild` (and `node-pty`'s)
-  entirely. Both load anyway, from their prebuilds — verified on Node
-  26.9.0 / npm 11.19.1. So treat that warning as expected, and check
-  that the module *loads* rather than that a script ran:
+  v11 only. **npm 11.19 still runs install scripts** — its
+  `install-scripts … not yet covered by allowScripts` warning says a later
+  version will stop, not that this one has (an earlier note here said it
+  skipped them; Phase 32 HD4c measured otherwise). So a plain `npm ci`
+  rebuilds `better-sqlite3` from source with node-gyp, which downloads
+  Node's headers and once crashed a CI job doing it. **CI installs with
+  `npm ci --ignore-scripts`**, and both modules load from their prebuilds.
+  That flag also skips the root `postinstall`, which is `patch-package`, so
+  every such install is followed by `npx patch-package && node
+  scripts/check-patches.cjs` — without it werift ships unpatched, which the
+  CI-built installers did until HD4c. Check that the modules *load*, not
+  that a script ran:
 
   ```
   node -e "new (require('better-sqlite3'))(':memory:'); console.log('ok')"

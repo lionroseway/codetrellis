@@ -57,6 +57,11 @@ jobs:
         # grammar package kept only as the source of a committed .wasm, and
         # node-gyp failed on its nested path. Say it, so no runner differs.
         run: npm ci --ignore-scripts
+      - name: Apply patches/
+        # The root postinstall is a script too, so --ignore-scripts skipped
+        # patch-package and these installers shipped werift unpatched (Phase 32
+        # HD4c). Apply them by hand, then prove every hunk is in node_modules.
+        run: npx patch-package && node scripts/check-patches.cjs
       - name: Build NSIS installer + portable exe
         run: npm run package:win -- --publish never
       - name: Verify the build stamp
@@ -93,6 +98,11 @@ jobs:
         # grammar package kept only as the source of a committed .wasm, and
         # node-gyp failed on its nested path. Say it, so no runner differs.
         run: npm ci --ignore-scripts
+      - name: Apply patches/
+        # The root postinstall is a script too, so --ignore-scripts skipped
+        # patch-package and these installers shipped werift unpatched (Phase 32
+        # HD4c). Apply them by hand, then prove every hunk is in node_modules.
+        run: npx patch-package && node scripts/check-patches.cjs
       - name: Install rpm tooling
         # ubuntu-latest has dpkg/fakeroot for .deb, but not rpmbuild for .rpm.
         run: sudo apt-get update && sudo apt-get install -y rpm
@@ -132,6 +142,11 @@ jobs:
         # grammar package kept only as the source of a committed .wasm, and
         # node-gyp failed on its nested path. Say it, so no runner differs.
         run: npm ci --ignore-scripts
+      - name: Apply patches/
+        # The root postinstall is a script too, so --ignore-scripts skipped
+        # patch-package and these installers shipped werift unpatched (Phase 32
+        # HD4c). Apply them by hand, then prove every hunk is in node_modules.
+        run: npx patch-package && node scripts/check-patches.cjs
       - name: Install rpm tooling
         run: sudo apt-get update && sudo apt-get install -y rpm
       - name: Build AppImage + .deb + .rpm (arm64)

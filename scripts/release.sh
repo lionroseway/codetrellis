@@ -89,6 +89,9 @@ fi
 
 # --- Build macOS locally (signed + notarized) ---
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
+  # A node_modules installed with scripts off has no patches applied, and
+  # packaging would ship it that way (Phase 32 HD4c).
+  node scripts/check-patches.cjs || { err "patches/ is not applied — run: npx patch-package"; exit 1; }
   log "Building signed + notarized macOS DMGs (arm64 + x64)…"
   log "  (electron-builder runs Apple notarization inline — can take several minutes)"
   npm run package:mac:signed
