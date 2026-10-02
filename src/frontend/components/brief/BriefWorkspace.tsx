@@ -28,6 +28,7 @@ import { AgentTurnList, useAgentTurns } from '../layout/AgentTurns';
 import { openArtefactAt } from '../../lib/open-artefact-at';
 import { BRIEF_WORDS, briefState } from '../../lib/brief-vocabulary';
 import { SignoffPackControls } from './SignoffPackControls';
+import { EvidenceControls } from './EvidenceControls';
 import type { ItemCriterion, PlanItem, TaskAttachment } from '@shared/types';
 import { authorKind } from '../../lib/author-words';
 import { UnverifiedIf } from '../UnverifiedTag';
@@ -296,6 +297,10 @@ export function BriefWorkspace() {
           </ul>
         )}
         <SignoffPackControls planUid={plan.uid} planTitle={plan.title} />
+        <section className="mt-6">
+          <h2 className="text-[11px] uppercase tracking-[0.1em] text-foreground-subtle font-semibold mb-2">Evidence</h2>
+          <EvidenceControls scope={{ plan: plan.uid }} name={plan.title} />
+        </section>
       </aside>
 
       <main className="overflow-y-auto px-8 py-6" data-testid="brief-task">

@@ -779,6 +779,7 @@ the PR with your own credentials.
 | \`resolve_conflict(project_path, file_path, resolutions[])\` | Resolve field by field and stage the result |
 | \`get_freeze_status(project_path)\` / \`check_freeze(project_path)\` | Is the repo locked down for a release? |
 | \`verify_record()\` | Is the record intact? Every agent event and every person's decision is linked into a hash chain as it is written; this names anything changed, removed or added around it since |
+| \`export_evidence(plan_uid)\` or \`export_evidence(project_path, from, to)\` | One signed package for an auditor: the record's entries in the window with how to recompute each link, the recorded moments, the stack and signals at both ends, the breakpoints and decisions, and a plan's sign-off pack. A person verifies it in the Brief or from replay |
 | \`set_freeze(project_path, active, reason?)\` | Lock or unlock it |
 | \`exempt_plan_from_freeze(plan_uid, project_path)\` | Let one plan through the freeze |
 

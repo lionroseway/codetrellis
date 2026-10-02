@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track B — B10.3: signed packs, carrying the record's head"
-  status: "B10.2 in review (#310). B10.3 built: every sign-off pack (data, page, PDF) is signed with this computer's device key in its own namespace and carries the record's head; verify says who signed it (this computer, a trusted teammate, an unknown key), whether it changed since, and whether the record it names still holds. Unit pack-seal 6, harness signoff-surface (sealed, edited, unsigned), browser signoff-pack (shots)"
-  next: "Merge B10.2 (#310), then B10.3 by the stacked flow; then B10.4 (the evidence export)"
+  step: "Track B — B10.4: the evidence export"
+  status: "B10.2 in review (#310), B10.3 in review (#311, stacked). B10.4 built: GET /api/evidence (a plan, or a window of an opened project; JSON or the page), export_evidence (read), POST /api/evidence/verify; one package with the record's entries and the link before them (recomputable from the file alone), the frames, the stack and signals at both ends, the breakpoints and decisions in words, and the plan's sign-off pack, signed like a pack in its own namespace. Verify says who signed it, whether its chain holds, and on the computer that made it, any entry changed in the record since. From the Brief and the replay bar. Unit evidence 8, harness evidence 6, browser evidence (shots)"
+  next: "Merge B10.2 (#310), then B10.3 (#311) and B10.4 by the stacked flow; then B10.5 (the G2 done-when and docs/claude/record.md)"
   blockers: "None"
   updated: 2026-10-02
 sections:

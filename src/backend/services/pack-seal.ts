@@ -26,6 +26,9 @@ import { deviceKey } from './task-records/trust';
 import { recordHead } from './record-chain';
 
 export const PACK_NAMESPACE = 'codetrellis-signoff-pack';
+/** The evidence export (B10.4) is sealed the same way, in its own namespace: neither passes for the other. */
+export const EVIDENCE_NAMESPACE = 'codetrellis-evidence';
+type Noun = 'pack' | 'export';
 
 export interface PackSeal {
   how: 'device';
@@ -53,19 +56,24 @@ export interface SealCheck {
   words: string;
 }
 
-/** The bytes a seal signs: the pack without its seal, as a saved page reads it back. */
-export function sealBytes(pack: Record<string, unknown>): string {
+/** The bytes a seal signs: the document without its seal, as a saved page reads it back. */
+export function sealBytes(pack: Record<string, unknown>, namespace = PACK_NAMESPACE): string {
   const { seal: _seal, ...rest } = pack;
-  return `${PACK_NAMESPACE}\n${canonicalJson(JSON.parse(JSON.stringify(rest)))}`;
+  return `${namespace}\n${canonicalJson(JSON.parse(JSON.stringify(rest)))}`;
 }
 
-/** The pack, sealed with this computer's key, carrying the record's head now (signed with the rest). */
-export function sealPack<T extends object>(pack: T): T & { sealedRecord: SealedRecord; seal: PackSeal } {
+/** A document, sealed with this computer's key, carrying the record's head now (signed with the rest). */
+export function sealDocument<T extends object>(namespace: string, doc: T): T & { sealedRecord: SealedRecord; seal: PackSeal } {
   const key = deviceKey();
-  const { seal: _old, ...rest } = pack as Record<string, unknown>;
+  const { seal: _old, ...rest } = doc as Record<string, unknown>;
   const body = { ...rest, sealedRecord: recordHead() } as T & { sealedRecord: SealedRecord };
-  const value = signWithDevice(key, sealBytes(body as Record<string, unknown>)).value;
+  const value = signWithDevice(key, sealBytes(body as Record<string, unknown>, namespace)).value;
   return { ...body, seal: { how: 'device', key: key.fingerprint, publicKey: key.publicKey, value } };
+}
+
+/** The pack, sealed. */
+export function sealPack<T extends object>(pack: T): T & { sealedRecord: SealedRecord; seal: PackSeal } {
+  return sealDocument(PACK_NAMESPACE, pack);
 }
 
 function parseSeal(raw: unknown): PackSeal | null {
@@ -103,17 +111,22 @@ const RECORD_WORDS: Record<SealRecordState, string> = {
 
 /** Who sealed a pack, whether it changed since, and whether the record it names still holds. Never throws. */
 export function checkSeal(pack: unknown): SealCheck {
-  const p = (pack && typeof pack === 'object' ? pack : {}) as Record<string, unknown>;
+  return checkDocumentSeal(PACK_NAMESPACE, 'pack', pack);
+}
+
+/** The same, for any sealed document in its namespace. */
+export function checkDocumentSeal(namespace: string, noun: Noun, doc: unknown): SealCheck {
+  const p = (doc && typeof doc === 'object' ? doc : {}) as Record<string, unknown>;
   const seal = parseSeal(p.seal);
   if (!seal) {
-    return { state: 'unsigned', fingerprint: null, signer: null, record: null, words: 'This pack is not signed: it was made before packs were signed, or its signature was removed.' };
+    return { state: 'unsigned', fingerprint: null, signer: null, record: null, words: noun === 'pack' ? 'This pack is not signed: it was made before packs were signed, or its signature was removed.' : 'This export is not signed: its signature was removed.' };
   }
   const short = `${shortFingerprint(seal.key)}…`;
   const record = parseRecord(p.sealedRecord);
   const intact = record !== null && fingerprintOf(seal.publicKey) === seal.key
-    && verifyWithDevice(seal.publicKey, sealBytes(p), seal.value);
+    && verifyWithDevice(seal.publicKey, sealBytes(p, namespace), seal.value);
   if (!intact) {
-    return { state: 'changed', fingerprint: seal.key, signer: null, record: null, words: `Changed after it was signed: this pack no longer matches its signature (key ${short}).` };
+    return { state: 'changed', fingerprint: seal.key, signer: null, record: null, words: `Changed after it was signed: this ${noun} no longer matches its signature (key ${short}).` };
   }
   const mine = deviceKey().fingerprint === seal.key;
   if (mine) {

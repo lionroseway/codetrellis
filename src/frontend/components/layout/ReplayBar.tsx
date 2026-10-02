@@ -16,6 +16,7 @@ import { PlaybackBar } from '../inspector/PlaybackBar';
 import { useReplayStore } from '../../stores/replay-store';
 import { useProjectStore } from '../../stores/project-store';
 import { frameWords, replayRangeWords, toPlaybackFrames } from '../../lib/replay';
+import { EvidenceControls } from '../brief/EvidenceControls';
 
 /** The moment's words sit under the bar; the transport bar's own line stays empty. */
 const noSummary = (): string => '';
@@ -40,7 +41,7 @@ export function ReplayStart() {
 }
 
 export function ReplayBar() {
-  const { active, root: replayRoot, frames, index, state, loading, error, autoplay, setIndex, exit } = useReplayStore();
+  const { active, root: replayRoot, from, frames, index, state, loading, error, autoplay, setIndex, exit } = useReplayStore();
   const root = useProjectStore((s) => s.root);
   const playback = useMemo(() => toPlaybackFrames(frames), [frames]);
   // Another project opened: its moments are not these.
@@ -91,6 +92,9 @@ export function ReplayBar() {
             </div>
           )}
         </>
+      )}
+      {replayRoot && from !== null && (
+        <EvidenceControls compact scope={() => ({ project: replayRoot, from, to: Date.now() })} name="replay-window" />
       )}
     </div>
   );
