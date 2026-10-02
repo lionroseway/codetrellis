@@ -126,7 +126,7 @@ test.describe('Compare two points', () => {
 
     // A file opens its diff between those two, both named.
     await panel.getByTestId('pair-file').filter({ hasText: FILE }).click();
-    await expect(page.getByTestId('code-compare-words')).toContainText('Where main and billing-v2 split (a1b2c3d) → billing-v2');
+    await expect(page.getByTestId('code-compare-words')).toHaveText('Two points: Where main and billing-v2 split (a1b2c3d) → billing-v2');
     await expect(page.getByTestId('code-git-command')).toHaveText(`$ git diff main...billing-v2 -- ${FILE}`);
     await diffLoaded(page);
     await expect.poll(() => asked).toEqual(expect.arrayContaining([`${FILE}|${SPLIT}`, `${FILE}|commit:refs/heads/billing-v2`]));

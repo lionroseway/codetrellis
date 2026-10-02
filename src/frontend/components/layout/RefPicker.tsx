@@ -58,25 +58,24 @@ export function RefPicker({ side, value, onChange }: { side: 'before' | 'after';
   }, [refs, filter]);
 
   return (
-    <div className="relative min-w-0 flex-1" ref={box} data-testid="ref-picker" data-side={side}>
+    <div className="min-w-0" ref={box} data-testid="ref-picker" data-side={side}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-1 px-2 py-1 rounded-md border border-border bg-surface text-left hover:border-accent-glow"
+        className="w-full flex items-center gap-1.5 px-2 py-1 rounded-md border border-border bg-surface text-left hover:border-accent-glow"
         title={chosen ? `${chosen.name}: ${chosen.words}` : value}
         data-testid="ref-picker-open"
       >
-        <span className="min-w-0 flex-1">
-          <span className="block text-[9px] uppercase tracking-[0.1em] text-foreground-subtle">{side === 'before' ? 'From' : 'To'}</span>
-          <span className="flex items-center gap-1 min-w-0">
-            <span className="truncate text-[11px] text-foreground" data-testid="ref-picker-name">{chosen?.name ?? value}</span>
-            {chosen && <span className="shrink-0 font-mono text-[9px] px-1 rounded bg-white/[0.05] text-foreground-subtle">{chosen.term}</span>}
-          </span>
+        <span className="shrink-0 w-8 text-[9px] uppercase tracking-[0.1em] text-foreground-subtle">{side === 'before' ? 'From' : 'To'}</span>
+        <span className="min-w-0 flex-1 flex items-center gap-1">
+          <span className="truncate text-[11px] text-foreground" data-testid="ref-picker-name">{chosen?.name ?? value}</span>
+          {chosen && <span className="shrink-0 font-mono text-[9px] px-1 rounded bg-white/[0.05] text-foreground-subtle">{chosen.term}</span>}
         </span>
         <ChevronDown size={11} className="shrink-0 text-foreground-subtle" />
       </button>
       {open && (
-        <div className="absolute z-30 left-0 mt-1 w-[300px] max-h-[360px] flex flex-col rounded-lg border border-border bg-surface shadow-xl" data-testid="ref-menu">
+        // In the flow, not floating: the sidebar is narrow and scrolls, and a floating list was clipped by it.
+        <div className="mt-1 max-h-[320px] flex flex-col rounded-lg border border-border bg-background" data-testid="ref-menu">
           <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-border-subtle">
             <Search size={11} className="text-foreground-subtle shrink-0" />
             <input
@@ -166,18 +165,20 @@ export function ComparePair() {
       {open && (
         <div className="px-1.5 space-y-1.5">
           <div className="flex items-center gap-1">
-            <RefPicker side="before" value={pair?.before ?? defaultPair(refs).before} onChange={(spec) => change({ before: spec })} />
+            <div className="min-w-0 flex-1 space-y-1">
+              <RefPicker side="before" value={pair?.before ?? defaultPair(refs).before} onChange={(spec) => change({ before: spec })} />
+              <RefPicker side="after" value={pair?.after ?? 'live'} onChange={(spec) => change({ after: spec })} />
+            </div>
             <button
               type="button"
               onClick={() => pair && change({ before: pair.after, after: pair.before })}
-              className="shrink-0 p-1 rounded text-foreground-subtle hover:text-foreground hover:bg-surface-hover"
+              className="shrink-0 self-start mt-1.5 p-1 rounded text-foreground-subtle hover:text-foreground hover:bg-surface-hover"
               title="Swap the two sides"
               aria-label="Swap the two sides"
               data-testid="compare-swap"
             >
-              <ArrowLeftRight size={11} />
+              <ArrowLeftRight size={11} className="rotate-90" />
             </button>
-            <RefPicker side="after" value={pair?.after ?? 'live'} onChange={(spec) => change({ after: spec })} />
           </div>
           <label
             className={`flex items-center gap-1.5 text-[10px] ${pair && canSplit(pair) ? 'text-foreground-muted' : 'text-foreground-subtle/60'}`}

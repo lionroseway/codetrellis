@@ -227,8 +227,8 @@ export const useSourceControlStore = create<SourceControlState>((set, get) => ({
       compare: {
         path: file.path, groupId: 'pair', before: r.before, after: r.after, labels: r.labels,
         command: r.command ? `${r.command} -- ${file.path}` : '',
-        title: `${r.labels.before} → ${r.labels.after}`,
-        words: r.words.replace(/\.$/, ''),
+        title: 'Two points',
+        words: `${r.labels.before} → ${r.labels.after}`,
       },
     });
     const ui = useUiStore.getState();
