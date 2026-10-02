@@ -20,6 +20,9 @@ interface EvidenceCheck {
   words: string;
 }
 
+/** A sentence continuing after "holds:", so it starts in lower case. */
+const afterColon = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+
 const tone = (good: boolean, warn = false) => (good ? 'text-emerald-300' : warn ? 'text-amber-300' : 'text-red-300');
 
 /** What the export covers: a plan, or a window of an opened project. */
@@ -100,7 +103,17 @@ export function EvidenceControls({ scope, name, compact = false }: { scope: Evid
           onChange={(e) => { const f = e.target.files?.[0]; if (f) void verify(f); }} />
       </div>
       {message && <p className="mt-2 text-[11px] text-foreground-subtle break-words" data-testid="evidence-message">{message}</p>}
-      {result && (
+      {result && compact && (
+        // On the replay bar: the verdict and the one sentence that matters; the rest on hover.
+        <p className={`mt-1.5 text-[10.5px] ${tone(result.ok)}`} data-testid="evidence-verification" data-ok={result.ok ? 'true' : 'false'} title={result.words}>
+          {result.ok ? '✓ This evidence holds: ' : '✕ This evidence does not hold: '}
+          {afterColon(result.ok ? result.chain.words
+            : !sealGood ? result.seal.words
+              : !result.chain.ok ? result.chain.words
+                : result.here.state === 'differs' ? result.here.words : result.words)}
+        </p>
+      )}
+      {result && !compact && (
         <div className="mt-2 text-[11.5px] space-y-1" data-testid="evidence-verification" data-ok={result.ok ? 'true' : 'false'}>
           <p className={`font-medium ${tone(result.ok)}`}>{result.ok ? '✓ This evidence holds.' : '✕ This evidence does not hold.'}</p>
           <p data-testid="evidence-seal" data-state={result.seal.state} className={tone(sealGood, result.seal.state === 'unknown-key' || result.seal.state === 'unsigned')}>{result.seal.words}</p>

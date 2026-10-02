@@ -4,7 +4,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { frameWords, hitsAsOf, replayRangeWords, signalsAsOf, statusesAsOf, toPlaybackFrames, type ReplayFrameInfo, type ReplayState } from './replay';
+import { frameWords, hitsAsOf, replayRangeWords, signalsAsOf, statusesAsOf, toPlaybackFrames, weekFrom, whenWords, type ReplayFrameInfo, type ReplayState } from './replay';
 
 const frame = (over: Partial<ReplayFrameInfo> = {}): ReplayFrameInfo => ({
   id: 1, at: new Date(2026, 8, 29, 10, 2).getTime(), reasons: ['turn-end'], ref: null, sessionId: 's', agentType: 'codex',
@@ -19,7 +19,8 @@ test('a frame says what it stands for, every moment in it', () => {
 
 test('the chrome says between which two times, and where the cursor is', () => {
   const frames = [frame(), frame({ id: 2, at: new Date(2026, 8, 29, 12, 4).getTime() })];
-  const words = replayRangeWords(frames, 0);
+  // Seen the same day: times alone.
+  const words = replayRangeWords(frames, 0, new Date(2026, 8, 29, 13, 0).getTime());
   assert.match(words, /^Replaying \d\d:\d\d → \d\d:\d\d · at \d\d:\d\d$/);
   assert.equal(replayRangeWords([], 0), 'Replay: nothing recorded yet');
 });
@@ -51,4 +52,19 @@ test('hits as they stood: none made later, one answered later still waiting', ()
   const hit = (ref: string, hitAt: number, answeredAt: number | null) => ({ ref, hitAt, answeredAt, decision: answeredAt ? 'continue' : null, note: null }) as unknown as import('@shared/types').BreakpointHit;
   const at = hitsAsOf([hit('a', 100, 300), hit('b', 400, null), hit('c', 50, 80)], 200);
   assert.deepEqual(at.map((h) => [h.ref, h.answeredAt, h.decision]), [['a', null, null], ['c', 80, 'continue']]);
+});
+
+test('a window on another day says which days (B10.5); a chosen day starts a week at its midnight', () => {
+  const now = new Date(2026, 9, 2, 12, 0).getTime();
+  const march = (d: number, h: number, m: number) => new Date(2026, 2, d, h, m).getTime();
+  assert.equal(whenWords(new Date(2026, 9, 2, 9, 5).getTime(), now), '09:05');
+  assert.equal(whenWords(march(2, 9, 14), now), '2 Mar 09:14');
+  assert.equal(whenWords(new Date(2025, 11, 30, 18, 0).getTime(), now), '30 Dec 2025 18:00');
+  const frames = [march(2, 9, 14), march(4, 16, 2), march(6, 17, 40)].map((at, i) => ({ id: i + 1, at } as ReplayFrameInfo));
+  assert.equal(replayRangeWords(frames, 1, now), 'Replaying 2 Mar 09:14 → 6 Mar 17:40 · at 4 Mar 16:02');
+
+  const w = weekFrom('2026-03-02')!;
+  assert.equal(w.from, new Date(2026, 2, 2).getTime());
+  assert.equal(w.to, new Date(2026, 2, 9).getTime() - 1);
+  assert.equal(weekFrom('March'), null);
 });
