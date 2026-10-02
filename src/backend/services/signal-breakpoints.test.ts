@@ -54,7 +54,7 @@ test('a rule is on a kind that can be serious, for the opened project; twice is 
   assert.equal(a.created, true);
   assert.deepEqual([a.breakpoint.kind, a.breakpoint.target, a.breakpoint.projectRoot], ['signal', 'contract', project]);
   assert.equal(bp.setBreakpoint({ kind: 'signal', signal: 'contract', projectRoot: project, ...sam }).breakpoint.id, a.breakpoint.id);
-  assert.throws(() => bp.setBreakpoint({ kind: 'signal', signal: 'stale-base', projectRoot: project, ...sam }), /signal must be one of collision, contract, drift/);
+  assert.throws(() => bp.setBreakpoint({ kind: 'signal', signal: 'stale-base', projectRoot: project, ...sam }), /signal must be one of collision, contract, drift, rule/);
   assert.throws(() => bp.setBreakpoint({ kind: 'signal', signal: 'contract', projectRoot: null, ...sam }), /No project is open/);
 });
 

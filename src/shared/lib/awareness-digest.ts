@@ -52,6 +52,7 @@ const QUESTION: Record<AwarenessSignal['kind'], string> = {
   'stale-base': 'rebase now, or later?',
   'version-split': 'which version should both use?',
   'state-split': 'which state is right?',
+  rule: 'route it through what the rule allows, or change the rule?',
 };
 
 /** Tasks' materials (A6.3) ask their own question where the code one would not fit. */
@@ -92,6 +93,12 @@ function lineText(kind: AwarenessSignal['kind'], group: AwarenessSignal[], label
   if (kind === 'drift') {
     const files = [...new Set(group.flatMap((s) => s.subject.files ?? []))];
     return `${names(first.workstreams)[0]} changes ${plural(files.length, 'file')} outside its scope: ${listed(files)}`;
+  }
+  if (kind === 'rule') {
+    // One line per workstream: which rules, and the first imports across them.
+    const rules = [...new Set(group.map((s) => s.subject.rule?.words ?? '?'))];
+    const edges = group.flatMap((s) => (s.subject.edges ?? []).map((e) => `${e.from} → ${e.to}`));
+    return `${names(first.workstreams)[0]} now imports across ${rules.length === 1 ? `the rule “${rules[0]}”` : plural(rules.length, 'rule')}: ${listed(edges)}`;
   }
   // collision
   const pair = names(first.workstreams).join(' and ');

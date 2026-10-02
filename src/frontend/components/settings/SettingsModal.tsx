@@ -167,7 +167,9 @@ const MCP_CAPABILITIES: Array<{
  * `settings-changed` so other open instances stay in sync.
  */
 
-type Section = 'identity' | 'appearance' | 'mcp' | 'plans' | 'review-hosts' | 'plans-folder' | 'recurring' | 'rules' | 'shared-state' | 'data' | 'devices' | 'power' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'about';
+export type SettingsSection = 'identity' | 'appearance' | 'mcp' | 'plans' | 'review-hosts' | 'plans-folder' | 'recurring' | 'rules' | 'shared-state' | 'data' | 'devices' | 'power' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'about';
+
+type Section = SettingsSection;
 
 const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'identity', label: 'Identity', Icon: User },

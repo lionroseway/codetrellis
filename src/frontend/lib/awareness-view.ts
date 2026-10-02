@@ -164,6 +164,7 @@ const ACK: SignalAction = { state: 'acknowledged', label: 'Acknowledge', hint: '
 const INTENDED: SignalAction = { state: 'intended', label: 'Intended', hint: 'Both sides are meant to change this. Set aside while the overlap lasts.' };
 const INTENDED_DRIFT: SignalAction = { state: 'intended', label: 'Intended', hint: 'The extra files are meant to be part of this work. Set aside while it lasts.' };
 const INTENDED_CONTRACT: SignalAction = { state: 'intended', label: 'Intended', hint: 'The change is meant, and the side that imports it will follow. Set aside while it lasts.' };
+const INTENDED_RULE: SignalAction = { state: 'intended', label: 'Intended', hint: 'The team knows this import breaks the rule and means it for now. Set aside while it lasts.' };
 const DISMISS: SignalAction = { state: 'dismissed', label: 'Dismiss', hint: 'Not worth your attention. Set aside while the overlap lasts.' };
 const REOPEN: SignalAction = { state: 'open', label: 'Reopen', hint: 'Take your answer back: it needs you again.' };
 
@@ -171,11 +172,12 @@ const REOPEN: SignalAction = { state: 'open', label: 'Reopen', hint: 'Take your 
  * The answers a signal offers in its state. "Intended" needs two sides: for
  * a collision both are meant to change the same thing; for a contract the
  * change is meant and the importing side will follow; for drift the extra
- * files are meant to be part of the work. A stale base is one workstream
+ * files are meant to be part of the work; for a rule, the team means the
+ * import for now (A7.2). A stale base is one workstream
  * behind main: nothing in it was chosen, so there is nothing to intend.
  */
 export function actionsFor(state: AwarenessSignal['state'], kind: AwarenessSignal['kind'] = 'collision'): SignalAction[] {
-  const intended = kind === 'collision' ? [INTENDED] : kind === 'contract' ? [INTENDED_CONTRACT] : kind === 'drift' ? [INTENDED_DRIFT] : [];
+  const intended = kind === 'collision' ? [INTENDED] : kind === 'contract' ? [INTENDED_CONTRACT] : kind === 'drift' ? [INTENDED_DRIFT] : kind === 'rule' ? [INTENDED_RULE] : [];
   switch (state) {
     case 'open': return [ACK, ...intended, DISMISS];
     case 'acknowledged': return [...intended, DISMISS, REOPEN];

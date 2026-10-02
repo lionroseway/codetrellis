@@ -23,6 +23,7 @@ import path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
 import type { ChangedFile, WorkstreamChanges } from '../../shared/types';
 import { isSafeGitRef } from './git-safety';
+import { refreshIndexOccasionally } from './git-env';
 
 /** More than this is listed as truncated: a footprint is a summary, not a diff. */
 export const MAX_CHANGED_FILES = 500;
@@ -125,6 +126,8 @@ export function combineChanges(tracked: ChangedFile[], untracked: string[], max 
  * exactly its uncommitted work — the same rule, not a special case.
  */
 export function computeChanges(folder: string, mainRef: string | null): WorkstreamChanges {
+  // Reads below never write the index (git-env.ts); keep it fresh so they stay fast.
+  refreshIndexOccasionally(folder);
   let base: string | null = null;
   try {
     const ref = mainRef && isSafeGitRef(mainRef) ? mainRef : 'HEAD';

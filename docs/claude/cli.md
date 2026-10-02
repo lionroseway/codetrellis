@@ -115,6 +115,7 @@ Over those files, the `check_changes` tool reports:
 | ✗ A changed file's tests fail, or ⚠ are older than the code | test grounding (B8.2), from the reports handed over |
 | ✗ A task marked done has a criterion whose check fails | the criterion checks (Phase 31 §8.1), run without recording |
 | ⚠ A system doc that describes a changed file was verified before it changed | the doc's stamp and `git diff <stamp>` over the working tree |
+| ✗ A changed file adds an import an architecture rule forbids | the team's rules in `.codetrellis/config.json` (A7), each changed file's imports now against the branch's merge base, which the CLI passes as `base`; an import already there before the branch is the rule's to list, not this change's |
 
 What a runner can and cannot see: plans, task records, criteria and system
 docs arrive with the checkout; test results arrive with the report the job
@@ -123,6 +124,11 @@ app, and live in that machine's database. So the breakpoint gate holds on
 a laptop (a pre-push hook with the app open, where `check` talks to the
 app) and finds none in CI. That is deliberate: a breakpoint is "ask me
 first", and nobody can be asked from a runner.
+
+Rules, unlike breakpoints, **do** travel: they are committed. Checking them
+needs the project's imports resolved, which `serve` does when it scans the
+checkout; if they cannot be read (another project is loaded), the answer
+says the rules were not checked rather than passing them silently.
 
 ## Test runs that travel (D1.5a)
 

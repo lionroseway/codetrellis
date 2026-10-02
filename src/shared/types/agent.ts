@@ -267,13 +267,14 @@ export interface WorkstreamLineChanges {
 
 /**
  * The kinds built so far. `collision`, `contract` (A2.3), `drift` (A2.5) and
- * `stale-base` come from the footprints; `rule`, `duplicate` and `decision`
+ * `stale-base` come from the footprints, and `rule` (A7.2) from the imports a
+ * workstream adds across an architecture rule; `duplicate` and `decision`
  * follow (awareness spec §4.3). Tasks' materials (A6.3) raise the same kinds
  * with `subject.material` set, and one of their own: `version-split`, two
  * tasks that read different versions of one file. `state-split` (C3.2) is
  * two people setting one task two ways at once, from their records.
  */
-export type SignalKind = 'collision' | 'contract' | 'drift' | 'stale-base' | 'version-split' | 'state-split';
+export type SignalKind = 'collision' | 'contract' | 'drift' | 'stale-base' | 'version-split' | 'state-split' | 'rule';
 export type SignalSeverity = 'high' | 'medium' | 'low';
 /**
  * Where a signal stands (A1.6, set by a person from A1.8):
@@ -374,6 +375,12 @@ export interface AwarenessSignal {
      * to be the same change by that person.
      */
     said?: Array<{ name: string; status: string | null; forged?: boolean }>;
+    /**
+     * Rule (A7.2): which architecture rule, in words ("web/ may not import
+     * db/"), why, and the imports this workstream adds across it.
+     */
+    rule?: { id: string; words: string; because: string };
+    edges?: Array<{ from: string; to: string }>;
   };
   /** The workstreams it names, by folder, sorted. */
   workstreams: string[];

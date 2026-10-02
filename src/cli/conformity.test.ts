@@ -51,13 +51,19 @@ test('the base: --base, else the pull request\'s base in GitHub Actions, else or
 });
 
 test('the gate in words: what was checked, then one line per finding', () => {
-  const base = { files: 3, base: 'origin/main', breakpoints: [], tests: [], criteria: [], docs: [] };
+  const base = { files: 3, base: 'origin/main', breakpoints: [], tests: [], criteria: [], docs: [], rules: [] };
   assert.equal(
     gateWords({ ...base, ok: true, says: [] }),
-    'Conforms: 3 changed files since origin/main. No breakpoint holds them, none of their tests fail or are older than the code, no done task fails its checks, and no doc that describes them is stale.',
+    'Conforms: 3 changed files since origin/main. No breakpoint holds them, none of their tests fail or are older than the code, no done task fails its checks, no doc that describes them is stale, and they add no import an architecture rule forbids.',
   );
   assert.equal(
     gateWords({ ...base, files: 1, ok: false, says: ['src/a.ts: ✗ 1 of 2 tests failing'] }),
     'Does not conform (1 changed file since origin/main):\n  src/a.ts: ✗ 1 of 2 tests failing',
   );
+  // A7.3: a rule's line, and a note when the rules could not be read.
+  assert.equal(
+    gateWords({ ...base, files: 1, ok: false, says: ['✗ web/reports.ts now imports db/client.ts, which the rule “web/ may not import db/” forbids: web talks to db through the API'] }),
+    'Does not conform (1 changed file since origin/main):\n  ✗ web/reports.ts now imports db/client.ts, which the rule “web/ may not import db/” forbids: web talks to db through the API',
+  );
+  assert.match(gateWords({ ...base, ok: true, says: [], rulesNote: 'The architecture rules were not checked.' }), /forbids\.\nThe architecture rules were not checked\.$/);
 });

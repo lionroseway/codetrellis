@@ -13,7 +13,7 @@ import type { Breakpoint, BreakpointHit, BreakpointDecision } from '@shared/type
 export type SetBreakpointInput =
   | { kind: 'task' | 'spec'; itemUid: string; note?: string }
   | { kind: 'code'; path: string; symbol?: string; note?: string }
-  | { kind: 'signal'; signal: 'collision' | 'contract' | 'drift'; note?: string };
+  | { kind: 'signal'; signal: 'collision' | 'contract' | 'drift' | 'rule'; note?: string };
 
 interface BreakpointsState {
   breakpoints: Breakpoint[];

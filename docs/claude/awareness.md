@@ -95,6 +95,7 @@ written by CodeTrellis.
 | `contract` | An exported signature changed or an export was removed, and the other side's changed files import it | high; medium for a namespace import only |
 | `drift` | Changes outside the workstream's scope | medium |
 | `stale-base` | Main changed files this workstream changes, since it branched | low |
+| `rule` | The workstream adds an import across one of the team's architecture rules (A7.2): `subject.rule` names it in words with why, `subject.edges` each import. Only imports it *adds* against its merge base count; one already there is listed by the rule (A7.1), never signalled | high |
 
 **Staying quiet** (spec §4.4):
 - The id is derived from kind, subject and workstreams, so a signal that
@@ -499,6 +500,28 @@ run as a plain `codex` client with no hook and no watcher in
 | Spec proposals (B7) | `propose_spec_change`, `reply_to_spec_proposal`, `get_spec_links`, `list_spec_proposals`; the notices ride on the agent's next call; `await_decision` on the proposal. The person decides in the window or on the phone | — |
 | Setup | the MCP connector config (Settings → MCP Server: a JSON entry for Claude Desktop, Cursor and most clients) | Claude Code's skill and hook installer (A3.4); Gemini CLI's hook installer (A8.3) |
 
+## Architecture rules: the team's boundaries (A7, M7)
+
+A rule is a boundary between two sets of paths, written once by a person in
+Settings → Architecture rules and committed in `.codetrellis/config.json`:
+`from` may not import `mayNotImport`, `except` some doors, `because` the
+team's reason. One file every laptop, agent and pipeline reads.
+
+- **Today** (A7.1): each rule lists the imports that already break it ("1
+  import breaks this today"); `check_conformity` refuses a proposed import
+  with the rule and why; `list_rules` reads them.
+- **In flight** (A7.2): an import a workstream *adds* (its changed files'
+  imports now, minus at its merge base, resolved by the project's resolver)
+  raises a high `rule` signal. The agent is told inline on its next call,
+  the person reads one digest line and a card with the rule, the import
+  and a way to change the rule; a `rule` breakpoint can hold the agent.
+- **At the gate** (A7.3): `check_changes` with `base` lists each added
+  import across a rule, and `codetrellis check` exits 3 on it. Rules are
+  committed, so unlike breakpoints they hold in CI too.
+
+Only the project whose graph is loaded is checked, because resolving needs
+its aliases and systems; anything else says the rules were not checked.
+
 ## Rules to keep
 
 - **An agent is never handed another agent's text** (principle 5).
@@ -570,6 +593,11 @@ run as a plain `codex` client with no hook and no watcher in
     so, and the queue puts it first with that reason, for three different
     agents and the phone. Once the overlap is marked intended both lines
     are ready and the order stands.
+  - `architecture-rules`, `rule-signals`;
+  - `awareness-m7`, the M7 "done when": two agents in two worktrees, one
+    adds an import across a rule. It alone is told, on its next call; the
+    digest has the one line; and `codetrellis check` on the branch exits 3
+    naming the import and the rule, then passes once it is taken out.
   - `cross-plan-dependencies`, `stack`, `stack-overlaps`, `stack-at`;
   - `awareness-h1`, the H1 "done when": two agents in two plans on two
     worktrees whose work collides, one plan by its ticket key and a wait

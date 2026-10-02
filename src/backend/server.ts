@@ -1,4 +1,6 @@
 // [codemod] hoisted lazy requires → static namespace imports for bundling
+// Before anything runs git: CodeTrellis's git never holds the person's index lock.
+import './services/git-env';
 import * as _lazy___services_settings_service from './services/settings-service';
 import * as _lazy___services_project_config_service from './services/project-config-service';
 import * as _lazy___services_external_pointer_service from './services/external-pointer-service';
@@ -2700,6 +2702,8 @@ app.put('/api/rules/:id', (req, res) => {
     broadcast('rules-changed', { project: projectRoot });
     const person = personFrom(req);
     recordDecision('rule_changed', { projectRoot, ruleId: rule.id, change: 'set', from: rule.from, mayNotImport: rule.mayNotImport, except: rule.except, because: rule.because, author: person.author, authorType: person.authorType }, person.authorType);
+    // A7.2 — work in flight is checked against the new rule at once.
+    try { refreshSignals(projectRoot); } catch (err) { console.warn('[Awareness] refresh failed:', err); }
     res.json({ rule, view: rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)).find((v) => v.rule.id === rule.id) });
   } catch (err) {
     if (err instanceof RuleError) { res.status(err.status).json({ error: err.message }); return; }
@@ -2716,6 +2720,7 @@ app.delete('/api/rules/:id', (req, res) => {
     broadcast('rules-changed', { project: projectRoot });
     const person = personFrom(req);
     recordDecision('rule_changed', { projectRoot, ruleId: req.params.id, change: 'stopped', author: person.author, authorType: person.authorType }, person.authorType);
+    try { refreshSignals(projectRoot); } catch (err) { console.warn('[Awareness] refresh failed:', err); }
     res.json({ removed: req.params.id });
   } catch (err) {
     if (err instanceof RuleError) { res.status(err.status).json({ error: err.message }); return; }

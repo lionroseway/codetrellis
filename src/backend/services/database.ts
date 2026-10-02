@@ -614,6 +614,11 @@ export function setImportResolutionContext(projectRoot: string, aliasMap: AliasM
   resolutionContext = { projectRoot, aliasMap, systems };
 }
 
+/** The project whose import context (aliases, systems) is held: the last one scanned (A7.2). */
+export function resolutionContextRoot(): string | null {
+  return resolutionContext?.projectRoot ?? null;
+}
+
 /** The alias map and systems the last scan of this project resolved with (empty for another project). */
 export function getImportResolutionContext(projectRoot: string): { aliasMap: AliasMapping[]; systems: DiscoveredSystem[] } {
   const ctx = resolutionContext?.projectRoot === projectRoot ? resolutionContext : null;

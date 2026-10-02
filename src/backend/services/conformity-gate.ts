@@ -9,7 +9,10 @@
  *  - a changed file's tests fail, or are older than the code (B8.2);
  *  - a task marked done has a criterion whose check now fails (§8.1);
  *  - a system doc that references a changed file was verified before it
- *    changed, and has not been since.
+ *    changed, and has not been since;
+ *  - a changed file adds an import across one of the team's architecture
+ *    rules (A7.3); an import that was there before the change is the rule's
+ *    to list, not the change's.
  *
  * Read only: nothing is recorded, no breakpoint is hit, no check run is
  * stored. CodeTrellis still runs no tests; it reads what was reported.
@@ -27,6 +30,10 @@ export interface HeldFile { path: string; breakpoint: string; note: string | nul
 export interface TestTrouble { path: string; state: 'failing' | 'stale'; says: string }
 export interface FailingCriterion { itemUid: string; task: string; criterion: string; findings: string[] }
 export interface StaleDoc { uid: string; title: string; slug: string; verifiedAt: string; files: string[] }
+export interface RuleImport { path: string; imports: string; rule: string; words: string; because: string }
+
+/** The imports these changed files add across the rules, or null when they could not be read (injected). */
+export type RuleChecker = (files: readonly string[]) => RuleImport[] | null;
 
 export interface Conformity {
   ok: boolean;
@@ -37,6 +44,9 @@ export interface Conformity {
   tests: TestTrouble[];
   criteria: FailingCriterion[];
   docs: StaleDoc[];
+  rules: RuleImport[];
+  /** False when the rules could not be checked: the project's imports are not loaded here. */
+  rulesChecked: boolean;
 }
 
 /** A criterion's check, as the criterion loop runs it (injected so tests need no files). */
@@ -65,7 +75,7 @@ function changedSince(root: string, commit: string): Set<string> | null {
   }
 }
 
-export async function checkChanges(root: string, changed: readonly string[], checkCriterion: CriterionChecker): Promise<Conformity> {
+export async function checkChanges(root: string, changed: readonly string[], checkCriterion: CriterionChecker, checkRules?: RuleChecker): Promise<Conformity> {
   const files = cleanChanged(changed);
   const says: string[] = [];
 
@@ -78,6 +88,11 @@ export async function checkChanges(root: string, changed: readonly string[], che
       says.push(`■ ${f}: ${b.createdBy} set a breakpoint on ${b.target === f ? 'it' : b.target}${b.note ? ` (“${b.note}”)` : ''}; ask them before changing it`);
     }
   }
+
+  // The team's architecture rules (A7.3): one line per import, with the rule's reason.
+  const found = files.length && checkRules ? checkRules(files) : [];
+  const rules = found ?? [];
+  for (const r of rules) says.push(`✗ ${r.path} now imports ${r.imports}, which the rule “${r.words}” forbids${r.because ? `: ${r.because}` : ''}`);
 
   const tests: TestTrouble[] = [];
   for (const f of files) {
@@ -123,5 +138,5 @@ export async function checkChanges(root: string, changed: readonly string[], che
   }
   for (const d of docs) says.push(`⚠ The system doc "${d.title}" describes ${d.files.join(', ')}, which changed after it was verified at ${d.verifiedAt}`);
 
-  return { ok: says.length === 0, says, files, breakpoints, tests, criteria, docs };
+  return { ok: says.length === 0, says, files, breakpoints, tests, criteria, docs, rules, rulesChecked: found !== null };
 }

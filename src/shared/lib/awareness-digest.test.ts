@@ -131,3 +131,15 @@ describe('tasks\' materials (A6.3)', () => {
     assert.equal(d.lines.find((l) => l.signalIds[0] === 'm3')!.question, 'which version should both use?');
   });
 });
+
+describe('a rule (A7.2)', () => {
+  test('one line per workstream: the rule and the imports across it, with the question', () => {
+    const rule = { id: 'web-not-db', words: 'web/ may not import db/', because: 'web talks to db through the API' };
+    const d = buildDigest([
+      sig({ kind: 'rule', workstreams: ['/r/billing'], subject: { files: ['web/reports.ts'], rule, edges: [{ from: 'web/reports.ts', to: 'db/client.ts' }] } }),
+    ], label);
+    assert.equal(d.lines.length, 1);
+    assert.match(d.lines[0].text, /^`billing-v2` now imports across the rule “web\/ may not import db\/”: web\/reports\.ts → db\/client\.ts/);
+    assert.match(digestText(d), /route it through what the rule allows, or change the rule\?/);
+  });
+});
