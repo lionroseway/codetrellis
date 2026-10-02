@@ -142,9 +142,13 @@ test.describe('Branches and pull requests', () => {
     const state = { fetched: false, asked: [] as string[] };
     await serve(page, state);
     const put: unknown[] = [];
+    // Saved here, not by the backend: turned on for real it would fetch this checkout.
     await page.route('**/api/settings', async (r) => {
-      if (r.request().method() === 'PUT') put.push(r.request().postDataJSON());
-      return r.fallback();
+      if (r.request().method() !== 'PUT') return r.fallback();
+      const patch = r.request().postDataJSON();
+      put.push(patch);
+      const current = await (await r.fetch({ method: 'GET' })).json();
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...current, git: { ...current.git, ...patch.git } }) });
     });
     await gotoWithProject(page);
     await page.getByTestId('sidebar-changes').first().click();
@@ -159,14 +163,13 @@ test.describe('Branches and pull requests', () => {
     await expect(settings.getByTestId('git-every')).toBeDisabled();
     await expect(page.getByTestId('git-last-fetched')).toHaveText('Last fetched 2 h ago');
     await expect(page.getByTestId('git-pulls-words')).toHaveText('Pull requests are read through the gh CLI when you fetch.');
-    try {
-      await keep.check();
-      await expect(settings.getByTestId('git-every')).toBeEnabled();
-      await settings.getByTestId('git-every').selectOption('30');
-      await expect.poll(() => put).toEqual(expect.arrayContaining([expect.objectContaining({ git: { keepRemotesCurrent: true, everyMinutes: 30 } })]));
-      await page.screenshot({ path: shot('branches-settings') });
-    } finally {
-      await page.evaluate(() => fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ git: { keepRemotesCurrent: false, everyMinutes: 15 } }) }));
-    }
+    // Checked once saved: the box shows what is stored.
+    await keep.click();
+    await expect(keep).toBeChecked();
+    await expect(settings.getByTestId('git-every')).toBeEnabled();
+    await settings.getByTestId('git-every').selectOption('30');
+    await expect.poll(() => put).toEqual([{ git: { keepRemotesCurrent: true, everyMinutes: 15 } }, { git: { keepRemotesCurrent: true, everyMinutes: 30 } }]);
+    await expect(settings.getByTestId('git-every')).toHaveValue('30');
+    await page.screenshot({ path: shot('branches-settings') });
   });
 });
