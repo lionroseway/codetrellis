@@ -20,6 +20,7 @@ import {
   exemptPlanFromFreeze,
 } from '../../services/freeze-service';
 import { verifyRecord } from '../../services/record-chain';
+import { buildEvidence, sealEvidence, EvidenceError } from '../../services/evidence';
 
 export function register(server: McpServer, deps: ToolDeps): void {
   // --- verify_record (Phase 32 B10.1) ---
@@ -43,6 +44,39 @@ export function register(server: McpServer, deps: ToolDeps): void {
           head: r.head, problems: r.problems.map((p) => ({ seq: p.seq, event_id: p.eventId, kind: p.kind, at: p.at, type: p.type, agent_type: p.agentType })),
         }, null, 2) }],
       };
+    },
+  );
+
+  // --- export_evidence (Phase 32 B10.4) ---
+
+  server.registerTool(
+    'export_evidence',
+    {
+      description:
+        'The evidence for a plan, or a window of time in an opened project, as one signed package: the record\'s entries ' +
+        'in the window with how to recompute each link, the replay frames, the stack and the signals at the start and ' +
+        'the end, the breakpoints and decisions in words, and (for a plan) the sign-off pack; sealed with this ' +
+        'computer\'s key and the record\'s head. Give plan_uid, or project_path with from and to (milliseconds). Read only.',
+      inputSchema: {
+        plan_uid: z.string().optional().describe('A plan: its project, from when it was made until it finished (or now).'),
+        project_path: z.string().optional().describe('An opened project, for a window of time. Defaults to the active project.'),
+        from: z.number().int().nonnegative().optional().describe('The window\'s start, in milliseconds since 1970.'),
+        to: z.number().int().nonnegative().optional().describe('The window\'s end, in milliseconds since 1970.'),
+      },
+    },
+    async ({ plan_uid, project_path, from, to }) => {
+      try {
+        const e = sealEvidence(buildEvidence(plan_uid
+          ? { planUid: plan_uid }
+          : { projectPath: project_path ?? deps.getActiveProjectPath() ?? undefined, from, to }));
+        return {
+          _meta: { summary: `Evidence: ${e.window.words}` },
+          content: [{ type: 'text' as const, text: JSON.stringify(e) }],
+        };
+      } catch (err) {
+        if (err instanceof EvidenceError) return { isError: true, content: [{ type: 'text' as const, text: err.message }] };
+        throw err;
+      }
     },
   );
 

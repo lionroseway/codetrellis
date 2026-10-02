@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B10.3: signed packs, carrying the record's head |
-| **Status** | B10.2 merged (#310). B10.3 in review (#311): every sign-off pack (data, page, PDF) is signed with this computer's device key in its own namespace and carries the record's head; verify says who signed it (this computer, a trusted teammate, an unknown key), whether it changed since, and whether the record it names still holds. Unit pack-seal 6, harness signoff-surface (sealed, edited, unsigned), browser signoff-pack (shots) |
-| **In flight** | B10.3 in review (#311) on `feat/phase-32-b10-3-signed-packs`; B10.4 in review (#312) on `feat/phase-32-b10-4-evidence`; B10.5 in review (#313) on `feat/phase-32-b10-5-g2` |
-| **Last merged** | B10.2 (#310, `087819c`) |
-| **Next action** | Merge B10.3 (#311); then B10.4 (#312) and B10.5 (#313) by the stacked flow |
+| **Stage / step** | Track B — B10.4: the evidence export |
+| **Status** | B10.2 (#310) and B10.3 (#311) merged. B10.4 in review (#312): GET /api/evidence (a plan, or a window of an opened project; JSON or the page), export_evidence (read), POST /api/evidence/verify; one package with the record's entries and the link before them (recomputable from the file alone), the frames, the stack and signals at both ends, the breakpoints and decisions in words, and the plan's sign-off pack, signed like a pack in its own namespace. Verify says who signed it, whether its chain holds, and on the computer that made it, any entry changed in the record since. From the Brief and the replay bar. Unit evidence 8, harness evidence 6, browser evidence (shots) |
+| **In flight** | B10.4 in review (#312) on `feat/phase-32-b10-4-evidence`; B10.5 in review (#313) on `feat/phase-32-b10-5-g2`; #314 in review on `feat/phase-32-e1-source-control` |
+| **Last merged** | B10.3 (#311, `e415975`) |
+| **Next action** | Merge B10.4 (#312), then B10.5 (#313) by the stacked flow; Track E (E1, #314) is in review |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `087819c`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `e415975`, with open PRs from GitHub.
 
 ---
 
@@ -221,7 +221,7 @@
 - [ ] B10 The record — building
   - [x] B10.1 The chain: every kept event linked, decisions as events, verified in words (#309)
   - [x] B10.2 Retention you can set, and the chain still verifies (#310)
-  - [ ] B10.3 Signed packs, carrying the record's head (#311) — in review
+  - [x] B10.3 Signed packs, carrying the record's head (#311)
   - [ ] B10.4 The evidence export (#312) — in review
   - [ ] B10.5 The G2 done-when and docs (#313) — in review
 
@@ -440,6 +440,8 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | C4.2a: a scheduled start is authored `schedule` (a system author, as other app-made records are), and the run keeps who set the rule | No person or agent called; the rule a person set is the reason, and saying "schedule" never passes the app off as that person |
 | 2026-10-02 | C4.3b: an agent on each run is kept per rule on this device, never in the committed config, and set by the person only; it starts only when the run was made here by the person in the window, the schedule, or a phone granted `terminal` — from plain HTTP or a phone without it, the run is made and says why not | It starts a process on this machine, so it is the person's and this machine's, never the team's; loopback is not a person, and a phone may only cause a terminal the person allowed it. A found run starts nothing, so two laptops make one agent |
 | 2026-10-02 | A7 is refined into three parts (EXECUTION §4): the rules and the check, rule signals from each workstream's import delta, the gate and the done-when. A rule is a path boundary (`from`, `mayNotImport`, `except`, `because`) in the committed config | One file every laptop, agent and pipeline reads; a boundary between two sets of paths is what M7 asks for ("web/ may not import db/") and covers layers without a layer model |
+| 2026-10-02 | B10.4: an evidence export carries every record entry in its window, whichever project it was about, with the link before the window, rather than only the project's entries | The chain only recomputes over consecutive links; leaving out other projects' entries would leave gaps nobody outside could check. The record is the computer's, not one project's, and the docs say so; the frames, the stack and the signals are the project's |
+| 2026-10-02 | B10.4: verifying an export on the computer that made it compares every entry against that computer's record, and names any changed, removed or relinked since; entries retention removed since are said, and do not fail it | The G2 question is "has anything changed since we exported this?": the file alone shows the file is intact, only the record shows the database has not been edited since. Retention removing old entries is policy, not tampering |
 | 2026-10-02 | B10.3: the sign-off pack is signed with the device key task records already use (C3.1), in its own namespace (`codetrellis-signoff-pack`), never the release-manifest key; the signature covers the record's head at signing, and verifying names the signer against this computer's trust (its own key, a teammate's trusted key, or a key not known here) | One per-install key, already trusted between teammates by fingerprint, so no second trust model; a namespace keeps a task-record signature from passing as a pack's. Carrying the head ties the pack to the record: an edit to the record since shows when the pack is verified as well as in the record's own walk |
 | 2026-10-02 | B10.3: a pack signed by an unknown key is said to be unchanged but its signer not proven, never "valid" | A signature from a key nobody vouched for proves integrity, not identity; the reviewer is told to check the fingerprint with whoever sent it |
 | 2026-10-02 | B10.2: one retention window, set in Settings → Data (14, 30, 90, 365 days, or everything), governs agent events and the record, replay frames and signal spans, test runs, log files and the device log; changing it is the person's only, and is itself kept in the record | Shortening the window is how evidence is removed, so it is a grant like LAN exposure, and an auditor sees who changed it from what to what. One window, because a record that outlives its replay or its tests would answer "what happened" without "what else was going on" |
@@ -470,6 +472,29 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-02: B10.4 — the evidence export
+- **Journey.** The auditor asks what happened while the refunds plan was
+  built. Sam opens the plan's Brief and chooses "Export evidence": one page,
+  signed, with the breakpoints and decisions in words ("Paused at a
+  breakpoint before claiming “Round refunds”", "Approved “Refunds round
+  half-even”"), the stack and the signals at the start and the end, the
+  recorded moments, the sign-off pack, and every record entry with how to
+  recompute it. "Verify evidence…" says it holds: signed by this computer,
+  its entries recompute into one unbroken chain, and this computer's record
+  still holds every one. A copy with one approval turned into a send-back
+  is named by entry. From replay, the window being watched exports the
+  same way; an agent asks with `export_evidence`.
+- **Built.** `services/evidence.ts` (`buildEvidence`, `sealEvidence`,
+  `verifyEvidence`, `renderEvidenceHtml`, `evidenceFromText`); the seal
+  generalised to any namespace (`sealDocument`, `checkDocumentSeal`);
+  `GET /api/evidence`, `POST /api/evidence/verify`, MCP `export_evidence`
+  (`read`); `EvidenceControls` in the Brief and the replay bar.
+- **Tests.** Unit `evidence.test.ts` (8). Harness `evidence.test.ts` (6:
+  a plan's evidence; verified as JSON and page; an agent's export; an
+  edited decision refused; bad requests; a tool call changed in the
+  database while closed, named). Browser `plan/evidence.spec.ts` (shots
+  `evidence-verified`, `evidence-forged`, `evidence-replay`).
 
 ### 2026-10-02: B10.3 — signed packs, carrying the record's head
 - **Journey.** Sam saves the Q3 board pack as a page and sends it to the

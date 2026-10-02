@@ -87,6 +87,7 @@ import { startRecurringScheduler } from './services/recurring-scheduler';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
 import { sealPack, checkSeal } from './services/pack-seal';
+import { buildEvidence, sealEvidence, renderEvidenceHtml, verifyEvidence, evidenceFromText, EvidenceError } from './services/evidence';
 import { planGitStatesFresh } from './services/item-git-state';
 import { planStatusFresh } from './services/plan-status';
 import { listSignedApprovals } from './services/signed-approvals';
@@ -4713,6 +4714,51 @@ app.post(
     }
   },
 );
+
+// --- Phase 32 B10.4: the evidence export ------------------------------
+//
+// For a plan (`?plan=`: its project and its time) or a window of an opened
+// project (`?project=&from=&to=`): the record's entries with how to
+// recompute them, the frames, the stack and signals at both ends, the
+// breakpoints and decisions, and the plan's sign-off pack; sealed with this
+// computer's key. `?format=html` is the page to save.
+
+app.get('/api/evidence', (req, res) => {
+  const ms = (v: unknown) => (typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : undefined);
+  const plan = typeof req.query.plan === 'string' && req.query.plan ? req.query.plan : undefined;
+  let projectPath: string | undefined;
+  if (!plan) {
+    const root = requireProjectRoot(req, res);
+    if (!root) return;
+    projectPath = root;
+  }
+  try {
+    const evidence = sealEvidence(buildEvidence({ planUid: plan, projectPath, from: ms(req.query.from), to: ms(req.query.to) }));
+    if (req.query.format !== 'html') { res.json(evidence); return; }
+    const name = (evidence.window.plan?.title ?? 'window').replace(/[^A-Za-z0-9 _-]+/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'window';
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    // A file to save, not a page to render inside the app's origin.
+    res.setHeader('Content-Disposition', `attachment; filename="evidence-${name}.html"`);
+    res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.send(renderEvidenceHtml(evidence));
+  } catch (err) {
+    if (err instanceof EvidenceError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+/** "Verify evidence": the saved page or its JSON, as text. Who signed it, whether its chain holds, and what changed here since. */
+app.post('/api/evidence/verify', express.text({ type: 'text/plain', limit: '100mb' }), (req, res) => {
+  const text = typeof req.body === 'string' ? req.body : '';
+  if (!text.trim()) { res.status(400).json({ error: 'Send the saved evidence (.html or .json) as text' }); return; }
+  try {
+    res.json(verifyEvidence(evidenceFromText(text)));
+  } catch (err) {
+    if (err instanceof EvidenceError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
 
 // --- Plan Templates API (Phase 12 §G) ---
 
