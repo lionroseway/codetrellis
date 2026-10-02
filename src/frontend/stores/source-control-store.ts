@@ -42,6 +42,68 @@ export interface SourceControl {
   words: string;
 }
 
+/** Phase 32 E2: a point to compare (a ref, a worktree, this checkout), from `/api/git/refs`. */
+export interface GitRef {
+  spec: string;
+  kind: 'checkout' | 'branch' | 'remote' | 'tag' | 'worktree' | 'commit';
+  name: string;
+  words: string;
+  term: string;
+  sha: string | null;
+  at: number | null;
+  subject: string | null;
+  current?: boolean;
+  agents?: string[];
+}
+
+export interface RefGroup {
+  kind: GitRef['kind'];
+  title: string;
+  words: string;
+  git: { term: string; command: string };
+  refs: GitRef[];
+}
+
+export interface RefListing {
+  project: string;
+  git: boolean;
+  branch: string | null;
+  groups: RefGroup[];
+  fetchedAt: number | null;
+}
+
+/** Two points chosen to compare, and what differs between them. */
+export interface RefPair {
+  before: string;
+  after: string;
+  /** Compare from where the two split (git's `a...b`), when both are refs. */
+  fromSplit: boolean;
+}
+
+export interface PairResult {
+  /** The sides as compared (with `fromSplit`, the before side is their merge base). */
+  before: string;
+  after: string;
+  labels: { before: string; after: string };
+  files: SourceFile[];
+  truncated: boolean;
+  command: string | null;
+  words: string;
+}
+
+/** The side the comparison starts from: the merge base of the two when asked, and both are refs. */
+export function effectiveBefore(pair: RefPair): string {
+  if (pair.fromSplit && pair.before.startsWith('commit:') && pair.after.startsWith('commit:')) {
+    return `merge-base:${pair.before.slice('commit:'.length)}...${pair.after.slice('commit:'.length)}`;
+  }
+  return pair.before;
+}
+
+/** Whether "from where they split" applies: both sides are refs. */
+export function canSplit(pair: RefPair): boolean {
+  return pair.before.startsWith('commit:') && pair.after.startsWith('commit:');
+}
+
 /** A comparison picked from the panel: one file between a group's two points. */
 export interface PickedCompare {
   /** Relative to the project. */
@@ -70,10 +132,23 @@ interface SourceControlState {
   /** Open the code view on this file's diff in this group. */
   openCompare: (root: string, group: SourceGroup, file: SourceFile) => void;
   clearCompare: () => void;
+
+  /** E2: the points this project can compare. */
+  refs: RefListing | null;
+  loadRefs: (root: string) => Promise<void>;
+  /** E2: two points chosen to compare, the files between them, and reading them. */
+  pair: RefPair | null;
+  pairResult: PairResult | null;
+  pairLoading: boolean;
+  pairError: string | null;
+  setPair: (root: string, pair: RefPair | null) => Promise<void>;
+  /** Open the code view on one file between the chosen two. */
+  openPairFile: (root: string, file: SourceFile) => void;
 }
 
 /** Every read is numbered; a slower earlier one never replaces a later one. */
 let generation = 0;
+let pairGeneration = 0;
 
 export const useSourceControlStore = create<SourceControlState>((set, get) => ({
   root: null,
@@ -87,7 +162,7 @@ export const useSourceControlStore = create<SourceControlState>((set, get) => ({
   refresh: async (root) => {
     const mine = ++generation;
     if (!root) { set({ root: null, data: null, loading: false, error: null, compare: null }); return; }
-    if (root !== get().root) set({ root, data: null, compare: null });
+    if (root !== get().root) set({ root, data: null, compare: null, refs: null, pair: null, pairResult: null, pairError: null });
     set({ loading: true });
     try {
       const res = await fetch(`/api/source-control?project=${encodeURIComponent(root)}`);
@@ -114,6 +189,52 @@ export const useSourceControlStore = create<SourceControlState>((set, get) => ({
   },
 
   clearCompare: () => set({ compare: null }),
+
+  refs: null,
+  loadRefs: async (root) => {
+    try {
+      const res = await fetch(`/api/git/refs?project=${encodeURIComponent(root)}`);
+      if (!res.ok) return;
+      set({ refs: (await res.json()) as RefListing });
+    } catch { /* the pickers keep what they had */ }
+  },
+
+  pair: null,
+  pairResult: null,
+  pairLoading: false,
+  pairError: null,
+  setPair: async (root, pair) => {
+    const mine = ++pairGeneration;
+    if (!pair) { set({ pair: null, pairResult: null, pairLoading: false, pairError: null }); return; }
+    set({ pair, pairLoading: true, pairError: null });
+    const before = effectiveBefore(pair);
+    try {
+      const q = `project=${encodeURIComponent(root)}&before=${encodeURIComponent(before)}&after=${encodeURIComponent(pair.after)}`;
+      const res = await fetch(`/api/git/refs/compare?${q}`);
+      const body = await res.json().catch(() => null);
+      if (mine !== pairGeneration) return;
+      if (!res.ok) { set({ pairLoading: false, pairResult: null, pairError: body?.error || `Server returned ${res.status}` }); return; }
+      set({ pairLoading: false, pairResult: body as PairResult });
+    } catch (e) {
+      if (mine === pairGeneration) set({ pairLoading: false, pairResult: null, pairError: e instanceof Error ? e.message : String(e) });
+    }
+  },
+
+  openPairFile: (root, file) => {
+    const r = get().pairResult;
+    if (!r) return;
+    set({
+      compare: {
+        path: file.path, groupId: 'pair', before: r.before, after: r.after, labels: r.labels,
+        command: r.command ? `${r.command} -- ${file.path}` : '',
+        title: 'Two points',
+        words: `${r.labels.before} → ${r.labels.after}`,
+      },
+    });
+    const ui = useUiStore.getState();
+    ui.setSelectedNode(`${root.replace(/[\\/]+$/, '')}/${file.path}`, 'file');
+    ui.setWorkspaceMode('code');
+  },
 }));
 
 /** The first group that lists this file, in the panel's order: where its change is. */

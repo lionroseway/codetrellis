@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track E — E1: source control with no plan needed |
-| **Status** | B10 done: B10.2 (#310), B10.3 (#311), B10.4 (#312) and B10.5 (#313) merged. Track E planned with the owner (2026-10-02). E1 built: the defect reproduced three ways (a committed edit, an edit in another worktree, a project in a subfolder) and fixed; the sidebar's Changes tab (this checkout, committed since you opened it, each other worktree with its agents), each file opening its diff between its group's two points; the code view says what it compares. Found on the way and fixed: a request storm of commit reads that starved the browser. Unit source-control 7 + commits cache; harness source-control 6; browser sidebar/changes (shots) |
-| **In flight** | E1 in review (#314) on `feat/phase-32-e1-source-control` |
+| **Stage / step** | Track E — E2a: any ref on either side, from the Changes tab |
+| **Status** | E1 merged (#314). E2 is split in two: E2a (the refs, any two compared file by file, from the Changes tab) and E2b (the graph compares the same two). E2a built on E1: GET /api/git/refs lists this checkout, branches, remote branches as last fetched, tags and other worktrees, each group with git's word and command; GET /api/git/refs/compare lists the files between any two, with "from where they split" (merge base) and the git command; a worktree's working copy is read as a tree through a copy of its own index (the checkout untouched); /api/compare and /api/file/at take the same sides. Unit git-refs 7; harness refs 6; browser compare-refs (shots) |
+| **In flight** | E2a in review (#315) on `feat/phase-32-e2a-refs`; E2b in review (#316) on `feat/phase-32-e2b-graph-pair`; E3 building on `feat/phase-32-e3-evolution` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
-| **Next action** | Merge E1 (#314) when green; then E2 (any ref on either side), E2a stacked on E1 |
+| **Next action** | Merge E2a (#315) when green, then E2b (#316) and E3 by the stacked flow |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `7c0623a`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `c8ac703`, with open PRs from GitHub.
 
 ---
 
@@ -284,9 +284,11 @@
 
 ### Track E: how the code got here
 - [ ] E Compare any two points, scrub each side's history, and each line's commit and agent, with no plan needed (owner's decision, 2026-10-02), refined in EXECUTION §6c: — building
-  - [ ] E1 Source control with no plan: the Changes panel (staged, unstaged, untracked; each worktree's changes), and the defect that started it (the graph showed changes, the code view no diff) (#314) — in review
-  - [ ] E2 Any ref on either side: branches local and remote, tags, a worktree's working copy, a merge base; one picker for the code view and the graph
-  - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked
+  - [ ] E1 Source control with no plan: the Changes panel (staged, unstaged, untracked; each worktree's changes), and the defect that started it (the graph showed changes, the code view no diff)
+  - [ ] E2 Any ref on either side: branches local and remote, tags, a worktree's working copy, a merge base; one picker for the code view and the graph, in two: — building
+    - [ ] E2a The refs, and any two compared file by file from the Changes tab, each side said plainly and as git's command; a file opens its diff (#315) — in review
+    - [ ] E2b The graph compares the same two: its architecture diff between the pair chosen in the Changes tab (#316) — in review
+  - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked — building
   - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history`
   - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default
   - [ ] E6 The done-when: a teammate's agent's work, traced line by line and side by side, with no plan
@@ -451,6 +453,10 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-02 | A7 is refined into three parts (EXECUTION §4): the rules and the check, rule signals from each workstream's import delta, the gate and the done-when. A rule is a path boundary (`from`, `mayNotImport`, `except`, `because`) in the committed config | One file every laptop, agent and pipeline reads; a boundary between two sets of paths is what M7 asks for ("web/ may not import db/") and covers layers without a layer model |
 | 2026-10-02 | Track E serves beginners and advanced users of git alike (owner): every surface reads two ways, a plain sentence first, then git's own word and the exact command (copyable) | The owner: "the whole idea behind this portion of work is making it so both beginners and advanced users of git can use it as their surfacing tool". Plain words alone hide what is compared from someone who knows git; git's words alone shut out someone who does not; both, together, teach the one and serve the other |
 | 2026-10-02 | E1: the defect had three causes, each fixed where it was: a committed edit (the code view compared the last commit with a clean working tree), an edit in another worktree (it read only this checkout), and a project in a subfolder of its repository (`git show <ref>:<path>` read from the repository's top, so the file "was added") | All three reproduced against a running backend before anything changed; the Changes panel names where each change is and diffs between that group's own two points, and the code view picks the same comparison for a file opened from the tree or the graph |
+| 2026-10-02 | E2 is split in two: E2a, the refs and any two compared file by file from the Changes tab; E2b, the graph comparing the same pair | The graph has no comparison of two chosen points today (only baseline against live, and replay's frames), so drawing one is its own work; the pair, chosen once, is what both read |
+| 2026-10-02 | E2a: a working copy is compared as a tree, written through a copy of its own index (as `git stash create` does) | One diff for every kind of side (`git diff-tree` of two trees), untracked files included, and the checkout, its index and its refs untouched; it writes blobs into the object store, which `git gc` clears. Copying the index keeps its stat cache, so unchanged files are not read again |
+| 2026-10-02 | E2a: sides are full ref names (`refs/heads/x`, `refs/remotes/origin/x`, `refs/tags/x`), said as git shows them | A branch and a tag with the same name never mix; the words and the command use the short name a person types |
+| 2026-10-02 | E2a: a comparison reads worktrees from `git worktree list` only, never through `listWorkstreams` | That listing is the discovery pass and starts watchers; a comparison asked for twice must not change what is watched (a unit test hung on the watchers it left open) |
 | 2026-10-02 | E1: the awareness store reads one at a time and reads commits only when a head moved or every 30 s; the backend keeps each workstream's commits by head and merge base | Found by the E1 browser test hanging after another spec: every file change in any worktree started three reads with no limit, the commit reads (a `git log` per workstream, synchronous, seconds each) piled up two dozen deep, and the browser's six connections to the app filled, so even the diff editor's code could not load. The likely cause of #310's Awareness count failure too |
 | 2026-10-02 | Track E joins Phase 32 before the review (owner): compare any two points with no plan, in the graph and the code view; a file at two refs side by side, each side scrubbing its own commits; each line's commit and author as GitLens shows them, with the agent, session, task and plan where CodeTrellis knows them | It surfaces the process behind the current state to someone outside the work, which is most of what CodeTrellis is for, and it starts from a defect the owner saw: the graph showed changes, the code view no diff, with no plan |
 | 2026-10-02 | Track E: git and gh run by the backend through the CLI, nothing sent anywhere; keeping remotes current is a setting, off by default; "Fetch now" is always there | The owner: "on the whole we still aren't doing any telemetry, what we do is powered by the CLI". A background fetch is the app reaching the network on its own, so it is the person's choice, and the app says when it last fetched |
@@ -489,6 +495,30 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-02: E2a — any ref on either side, from the Changes tab
+- **Journey.** In the Changes tab, Priya opens "Compare two points". It
+  starts on `main` against her working copy. "To" lists this checkout,
+  branches, remote branches as last fetched, tags and worktrees, each
+  group with git's command (`$ git branch -r`), and the worktree codex
+  works in; she types "billing" and picks `billing-v2`. "2 files differ
+  between main and billing-v2", with `$ git diff main billing-v2`; one is
+  main's own later changelog, so she ticks "From where they split": "1
+  file differs", `$ git diff main...billing-v2`. The file opens its diff
+  in the code view, "Where main and billing-v2 split (a1b2c3d)" against
+  "billing-v2". Swapped, it reads what main changed since.
+- **Built.** `services/git-refs.ts` (`listRefs`, `filesBetween`,
+  `treeOf`, `workingCopyTree`, `mergeBase`, `sideLabel`, `diffCommand`,
+  `worktreesForCompare`); `GET /api/git/refs`, `GET /api/git/refs/compare`;
+  `merge-base:` and `workstream:` comparands for the graph and
+  `/api/file/at`; full ref names labelled as git shows them; the store's
+  pair; `RefPicker` and `ComparePair` in the Changes tab.
+- **Tests.** Unit `git-refs.test.ts` (7: the listing; each kind compared;
+  a working copy read without touching the checkout; labels and
+  commands; files at each kind and the graph's resolution; refusals; a
+  subfolder project). Harness `refs.test.ts` (6). Browser
+  `sidebar/compare-refs.spec.ts` (shots `compare-ref-menu`,
+  `compare-pair`, `compare-diff`).
 
 ### 2026-10-02: E1 — source control with no plan, and the defect that started Track E
 - **Journey.** Priya opens a repository with no plan. The sidebar's Changes

@@ -77,6 +77,7 @@ import * as planService from './services/plan-service';
 import * as budgetService from './services/budget-service';
 import { compareSnapshots, listComparands, readFileAt } from './services/snapshot-compare-service';
 import { sourceControl, projectPrefix } from './services/source-control';
+import { diffCommand, filesBetween, listRefs, sideLabel, worktreesForCompare } from './services/git-refs';
 import { reviewPlan, renderReviewMarkdown } from './services/plan-review-service';
 import { reviewQueue } from './services/review-queue-service';
 import { buildStack } from './services/stack-service';
@@ -4323,6 +4324,42 @@ app.get('/api/source-control', (req, res) => {
   let workstreams: ReturnType<typeof listWorkstreams> = [];
   try { workstreams = listWorkstreams(projectPath, { includeIdle: false }); } catch { /* not a repository: the service says so */ }
   res.json(sourceControl(projectPath, baselineCommit, workstreams));
+});
+
+// Phase 32 E2: every point a person can compare (branches, remote branches as
+// last fetched, tags, other worktrees' working copies), and the files that
+// differ between any two, each side said plainly and the command git would
+// use. A worktree is named by the id `listWorkstreams` gave it; refs are
+// checked before they reach git.
+app.get('/api/git/refs', (req, res) => {
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  let workstreams: ReturnType<typeof listWorkstreams> = [];
+  try { workstreams = listWorkstreams(projectPath, { includeIdle: true }); } catch { /* not a repository: the listing says so */ }
+  res.json(listRefs(projectPath, workstreams));
+});
+
+app.get('/api/git/refs/compare', (req, res) => {
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  const before = typeof req.query.before === 'string' ? req.query.before : '';
+  const after = typeof req.query.after === 'string' ? req.query.after : '';
+  if (!before || !after) { res.status(400).json({ error: 'Choose both sides: before and after.' }); return; }
+  // Read only: git's worktrees, no agents placed, no watchers started.
+  const workstreams = worktreesForCompare(projectPath);
+  const result = filesBetween(projectPath, before, after, workstreams);
+  if (!result.ok) { res.status(400).json({ error: result.error }); return; }
+  const labels = { before: sideLabel(projectPath, before, workstreams), after: sideLabel(projectPath, after, workstreams) };
+  const n = result.files.length;
+  // Inside a sentence the app's own words start lower case; a branch keeps its name.
+  const said = (l: string) => (/^(Where|Your|Last|Staged|Tag|Nothing|Commit) /.test(l) ? l[0].toLowerCase() + l.slice(1) : l);
+  res.json({
+    before, after, labels, files: result.files, truncated: result.truncated,
+    command: diffCommand(before, after, workstreams, undefined),
+    words: n === 0
+      ? `${labels.before} and ${said(labels.after)} have the same files.`
+      : `${n}${result.truncated ? '+' : ''} file${n === 1 ? ' differs' : 's differ'} between ${said(labels.before)} and ${said(labels.after)}.`,
+  });
 });
 
 app.get('/api/comparands', (req, res) => {

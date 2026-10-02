@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track E — E1: source control with no plan needed"
-  status: "B10 done: B10.2 (#310), B10.3 (#311), B10.4 (#312) and B10.5 (#313) merged. Track E planned with the owner (2026-10-02). E1 built: the defect reproduced three ways (a committed edit, an edit in another worktree, a project in a subfolder) and fixed; the sidebar's Changes tab (this checkout, committed since you opened it, each other worktree with its agents), each file opening its diff between its group's two points; the code view says what it compares. Found on the way and fixed: a request storm of commit reads that starved the browser. Unit source-control 7 + commits cache; harness source-control 6; browser sidebar/changes (shots)"
-  next: "Merge E1 (#314) when green; then E2 (any ref on either side), E2a stacked on E1"
+  step: "Track E — E2a: any ref on either side, from the Changes tab"
+  status: "E1 merged (#314). E2 is split in two: E2a (the refs, any two compared file by file, from the Changes tab) and E2b (the graph compares the same two). E2a built on E1: GET /api/git/refs lists this checkout, branches, remote branches as last fetched, tags and other worktrees, each group with git's word and command; GET /api/git/refs/compare lists the files between any two, with \"from where they split\" (merge base) and the git command; a worktree's working copy is read as a tree through a copy of its own index (the checkout untouched); /api/compare and /api/file/at take the same sides. Unit git-refs 7; harness refs 6; browser compare-refs (shots)"
+  next: "Merge E2a (#315) when green, then E2b (#316) and E3 by the stacked flow"
   blockers: "None"
   updated: 2026-10-02
 sections:
@@ -659,7 +659,12 @@ sections:
           - id: E1
             title: "Source control with no plan: the Changes panel (staged, unstaged, untracked; each worktree's changes), and the defect that started it (the graph showed changes, the code view no diff)"
           - id: E2
-            title: "Any ref on either side: branches local and remote, tags, a worktree's working copy, a merge base; one picker for the code view and the graph"
+            title: "Any ref on either side: branches local and remote, tags, a worktree's working copy, a merge base; one picker for the code view and the graph, in two:"
+            items:
+              - id: E2a
+                title: "The refs, and any two compared file by file from the Changes tab, each side said plainly and as git's command; a file opens its diff"
+              - id: E2b
+                title: "The graph compares the same two: its architecture diff between the pair chosen in the Changes tab"
           - id: E3
             title: "The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked"
           - id: E4
