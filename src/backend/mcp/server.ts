@@ -567,7 +567,8 @@ function setupMcpServerInstance(sessionId: string): McpServer {
         const breach = breachNoticeFor(sessionId, getActiveProjectPath());
         if (breach) result.content.push({ type: 'text', text: breach });
         // A spec change proposed to a page this session's task relies on (B7.3), once.
-        const proposal = proposalNoticeFor(sessionId, agentInfo.type ?? null);
+        // When it tells the agent a spec changed, the task's page says so at once (B7.4).
+        const proposal = proposalNoticeFor(sessionId, agentInfo.type ?? null, Date.now(), (itemUids) => broadcast('spec-proposal-told', { itemUids }));
         if (proposal) result.content.push({ type: 'text', text: proposal });
         // A planned overlap a person asked this session to know about (B9.3a), once.
         const planned = plannedOverlapNoticeFor(sessionId);

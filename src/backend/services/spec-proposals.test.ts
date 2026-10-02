@@ -95,3 +95,17 @@ test('a session with no tasks, or a decided proposal, gets nothing', () => {
   db.getDb().run(`UPDATE spec_proposals SET status = 'rejected'`);
   assert.equal(proposals.proposalNoticeFor('s-late', null), null);
 });
+
+test('accepted, the relying task\'s agent is told on its next call, and the window is told which task, once', () => {
+  const held = task('Format totals', 's-told', 'fields');
+  const p = propose('fields', '## Fields\n\n- amount\n- vat', 's-proposer-2');
+  proposals.decideProposal({ uid: p.uid, decision: 'accept' }, { author: 'Sam', authorType: 'human' });
+  const told: string[][] = [];
+  const notice = proposals.proposalNoticeFor('s-told', 'codex', Date.now(), (uids) => told.push(uids)) ?? '';
+  assert.match(notice, /── CodeTrellis: spec changed ──/);
+  assert.deepEqual(told, [[held]]);
+  assert.equal(proposals.specChangedFor(held)[0].toldAt !== null, true);
+  // Told once: the next call says nothing and tells the window nothing.
+  proposals.proposalNoticeFor('s-told', 'codex', Date.now(), (uids) => told.push(uids));
+  assert.deepEqual(told, [[held]]);
+});
