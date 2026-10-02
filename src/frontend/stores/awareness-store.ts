@@ -61,6 +61,7 @@ export const useAwarenessStore = create<AwarenessState>((set, get) => ({
       const body = await res.json().catch(() => ({}));
       if (!res.ok) return (body as { error?: string }).error ?? `Server returned ${res.status}`;
       const updated = body as AwarenessSignal;
+      localEdits++;
       set((s) => ({ signals: s.signals.map((x) => (x.id === id ? updated : x)) }));
       return null;
     } catch {
@@ -80,6 +81,7 @@ export const useAwarenessStore = create<AwarenessState>((set, get) => ({
       const body = await res.json().catch(() => ({}));
       if (!res.ok) return (body as { error?: string }).error ?? `Server returned ${res.status}`;
       const { signalId: _s, steers: _t, ...reply } = body as SignalReply & { signalId: string; steers: string[] };
+      localEdits++;
       set((s) => ({ signals: s.signals.map((x) => (x.id === id ? { ...x, replies: [...(x.replies ?? []), reply] } : x)) }));
       return null;
     } catch {
@@ -91,6 +93,13 @@ export const useAwarenessStore = create<AwarenessState>((set, get) => ({
 /** The read in flight, and a refresh asked for while it ran. */
 let inFlight: Promise<void> | null = null;
 let again: string | null = null;
+/**
+ * Bumped by every answer and reply set here. A read that started before one
+ * must not write its older list over it: the card would turn back to open
+ * after the person acknowledged it. Such a read keeps the workstreams and
+ * asks for one more.
+ */
+let localEdits = 0;
 /** Commits change when a workstream commits, not on every file change: read at most this often. */
 const COMMITS_EVERY_MS = 30_000;
 let commitsReadAt = 0;
@@ -100,6 +109,7 @@ let commitsHeads = '';
 
 async function readOnce(root: string, set: (s: Partial<AwarenessState>) => void, get: () => AwarenessState): Promise<void> {
   const q = `project=${encodeURIComponent(root)}`;
+  const editsAtStart = localEdits;
   try {
     const [ws, aw] = await Promise.all([fetch(`/api/workstreams?${q}&idle=1`), fetch(`/api/awareness?${q}`)]);
     if (!ws.ok || !aw.ok) throw new Error(`Server returned ${ws.ok ? aw.status : ws.status}`);
@@ -107,7 +117,13 @@ async function readOnce(root: string, set: (s: Partial<AwarenessState>) => void,
     const body = (await aw.json()) as { signals?: AwarenessSignal[] };
     if (get().root !== root) return; // the project changed while this was in flight
     const list = Array.isArray(workstreams) ? workstreams : [];
-    set({ workstreams: list, signals: Array.isArray(body.signals) ? body.signals : [], loaded: true, error: null });
+    if (localEdits !== editsAtStart) {
+      // Read before a person's answer landed: its signals are older than what is shown.
+      set({ workstreams: list, loaded: true, error: null });
+      again = again ?? root;
+    } else {
+      set({ workstreams: list, signals: Array.isArray(body.signals) ? body.signals : [], loaded: true, error: null });
+    }
     // Commits are extra: failing to read them never costs the rest, and
     // neither does reading them slowly; they land when they arrive. Read
     // when a workstream's head moved (a commit landed) or every
@@ -131,4 +147,4 @@ async function readOnce(root: string, set: (s: Partial<AwarenessState>) => void,
 }
 
 /** Test seam: forget what is in flight and when commits were read. */
-export function resetAwarenessReads(): void { inFlight = null; again = null; commitsReadAt = 0; commitsInFlight = false; commitsHeads = ''; }
+export function resetAwarenessReads(): void { inFlight = null; again = null; localEdits = 0; commitsReadAt = 0; commitsInFlight = false; commitsHeads = ''; }
