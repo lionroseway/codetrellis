@@ -103,6 +103,7 @@ import { buildPlanPrompt } from '../mcp/prompt-builders';
 import { handleApprovalMethod } from './mobile-approvals';
 import { handleBudgetMethod } from './mobile-budget';
 import { handleFreezeMethod } from './mobile-freeze';
+import { seriesFor, startRun } from './recurring-service';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -1317,6 +1318,26 @@ async function routeMethod(
       }
       broadcast('play-forward-changed', { project: projectPath });
       return { ...result, playForward: buildPlayForward(projectPath) };
+    }
+
+    // Recurring playbooks (Phase 32 C4.3a): the series as the plans list shows
+    // them, and starting the run due now. Starting is anyone's, as making a
+    // plan is, and twice is one run; setting a rule stays the app window's.
+    case 'recurring.list': {
+      const projectPath = peerProjectRoot(params, { required: true })!;
+      return { series: seriesFor(projectPath) };
+    }
+
+    case 'recurring.start': {
+      const projectPath = peerProjectRoot(params, { required: true })!;
+      const ruleId = requireString(params, 'ruleId');
+      // A RecurringError ("not due yet", an unknown rule) reaches the phone as its message.
+      const run = startRun(projectPath, ruleId, phonePerson());
+      if (run.created) {
+        broadcast('plan-created', { plan: run.plan });
+        broadcast('recurring-changed', { project: projectPath });
+      }
+      return { planUid: run.plan.uid, title: run.plan.title, created: run.created, recurrence: run.info, series: seriesFor(projectPath) };
     }
 
     // The plan's status (Phase 32 C2.4): every item's state with its source,

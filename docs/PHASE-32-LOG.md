@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track C — C4.2b: Settings → Recurring playbooks, and a run's own line |
-| **Status** | C4.1 (#299) and C4.2a (#300) merged. C4.2b built: Settings → Recurring playbooks sets a rule for the team (playbook, every, on, at, zone, carry over, skills) and stops one; a run's page says which series and period it is, who started it, and names its carried tasks, recognised by its id when it came from a teammate. Unit recurring-service 11, harness recurring 7, browser settings/recurring.spec 2 (shots) |
-| **In flight** | C4.2b in review (#301) on `feat/phase-32-c4-2b-settings-and-run-line` |
-| **Last merged** | C4.2a (#300, `2a605c8`) |
-| **Next action** | Merge C4.2b when green; then C4.3 (the phone, an agent only by opt-in, and the C4 done-when) |
+| **Stage / step** | Track C — C4.3a: recurring runs from the phone |
+| **Status** | C4.1 (#299), C4.2a (#300) and C4.2b (#301) merged. C4.3a built: the phone's Plans tab opens Recurring, each series in the desktop's words (W38 ✓ · W39 ✗ missed · W40 due · W41 next), the due run started as the person and opened; a run a teammate started is found, not made twice; a read-only phone cannot start one. `recurring.list` (read), `recurring.start` (write). Harness recurring 10, phone recurring.spec 3 (shots) |
+| **In flight** | C4.3a building on `feat/phase-32-c4-3a-phone-recurring` |
+| **Last merged** | C4.2b (#301, `b9bf396`) |
+| **Next action** | Merge C4.3a when green; then C4.3b (an agent on each run by opt-in per device, and the C4 done-when on two machines) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `2a605c8`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `b9bf396`, with open PRs from GitHub.
 
 ---
 
@@ -250,10 +250,12 @@
   - [x] C3.6 The C3 done-when (#284)
 - [ ] C4 Recurring playbooks, refined in EXECUTION §6: — building
   - [x] C4.1 The data: a rule on a playbook in the committed config, one run per period by its id, the series, carry-over (#299)
-  - [ ] C4.2 Due, in the window, split in two: — building
+  - [x] C4.2 Due, in the window, split in two:
     - [x] C4.2a Started as it comes; asked about when it fell due while the app was closed; the series row in the plans list (#300)
-    - [ ] C4.2b Settings → Recurring playbooks; a run's series, period and carried tasks on the run (#301) — in review
-  - [ ] C4.3 The phone, an agent only by opt-in, and the C4 done-when
+    - [x] C4.2b Settings → Recurring playbooks; a run's series, period and carried tasks on the run (#301)
+  - [ ] C4.3 The phone, an agent only by opt-in, and the C4 done-when — building
+    - [ ] C4.3a The phone lists the series and starts the due run (`recurring.list`, `recurring.start`) — building
+    - [ ] C4.3b Start an agent on each run, per rule and device (off by default, needs `terminal`); the C4 done-when on two machines
 - [x] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
   - [x] C5.1 `workstream` on an item, inherited; `assign_workstream`; next and claim respect it (#186)
   - [x] C5.2 Start a worktree for a section; a start command for any agent (#187)
@@ -428,6 +430,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | B9.3 is split into B9.3a (the three actions, in the window) and B9.3b (said on approval; the phone) | The actions are one service and one surface; the approval notice and the phone's RPCs each touch another door with its own tests |
 | 2026-10-01 | C4.2a: the app starts a run only when its moment falls while the app runs (between two ticks); one that fell due while it was closed is asked about, never started on launch | The doc's "the app only acts while running": a laptop opened at ten should not make a nine o'clock run on its own, since a teammate may have run it or the person may not want it; asking keeps the person in the decision |
 | 2026-10-01 | C4.2a: a scheduled start is authored `schedule` (a system author, as other app-made records are), and the run keeps who set the rule | No person or agent called; the rule a person set is the reason, and saying "schedule" never passes the app off as that person |
+| 2026-10-01 | C4.3 is split into C4.3a (the phone) and C4.3b (an agent on each run by opt-in, and the done-when on two machines). The phone starts a run but does not set a rule | The phone is one more door onto C4.1's service with its own RPC tests; starting an agent spawns a process and carries its own security case. Setting a rule is the person's in the app window, as a plans folder is |
 | 2026-10-01 | C4.2 is split into C4.2a (due runs and the series row) and C4.2b (Settings and the run's own line) | Each is a surface with its own browser journey; the first answers "what is due", the second "how is it set up" |
 | 2026-10-01 | C4 is refined into three parts (EXECUTION §6): the data, due in the window, the phone and the done-when. A recurrence rule lives in the committed config and a run's uid is derived from the series (the plans folder named, else the origin, else the folder's name), the rule and the period | The team sees the rule where it sees the plans folder; a derived id makes two starts, here or on two machines, one plan without either asking the other, and the series key never includes this device's path |
 | 2026-10-01 | C4.1: a period runs from its due moment to the next one's, in the rule's own time zone; only the current period can be started, and periods before the rule was set are not counted | "Due since Monday" stays true until the next Monday, and a team in one zone shares one clock across laptops in others; refusing older periods is the doc's "missed runs are shown, not back-filled" |
@@ -442,6 +445,21 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-01: C4.3a — recurring runs from the phone
+- **Journey.** Away from the desk, Sam opens Plans → Recurring on the phone.
+  "Weekly security review" reads "every Mon 09:00 · Europe/London · carries
+  open tasks over · skill: security-review", then "W38 ✓ · W39 ✗ missed · W40
+  due · W41 next", and "Weekly security review is due since Monday 09:00".
+  He taps Start W40: "Started Weekly security review — W40", the row reads
+  "W40 ◐" and the run's plan opens. Had Dana started it on her laptop first,
+  the phone says "was already started; opening it" and opens hers.
+- **Built.** `recurring.list` (`read`) and `recurring.start` (`write`, the
+  person on the phone through `phonePerson`), `mobile/lib/recurring.ts`,
+  `mobile/app/recurring.tsx`, the Recurring way in on the Plans tab.
+- **Tests.** Harness `recurring.test.ts` (10: the phone's list equals REST,
+  started as the person, twice is one run, refused for an unknown series and
+  a read-only phone). Phone `recurring.spec.ts` (3, shots) and `tabs.spec.ts`.
 
 ### 2026-10-01: C4.2b — Settings → Recurring playbooks, and a run's own line
 - **Journey.** Sam opens Settings → Recurring playbooks and makes the Bug fix

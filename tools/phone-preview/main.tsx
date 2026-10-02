@@ -28,6 +28,7 @@ const SCREENS: Record<string, { title: string; load: () => Promise<{ default: Co
   'workstream-detail': { title: 'Line of work', load: () => import('../../mobile/app/workstream-detail') },
   'review-queue': { title: 'Review queue', load: () => import('../../mobile/app/review-queue') },
   stack: { title: 'Stack', load: () => import('../../mobile/app/stack') },
+  recurring: { title: 'Recurring', load: () => import('../../mobile/app/recurring') },
   'plan-review': { title: 'Review', load: () => import('../../mobile/app/plan-review') },
   'plan-detail': { title: 'Plan', load: () => import('../../mobile/app/plan-detail') },
   'item-detail': { title: 'Task', load: () => import('../../mobile/app/item-detail') },
