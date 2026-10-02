@@ -37,6 +37,10 @@ A workstream is one line of work in the opened repository. They are
 - **Branches** with no checkout here, ahead of main, changed within
   `sensors.awareness.branchWindowDays` (default 7), and not already merged
   by content, so a squash merge counts (`branch-workstreams.ts`, bug 53).
+  Answers are cached per branch head; a listing works out at most eight
+  uncached branches inline and the rest in the background, then
+  broadcasts `workstreams-changed` (HD4b), so a clone with a hundred
+  recent remote branches never stalls the server.
   Only local refs are read, never fetched.
 - **Clones**: a folder an agent reports that no trusted root covers becomes
   a *folder request*. The person includes it or dismisses it
