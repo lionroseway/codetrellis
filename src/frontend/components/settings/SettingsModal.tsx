@@ -32,7 +32,7 @@ import { VerifiedUpdateDownload } from './VerifiedUpdateDownload';
 import { explainSaveError } from '../../lib/settings-words';
 import { useUiStore, type GraphStyle } from '../../stores/ui-store';
 import { configText, copyText, fetchMcpSetup, maskToken, recommendedConfigText, tokenOf, type McpSetup } from '../../lib/mcp-setup';
-import { FETCH_INTERVAL_CHOICES, type AppSettings, type PowerStatus, type PowerTriggers, type PeerCapabilityName, type RetentionDays } from '@shared/types';
+import { FETCH_INTERVAL_CHOICES, type AppSettings, type SettingsSection, type PowerStatus, type PowerTriggers, type PeerCapabilityName, type RetentionDays } from '@shared/types';
 import { useProjectStore } from '../../stores/project-store';
 import { useBranchesStore } from '../../stores/branches-store';
 import { AddToClaudeDesktop } from './AddToClaudeDesktop';
@@ -170,7 +170,7 @@ const MCP_CAPABILITIES: Array<{
  * `settings-changed` so other open instances stay in sync.
  */
 
-export type SettingsSection = 'identity' | 'appearance' | 'mcp' | 'plans' | 'review-hosts' | 'plans-folder' | 'recurring' | 'rules' | 'shared-state' | 'data' | 'devices' | 'power' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'git' | 'about';
+export type { SettingsSection } from '@shared/types';
 
 type Section = SettingsSection;
 
@@ -284,7 +284,7 @@ export function SettingsModal({
         </div>
 
         {/* Content */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col" data-settings-section={section}>
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[0.06]">
             <h3 className="text-[13px] font-semibold text-foreground">
               {SECTIONS.find((s) => s.key === section)?.label}

@@ -83,6 +83,16 @@ test.describe.serial('Agent UI and diagnostics tools', () => {
       ['toggle_activity_drawer', {}, 'ui-toggle-activity-drawer', {}],
       ['open_history_drawer', { item_uid: itemUid }, 'ui-open-history-drawer', { itemUid }],
       ['open_settings', {}, 'ui-open-settings', {}],
+      ['open_settings', { section: 'data' }, 'ui-open-settings', { section: 'data' }],
+      // Showing, never deciding: replay from a moment at 4×, the plans played
+      // forward, back to now, the sidebar's Changes, one overlap pointed at.
+      ['navigate_to', { target: 'replay', from: '2026-10-01T09:00:00Z', speed: 4 }, 'ui-navigate', { target: 'replay', from: Date.parse('2026-10-01T09:00:00Z'), speed: 4 }],
+      ['navigate_to', { target: 'replay', from: 1_790_000_000_000, to: 1_790_003_600_000 }, 'ui-navigate', { target: 'replay', from: 1_790_000_000_000, to: 1_790_003_600_000 }],
+      ['navigate_to', { target: 'play-forward' }, 'ui-navigate', { target: 'play-forward' }],
+      ['navigate_to', { target: 'live' }, 'ui-navigate', { target: 'live' }],
+      ['navigate_to', { target: 'changes' }, 'ui-navigate', { target: 'changes' }],
+      ['navigate_to', { target: 'awareness', signal_id: 'sig-1' }, 'ui-navigate', { target: 'awareness', signalId: 'sig-1' }],
+      ['navigate_to', { target: 'awareness', breakpoint_ref: 'bp-1' }, 'ui-navigate', { target: 'awareness', breakpointRef: 'bp-1' }],
       ['open_mcp_guide', {}, 'ui-open-mcp-guide', {}],
       ['select_item', { item_uid: itemUid }, 'ui-select-item', { planUid, itemUid }],
       ['clipboard_write', { text: 'npm run test:unit' }, 'ui-clipboard-write', { text: 'npm run test:unit' }],
@@ -96,6 +106,22 @@ test.describe.serial('Agent UI and diagnostics tools', () => {
     expect(await broadcastOf('set_active_plan', { plan_uid: planUid }, 'ui-navigate')).toMatchObject({ target: 'plan', planUid });
     const sessions = (await req('GET', '/api/sessions')) as Array<{ agentType: string; activePlanUid: string | null }>;
     expect(sessions.find((s) => s.agentType === 'claude-desktop')?.activePlanUid).toBe(planUid);
+  });
+
+  test('a time that is not a time, a card with nowhere to show it, a section that is not one: refused, nothing shown', async () => {
+    const navigations = events.ofType('ui-navigate').length;
+    const settings = events.ofType('ui-open-settings').length;
+    for (const [tool, args, says] of [
+      ['navigate_to', { target: 'replay', from: 'not a time' }, 'from is not a time'],
+      ['navigate_to', { target: 'graph', signal_id: 'sig-1' }, 'go with target "awareness"'],
+      ['open_settings', { section: 'no-such-section' }, 'section'],
+    ] as Array<[string, Record<string, unknown>, string]>) {
+      const res = await agent.callTool(tool, args);
+      expect(res.isError, `${tool} ${JSON.stringify(args)}: ${res.text}`).toBe(true);
+      expect(res.text).toContain(says);
+    }
+    expect(events.ofType('ui-navigate').length).toBe(navigations);
+    expect(events.ofType('ui-open-settings').length).toBe(settings);
   });
 
   test('a plan, item or file that does not exist is refused, not reported as shown (bug 27)', async () => {

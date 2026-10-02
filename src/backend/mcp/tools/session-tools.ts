@@ -7,6 +7,7 @@ import path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { resultWithMeta } from '../helpers';
+import { SETTINGS_SECTIONS } from '../../../shared/types';
 import { ConfinementError, readTextWithin, writeFileWithin } from '../../services/confined-fs';
 
 /**
@@ -105,7 +106,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
     {
       description: 'Navigate the CodeTrellis UI to a specific view. Use this to show the user what you are working on — open the plan workspace, switch to graph view, enable split view, open the Brief on a task, or open a file you cite at the place you cite.',
       inputSchema: {
-        target: z.enum(['plan', 'graph', 'split', 'timeline', 'code', 'brief', 'artefact', 'awareness', 'stack', 'review']).describe('"plan" = plan workspace, "graph" = dependency graph, "split" = plan + graph side-by-side, "timeline" = plan workspace with the activity/event feed open, "code" = the code reader on a file, "brief" = the Brief (the plan as tasks, materials and what good looks like), "artefact" = a recorded file in the viewer, at a locator, "awareness" / "stack" / "review" = that tab of the side panel (overlaps and what needs the person; how the work stacks up; what to merge first)'),
+        target: z.enum(['plan', 'graph', 'split', 'timeline', 'code', 'brief', 'artefact', 'awareness', 'stack', 'review', 'replay', 'play-forward', 'live', 'changes']).describe('"plan" = plan workspace, "graph" = dependency graph, "split" = plan + graph side-by-side, "timeline" = plan workspace with the activity/event feed open, "code" = the code reader on a file, "brief" = the Brief (the plan as tasks, materials and what good looks like), "artefact" = a recorded file in the viewer, at a locator, "awareness" / "stack" / "review" = that tab of the side panel (overlaps and what needs the person; how the work stacks up; what to merge first), "replay" = the project as it was, from a moment (`from`), played at 4× with speed 4, "play-forward" = every active plan played forward to where they meet, "live" = back to now from replay or play-forward, "changes" = the sidebar\'s Changes view (source control, no plan needed). Showing only: nothing here decides anything for the person.'),
         plan_uid: z.string().optional().describe('If navigating to plan/split/timeline, which plan to show. If omitted, keeps the current active plan.'),
         // `code` was missing entirely, so an agent could show someone the
         // graph, a plan, a split and a timeline — and never the code,
@@ -116,6 +117,11 @@ export function register(server: McpServer, deps: ToolDeps): void {
         // Phase 31 §5 — an agent that says "look at the figure I cited" can
         // put it on screen, and one working a brief can show the task.
         item_uid: z.string().optional().describe('For target "brief": the task to show.'),
+        from: z.union([z.number(), z.string()]).optional().describe('For target "replay": where to start, as epoch milliseconds or an ISO date. Defaults to two hours ago.'),
+        to: z.union([z.number(), z.string()]).optional().describe('For target "replay": where to end, for a window in the past. Defaults to now.'),
+        speed: z.union([z.literal(1), z.literal(4)]).optional().describe('For target "replay": 4 plays it at once at 4× (catching up); 1, the default, leaves the person to scrub.'),
+        signal_id: z.string().optional().describe('With target "awareness": the overlap to scroll to and mark (an id from get_awareness or a notice).'),
+        breakpoint_ref: z.string().optional().describe('With target "awareness": the paused or breached breakpoint to scroll to and mark in Needs you (a ref from a paused result).'),
         attachment_uid: z.string().optional().describe('For target "artefact": the recorded file to open (from get_brief or record_artefact).'),
         locator: z.object({
           sheet: z.string().optional(),
@@ -127,7 +133,20 @@ export function register(server: McpServer, deps: ToolDeps): void {
         }).strict().optional().describe('For target "artefact": where in the file — {sheet, range}, {page}, {lines}, {text} or {t}.'),
       },
     },
-    async ({ target, plan_uid, file_path, line, item_uid, attachment_uid, locator }) => {
+    async ({ target, plan_uid, file_path, line, item_uid, attachment_uid, locator, from, to, speed, signal_id, breakpoint_ref }) => {
+      const when = (v: number | string | undefined, name: string): number | undefined | { error: string } => {
+        if (v === undefined) return undefined;
+        const ms = typeof v === 'number' ? v : Date.parse(v);
+        return Number.isFinite(ms) ? ms : { error: `${name} is not a time: ${String(v)}` };
+      };
+      const fromMs = when(from, 'from');
+      const toMs = when(to, 'to');
+      for (const t of [fromMs, toMs]) {
+        if (t && typeof t === 'object') return { content: [{ type: 'text' as const, text: t.error }], isError: true };
+      }
+      if ((signal_id || breakpoint_ref) && target !== 'awareness') {
+        return { content: [{ type: 'text' as const, text: 'signal_id and breakpoint_ref go with target "awareness"' }], isError: true };
+      }
       if (target === 'artefact' && !attachment_uid) {
         return { content: [{ type: 'text' as const, text: 'target "artefact" needs attachment_uid' }], isError: true };
       }
@@ -136,6 +155,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (refused) return refused;
       deps.broadcast('ui-navigate', {
         target, planUid: plan_uid, filePath: file_path, line, itemUid: item_uid, attachmentUid: attachment_uid, locator: locator ?? null,
+        from: fromMs as number | undefined, to: toMs as number | undefined, speed, signalId: signal_id, breakpointRef: breakpoint_ref,
       });
       return { content: [{ type: 'text' as const, text: `Navigated to ${target}${plan_uid ? ` (plan ${plan_uid})` : ''}` }] };
     },
@@ -491,12 +511,15 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'open_settings',
     {
-      description: 'Open the settings modal in the CodeTrellis UI.',
-      inputSchema: {},
+      description: 'Open the settings modal in the CodeTrellis UI, at a section when one is named. '
+        + 'Showing only: settings that widen what the app can reach are changed by the person, in the window.',
+      inputSchema: {
+        section: z.enum(SETTINGS_SECTIONS).optional().describe('The section to open at, e.g. "data" (the record), "git", "review-hosts", "mcp" (what agents may do).'),
+      },
     },
-    async () => {
-      deps.broadcast('ui-open-settings', {});
-      return { content: [{ type: 'text' as const, text: 'Opened settings modal' }] };
+    async ({ section }) => {
+      deps.broadcast('ui-open-settings', section ? { section } : {});
+      return { content: [{ type: 'text' as const, text: section ? `Opened settings at ${section}` : 'Opened settings modal' }] };
     },
   );
 

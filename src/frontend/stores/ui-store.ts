@@ -44,6 +44,13 @@ export type WorkspaceMode = 'graph' | 'plan' | 'docs' | 'code' | 'brief';
 /** The bottom panel's tabs (`PlanPanel`). */
 export type PlanPanelTab = 'plans' | 'stack' | 'timeline' | 'awareness' | 'review' | 'changes' | 'proposed' | 'comments';
 
+/**
+ * One thing an agent pointed at (`navigate_to` with `signal_id` or
+ * `breakpoint_ref`): the card scrolls into view and is marked, until the
+ * next navigation. `at` makes pointing at the same thing again a change.
+ */
+export interface UiHighlight { kind: 'signal' | 'breakpoint'; id: string; at: number }
+
 interface UiState {
   sidebarVisible: boolean;
   inspectorVisible: boolean;
@@ -93,6 +100,10 @@ interface UiState {
   setSplitView: (v: boolean) => void;
 
   toggleSidebar: () => void;
+  highlight: UiHighlight | null;
+  setHighlight: (h: UiHighlight | null) => void;
+  /** Show the sidebar when it is hidden (an agent opening one of its views). */
+  showSidebar: () => void;
   toggleInspector: () => void;
   toggleAgentPanel: () => void;
   setSidebarWidth: (w: number) => void;
@@ -198,6 +209,9 @@ export const useUiStore = create<UiState>((set) => ({
   toggleWorkspaceMode: () => set((s) => ({ workspaceMode: s.workspaceMode === 'graph' ? 'plan' : 'graph' })),
 
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
+  highlight: null,
+  setHighlight: (highlight) => set({ highlight }),
+  showSidebar: () => set({ sidebarVisible: true }),
   toggleInspector: () => set((s) => ({ inspectorVisible: !s.inspectorVisible })),
   toggleAgentPanel: () => set((s) => ({ agentPanelVisible: !s.agentPanelVisible })),
   setSidebarWidth: (w) => set({ sidebarWidth: w }),

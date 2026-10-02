@@ -80,6 +80,54 @@ test.describe('UI tools against the window', () => {
     }
   });
 
+  test('navigate_to shows replay at 4×, the plans played forward, the sidebar\'s Changes, Settings at a section, and one overlap pointed at; ui_ready says so', async ({ page }) => {
+    // Showing only: each is what a person's own click does, and ui_ready
+    // reports it, so the demo can check a picture is of what it says.
+    const ready = async () => JSON.parse((await client.callTool('ui_ready', {})).content[0].text);
+    const signalId = 'nav-c1';
+    await page.route('**/api/awareness?*', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ signals: [{
+        id: signalId, kind: 'collision', severity: 'high', subject: { file: 'src/auth/session.ts', symbol: 'refreshToken' },
+        workstreams: ['/work/acme-auth', '/work/acme-billing'], summary: '`auth-refresh` and `billing-v2` both change src/auth/session.ts → refreshToken',
+        firstSeen: Date.now() - 600_000, lastSeen: Date.now(), state: 'open',
+      }] }),
+    }));
+    await gotoWithProject(page);
+
+    await client.callTool('navigate_to', { target: 'replay', from: Date.now() - 3_600_000, speed: 4 });
+    await expect(page.getByTestId('replay-bar')).toBeVisible({ timeout: 10_000 });
+    await expect.poll(async () => (await ready()).replay?.autoplay ?? null, { timeout: 15_000 }).toBe(4);
+
+    await client.callTool('navigate_to', { target: 'play-forward' });
+    await expect(page.getByTestId('play-forward-bar')).toBeVisible({ timeout: 10_000 });
+    await expect.poll(async () => (await ready()).playForward, { timeout: 15_000 }).toBe(true);
+    expect((await ready()).replay).toBeNull();
+
+    await client.callTool('navigate_to', { target: 'live' });
+    await expect(page.getByTestId('play-forward-bar')).toHaveCount(0);
+    await expect.poll(async () => { const r = await ready(); return [r.replay, r.playForward]; }, { timeout: 15_000 }).toEqual([null, false]);
+
+    await client.callTool('navigate_to', { target: 'changes' });
+    await expect(page.getByTestId('source-control')).toBeVisible({ timeout: 10_000 });
+    expect((await ready()).sidebarView).toBe('changes');
+
+    await client.callTool('navigate_to', { target: 'awareness', signal_id: signalId });
+    const card = page.locator(`[data-signal-id="${signalId}"]`);
+    await expect(card).toHaveAttribute('data-highlighted', 'true', { timeout: 10_000 });
+    await expect.poll(async () => (await ready()).highlighted, { timeout: 15_000 }).toEqual({ kind: 'signal', id: signalId });
+    // The next navigation points at nothing.
+    await client.callTool('navigate_to', { target: 'awareness' });
+    await expect(card).not.toHaveAttribute('data-highlighted', 'true');
+
+    await client.callTool('open_settings', { section: 'data' });
+    const settings = page.getByRole('dialog', { name: 'Settings' });
+    await expect(settings.getByRole('heading', { name: 'Data' })).toBeVisible({ timeout: 10_000 });
+    expect((await ready()).settingsSection).toBe('data');
+    await page.keyboard.press('Escape');
+    await expect(settings).toHaveCount(0);
+  });
+
   test('a wrong uid changes nothing on screen, and the agent is told', async ({ page, request }) => {
     const seeded = await seedPlan(request, { title: TITLE, actions: [{ title: 'Stay on this' }] });
     await gotoWithProject(page);
