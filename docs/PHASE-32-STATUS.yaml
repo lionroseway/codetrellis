@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track A — A7.1: architecture rules, and check_conformity made true"
-  status: "C4 done (#299–#303; base fixes #304, #305). A7 refined in three parts. A7.1 built: rules in the committed config (from, may not import, except, because), each with the imports that break it today; GET/PUT/DELETE /api/rules (the person's); check_conformity checks them and says the rule and why; list_rules (read); Settings → Architecture rules. Unit architecture-rule 4, harness architecture-rules 5, browser settings/rules.spec 2 (shots)"
-  next: "Merge A7.1 when green; then A7.2 (rule signals from each workstream's import delta)"
+  step: "Track B — B10.1: the record as a hash chain"
+  status: "A7.2 (#307) and A7.3 (#308) in review. B10 refined in five parts. B10.1 built: every kept agent event linked into a hash chain as it is written; signal answers, spec decisions and rule changes kept as events; verifyRecord names what changed, was removed, relinked or added around it; GET /api/record, verify_record, Settings → Data → The record. Unit record-chain 8, harness record 4, browser settings/record 2 (shots)"
+  next: "Merge A7.2 and A7.3; open B10.1's PR; then B10.2 (retention you can set)"
   blockers: "None"
   updated: 2026-10-01
 sections:
@@ -513,6 +513,17 @@ sections:
             title: "The phone and the G3 done-when"
       - id: B10
         title: The record
+        items:
+          - id: B10.1
+            title: "The chain: every kept event linked, decisions as events, verified in words"
+          - id: B10.2
+            title: Retention you can set, and the chain still verifies
+          - id: B10.3
+            title: Signed packs, carrying the record's head
+          - id: B10.4
+            title: The evidence export
+          - id: B10.5
+            title: The G2 done-when and docs
   - title: "Track C: shared ways of working"
     items:
       - id: C1
