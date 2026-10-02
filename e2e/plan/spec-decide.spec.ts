@@ -8,7 +8,7 @@
  * "✎ … proposes a change to § Fields", why, now and proposed, and the reply.
  * The person amends the text and accepts it. The page has the amended text;
  * "Show invoice totals" says "Spec changed", and once its agent's next call has
- * told it, says so.
+ * told it, says so there and then.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -104,10 +104,8 @@ test.describe('Deciding a spec change', () => {
       const later = text(await checkoutAgent.callTool('get_spec_links', { uid: showTotals }));
       expect(later).toContain('── CodeTrellis: spec changed ──');
       expect(later).toContain('Their note: Name the standard.');
-      await page.reload();
-      await openPlan(page, CHECKOUT);
-      await page.getByTestId('plan-item-tree').getByText('Show invoice totals', { exact: true }).first().click();
-      await expect(page.getByTestId('spec-changed')).toContainText('its agent has been told', { timeout: 10_000 });
+      // Said on the open task as it happens, without opening it again.
+      await expect(changed).toContainText('its agent has been told', { timeout: 10_000 });
     } finally {
       proposer.close();
       checkoutAgent.close();
