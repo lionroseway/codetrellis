@@ -104,6 +104,7 @@ import { handleApprovalMethod } from './mobile-approvals';
 import { handleBudgetMethod } from './mobile-budget';
 import { handleFreezeMethod } from './mobile-freeze';
 import { seriesFor, startRun } from './recurring-service';
+import { startRunAgent } from './recurring-agent';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -1333,11 +1334,19 @@ async function routeMethod(
       const ruleId = requireString(params, 'ruleId');
       // A RecurringError ("not due yet", an unknown rule) reaches the phone as its message.
       const run = startRun(projectPath, ruleId, phonePerson());
+      // C4.3b — its agent, when the rule has one on this desktop: only for a
+      // phone the person allowed to open terminals.
+      const mayOpen = (getPairedDevice(fingerprint)?.capabilities ?? []).includes('terminal')
+        ? true as const
+        : 'this phone is not allowed to open terminals (Settings → Devices)';
+      const agent = run.created
+        ? startRunAgent(projectPath, ruleId, run.plan, mayOpen, (session) => broadcast('terminal-created', { session }))
+        : null;
       if (run.created) {
         broadcast('plan-created', { plan: run.plan });
         broadcast('recurring-changed', { project: projectPath });
       }
-      return { planUid: run.plan.uid, title: run.plan.title, created: run.created, recurrence: run.info, series: seriesFor(projectPath) };
+      return { planUid: run.plan.uid, title: run.plan.title, created: run.created, recurrence: run.info, agent, series: seriesFor(projectPath) };
     }
 
     // The plan's status (Phase 32 C2.4): every item's state with its source,

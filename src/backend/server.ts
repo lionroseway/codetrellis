@@ -78,6 +78,7 @@ import { buildStack } from './services/stack-service';
 import { buildPlayForward } from './services/play-forward';
 import { resequence, tellAgents, leaveOverlap, OverlapActionError, noteApproval, approvalNotices, markNoticeSeen } from './services/planned-overlap-actions';
 import { seriesFor, setRule, removeRule, startRun, dismissDue, recurrenceOf, RecurringError } from './services/recurring-service';
+import { isRunAgent, setRunAgent, startRunAgent } from './services/recurring-agent';
 import { startRecurringScheduler } from './services/recurring-scheduler';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
@@ -2683,16 +2684,43 @@ app.delete('/api/recurring/:id', (req, res) => {
   }
 });
 
+// C4.3b — on this device, start an agent on each run of a rule: the person's
+// alone, since it starts a process here. `agent` is claude, codex, or null (off).
+const RUN_AGENT_NOT_HERE = 'the run was started over plain HTTP; only you in the app, the schedule, or a phone allowed to open terminals start one';
+app.put('/api/recurring/:id/agent', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can have an agent start on each run — in the CodeTrellis app, ${RECURRING_WHERE}.` }); return; }
+  const agent = (req.body ?? {}).agent;
+  if (agent !== null && !isRunAgent(agent)) { res.status(400).json({ error: 'agent must be claude, codex or null' }); return; }
+  try {
+    const series = seriesFor(projectRoot).find((s) => s.rule.id === req.params.id);
+    if (!series) { res.status(404).json({ error: `No recurring playbook "${req.params.id}" in this project` }); return; }
+    setRunAgent(projectRoot, req.params.id, agent, changedBy(req));
+    broadcast('recurring-changed', { project: projectRoot });
+    res.json({ series: seriesFor(projectRoot).find((s) => s.rule.id === req.params.id) });
+  } catch (err) {
+    if (err instanceof RecurringError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
 app.post('/api/recurring/:id/start', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   try {
-    const run = startRun(projectRoot, req.params.id, personFrom(req));
+    const who = personFrom(req);
+    const run = startRun(projectRoot, req.params.id, who);
+    // C4.3b — its agent, when the rule has one on this device: from the app
+    // window, never from plain HTTP (loopback is not a person).
+    const agent = run.created
+      ? startRunAgent(projectRoot, req.params.id, run.plan, who.authorType === 'human' ? true : RUN_AGENT_NOT_HERE, (session) => broadcast('terminal-created', { session }))
+      : null;
     if (run.created) {
       broadcast('plan-created', { plan: run.plan });
       broadcast('recurring-changed', { project: projectRoot });
     }
-    res.json({ planUid: run.plan.uid, title: run.plan.title, created: run.created, recurrence: run.info });
+    res.json({ planUid: run.plan.uid, title: run.plan.title, created: run.created, recurrence: run.info, agent });
   } catch (err) {
     if (err instanceof RecurringError) { res.status(err.status).json({ error: err.message }); return; }
     throw err;
@@ -6186,6 +6214,8 @@ export async function initializeBackend(): Promise<void> {
   // Phase 32 C4.2a — recurring runs start as their moment comes while the app
   // runs; one that fell due while it was closed is asked about in the inbox.
   startRecurringScheduler((projectRoot, run) => {
+    // C4.3b — the schedule may start a run's agent, when the person turned it on here.
+    startRunAgent(projectRoot, run.info.rule, run.plan, true, (session) => broadcast('terminal-created', { session }));
     broadcast('plan-created', { plan: run.plan });
     broadcast('recurring-changed', { project: projectRoot });
   });

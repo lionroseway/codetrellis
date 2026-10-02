@@ -28,6 +28,8 @@ export interface RecurringSeries {
   words: string;
   runs: RecurringRun[];
   due: { period: string; label: string; since: number; words: string; dismissed: boolean } | null;
+  /** On the desktop, the agent each run made there starts (C4.3b); null when off. */
+  agent: { agent: 'claude' | 'codex'; by: string; at: number } | null;
 }
 
 export interface StartedRun {
@@ -35,6 +37,8 @@ export interface StartedRun {
   title: string;
   /** False when the run was already there: started earlier, or by a teammate. */
   created: boolean;
+  /** What starting did about the desktop's agent: started, or why not. Null when none is on. */
+  agent: { agent: string; terminalId: string | null; words: string } | null;
   series: RecurringSeries[];
 }
 
@@ -52,6 +56,13 @@ const MARK: Record<RunState, string> = { done: '✓', in_progress: '◐', missed
 /** The mark a period carries in the row: "W39 ✗ missed", "W40 ◐". */
 export function runMark(run: RecurringRun): string {
   return `${run.label} ${MARK[run.state]}`;
+}
+
+const AGENT_NAMES: Record<string, string> = { claude: 'Claude Code', codex: 'Codex' };
+
+/** "On the computer, Claude Code starts on each run", when it is on there. */
+export function agentLine(series: RecurringSeries): string | null {
+  return series.agent ? `On the computer, ${AGENT_NAMES[series.agent.agent] ?? series.agent.agent} starts on each run` : null;
 }
 
 /** What starting said: "Started Weekly security review — W40" or "already started". */

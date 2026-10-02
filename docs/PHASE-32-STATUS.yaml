@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track C — C4.3a: recurring runs from the phone"
-  status: "C4.1 (#299), C4.2a (#300) and C4.2b (#301) merged. C4.3a built: the phone's Plans tab opens Recurring, each series in the desktop's words (W38 ✓ · W39 ✗ missed · W40 due · W41 next), the due run started as the person and opened; a run a teammate started is found, not made twice; a read-only phone cannot start one. `recurring.list` (read), `recurring.start` (write). Harness recurring 10, phone recurring.spec 3 (shots)"
-  next: "Merge C4.3a when green; then C4.3b (an agent on each run by opt-in per device, and the C4 done-when on two machines)"
+  step: "Track C — C4.3b: an agent on each run, and the C4 done-when on two machines"
+  status: "C4.3a merged (#302), with base fixes #304 (a task says its agent was told as it happens) and #305 (a pairing no longer shuts the next pairing's window). C4.3b built: per rule and device, Settings → Recurring playbooks starts Claude Code or Codex on each run made here (off by default, kept on this device); only the person, the schedule or a phone granted `terminal` starts one, otherwise the run says why. Runs go to the plans folder when the project shares new plans. Done-when: two laptops, one planning repository, one W40 and one agent. Unit recurring-service 14, harness recurring 10 and recurring-two-machines 5, browser 2 specs, phone recurring.spec 4 (shots)"
+  next: "Merge C4.3b when green — C4 done; then refine A7 (rules)"
   blockers: "None"
   updated: 2026-10-01
 sections:

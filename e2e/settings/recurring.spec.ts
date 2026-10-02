@@ -7,7 +7,8 @@
  * "every Mon 09:00 · skill: triage · Europe/London · from the bug-fix
  * playbook · carries open tasks over". He opens this week's run: its page
  * says "Weekly triage · W40 run · started by the schedule · 1 task carried
- * from W39" and names the carried task, which opens. He stops the rule.
+ * from W39" and names the carried task, which opens. On this computer he has
+ * Claude Code start on each run (C4.3b), then turns it off. He stops the rule.
  *
  * The rule calls are answered on the page (the backend's side, real rules in
  * the committed config, is tests/e2e/recurring.test.ts), so nothing is
@@ -30,13 +31,21 @@ test.describe('Settings → Recurring playbooks', () => {
   test('a playbook made to recur is listed for the team, and stopped', async ({ page }) => {
     const rules: Array<Record<string, unknown>> = [];
     const puts: Array<{ id: string; body: Record<string, unknown> }> = [];
+    const agents: Record<string, { agent: string; by: string; at: number }> = {};
     await page.route((url) => url.pathname.startsWith('/api/recurring'), async (route) => {
       const req = route.request();
       const { pathname } = new URL(req.url());
       if (req.method() === 'GET' && pathname === '/api/recurring') {
-        return route.fulfill({ json: { series: rules.map((rule) => ({ rule, words: 'every Mon 09:00 · skill: triage', runs: [], due: null })) } });
+        return route.fulfill({ json: { series: rules.map((rule) => ({ rule, words: 'every Mon 09:00 · skill: triage', runs: [], due: null, agent: agents[rule.id as string] ?? null })) } });
       }
       const id = decodeURIComponent(pathname.split('/')[3] ?? '');
+      // C4.3b — this computer's agent for the rule.
+      if (req.method() === 'PUT' && pathname.endsWith('/agent')) {
+        const { agent } = req.postDataJSON() as { agent: string | null };
+        puts.push({ id: `${id}/agent`, body: { agent } });
+        if (agent) agents[id] = { agent, by: 'Sam Lee', at: Date.now() }; else delete agents[id];
+        return route.fulfill({ json: {} });
+      }
       if (req.method() === 'PUT') {
         const body = req.postDataJSON() as Record<string, unknown>;
         puts.push({ id, body });
@@ -77,6 +86,18 @@ test.describe('Settings → Recurring playbooks', () => {
     await expect(section.getByTestId('recurring-rule-words')).toHaveText('every Mon 09:00 · skill: triage · Europe/London · from the bug-fix playbook · carries open tasks over · set by Sam Lee');
     await expect(section.getByTestId('recurring-title')).toHaveValue('');
     await section.getByTestId('recurring-rules').screenshot({ path: path.join(OUT, 'recurring-settings-rule.png') });
+
+    // C4.3b — off unless chosen here; on, a run started here opens a terminal with the agent.
+    const agent = section.getByTestId('recurring-rule-agent');
+    await expect(agent).toHaveValue('');
+    await expect(section.getByTestId('recurring-rule-agent-words')).toHaveCount(0);
+    await agent.selectOption('claude');
+    await expect(section.getByTestId('recurring-rule-agent-words')).toHaveText('A run started here opens a terminal in the project with Claude Code on it. Only on this computer; teammates choose for their own.');
+    await expect(agent).toHaveValue('claude');
+    await section.getByTestId('recurring-rules').screenshot({ path: path.join(OUT, 'recurring-settings-agent.png') });
+    await agent.selectOption('');
+    await expect(section.getByTestId('recurring-rule-agent-words')).toHaveCount(0);
+    expect(puts.slice(1)).toEqual([{ id: 'weekly-triage/agent', body: { agent: 'claude' } }, { id: 'weekly-triage/agent', body: { agent: null } }]);
 
     await section.getByTestId('recurring-rule-stop').click();
     await expect(section.getByTestId('recurring-rule')).toHaveCount(0);

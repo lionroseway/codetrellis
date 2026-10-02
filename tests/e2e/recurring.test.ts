@@ -68,13 +68,23 @@ test.describe.serial('Recurring playbooks', () => {
   });
 
   test('started, today\'s run is a plan from the playbook with the rule\'s skill; started again, the same plan', async () => {
+    // C4.3b — an agent on each run, on this device; from plain HTTP it is not started, and the run says why.
+    const on = await h.client.raw('PUT', `/api/recurring/daily-security-check/agent?project=${encodeURIComponent(root)}`, { agent: 'claude' });
+    expect(on.status, await on.clone().text()).toBe(200);
+    const terminals = async () => ((await (await h.client.raw('GET', '/api/terminals')).json()) as unknown[]).length;
+    const before = await terminals();
     const first = await h.client.raw('POST', `/api/recurring/daily-security-check/start?project=${encodeURIComponent(root)}`, {});
     expect(first.status, await first.clone().text()).toBe(200);
     const a = (await first.json()) as { planUid: string; title: string; created: boolean; recurrence: { period: string; previous: string | null } };
     expect(a).toMatchObject({ title: `Daily security check — ${label(now)}`, created: true, recurrence: { previous: null } });
+    expect((a as unknown as { agent: unknown }).agent).toEqual({
+      agent: 'claude', terminalId: null,
+      words: 'Claude Code was not started: the run was started over plain HTTP; only you in the app, the schedule, or a phone allowed to open terminals start one',
+    });
+    expect(await terminals()).toBe(before);
 
     const again = (await (await h.client.raw('POST', `/api/recurring/daily-security-check/start?project=${encodeURIComponent(root)}`, {})).json()) as { planUid: string; created: boolean };
-    expect(again).toEqual({ ...again, planUid: a.planUid, created: false });
+    expect(again).toEqual({ ...again, planUid: a.planUid, created: false, agent: null });
 
     const plans = (await (await h.client.raw('GET', `/api/plans?project=${encodeURIComponent(root)}`)).json()) as Array<{ uid: string; title: string }>;
     expect(plans.filter((p) => p.title.startsWith('Daily security check')).map((p) => p.uid)).toEqual([a.planUid]);
@@ -134,6 +144,13 @@ test.describe.serial('Recurring playbooks', () => {
     expect(((await unknown.json()) as { error: string }).error).toBe('No playbook "no-such-playbook" in this project');
     expect((await h.client.raw('POST', `/api/recurring/nope/start?project=${encodeURIComponent(root)}`, {})).status).toBe(404);
     expect((await h.client.raw('DELETE', `/api/recurring/nope${q()}`)).status).toBe(404);
+    // C4.3b — an agent the app does not know, and a series the project does not have.
+    const agent = await h.client.raw('PUT', `/api/recurring/daily-security-check/agent${q()}`, { agent: 'aider' });
+    expect(agent.status).toBe(400);
+    expect(((await agent.json()) as { error: string }).error).toBe('agent must be claude, codex or null');
+    expect((await h.client.raw('PUT', `/api/recurring/nope/agent${q()}`, { agent: 'codex' })).status).toBe(404);
+    const off = await h.client.raw('PUT', `/api/recurring/daily-security-check/agent${q()}`, { agent: null });
+    expect(((await off.json()) as { series: RecurringSeries }).series.agent).toBeNull();
     expect((await h.client.raw('GET', `/api/recurring?project=${encodeURIComponent('/tmp/never-opened')}`)).ok).toBe(false);
   });
 });
@@ -149,7 +166,7 @@ test.describe.serial('Only the person makes a playbook recur', () => {
   });
   test.afterAll(async () => { await h?.teardown(); });
 
-  test('from plain HTTP, setting and removing a rule are refused with where to do it; reading is not', async () => {
+  test('from plain HTTP, setting and removing a rule, and an agent on each run, are refused with where to do it; reading is not', async () => {
     const root = encodeURIComponent(h.fixture.projectPath);
     const set = await h.client.raw('PUT', `/api/recurring/weekly?project=${root}`, { playbook: 'bug-fix', title: 'Weekly', every: 'week', on: 1, at: '09:00', timeZone: 'UTC' });
     expect(set.status).toBe(403);
@@ -158,6 +175,10 @@ test.describe.serial('Only the person makes a playbook recur', () => {
     expect(removed.status).toBe(403);
     expect(((await removed.json()) as { error: string }).error).toBe('Only you can stop a playbook recurring — in the CodeTrellis app, Settings → Recurring playbooks.');
     expect((await h.client.raw('GET', `/api/recurring?project=${root}`)).status).toBe(200);
+    // C4.3b — nor having an agent start on each run: it opens a terminal on this computer.
+    const agent = await h.client.raw('PUT', `/api/recurring/daily-security-check/agent?project=${root}`, { agent: 'claude' });
+    expect(agent.status).toBe(403);
+    expect(((await agent.json()) as { error: string }).error).toBe('Only you can have an agent start on each run — in the CodeTrellis app, Settings → Recurring playbooks.');
   });
 });
 

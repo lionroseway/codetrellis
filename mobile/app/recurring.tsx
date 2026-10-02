@@ -6,12 +6,16 @@
  * W40 due", says what is due in the desktop's words, and starts it; a run
  * that a teammate already started is found, not made twice. A run opens its
  * plan. Rules are set in the app window (Settings → Recurring playbooks).
+ *
+ * C4.3b: when the computer starts an agent on each run, the card says so,
+ * and starting says whether it did (only for a phone allowed to open
+ * terminals) or why not.
  */
 
 import { useCallback, useState } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { listRecurring, runMark, startRecurring, startedLine, type RecurringRun, type RecurringSeries } from '../lib/recurring';
+import { agentLine, listRecurring, runMark, startRecurring, startedLine, type RecurringRun, type RecurringSeries } from '../lib/recurring';
 
 const TONE: Record<RecurringRun['state'], { color: string; border: string }> = {
   done: { color: '#6ee7b7', border: '#34d39940' },
@@ -76,12 +80,14 @@ function SeriesCard({ series: s, onOpen, onStarted }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
+  const [agentSaid, setAgentSaid] = useState<string | null>(null);
   const start = async () => {
     setBusy(true);
     setError(null);
     try {
       const run = await startRecurring(s.rule.id);
       setSaid(startedLine(run));
+      setAgentSaid(run.agent?.words ?? null);
       onStarted(run.series);
       onOpen(run.planUid);
     } catch (err: unknown) {
@@ -94,6 +100,7 @@ function SeriesCard({ series: s, onOpen, onStarted }: {
     <View style={styles.card} testID="recurring-series">
       <Text style={styles.title}>↻ {s.rule.title}</Text>
       <Text style={styles.words} testID="recurring-series-words">{s.words}</Text>
+      {agentLine(s) && <Text style={styles.agent} testID="recurring-agent">{agentLine(s)}</Text>}
       <View style={styles.runs}>
         {s.runs.map((r) => {
           const tone = TONE[r.state];
@@ -121,6 +128,7 @@ function SeriesCard({ series: s, onOpen, onStarted }: {
         </View>
       )}
       {said && <Text style={styles.said} testID="recurring-started">{said}</Text>}
+      {agentSaid && <Text style={styles.agentSaid} testID="recurring-agent-started">{agentSaid}</Text>}
       {error && <Text style={styles.error} testID="recurring-start-error">{error}</Text>}
     </View>
   );
@@ -145,6 +153,8 @@ const styles = StyleSheet.create({
   startText: { color: '#fde68a', fontSize: 13, fontWeight: '600' },
   disabled: { opacity: 0.5 },
   said: { color: '#6ee7b7', fontSize: 12, marginTop: 8 },
+  agent: { color: '#c4b5fd', fontSize: 12, marginTop: 3 },
+  agentSaid: { color: '#a1a1aa', fontSize: 12, marginTop: 2 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, paddingTop: 80 },
   emptyTitle: { color: '#d4d4d8', fontSize: 16, fontWeight: '600', marginBottom: 8 },
   emptyBody: { color: '#71717a', fontSize: 13, textAlign: 'center', lineHeight: 20 },

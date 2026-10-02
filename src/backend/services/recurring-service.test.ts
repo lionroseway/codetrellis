@@ -183,3 +183,45 @@ describe('which series a plan is a run of (C4.2b)', () => {
     assert.equal(recurring.recurrenceOf(project, '00000000-0000-4000-8000-000000000000', at('2026-10-05T12:00:00Z')), null);
   });
 });
+
+describe('an agent on each run, on this device (C4.3b)', () => {
+  test('off unless the person turned it on here; the series says which', async () => {
+    const agents = await import('./recurring-agent');
+    assert.equal(recurring.seriesFor(project, at('2026-10-05T12:00:00Z'))[0].agent, null);
+    agents.setRunAgent(project, 'daily-report', 'claude', 'Sam Lee', at('2026-10-05T12:00:00Z'));
+    assert.deepEqual(recurring.seriesFor(project, at('2026-10-05T12:00:00Z'))[0].agent, { agent: 'claude', by: 'Sam Lee', at: at('2026-10-05T12:00:00Z') });
+    // Never in the committed config: it starts a process on this machine.
+    assert.doesNotMatch(fs.readFileSync(path.join(project, '.codetrellis', 'config.json'), 'utf8'), /"agent"/);
+    agents.setRunAgent(project, 'daily-report', null, 'Sam Lee');
+    assert.equal(recurring.seriesFor(project)[0].agent, null);
+  });
+
+  test('the agent is asked to work the run\'s plan by its id, in one shell argument', async () => {
+    const agents = await import('./recurring-agent');
+    const plan = { uid: 'p-1', title: "Sam's \"daily\" report — `1 Oct` $HOME" } as import('../../shared/types').Plan;
+    const saved = process.env.CODETRELLIS_RUN_AGENT_COMMAND;
+    delete process.env.CODETRELLIS_RUN_AGENT_COMMAND;
+    try {
+      const line = agents.runCommand('claude', plan);
+      assert.equal(line, `claude 'Work the CodeTrellis plan "Sam s daily report — 1 Oct HOME" (plan_uid p-1): call get_next_item with that plan_uid, claim the task, read its brief with get_brief, do it, and repeat until no task is left.'\n`);
+      // One argument: no quote, backtick, dollar or newline of the title's survives into the line.
+      assert.equal(line.slice(0, -1).split("'").length, 3);
+      assert.match(agents.runCommand('codex', plan), /^codex '/);
+    } finally {
+      if (saved !== undefined) process.env.CODETRELLIS_RUN_AGENT_COMMAND = saved;
+    }
+  });
+
+  test('with none on, nothing starts; when this start may not open a terminal, it says why and opens none', async () => {
+    const agents = await import('./recurring-agent');
+    const plan = { uid: 'p-2', title: 'Daily report — 5 Oct' } as import('../../shared/types').Plan;
+    assert.equal(agents.startRunAgent(project, 'daily-report', plan, true), null);
+    agents.setRunAgent(project, 'daily-report', 'codex', 'Sam Lee');
+    let opened = 0;
+    assert.deepEqual(agents.startRunAgent(project, 'daily-report', plan, 'this phone is not allowed to open terminals', () => { opened++; }), {
+      agent: 'codex', terminalId: null, words: 'Codex was not started: this phone is not allowed to open terminals',
+    });
+    assert.equal(opened, 0);
+    agents.setRunAgent(project, 'daily-report', null, 'Sam Lee');
+  });
+});

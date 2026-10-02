@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { RecurringSeries } from '../../shared/types/recurring';
+import { useToastStore } from '../stores/toast-store';
 
 /**
  * Phase 32 C4.2a — the project's recurring playbooks, read again whenever one
@@ -31,11 +32,21 @@ export function useRecurring(root: string | null): { series: RecurringSeries[]; 
   return { series, reload };
 }
 
-/** Start the run due now; the answer names the plan, made now or found. */
+/**
+ * Start the run due now; the answer names the plan, made now or found. When
+ * the rule starts an agent on this computer (C4.3b), a toast says whether it
+ * did, or why not.
+ */
 export async function startRecurringRun(root: string, ruleId: string): Promise<{ planUid: string; title: string; created: boolean }> {
   const res = await fetch(`/api/recurring/${encodeURIComponent(ruleId)}/start?project=${encodeURIComponent(root)}`, { method: 'POST' });
-  const body = (await res.json().catch(() => ({}))) as { planUid?: string; title?: string; created?: boolean; error?: string };
+  const body = (await res.json().catch(() => ({}))) as {
+    planUid?: string; title?: string; created?: boolean; error?: string;
+    agent?: { agent: string; terminalId: string | null; words: string } | null;
+  };
   if (!res.ok || !body.planUid) throw new Error(body.error ?? `Server returned ${res.status}`);
+  if (body.agent) {
+    useToastStore.getState().addToast({ type: body.agent.terminalId ? 'success' : 'warning', title: body.title ?? 'Run started', message: body.agent.words });
+  }
   return { planUid: body.planUid, title: body.title ?? '', created: !!body.created };
 }
 

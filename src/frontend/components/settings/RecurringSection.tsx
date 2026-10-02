@@ -42,12 +42,12 @@ export function RecurringSection() {
       .catch(() => setTemplates([]));
   }, [root]);
 
-  const call = useCallback(async (method: 'PUT' | 'DELETE', id: string, body?: unknown) => {
+  const call = useCallback(async (method: 'PUT' | 'DELETE', id: string, body?: unknown, suffix = '') => {
     if (!root) return false;
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/recurring/${encodeURIComponent(id)}?project=${encodeURIComponent(root)}`, {
+      const res = await fetch(`/api/recurring/${encodeURIComponent(id)}${suffix}?project=${encodeURIComponent(root)}`, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -92,6 +92,26 @@ export function RecurringSection() {
                 <div className="text-foreground-muted text-[11px]" data-testid="recurring-rule-words">
                   {s.words} · {s.rule.timeZone} · from the {s.rule.playbook} playbook{s.rule.carryOver ? ' · carries open tasks over' : ''}{s.rule.by ? ` · set by ${s.rule.by}` : ''}
                 </div>
+                {/* C4.3b — this computer's choice, never the team's: it opens a terminal here. */}
+                <label className="mt-1.5 flex items-center gap-2 text-[11px] text-foreground-muted">
+                  <span>On this computer, start an agent on each run:</span>
+                  <select
+                    className="rounded border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 text-[11px] text-foreground"
+                    value={s.agent?.agent ?? ''}
+                    disabled={busy}
+                    onChange={(e) => { void call('PUT', s.rule.id, { agent: e.target.value || null }, '/agent'); }}
+                    data-testid="recurring-rule-agent"
+                  >
+                    <option value="">Off</option>
+                    <option value="claude">Claude Code</option>
+                    <option value="codex">Codex</option>
+                  </select>
+                </label>
+                {s.agent && (
+                  <div className="mt-0.5 text-[10.5px] text-foreground-subtle" data-testid="recurring-rule-agent-words">
+                    A run started here opens a terminal in the project with {s.agent.agent === 'codex' ? 'Codex' : 'Claude Code'} on it. Only on this computer; teammates choose for their own.
+                  </div>
+                )}
               </div>
               <button type="button" disabled={busy} onClick={() => { void call('DELETE', s.rule.id); }} data-testid="recurring-rule-stop"
                 className="shrink-0 px-2 py-0.5 rounded text-[11.5px] bg-white/[0.06] text-foreground hover:bg-white/[0.1] disabled:opacity-40">
