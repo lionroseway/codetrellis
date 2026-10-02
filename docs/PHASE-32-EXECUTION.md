@@ -548,6 +548,43 @@ Refined into sub-steps when next. Scope is per the awareness spec:
 | A6 | M6, §10 | Refined above (A6.1–A6.6) |
 | A7 | M7 | Rules format, `rule` signals, `check_conformity` made true |
 
+### A7: Rules
+
+Refined 2026-10-02 (awareness spec M7). `check_conformity` catches only a
+direct two-file cycle and says so; nothing else knows the team's
+architecture. A rule is a path boundary the team writes down once: "files
+under `web/` may not import from `db/`", kept in the committed
+`.codetrellis/config.json` so every laptop, agent and pipeline reads the
+same one.
+
+- **A rule is a boundary between two sets of paths.** `from` and `mayNotImport`
+  are folder prefixes or globs (`web/`, `src/**/ui/**`), project-relative;
+  an optional `except` names the doors through the wall (`db/types.ts`);
+  `because` says why in the team's words. Setting one is the person's (as a
+  recurring playbook is, C4); reading them is anyone's.
+- **What is already there is said, not hidden.** A rule set today over a
+  codebase that breaks it lists the imports that break it now ("3 imports
+  break this today"); a signal is raised only for an import a workstream
+  *adds*, so the rule is useful from the day it is written.
+- **One import graph.** Imports are the resolver's (A2.2), read from each
+  file's content at the merge base and now, so a breach is an edge, never a
+  text match.
+
+| Sub-step | Delivers | Tests |
+|---|---|---|
+| A7.1 | The rules and the check: `rules` in the committed config (id, from, mayNotImport, except, because, since, by), validated on read and set; `checkEdges` (which edges break which rule); the rules with the imports that break each now, `GET /api/rules`, `PUT` and `DELETE /api/rules/:id` (the person's); `check_conformity` checks the rules as well as cycles, takes `project_path`, and its description becomes true; `list_rules` (`read`). Settings → Architecture rules: write one, see what breaks it today, stop it | unit `architecture-rules.test.ts` (matching, except, bad rules refused); harness `architecture-rules.test.ts` (set by the person, refused from plain HTTP; a proposed import refused with the rule's words; today's breaches); browser `settings/rules.spec.ts` (shots) |
+| A7.2 | `rule` signals: each workstream's import delta (edges its changed files add against the merge base, parsed and resolved as A5.1's commit edges are); one signal per workstream and rule, in words: "billing-v2 now imports db/ from web/ (web/api.ts → db/client.ts), which the rule “web talks to db through the API” forbids". The inline notice, digest, Awareness tab, phone and push carry it; a `rule` breakpoint holds the next edit (B4) | unit (the delta; no signal for an edge that was already there); harness (a workstream adds a forbidden import: one signal; removed, resolved) |
+| A7.3 | The gate and the done-when: `check_changes` reports a changed file importing across a rule, and `codetrellis check` exits 3 on it; `docs/claude/awareness.md` and the guide. M7 done-when: an agent adding a forbidden import in any workstream is told on its next call, and the developer sees one line | harness end to end (two workstreams, one breach; the CLI gate) |
+
+**Journey (A7).** Sam's team keeps the web app off the database: in
+Settings → Architecture rules he writes "web/ may not import db/, except
+db/types.ts, because web talks to db through the API". It lists one import
+that breaks it today, which the team knew about. On Dana's branch an agent
+adds `import { query } from '../db/client'` to `web/reports.ts`; on its next
+call it is told the rule and why, the Awareness tab and the digest say
+"exports-v2 now imports db/ from web/", and the pipeline's
+`codetrellis check` fails on it until the import goes through the API.
+
 ### A8: Any agent
 
 CodeTrellis is agent-agnostic (CLAUDE.md), but several things now work

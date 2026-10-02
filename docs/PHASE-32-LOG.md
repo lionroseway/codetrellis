@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track C — C4.3b: an agent on each run, and the C4 done-when on two machines |
-| **Status** | C4.3a merged (#302), with base fixes #304 (a task says its agent was told as it happens) and #305 (a pairing no longer shuts the next pairing's window). C4.3b built: per rule and device, Settings → Recurring playbooks starts Claude Code or Codex on each run made here (off by default, kept on this device); only the person, the schedule or a phone granted `terminal` starts one, otherwise the run says why. Runs go to the plans folder when the project shares new plans. Done-when: two laptops, one planning repository, one W40 and one agent. Unit recurring-service 14, harness recurring 10 and recurring-two-machines 5, browser 2 specs, phone recurring.spec 4 (shots) |
-| **In flight** | C4.3b in review (#303) on `feat/phase-32-c4-3b-agent-and-done-when` |
-| **Last merged** | C4.3a (#302, `27094ae`) |
-| **Next action** | Merge C4.3b when green — C4 done; then refine A7 (rules) |
+| **Stage / step** | Track A — A7.1: architecture rules, and check_conformity made true |
+| **Status** | C4 done (#299–#303; base fixes #304, #305). A7 refined in three parts. A7.1 built: rules in the committed config (from, may not import, except, because), each with the imports that break it today; GET/PUT/DELETE /api/rules (the person's); check_conformity checks them and says the rule and why; list_rules (read); Settings → Architecture rules. Unit architecture-rule 4, harness architecture-rules 5, browser settings/rules.spec 2 (shots) |
+| **In flight** | A7.1 building on `feat/phase-32-a7-1-rules` |
+| **Last merged** | C4.3b (#303, `b6ed8fe`) |
+| **Next action** | Merge A7.1 when green; then A7.2 (rule signals from each workstream's import delta) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
-> Read from git at `origin/feat/phase-32` `27094ae`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `b6ed8fe`, with open PRs from GitHub.
 
 ---
 
@@ -120,7 +120,10 @@
   - [x] A6.4 Other work affected on the Brief, in get_brief, the inbox and the phone (#256)
   - [x] A6.5 Sign-off packs list the signals that touched the task (#257)
   - [x] A6.6 M6 done-when and docs (#258)
-- [ ] A7 Rules
+- [ ] A7 Rules — building
+  - [ ] A7.1 The rules in the committed config, what breaks them today, and `check_conformity` made true — building
+  - [ ] A7.2 `rule` signals from each workstream's import delta
+  - [ ] A7.3 The gate (`check_changes`, `codetrellis check`) and the M7 done-when
 - [ ] Follow-up: `plan-by-hand` failed once in CI when its plan workspace dropped back to the plan list while `plan/list.spec.ts` created and deleted plans on the other worker (#147). It doesn't reproduce as a pair (5/5 on base and on the branch). Find which broadcast leaves the workspace, so a person's open plan survives someone else's plan changes.
 - [ ] Follow-up: two browser tests failed once on #167 and passed on re-run: `realtime/plan-events.spec.ts:18` (a reset connection mid-POST; also 2/3 locally on the base branch) and `external-refs/refs-panel.spec.ts:77` (a fixed 3 s `isVisible`). Both are queued as separate fixes; neither touches A3.4's code.
 - [x] Follow-up: two browser tests failed once on the docs-only #184 and passed on re-run: `graph/layout-controls.spec.ts:38` (0 nodes after Tree → Map; the spec already names a rescan on the other worker as the cause of an empty graph, and polls 20 s) and `review-regressions/pr55-ui.spec.ts:431` (the linked-ticket chip never appeared, on the sample-app fixture). Neither touches a Phase 32 file; each needs its root cause found, not a longer wait. **Fixed at the source by #195 and #196:** a scan answers "scanning" and every graph answer names its project; a canvas keeps its graph through another project's scan, and an empty one rescans its own.
@@ -248,14 +251,14 @@
     - [x] C3.4c Materials in the folder by their place and hash, never a full path; A6's signals match across machines (#282)
   - [x] C3.5 Teammates' material reads, a separate switch, on by default once a folder is shared (#283)
   - [x] C3.6 The C3 done-when (#284)
-- [ ] C4 Recurring playbooks, refined in EXECUTION §6: — building
+- [x] C4 Recurring playbooks, refined in EXECUTION §6:
   - [x] C4.1 The data: a rule on a playbook in the committed config, one run per period by its id, the series, carry-over (#299)
   - [x] C4.2 Due, in the window, split in two:
     - [x] C4.2a Started as it comes; asked about when it fell due while the app was closed; the series row in the plans list (#300)
     - [x] C4.2b Settings → Recurring playbooks; a run's series, period and carried tasks on the run (#301)
-  - [ ] C4.3 The phone, an agent only by opt-in, and the C4 done-when — building
+  - [x] C4.3 The phone, an agent only by opt-in, and the C4 done-when
     - [x] C4.3a The phone lists the series and starts the due run (`recurring.list`, `recurring.start`) (#302)
-    - [ ] C4.3b Start an agent on each run, per rule and device (off by default, needs `terminal`); the C4 done-when on two machines (#303) — in review
+    - [x] C4.3b Start an agent on each run, per rule and device (off by default, needs `terminal`); the C4 done-when on two machines (#303)
 - [x] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
   - [x] C5.1 `workstream` on an item, inherited; `assign_workstream`; next and claim respect it (#186)
   - [x] C5.2 Start a worktree for a section; a start command for any agent (#187)
@@ -431,6 +434,9 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | C4.2a: the app starts a run only when its moment falls while the app runs (between two ticks); one that fell due while it was closed is asked about, never started on launch | The doc's "the app only acts while running": a laptop opened at ten should not make a nine o'clock run on its own, since a teammate may have run it or the person may not want it; asking keeps the person in the decision |
 | 2026-10-01 | C4.2a: a scheduled start is authored `schedule` (a system author, as other app-made records are), and the run keeps who set the rule | No person or agent called; the rule a person set is the reason, and saying "schedule" never passes the app off as that person |
 | 2026-10-02 | C4.3b: an agent on each run is kept per rule on this device, never in the committed config, and set by the person only; it starts only when the run was made here by the person in the window, the schedule, or a phone granted `terminal` — from plain HTTP or a phone without it, the run is made and says why not | It starts a process on this machine, so it is the person's and this machine's, never the team's; loopback is not a person, and a phone may only cause a terminal the person allowed it. A found run starts nothing, so two laptops make one agent |
+| 2026-10-02 | A7 is refined into three parts (EXECUTION §4): the rules and the check, rule signals from each workstream's import delta, the gate and the done-when. A rule is a path boundary (`from`, `mayNotImport`, `except`, `because`) in the committed config | One file every laptop, agent and pipeline reads; a boundary between two sets of paths is what M7 asks for ("web/ may not import db/") and covers layers without a layer model |
+| 2026-10-02 | A7.1: a rule written over code that already breaks it lists those imports ("1 import breaks this today"); signals (A7.2) are raised only for imports a workstream adds | A rule that went red on every existing import would be switched off the day it was written; saying what is there keeps it honest and useful at once |
+| 2026-10-02 | A7.1: a file already inside the forbidden set is not "from" outside it, and a rule's breaches are said only when the graph loaded is that project's | `src/` may not import `src/db/` must not flag db importing itself; the backend holds one project's graph, so another project's breaches are "open this project to see", never zero |
 | 2026-10-02 | C4.3b: the agent is asked in one shell argument to work the run's plan by its id through the MCP tools, not handed the plan's text; the harness makes the program `echo` (`CODETRELLIS_RUN_AGENT_COMMAND`) | One line with the title's quotes and `$` removed cannot break out of its argument, and the tools give the agent the current tasks, criteria and skills. The first run of the done-when started the container's real Claude Code: no test may start a real agent |
 | 2026-10-02 | C4.3b: a recurring run is written to the plans folder at once when the project shares new plans | Otherwise a teammate's laptop never sees it, and its start makes nothing new only because the id matches; written, the series shows the teammate's run in progress |
 | 2026-10-01 | C4.3 is split into C4.3a (the phone) and C4.3b (an agent on each run by opt-in, and the done-when on two machines). The phone starts a run but does not set a rule | The phone is one more door onto C4.1's service with its own RPC tests; starting an agent spawns a process and carries its own security case. Setting a rule is the person's in the app window, as a plans folder is |
@@ -448,6 +454,22 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-02: A7.1 — architecture rules, and check_conformity made true
+- **Journey.** Sam opens Settings → Architecture rules and writes "web/ may
+  not import db/, except db/types.ts, because web talks to db through the
+  API". It is listed for the team with "1 import breaks this today", which
+  opens to web/legacy/report.ts → db/client.ts. An agent about to import
+  services/api/app/db.py from the web app asks check_conformity and is told
+  the rule and why; an import inside the web app is fine.
+- **Built.** `services/architecture-rule.ts` (parse, patterns, `breaks`,
+  `checkEdges`, words), `services/architecture-rules.ts` (rules in the
+  committed config, `rulesView` with today's breaches, `edgesIfLoaded`),
+  `GET /api/rules`, `PUT` and `DELETE /api/rules/:id` (the person's),
+  `check_conformity` checking the rules (with `project_path`), `list_rules`
+  (`read`), Settings → Architecture rules.
+- **Tests.** Unit `architecture-rule.test.ts` (4). Harness
+  `architecture-rules.test.ts` (5). Browser `settings/rules.spec.ts` (2, shots).
 
 ### 2026-10-02: C4.3b — an agent on each run, and the C4 done-when
 - **Journey.** Sam's team runs "Weekly security review" every Monday from the
