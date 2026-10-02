@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track E — E2b: the graph compares the same two |
-| **Status** | E1 (#314) and E2a (#315) merged. E2b built on E2a: in the Changes tab, "Show on the graph" draws the graph's marks (files added, changed, removed; imports added, removed) from /api/compare between the chosen pair, instead of its own baseline against now; a banner beneath the canvas says which two, with the counts and git's command, and stops it; changing a side redraws it; clearing the pair turns it off. Unit source-control-store 3; browser compare-refs (graph, shot compare-graph) |
-| **In flight** | E2b in review (#316) on `feat/phase-32-e2b-graph-pair`; E3 in review (#317) on `feat/phase-32-e3-evolution`; E4 in review (#318) on `feat/phase-32-e4-line-history` |
+| **Stage / step** | Track E — E3: the evolution view |
+| **Status** | E1 (#314), E2a (#315) and E2b (#316) merged. E3 built on E2b: GET /api/git/file-history lists a file's positions on any side (its working copy, then each commit that changed it, following renames, at the path it had then), each with the git author and what CodeTrellis knows of who made it (from the commit message, or seen when it landed in a recorded session); GET /api/record/decisions lists the record's decisions between two moments. The code view's Evolution: two sides, each any point, each with a scrubber over its own commits and a card, a lock that moves the other side to the same moment, the decisions between the two, and the diff between the positions (renames read at each side's path). Unit file-history 6, evolution 3; harness file-history 5; browser evolution (shots) |
+| **In flight** | E3 in review (#317) on `feat/phase-32-e3-evolution`; E4 in review (#318) on `feat/phase-32-e4-line-history` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
-| **Next action** | Merge E2b (#316) when green, then E3 (#317) by the stacked flow; then E4 (line history) |
+| **Next action** | Merge E3 (#317) when green, then E4 (#318) by the stacked flow; then E5 (branches and pull requests) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `8498c84`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `bce3097`, with open PRs from GitHub.
 
 ---
 
@@ -285,9 +285,9 @@
 ### Track E: how the code got here
 - [ ] E Compare any two points, scrub each side's history, and each line's commit and agent, with no plan needed (owner's decision, 2026-10-02), refined in EXECUTION §6c: — building
   - [ ] E1 Source control with no plan: the Changes panel (staged, unstaged, untracked; each worktree's changes), and the defect that started it (the graph showed changes, the code view no diff)
-  - [ ] E2 Any ref on either side: branches local and remote, tags, a worktree's working copy, a merge base; one picker for the code view and the graph, in two: — building
+  - [ ] E2 Any ref on either side: branches local and remote, tags, a worktree's working copy, a merge base; one picker for the code view and the graph, in two:
     - [ ] E2a The refs, and any two compared file by file from the Changes tab, each side said plainly and as git's command; a file opens its diff
-    - [ ] E2b The graph compares the same two: its architecture diff between the pair chosen in the Changes tab (#316) — in review
+    - [ ] E2b The graph compares the same two: its architecture diff between the pair chosen in the Changes tab
   - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked (#317) — in review
   - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history` (#318) — in review
   - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default
@@ -454,6 +454,9 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-02 | Track E serves beginners and advanced users of git alike (owner): every surface reads two ways, a plain sentence first, then git's own word and the exact command (copyable) | The owner: "the whole idea behind this portion of work is making it so both beginners and advanced users of git can use it as their surfacing tool". Plain words alone hide what is compared from someone who knows git; git's words alone shut out someone who does not; both, together, teach the one and serve the other |
 | 2026-10-02 | E1: the defect had three causes, each fixed where it was: a committed edit (the code view compared the last commit with a clean working tree), an edit in another worktree (it read only this checkout), and a project in a subfolder of its repository (`git show <ref>:<path>` read from the repository's top, so the file "was added") | All three reproduced against a running backend before anything changed; the Changes panel names where each change is and diffs between that group's own two points, and the code view picks the same comparison for a file opened from the tree or the graph |
 | 2026-10-02 | E2b (found on CI): source-control reads run one at a time, as awareness reads do; and an awareness read that started before a person's answer never writes over it | `brief-other-work` failed once on CI: Acknowledge stayed busy for 5 s and the card read open. E1's Changes feed started a read of git for every workstreams-changed broadcast, unbounded, in every window with the sidebar shown; and a read already in flight when the person acknowledged could land after and turn the card back. Both reproduced in unit tests that fail without the change |
+| 2026-10-02 | E3: a commit's maker is CodeTrellis's only where it knows, and says how: the commit message's `agent:` line, or seen (a replay frame recorded the commit landing during that agent's session); the git author is always shown | GitLens's author line is what people trust, so it is never replaced; timing alone would guess, so a commit with neither stays the author's. E4 widens what is known (a session's own edits) |
+| 2026-10-02 | E3: the decisions between two positions are the computer's record in that window, not filtered to the project | The record carries no project column and its payloads differ by type; saying "recorded on this computer" is true, and each decision names what it was about |
+| 2026-10-02 | E3: locked scrubbing is by time, not by index | Two branches have different commits; the same moment is what makes the comparison mean something (where main stood when the agent committed) |
 | 2026-10-02 | E2b: the pair is drawn on the live graph's shape, marked from the comparison, rather than as a graph rebuilt at either side | The person's map stays where it was, so what moved between two points reads against the code they know; files only at the before side show as removed, as Diff mode shows them. Replay and play-forward still take the canvas first, and the banner says which is drawn |
 | 2026-10-02 | E2 is split in two: E2a, the refs and any two compared file by file from the Changes tab; E2b, the graph comparing the same pair | The graph has no comparison of two chosen points today (only baseline against live, and replay's frames), so drawing one is its own work; the pair, chosen once, is what both read |
 | 2026-10-02 | E2a: a working copy is compared as a tree, written through a copy of its own index (as `git stash create` does) | One diff for every kind of side (`git diff-tree` of two trees), untracked files included, and the checkout, its index and its refs untouched; it writes blobs into the object store, which `git gc` clears. Copying the index keeps its stat cache, so unchanged files are not read again |
@@ -497,6 +500,29 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-02: E3 — the evolution view
+- **Journey.** Priya opens `README.md` in the code view and chooses
+  Evolution. It starts on her checkout: the last commit against her
+  working copy. She sets the left side to `billing-v2`, a teammate's
+  agent's branch: "Half-even, as approved · Sam Lee · 24 h ago ·
+  4a1b2c3", and "codex, seen: it landed while CodeTrellis recorded codex's
+  session in acme-billing"; `$ git log --follow billing-v2 -- README.md`
+  beneath the picker. Between the two sides: "Sam approved “Refunds round
+  half-even”". She scrubs the left back: "Round to the cent", "codex, from
+  the commit message"; further, the rename, read at the path it had. She
+  locks the sides: moving the left to three days ago puts her checkout
+  where it stood then.
+- **Built.** `services/file-history.ts` (`fileHistory`, `parseFileLog`,
+  `agentOfBody`), `GET /api/git/file-history`; `framesByCommit` in
+  `replay-frames`; `decisionsBetween` in `evidence`,
+  `GET /api/record/decisions`; `CodeDiffView` takes each side's path;
+  `EvolutionView` and `lib/evolution.ts`; Evolution in the code view.
+- **Tests.** Unit `file-history.test.ts` (6: parsing; this checkout
+  through a rename; seen; a worktree; refusals; a subfolder project),
+  `evolution.test.ts` (3: locked time). Harness `file-history.test.ts`
+  (5). Browser `inspector/evolution.spec.ts` (shots `evolution`,
+  `evolution-locked`).
 
 ### 2026-10-02: E2b — the graph compares the same two
 - **Journey.** With `main` and `billing-v2` chosen from where they split,

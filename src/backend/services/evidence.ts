@@ -147,6 +147,27 @@ function decisionsOf(entries: EvidenceEntry[]): EvidenceDecision[] {
   });
 }
 
+/**
+ * The decisions this computer's record holds between two moments (Phase 32
+ * E3: what was decided between two commits), oldest first, worded as the
+ * Timeline words them. The record is the computer's, so a decision about
+ * another project in the same window is listed too; each says what it was.
+ */
+export function decisionsBetween(from: number, to: number, limit = 200): EvidenceDecision[] {
+  const types = [...DECISION_TYPES];
+  const rows = rowsOf<JoinedRow>(
+    `SELECT c.seq, c.linked_at, c.digest, c.prev, c.hash, e.id, e.at, e.source, e.type, e.session_id, e.agent_type, e.payload
+     FROM record_chain c JOIN agent_events e ON e.id = c.event_id
+     WHERE c.linked_at >= ? AND c.linked_at <= ? AND e.type IN (${types.map(() => '?').join(',')})
+     ORDER BY c.seq ASC LIMIT ?`,
+    [from, to, ...types, Math.min(Math.max(1, Math.floor(limit)), 1000)],
+  );
+  return decisionsOf(rows.map((r): EvidenceEntry => ({
+    seq: Number(r.seq), linkedAt: Number(r.linked_at), digest: r.digest, hash: r.hash,
+    event: { id: r.id as string, at: Number(r.at), source: String(r.source), type: String(r.type), sessionId: r.session_id ?? null, agentType: r.agent_type ?? null, payload: String(r.payload) },
+  })));
+}
+
 function moment(projectPath: string, at: number): EvidenceMoment {
   const { sinceFrame: _diff, projectPath: _path, ...rest } = stateAt(projectPath, at, false);
   return rest;

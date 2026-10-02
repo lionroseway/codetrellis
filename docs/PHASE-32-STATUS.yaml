@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track E — E2b: the graph compares the same two"
-  status: "E1 (#314) and E2a (#315) merged. E2b built on E2a: in the Changes tab, \"Show on the graph\" draws the graph's marks (files added, changed, removed; imports added, removed) from /api/compare between the chosen pair, instead of its own baseline against now; a banner beneath the canvas says which two, with the counts and git's command, and stops it; changing a side redraws it; clearing the pair turns it off. Unit source-control-store 3; browser compare-refs (graph, shot compare-graph)"
-  next: "Merge E2b (#316) when green, then E3 (#317) by the stacked flow; then E4 (line history)"
+  step: "Track E — E3: the evolution view"
+  status: "E1 (#314), E2a (#315) and E2b (#316) merged. E3 built on E2b: GET /api/git/file-history lists a file's positions on any side (its working copy, then each commit that changed it, following renames, at the path it had then), each with the git author and what CodeTrellis knows of who made it (from the commit message, or seen when it landed in a recorded session); GET /api/record/decisions lists the record's decisions between two moments. The code view's Evolution: two sides, each any point, each with a scrubber over its own commits and a card, a lock that moves the other side to the same moment, the decisions between the two, and the diff between the positions (renames read at each side's path). Unit file-history 6, evolution 3; harness file-history 5; browser evolution (shots)"
+  next: "Merge E3 (#317) when green, then E4 (#318) by the stacked flow; then E5 (branches and pull requests)"
   blockers: "None"
   updated: 2026-10-02
 sections:
