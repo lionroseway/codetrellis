@@ -121,7 +121,7 @@ test.describe('Branches and pull requests', () => {
     await expect(pr.getByTestId('br-pull-words')).toHaveText('Open, waiting on review · refunds-agent into main · teammate · 18 min ago');
     await expect(pr.getByTestId('br-pull-link')).toHaveAttribute('href', 'https://github.com/acme/billing/pull/7');
     await expect(br.locator('[data-testid="br-pull"][data-number="5"]')).toContainText('Its branch is not fetched here');
-    await expect(br.getByTestId('branches-count')).toHaveText('3 · 1 PR open');
+    await expect(br.getByTestId('branches-count')).toHaveText('3 · 1 PR');
     await br.scrollIntoViewIfNeeded();
     await page.screenshot({ path: shot('branches') });
 

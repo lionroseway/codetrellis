@@ -65,9 +65,10 @@ function Branch({ row, onCompare }: { row: BranchRow; onCompare: () => void }) {
           {row.behind ? <span className="shrink-0 flex items-center text-[9.5px] text-sky-300 tabular-nums" aria-label={`${row.behind} behind`}><ArrowDown size={9} />{row.behind}</span> : null}
           {row.at !== null && <span className="shrink-0 w-7 text-right text-[9.5px] text-foreground-subtle tabular-nums">{ago(row.at)}</span>}
         </div>
-        <div className="flex items-baseline gap-1.5">
-          <span className="truncate text-[10px] leading-snug text-foreground-subtle" data-testid="br-words">{row.words}</span>
-          <span className="shrink-0 font-mono text-[9px] px-1 rounded bg-white/[0.05] text-foreground-subtle" data-testid="br-term" title="What git calls it">{row.term}</span>
+        {/* The plain sentence is the point, so it wraps rather than being cut. */}
+        <div className="flex flex-wrap items-baseline gap-x-1.5">
+          <span className="text-[10px] leading-snug text-foreground-subtle" data-testid="br-words">{row.words}</span>
+          <span className="font-mono text-[9px] px-1 rounded bg-white/[0.05] text-foreground-subtle" data-testid="br-term" title="What git calls it">{row.term}</span>
         </div>
       </button>
     </li>
@@ -131,11 +132,11 @@ export function BranchesPanel() {
         title="Branches here and on the remotes, and pull requests"
       >
         <GitBranch size={12} className="shrink-0 text-foreground-subtle" />
-        Branches and pull requests
+        <span className="min-w-0 truncate text-left">Branches and pull requests</span>
         <span className="flex-1" />
         {listing && (
-          <span className="shrink-0 text-[9.5px] text-foreground-subtle tabular-nums" data-testid="branches-count">
-            {listing.branches.length} · {openPulls} PR{openPulls === 1 ? '' : 's'} open
+          <span className="shrink-0 text-[9.5px] font-normal text-foreground-subtle tabular-nums" data-testid="branches-count" title={`${listing.branches.length} branches; ${openPulls} pull requests open`}>
+            {listing.branches.length} · {openPulls} PR
           </span>
         )}
         <ChevronDown size={11} className={`shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} />
