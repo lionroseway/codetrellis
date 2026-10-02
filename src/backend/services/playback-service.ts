@@ -142,7 +142,8 @@ export function buildPlaybackSequence(params: {
         added: diff.addedFiles.length,
         removed: diff.removedFiles.length,
         modified: diff.modifiedFiles.length,
-        // Null rather than zero: a commit contributes no edges, and
+        // Null rather than zero: a commit whose edges could not be built
+        // (too many files differ to parse) contributes none, and
         // reporting "0 edges changed" for a comparison that never looked
         // at edges would read as a finding rather than an absence.
         edgesAdded: edgesComparable ? diff.addedEdges.length : null,
@@ -176,8 +177,8 @@ export function buildPlaybackSequence(params: {
 
   if (frames.some((f) => f.delta?.edgesAdded === null)) {
     notes.push(
-      'Edge counts are omitted for commit frames: a commit contributes its file list only, ' +
-        'so its edges would have to be reconstructed by re-parsing the tree.',
+      'Edge counts are omitted for some commit frames: too many files differ from the working tree ' +
+        'at those commits to parse for their dependencies.',
     );
   }
 

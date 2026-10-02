@@ -1,4 +1,7 @@
 // [codemod] hoisted lazy requires → static namespace imports for bundling
+// Before anything runs git: CodeTrellis's git never holds the person's index lock.
+import './services/test-clock';
+import './services/git-env';
 import * as _lazy___services_settings_service from './services/settings-service';
 import * as _lazy___services_project_config_service from './services/project-config-service';
 import * as _lazy___services_external_pointer_service from './services/external-pointer-service';
@@ -23,11 +26,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
+import { promisify } from 'node:util';
 import { WebSocketServer, WebSocket } from 'ws';
 import { scanDirectory, countFiles, collectFilePaths } from './services/project-scanner';
 import { detectMonorepo } from './services/monorepo-detector';
-import { initParser, parseFiles, parseVirtualFile, computeFileHash, getParserHealth } from './services/ast-parser';
+import { initParser, parseFiles, parseVirtualFile, computeFileHash, getParserHealth, getParseableExtensions } from './services/ast-parser';
+import { readBlobsAtCommit } from './services/git-blobs';
 import { localAuthMiddleware, isUpgradeAuthorised } from './middleware/local-auth';
 import { isSafeGitRef } from './services/git-safety';
 import { readFileWithin, isWithin, isInside, ConfinementError } from './services/confined-fs';
@@ -37,23 +42,71 @@ const MAX_BROWSE_ENTRIES = 1000;
 import { resolveTrustedProjectRoot, resolveTrustedPlanDir, listTrustedRoots, setActiveProjectRoot, projectRelative } from './services/trusted-roots';
 import { getCoverageReport } from './services/coverage-service';
 import * as externalIntakeService from './services/external-intake-service';
-import { initCapabilityToken, getTokenFilePath } from './services/capability-token';
+import { initCapabilityToken, getTokenFilePath, getCapabilityToken } from './services/capability-token';
+import { commitsByWorkstream } from './services/workstream-commits';
+import { lineChangesFor, cleanRelPath, readWorkstreamCopy } from './services/line-changes';
+import { normaliseSkills } from './services/skill-model';
+import { listProjectSkills } from './services/skills-service';
+import { skillProof, skillUseSources, sourceOf } from './services/skill-use-service';
+import { pendingArrivals, planArrivals, acceptArrival, type SkillArrival } from './services/skill-arrival-service';
+import { releaseSettled } from './services/signal-breakpoints';
+import { listBreakpoints, getBreakpoint, setBreakpoint, clearBreakpoint, listHits, getHit, answerHit, cleanNote, BreakpointError, DECISIONS } from './services/breakpoint-service';
+import { verifyRecord } from './services/record-chain';
+import { startAgentEventLog, recordDecision, pruneAgentEvents, listAgentEvents, setEventPublisher, setRecordedListener, actingSession, workstreamOfItem, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
+import { stateAt } from './services/replay-state';
+import { startReplayFrames, pruneFrames, setHeldProject, setFramePublisher, noteAgentActivity, requestFrame, noteRefsChanged, seedHeads, listFrames, DEFAULT_FRAME_LIMIT } from './services/replay-frames';
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
+import { listWorkstreams, setClaudeSessionSource, setSymbolParser, getSymbolParser } from './services/workstream-service';
+import { resolveSection, cleanBranch, workstreamOfBranch, whereWorked, worktreeDirFor, usableBase } from './services/section-workstreams';
+import { suggestSectionBranch } from '../shared/lib/branch-name';
+import { setWorkstreamChangesListener, setRefsChangedListener } from './services/workstream-watch-service';
+import { setBranchWorkstreamsWarmedListener } from './services/branch-workstreams';
+import { refreshSignals, listSignals, setAwarenessListener, setSignalState } from './services/awareness-service';
+import { withTold, setNoticeListener } from './services/awareness-notices';
+import { recordReply, withReplies, cleanReply, setReplyReadListener, MAX_REPLY } from './services/awareness-replies';
+import { listFolderRequests, takeFolderRequest, dismissFolderRequest, rememberDismissal, setFolderRequestsListener } from './services/folder-requests';
 import { captureSnapshot, setBaseline, computeDiff, getBaseline, baselineLabel, restoreBaseline, setBaselineStore } from './services/diff-engine';
 import { sqliteBaselineStore } from './services/baseline-store';
 import { startMcpServer, getMcpStatus, getMcpConfig, getMcpSetup } from './mcp/server';
-import { listWorktrees, listWorktreesWithPlans } from './services/worktree-service';
+import { listWorktrees, listWorktreesWithPlans, createWorktree, WorktreeError } from './services/worktree-service';
 import { checkoutGitDir, currentBranch, hasCommits, localBranches } from './services/git-checkout';
 import { startAutoSave, saveNow } from './services/persistence';
 import { exportDatabase } from './services/database';
 import * as planService from './services/plan-service';
 import * as budgetService from './services/budget-service';
 import { compareSnapshots, listComparands, readFileAt } from './services/snapshot-compare-service';
+import { sourceControl, projectPrefix } from './services/source-control';
+import { diffCommand, filesBetween, listRefs, sideLabel, worktreesForCompare } from './services/git-refs';
+import { fetchRemotes, listBranches, startRemoteKeeper } from './services/git-branches';
+import { fileHistory, FileHistoryError } from './services/file-history';
+import { recordedKnowledge, isProjectRelativePath } from './services/commit-attribution';
+import { lineHistory, LineHistoryError } from './services/line-history';
 import { reviewPlan, renderReviewMarkdown } from './services/plan-review-service';
+import { reviewQueue } from './services/review-queue-service';
+import { buildStack } from './services/stack-service';
+import { buildPlayForward } from './services/play-forward';
+import { resequence, tellAgents, leaveOverlap, OverlapActionError, noteApproval, approvalNotices, markNoticeSeen } from './services/planned-overlap-actions';
+import { seriesFor, setRule, removeRule, startRun, dismissDue, recurrenceOf, RecurringError } from './services/recurring-service';
+import { isRunAgent, setRunAgent, startRunAgent } from './services/recurring-agent';
+import { rulesView, setRule as setArchitectureRule, removeRule as removeArchitectureRule, edgesIfLoaded, RuleError } from './services/architecture-rules';
+import { startRecurringScheduler } from './services/recurring-scheduler';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
+import { sealPack, checkSeal } from './services/pack-seal';
+import { buildEvidence, sealEvidence, renderEvidenceHtml, verifyEvidence, evidenceFromText, EvidenceError, decisionsBetween } from './services/evidence';
+import { planGitStatesFresh } from './services/item-git-state';
+import { planStatusFresh } from './services/plan-status';
+import { listSignedApprovals } from './services/signed-approvals';
+import { allPlanArrivals } from './services/plan-arrivals';
+import { forgetHostReads } from './services/review-host/host-state';
+import { forgetReviewHostToken, getReviewHost, ReviewHostError, saveReviewHostToken, setReviewHost } from './services/review-host/switch';
+import { listTestReports, listTestResults, testsSummary } from './services/tests/test-results';
+import { groundingMap, groundingMapAt, groundingOf, NotAFileError } from './services/tests/grounding';
+import { teammateRunSummaries } from './services/tests/teammate-runs';
+import { taskGrounding } from './services/task-grounding';
+import { getSharedTaskState, keepMyState, readAndTell, setRecordAppliedListener, setSharedMaterialReads, setSharedTaskState, setRunsChangedListener, setSplitChangedListener, startRecordWatcher, stopRecordWatcher, trustTeammateKey, writeRecordFor } from './services/task-records/shared-state';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
 import { buildPlaybackSequence } from './services/playback-service';
 import * as commentService from './services/comment-service';
@@ -61,6 +114,11 @@ import * as sessionService from './services/session-service';
 import * as taskAttachmentsService from './services/task-attachments-service';
 // Phase 15 §C — unified Object/Action surface backing the V2 frontend.
 import * as planItemService from './services/plan-item-service';
+import { dependencyProblem } from './services/plan-dependencies';
+import { listTaskWorkstreams } from './services/task-workstreams';
+import { specRefProblem, setReliesOn, reliesOn, reliedOnBy, reliedOnWords, type SpecRef } from './services/spec-links-service';
+import { withdrawProposals } from './services/spec-proposal-withdraw';
+import { proposalProblem, proposeSpecChange, listProposals, getProposal, decisionProblem, decideProposal, specChangedFor, type ProposalStatus, type ProposalDecision } from './services/spec-proposals-service';
 import * as planEventService from './services/plan-event-service';
 import * as channelEventService from './services/channel-event-service';
 import { exportChannelEvent } from './services/channel-event-file-service';
@@ -70,6 +128,7 @@ import {
   listRecentProjects,
   removeRecentProject,
   setRecentProjectPinned,
+  getRecentProject,
 } from './services/recent-projects-service';
 import { discoverSystems, buildAliasMap } from './services/system-discovery';
 // Top-of-file imports for everything that used to be lazy-required.
@@ -79,10 +138,12 @@ import { discoverSystems, buildAliasMap } from './services/system-discovery';
 // imports get bundled cleanly. The original lazy-require pattern
 // existed to dodge import cycles that no longer apply.
 import { recomputeCrossSystemEdges, listCrossSystemEdges, getCrossSystemStats } from './services/cross-system-service';
-import { startPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs, exportIfSharedByDefault, exportOnFirstTitle } from './services/plan-file-service';
+import { getPlansFolder, linkPlansFolder, namePlansFolder, PlansFolderError, unlinkPlansFolder } from './services/plans-home';
+import { setPlanImportedListener, startPlanFileWatcher, stopPlanFileWatcher, exportPlan, importPlan, discoverPlanDirs, unlinkPlan, getLinkedPlanDir, reconcilePlanState, pruneOrphanedDirs, exportIfSharedByDefault, exportOnFirstTitle, registerDiskHoldSettling } from './services/plan-file-service';
 import { getAllGraphEdges, getDb } from './services/database';
 import { getSettings, updateSettings, getAuthorKey, readGitIdentity, SettingsError } from './services/settings-service';
 import { grantChange, grantRefusal, httpGrantsAllowed } from './services/grant-guard';
+import { refusesLocalApiChange, LOCAL_API_CHANGES_REFUSAL } from './services/local-api-changes';
 import * as criteriaService from './services/criteria-service';
 import * as criterionLoop from './services/criterion-loop-service';
 import * as artefactContent from './services/artefact-content-service';
@@ -114,7 +175,8 @@ import * as terminalService from './services/terminal-service';
 import * as powerService from './services/power-service';
 import * as terminalHistoryService from './services/terminal-history-service';
 import * as planImportService from './services/plan-import-service';
-import { tailLog, getCurrentLogPath, getLogDir, isWritingLogFile } from './services/logger';
+import { tailLog, getCurrentLogPath, getLogDir, isWritingLogFile, setLogRetention, pruneOldLogs } from './services/logger';
+import { retentionDays, retentionWords } from './services/retention';
 import {
   getUpdateState,
   checkForUpdate,
@@ -126,6 +188,7 @@ import {
   cancelUpdateDownload,
 } from './services/update-download-service';
 import { BUILD_INFO } from '../shared/build-info';
+import { SETTABLE_SIGNAL_STATES, type SettableSignalState, type SignalStateBy } from '../shared/types';
 import * as peerService from './services/peer-connection-service';
 import { setDeviceCapabilities } from './services/paired-device-service';
 import { listPeerAudit } from './services/peer-audit-service';
@@ -155,6 +218,18 @@ app.use(express.json());
  * See src/backend/middleware/local-auth.ts for the three layers.
  */
 app.use(localAuthMiddleware);
+
+// Changes over the local API can be turned off (carried item 2b): then only
+// the app window changes anything. Reads, MCP and the phone are unaffected.
+app.use((req, res, next) => {
+  const refused = refusesLocalApiChange(
+    { method: req.method, path: req.path, fromAppWindow: cameFromAppWindow(req) },
+    getSettings().mcp.acceptLocalApiChanges,
+    httpGrantsAllowed(),
+  );
+  if (refused) { res.status(403).json({ error: LOCAL_API_CHANGES_REFUSAL }); return; }
+  next();
+});
 
 /**
  * CONFINED TO OPENED PROJECTS (Phase 19).
@@ -277,6 +352,16 @@ function optionalProjectRoot(
 }
 
 const server = http.createServer(app);
+// A kept-alive socket is closed by the server after `keepAliveTimeout`
+// (Node's default: 5 s). A client that sends on it at that moment gets
+// ECONNRESET: the browser suite's request context did, on a PUT sent about
+// five seconds after its last call (#211). The window and the harness hold
+// sockets open between calls, so the server keeps them for a minute; the
+// header timeout must stay above it, or Node would close a slow request's
+// socket first.
+export const KEEP_ALIVE_MS = 65_000;
+server.keepAliveTimeout = KEEP_ALIVE_MS;
+server.headersTimeout = KEEP_ALIVE_MS + 1_000;
 
 // WebSocket servers — use `noServer` mode so we can manually route
 // the HTTP upgrade event.  Two WSS instances bound to the same
@@ -618,6 +703,257 @@ app.get('/api/git/worktrees', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   res.json(listWorktreesWithPlans(projectRoot));
+});
+
+// The lines of parallel work in the project's repository: each working tree
+// and the agents in it (Phase 32 A1.3). The TopBar strip reads this. Idle
+// ones (no agent) only with ?idle=1. The root is confined like the route
+// above; the folders come from git.
+setClaudeSessionSource(() => getWatcherStatus().sessions);
+// Each workstream's changed files are parsed for the symbols they touch (A1.5).
+setSymbolParser((filePath, content) => parseVirtualFile(filePath, content)?.symbols ?? null);
+// A watched workstream's changed files moved (A1.4): the strip refetches.
+setWorkstreamChangesListener((folder, changes) => {
+  broadcast('workstreams-changed', { root: folder, changedFiles: changes.files.length });
+  scheduleSignalRefresh();
+});
+
+// A branch moved (A1.7a): a branch workstream's footprint follows its ref.
+setRefsChangedListener((repo) => {
+  broadcast('workstreams-changed', { root: repo, refs: true });
+  scheduleSignalRefresh();
+  // B5.1: a checkout whose HEAD moved has had a commit land; replay takes a frame.
+  noteRefsChanged();
+});
+
+// Branches worked out off the request path (HD4b) are ready: the window reads
+// again, as when a branch moves.
+setBranchWorkstreamsWarmedListener((repo) => {
+  broadcast('workstreams-changed', { root: repo, refs: true });
+  scheduleSignalRefresh();
+});
+
+// Signals follow the footprints (A1.6): recomputed shortly after a
+// workstream's files move, and announced only when they change.
+setAwarenessListener((projectRoot) => broadcast('awareness-changed', { projectRoot }));
+setNoticeListener((projectRoot) => broadcast('awareness-changed', { projectRoot, told: true }));
+setReplyReadListener((projectRoot) => broadcast('awareness-changed', { projectRoot, told: true }));
+let signalTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleSignalRefresh(): void {
+  if (signalTimer) clearTimeout(signalTimer);
+  signalTimer = setTimeout(() => {
+    signalTimer = null;
+    const root = getActiveProjectPath();
+    if (root) {
+      try { refreshSignals(root); } catch (err) { console.warn('[Awareness] refresh failed:', err); }
+    }
+  }, 500);
+}
+
+// Folders an agent reported that CodeTrellis has not opened (A1.7c). Shown
+// to the person, who includes one only if it is a clone of this repository.
+setFolderRequestsListener(() => broadcast('folder-requests-changed', {}));
+app.get('/api/workstreams/folder-requests', (_req, res) => {
+  res.json(listFolderRequests().map(({ id, folder, agentType, reportedAt }) => ({ id, folder, agentType, reportedAt })));
+});
+
+// Including a folder trusts it — a grant, so the person's alone, from the
+// app window. The request is chosen by the id the server gave it, never by a
+// path in the body. Only now, with consent, is anything read from the folder.
+app.post('/api/workstreams/folder-requests/:id/include', (req, res) => {
+  if (!mayGrant(req)) {
+    res.status(403).json({ error: 'Only you can include a folder as a workstream — in the CodeTrellis app, from the workstreams strip.' });
+    return;
+  }
+  const projectRoot = getActiveProjectPath();
+  if (!projectRoot) { res.status(409).json({ error: 'No project is open to include it in.' }); return; }
+  const request = takeFolderRequest(req.params.id);
+  if (!request) { res.status(404).json({ error: 'No such request. It may already have been answered.' }); return; }
+  let isDir = false;
+  try { isDir = fs.statSync(request.folder).isDirectory(); } catch { /* gone */ }
+  if (!isDir) {
+    res.status(409).json({ included: false, reason: `${request.folder} is not a folder on this machine any more.` });
+    return;
+  }
+  const { getNormalisedOriginUrl } = _lazy___services_git_identity;
+  const ours = getRecentProject(projectRoot)?.originUrl ?? getNormalisedOriginUrl(projectRoot) ?? null;
+  const theirs = getNormalisedOriginUrl(request.folder) ?? null;
+  if (!ours || ours !== theirs) {
+    rememberDismissal(request.folder);
+    res.status(409).json({
+      included: false,
+      reason: ours
+        ? `${path.basename(request.folder)} is not a clone of this repository (its origin is ${theirs ?? 'not set'}). Nothing was included, and it will not be asked about again.`
+        : 'This project has no origin, so a clone of it cannot be recognised. Nothing was included.',
+    });
+    return;
+  }
+  recordProjectOpen(request.folder, currentBranch(request.folder));
+  const active = new Set(sessionService.getActiveSessions().map((s) => s.sessionId));
+  for (const sid of request.sessionIds) {
+    if (active.has(sid)) sessionService.bindSession(sid, request.folder);
+  }
+  broadcast('mcp-session-changed', { reason: 'bound' });
+  broadcast('workstreams-changed', { root: request.folder });
+  res.json({ included: true, folder: request.folder });
+});
+
+app.post('/api/workstreams/folder-requests/:id/dismiss', (req, res) => {
+  if (!dismissFolderRequest(req.params.id)) { res.status(404).json({ error: 'No such request.' }); return; }
+  res.json({ dismissed: true });
+});
+
+// What a person should know about the parallel work in this project: open
+// collisions and stale bases, most severe first (A1.6). Recomputed on read,
+// so it is current even when no watcher has fired.
+// Phase 32 B1: agent activity as it was recorded, oldest first — the
+// Timeline's history after a reload, and the record replay will read.
+// Read-only; filters by time, session or workstream.
+app.get('/api/agent-events', (req, res) => {
+  const num = (v: unknown) => (typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : undefined);
+  const text = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
+  res.json({
+    events: listAgentEvents({
+      since: num(req.query.since),
+      before: num(req.query.before),
+      sessionId: text(req.query.session),
+      workstreamRoot: text(req.query.workstream),
+      limit: num(req.query.limit) ?? AGENT_EVENTS_DEFAULT_LIMIT,
+    }),
+  });
+});
+
+// Phase 32 B10.1: the record, walked: whether every kept agent event still
+// matches its link in the hash chain, and if not, which ones and how.
+app.get('/api/record', (_req, res) => {
+  res.json(verifyRecord());
+});
+
+// Phase 32 B5.1: a project's replay frames between two times, oldest
+// first: why each was taken, by which session, at which commit, and whether
+// its graph is the one before's. The graph itself is /api/trellis/:id.
+app.get('/api/replay/frames', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const num = (v: unknown) => (typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : undefined);
+  res.json({
+    frames: listFrames(projectRoot, {
+      from: num(req.query.from),
+      to: num(req.query.to),
+      limit: num(req.query.limit) ?? DEFAULT_FRAME_LIMIT,
+    }),
+  });
+});
+
+// Phase 32 B5.2: the project as it was at a moment: the frame then and how
+// the graph differs from it now, each task's status, what was waiting on
+// the person, and the signals open. `at` defaults to now.
+app.get('/api/replay/state', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const raw = req.query.at;
+  if (raw !== undefined && (typeof raw !== 'string' || !/^\d+$/.test(raw))) {
+    res.status(400).json({ error: 'at must be a time in milliseconds' });
+    return;
+  }
+  const trim = (p: string) => p.replace(/[\\/]+$/, '');
+  const holds = !scanInFlight && !!lastScannedProject && trim(lastScannedProject) === trim(projectRoot);
+  res.json(stateAt(projectRoot, raw ? Number(raw) : Date.now(), holds));
+});
+
+app.get('/api/awareness', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  refreshSignals(projectRoot);
+  // With the agents told about each and what they said (A2.6).
+  res.json({ signals: withReplies(withTold(listSignals(projectRoot))) });
+});
+
+// A person's answer to a signal (A1.8): acknowledged, intended, dismissed,
+// or back to open. The project comes from the query and must be open; who
+// answered comes from how the call arrived. Tagged, not blocked: plain HTTP
+// may answer too, and the Awareness tab says it was not verified as you.
+// Agents have no tool for this — a collision is not theirs to wave away.
+app.post('/api/awareness/:id/state', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const state = (req.body ?? {}).state;
+  if (!(SETTABLE_SIGNAL_STATES as readonly unknown[]).includes(state)) {
+    res.status(400).json({ error: `state must be one of: ${SETTABLE_SIGNAL_STATES.join(', ')}` });
+    return;
+  }
+  const signal = setSignalState(projectRoot, req.params.id, state as SettableSignalState, actorFrom(req));
+  if (!signal) { res.status(404).json({ error: 'No such open signal in this project.' }); return; }
+  res.json(signal);
+});
+// A person's message to the agents about a signal (A4.1). Kept beside the
+// signal and read by each agent in its workstreams on its next tool call;
+// also a steer on the plan of each task an agent there holds. Who sent it
+// comes from how the call arrived, as for an answer.
+app.post('/api/awareness/:id/reply', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const message = cleanReply((req.body ?? {}).message);
+  if (!message) { res.status(400).json({ error: `message must be 1–${MAX_REPLY} characters.` }); return; }
+  const reply = replyToSignalAsPerson(projectRoot, req.params.id, message, actorFrom(req));
+  if (!reply) { res.status(404).json({ error: 'No such open signal in this project.' }); return; }
+  res.status(201).json(reply);
+});
+
+app.get('/api/workstreams', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(listWorkstreams(projectRoot, { includeIdle: req.query.idle === '1' }));
+});
+
+// Tasks worked as workstreams (Phase 32 A6.1): a session bound to a task by
+// get_brief, for work that has no folder. The project must be open.
+app.get('/api/workstreams/tasks', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(listTaskWorkstreams(projectRoot, { includeIdle: req.query.idle === '1' }));
+});
+
+// Each workstream's own commits since `since` (ms, at most a day back), by
+// root: ◆ marks on its Timeline lane (Phase 32 B2.2). The project must be
+// open; the folders and refs are the ones listWorkstreams found, never
+// anything from the request.
+app.get('/api/workstreams/commits', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const now = Date.now();
+  const asked = typeof req.query.since === 'string' && /^\d+$/.test(req.query.since) ? Number(req.query.since) : now - 2 * 60 * 60 * 1000;
+  const since = Math.min(now, Math.max(now - 24 * 60 * 60 * 1000, asked));
+  res.json({ since, commits: commitsByWorkstream(listWorkstreams(projectRoot, { includeIdle: true }), since) });
+});
+
+// One file's changed lines in each workstream (Phase 32 B3.1): hunks against
+// the merge base with main, the functions they fall in, committed or not.
+// `workstream` picks one by id or branch among those listWorkstreams found,
+// never a folder from the request; without it, every workstream changing the
+// file. The copy is read through confined-fs with its folder as the root.
+app.get('/api/workstreams/changes', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const rel = cleanRelPath(req.query.path);
+  if (!rel) { res.status(400).json({ error: 'path must be a file relative to the repository root.' }); return; }
+  const named = typeof req.query.workstream === 'string' && req.query.workstream ? req.query.workstream : null;
+  // The watched listing, not a fresh one: the code view asks on every file
+  // it opens and on every awareness change, and the watchers keep it current.
+  const workstreams = listWorkstreams(projectRoot, { includeIdle: true });
+  if (named && !workstreams.some((w) => w.root === named || w.branch === named)) {
+    res.status(404).json({ error: `No workstream ${named} in this project.` });
+    return;
+  }
+  res.json({ path: rel, changes: lineChangesFor(workstreams, rel, getSymbolParser(), { workstream: named, diff: req.query.diff === '1' }) });
+});
+
+// The skills the opened project has (Phase 32 C1): `.claude/skills/*/SKILL.md`,
+// read through confined-fs, name and description from each front-matter.
+app.get('/api/skills', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json({ skills: listProjectSkills(projectRoot) });
 });
 
 // Branches and the OTHER worktrees of a project's repository, for the
@@ -1022,6 +1358,8 @@ async function runScan(projectPath: string): Promise<ScanStats> {
     // Publish to trusted-roots, which cannot import this module (cycle).
     // Anything deriving a project root from trusted state reads it there.
     setActiveProjectRoot(projectPath);
+    // B5.1: each checkout's HEAD now, so the next move reads as a commit.
+    seedHeads(projectPath);
 
     const systems = discoverSystems(projectPath);
     const aliasMap = buildAliasMap(systems);
@@ -1101,6 +1439,14 @@ async function runScan(projectPath: string): Promise<ScanStats> {
       await startPlanFileWatcher(projectPath);
     } catch (err) {
       console.warn('[Scan] Plan file watcher failed to start:', err);
+    }
+
+    // Phase 32 C3.1 — teammates' task-state records, when this project shares them.
+    try {
+      await startRecordWatcher(projectPath);
+      readAndTell(projectPath);
+    } catch (err) {
+      console.warn('[Scan] Task-state records were not read:', err);
     }
 
     // Phase 31 §4.4 — the recorded artefacts, so an approval taken on a
@@ -1593,6 +1939,17 @@ app.get('/api/dependencies', (req, res) => {
   // `kind` discriminator. Default keeps the legacy import-only shape
   // so existing callers don't change.
   if (req.query.include === 'cross_system') {
+    // The canvas's call. A scan truncates the tables before it refills them,
+    // so while one runs "no edges" is not an answer: say so, and the canvas
+    // keeps the graph it has. And say whose edges these are: the tables hold
+    // one project at a time, and another window may have opened another
+    // (frontend/lib/graph-answer.ts).
+    if (scanInFlight) {
+      res.status(503).set('Retry-After', '1').json({ scanning: true, project: scanInFlight.path });
+      return;
+    }
+    const project = getActiveProjectPath();
+    if (project) res.set('X-CodeTrellis-Project', encodeURIComponent(project));
     res.json(getAllGraphEdges());
     return;
   }
@@ -1620,6 +1977,25 @@ app.get('/api/diff', async (req, res) => {
 
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
+
+  // The baseline and the files table hold one project at a time. While a
+  // scan runs, or once another project was scanned, a diff of the tables
+  // against this project is another project's files, and a canvas drew
+  // them as ghost nodes (Phase 32 HD1). Say whose data this is instead,
+  // as /api/dependencies does, and the canvas keeps the diff it has.
+  const trimRoot = (p: string) => p.replace(/[\\/]+$/, '');
+  if (scanInFlight) {
+    res.json({ error: 'A scan is running; its changes come when it lands', scanning: true, project: scanInFlight.path });
+    return;
+  }
+  const held = getActiveProjectPath();
+  if (held) res.set('X-CodeTrellis-Project', encodeURIComponent(held));
+  const heldElsewhere = !held || trimRoot(held) !== trimRoot(projectPath)
+    || (baseline.projectPath != null && trimRoot(baseline.projectPath) !== trimRoot(projectPath));
+  if (heldElsewhere) {
+    res.json({ error: 'The server holds another project\'s files; scan this project to see its changes', otherProject: true, project: held ?? baseline.projectPath });
+    return;
+  }
 
   // Read current state from the DB instead of re-running a full
   // scan + parse + resolveImports on every poll. The file watcher
@@ -1754,7 +2130,9 @@ app.get('/api/plans', (req, res) => {
   const projectPath = optionalProjectRoot(req, res);
   if (projectPath === null) return;
   const status = req.query.status as string | undefined;
-  res.json(planService.listPlans(projectPath, status));
+  // C2.6a — a plan that arrived through its files says from whom, as git says.
+  const arrivals = allPlanArrivals();
+  res.json(planService.listPlans(projectPath, status).map((p) => ({ ...p, arrival: arrivals.get(p.uid) ?? null })));
 });
 
 // Create plan
@@ -1766,7 +2144,7 @@ app.post('/api/plans', (req, res) => {
   // Phase 13 §E: prefer the configured identity (email) over the
   // legacy "user" role. `getAuthorKey` falls back to "human" if the
   // user hasn't set an identity yet, so old behaviour stays valid.
-  const plan = planService.createPlan({ title, description: description || '', tasks: tasks || [] }, getAuthorKey('human'), 'human', projectPath);
+  const plan = planService.createPlan({ title, description: description || '', tasks: tasks || [] }, personFrom(req).author, personFrom(req).authorType, projectPath);
   const exported = exportIfSharedByDefault(plan.uid, projectPath);
   broadcast('plan-created', { plan, exported });
   saveNow(() => exportDatabase());
@@ -1867,6 +2245,34 @@ app.get('/api/plans/:uid', (req, res) => {
 });
 
 /**
+ * Who a person's write over REST is by, from how it arrived (Phase 32
+ * §0.4d, owner's decision). The app window's IPC is the person. Plain HTTP
+ * with the token could be a person in a browser or a script that read the
+ * token, so it is recorded as `unverified`: it counts, and says what it is
+ * wherever it is shown.
+ *
+ * Every REST handler that records an author takes it from here — never a
+ * literal, and never from the request body. Authorship went wrong the same
+ * way four times in Stage 0 (bugs 43, 47, 49 and the grant escalation), so
+ * `authorship.test.ts` holds this file to it.
+ */
+export interface Person {
+  author: string;
+  authorType: 'human' | 'unverified';
+}
+
+function personFrom(req: express.Request): Person {
+  return { author: getAuthorKey('human'), authorType: cameFromAppWindow(req) ? 'human' : 'unverified' };
+}
+
+/** The same person, in the shape decisions, budgets and freezes record. */
+function actorFrom(req: express.Request) {
+  return cameFromAppWindow(req)
+    ? { actor: getAuthorKey('human'), actorType: 'human' as const, channel: 'desktop' as const }
+    : { actor: getAuthorKey('human'), actorType: 'unverified' as const, channel: 'local-api' as const };
+}
+
+/**
  * A person's edit to a plan, from the app or the paired phone.
  *
  * One function for both, because the phone's copy had drifted: it stored any
@@ -1877,14 +2283,14 @@ app.get('/api/plans/:uid', (req, res) => {
 export function updatePlanAsPerson(
   planUid: string,
   changes: Parameters<typeof planService.updatePlan>[1],
-  author: string,
-): void {
+  by: { author: string; authorType: string },
+): { plannedOverlaps: string[] } {
   const plan = planService.getPlan(planUid);
   if (!plan) throw new PlanRequestError(404, 'Plan not found');
   if (changes.status !== undefined && !isPlanStatus(changes.status)) {
     throw new PlanRequestError(400, `status must be one of: ${PLAN_STATUSES.join(', ')}`);
   }
-  planService.updatePlan(planUid, changes, author);
+  planService.updatePlan(planUid, changes, by.author, by.authorType);
 
   // A plan made in the window is held back while it is "Untitled plan" and
   // written into the project once it has a name (bug 48).
@@ -1902,8 +2308,17 @@ export function updatePlanAsPerson(
     }
   }
 
+  // B9.3b (G3): approving a plan says the planned overlaps it is in, once.
+  let plannedOverlaps: string[] = [];
+  if (changes.status === 'approved' && plan.status !== 'approved' && plan.projectPath) {
+    const noted = noteApproval(plan.projectPath, planUid);
+    plannedOverlaps = noted.overlaps;
+    if (noted.noticeId !== null) broadcast('play-forward-changed', { project: plan.projectPath });
+  }
+
   broadcast('plan-updated', { planUid, status: changes.status });
   saveNow(() => exportDatabase());
+  return { plannedOverlaps };
 }
 
 /**
@@ -1916,6 +2331,8 @@ export function deletePlanAsPerson(planUid: string, opts: { removeDisk?: boolean
   const plan = planService.getPlan(planUid);
   if (!plan) throw new PlanRequestError(404, 'Plan not found');
   planService.deletePlan(planUid);
+  // A proposal to a page in a deleted plan cannot be decided (B7.4).
+  if (withdrawProposals({ planUid }, 'The plan was deleted.')) { broadcast('spec-proposal-withdrawn', { planUid }); broadcast('breakpoints-changed', { planUid }); }
 
   // Also remove on-disk .codetrellis/plans/<slug>/ if the plan has a project path
   let diskRemoved = false;
@@ -1949,14 +2366,15 @@ app.put('/api/plans/:uid', (req, res) => {
     title, description, status,
     baseRef, targetBranch, targetWorktree, autoCreateBranch,
   } = req.body;
+  let result: ReturnType<typeof updatePlanAsPerson>;
   try {
-    updatePlanAsPerson(
+    result = updatePlanAsPerson(
       req.params.uid,
       { title, description, status, baseRef, targetBranch, targetWorktree, autoCreateBranch },
-      'user',
+      personFrom(req),
     );
   } catch (err) { sendPlanError(res, err); return; }
-  res.json({ ok: true });
+  res.json({ ok: true, ...(result.plannedOverlaps.length ? { plannedOverlaps: result.plannedOverlaps } : {}) });
 });
 
 // Delete (archive) plan
@@ -2004,6 +2422,429 @@ app.get('/api/plans/:uid/next-task', (req, res) => {
   res.json(task || { none: true });
 });
 
+/**
+ * Phase 32 B6.1 — every pending task in the plan held by its dependencies,
+ * with what each waits on and where, including tasks in other plans.
+ */
+app.get('/api/plans/:uid/waits', (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
+  res.json({ waits: planItemService.planWaits(req.params.uid) });
+});
+
+/**
+ * Phase 32 C2.1 — each item's state from git, for any host or none:
+ * building, pushed or merged, with the commit that proves it, from local
+ * refs; nothing is fetched. C2.2b — where the person turned on a review
+ * host for the project, what it says too (in review, closed), each state
+ * with its source; otherwise no host is asked.
+ */
+app.get('/api/plans/:uid/git-state', async (req, res) => {
+  const states = await planGitStatesFresh(req.params.uid);
+  if (!states) { res.status(404).json({ error: 'Plan not found' }); return; }
+  res.json(states);
+});
+
+/**
+ * Phase 32 C2.4 — the plan's status, read and never written: every item's
+ * state with its source (git or the review host for an item on a branch,
+ * the plan itself for everything else, with who recorded it), and the one
+ * view the window, the phone and get_plan share. No file is written.
+ */
+app.get('/api/plans/:uid/status', async (req, res) => {
+  const status = await planStatusFresh(req.params.uid);
+  if (!status) { res.status(404).json({ error: 'Plan not found' }); return; }
+  res.json(status);
+});
+
+/**
+ * Phase 32 C2.2a — a review host, per project, on this device. Off until the
+ * person turns it on; turning it on and saving a token are grants (they widen
+ * what the app reaches), so they come from the app window only. Turning it
+ * off and forgetting a token narrow it, and anyone may. No request is made
+ * here, and the token is never in a response.
+ */
+const REVIEW_HOST_WHERE = 'Settings → Review hosts';
+function sendReviewHostError(res: express.Response, err: unknown): void {
+  if (err instanceof ReviewHostError) { res.status(err.status).json({ error: err.message }); return; }
+  throw err;
+}
+function changedBy(req: express.Request): string {
+  const p = personFrom(req);
+  return p.authorType === 'human' ? p.author : `${p.author} (unverified)`;
+}
+
+app.get('/api/review-host', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(getReviewHost(projectRoot));
+});
+
+app.put('/api/review-host', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const enabled = req.body?.enabled;
+  if (typeof enabled !== 'boolean') { res.status(400).json({ error: 'enabled must be true or false' }); return; }
+  if (enabled && !mayGrant(req)) { res.status(403).json({ error: `Only you can turn on a review host — in the CodeTrellis app, ${REVIEW_HOST_WHERE}.` }); return; }
+  try {
+    const status = setReviewHost(projectRoot, enabled, changedBy(req));
+    forgetHostReads();
+    broadcast('review-host-changed', { project: projectRoot });
+    res.json(status);
+  } catch (err) { sendReviewHostError(res, err); }
+});
+
+app.put('/api/review-host/token', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can save a review host's token — in the CodeTrellis app, ${REVIEW_HOST_WHERE}.` }); return; }
+  try {
+    const token: unknown = req.body?.token;
+    const status = saveReviewHostToken(projectRoot, token);
+    forgetHostReads();
+    broadcast('review-host-changed', { project: projectRoot });
+    res.json(status);
+  } catch (err) { sendReviewHostError(res, err); }
+});
+
+// Phase 32 B8.1 — what the last test runs said. CodeTrellis never runs tests:
+// these are the reports agents handed over (report_tests, a test criterion).
+app.get('/api/tests', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const match = typeof req.query.match === 'string' ? req.query.match.slice(0, 300) : undefined;
+  res.json({
+    summary: testsSummary(projectRoot),
+    reports: listTestReports(projectRoot, 10),
+    tests: listTestResults(projectRoot, { match, limit: 500 }),
+    // D1.5a: teammates' latest runs, read from the plans folder.
+    teammates: teammateRunSummaries(projectRoot),
+  });
+});
+
+// Phase 32 B8.3a — every file's grounding at once, for the graph's overlay.
+// The same answer per file as /api/tests/grounding.
+app.get('/api/tests/grounding/map', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  // B8.4b — at a past moment, for replay: what was reported by then, on the graph as it was.
+  if (req.query.at !== undefined) {
+    const at = Number(req.query.at);
+    if (!Number.isFinite(at) || at <= 0) { res.status(400).json({ error: 'at must be a time in ms' }); return; }
+    res.json(groundingMapAt(projectRoot, at));
+    return;
+  }
+  res.json(groundingMap(projectRoot));
+});
+
+// Phase 32 B8.2 — one file's tests: those whose file imports it, and whether
+// they pass, fail, are older than the code, or there are none.
+app.get('/api/tests/grounding', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const file = typeof req.query.path === 'string' ? req.query.path : '';
+  if (!file) { res.status(400).json({ error: 'path query param required' }); return; }
+  try {
+    res.json(groundingOf(projectRoot, file));
+  } catch (err) {
+    if (err instanceof ConfinementError) { res.status(400).json({ error: `${file} is not a file inside this project.` }); return; }
+    if (err instanceof NotAFileError) { res.status(400).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+// Phase 32 C3.1 — task state shared as records in the project's files. Per
+// project, on this device; turning it on is the person's, as a grant.
+const SHARED_STATE_WHERE = 'Settings → Shared task state';
+
+app.get('/api/shared-task-state', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(getSharedTaskState(projectRoot));
+});
+
+app.put('/api/shared-task-state', async (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const enabled = req.body?.enabled;
+  const materialReads = req.body?.materialReads;
+  if (enabled !== undefined && typeof enabled !== 'boolean') { res.status(400).json({ error: 'enabled must be true or false' }); return; }
+  if (materialReads !== undefined && typeof materialReads !== 'boolean') { res.status(400).json({ error: 'materialReads must be true or false' }); return; }
+  if (enabled === undefined && materialReads === undefined) { res.status(400).json({ error: 'enabled or materialReads (true or false) is required' }); return; }
+  if (enabled && !mayGrant(req)) { res.status(403).json({ error: `Only you can share task state through the project's files — in the CodeTrellis app, ${SHARED_STATE_WHERE}.` }); return; }
+  // C3.5 — teammates' material reads, a separate switch: on is the person's too.
+  if (materialReads && !mayGrant(req)) { res.status(403).json({ error: `Only you can share which versions of materials your tasks read — in the CodeTrellis app, ${SHARED_STATE_WHERE}.` }); return; }
+  let status = getSharedTaskState(projectRoot);
+  if (enabled !== undefined) status = setSharedTaskState(projectRoot, enabled, changedBy(req));
+  if (materialReads !== undefined) status = setSharedMaterialReads(projectRoot, materialReads, changedBy(req));
+  // A change made right after this answer writes the first record: the
+  // watcher must already be watching where it goes.
+  if (enabled) await startRecordWatcher(projectRoot);
+  broadcast('shared-task-state-changed', { project: projectRoot });
+  res.json(status);
+});
+
+// C3.3 — trust a teammate's device key, introduced in the project's files,
+// so the records it signs verify here. Trusting is the person's, as a grant;
+// refusing one is anyone's. Keys are by device, so one decision covers every
+// project that device shares into.
+app.post('/api/shared-task-state/keys', (req, res) => {
+  const { writer, fingerprint, trust } = req.body ?? {};
+  if (typeof writer !== 'string' || typeof fingerprint !== 'string' || typeof trust !== 'boolean') {
+    res.status(400).json({ error: 'writer, fingerprint and trust (true or false) are required' });
+    return;
+  }
+  if (trust && !mayGrant(req)) { res.status(403).json({ error: `Only you can trust a teammate's key — in the CodeTrellis app, ${SHARED_STATE_WHERE}.` }); return; }
+  const out = trustTeammateKey(writer, fingerprint, trust, changedBy(req));
+  if (!out) { res.status(404).json({ error: 'No device has introduced that key in a project here.' }); return; }
+  broadcast('shared-task-state-changed', { writer });
+  for (const itemUid of out.rechecked) {
+    const item = planItemService.getItem(itemUid);
+    if (item) broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { rechecked: true } });
+  }
+  res.json(out);
+});
+
+// Phase 32 C3.4a — where a project's plans live. Naming a plans folder in
+// the committed config, and linking this device's copy of it, are the
+// person's (grants); unlinking is anyone's. A link moves where plans,
+// records and keys are read, so the watchers restart and what is there is
+// imported.
+const PLANS_FOLDER_WHERE = 'Settings → Plans folder';
+
+async function rebindPlansFolder(projectRoot: string): Promise<number> {
+  stopPlanFileWatcher(projectRoot);
+  stopRecordWatcher(projectRoot);
+  let imported = 0;
+  for (const dir of discoverPlanDirs(projectRoot)) {
+    try { importPlan(dir); imported++; } catch (err) { console.warn(`[PlansFolder] Import failed for ${dir}:`, err); }
+  }
+  await startPlanFileWatcher(projectRoot);
+  await startRecordWatcher(projectRoot);
+  readAndTell(projectRoot);
+  broadcast('plans-folder-changed', { project: projectRoot });
+  broadcast('plans-changed', { project: projectRoot });
+  return imported;
+}
+
+app.get('/api/plans-folder', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(getPlansFolder(projectRoot));
+});
+
+app.put('/api/plans-folder', async (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const raw = req.body?.folder;
+  const folder = raw === null ? null : _lazy___services_project_config_service.parsePlansFolderRef(raw);
+  if (raw !== null && !folder) { res.status(400).json({ error: 'folder must be { kind: "git", remote } or { kind: "synced", provider, place }, or null' }); return; }
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can choose where this project's plans live — in the CodeTrellis app, ${PLANS_FOLDER_WHERE}.` }); return; }
+  namePlansFolder(projectRoot, folder);
+  await rebindPlansFolder(projectRoot);
+  res.json(getPlansFolder(projectRoot));
+});
+
+app.post('/api/plans-folder/link', async (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can link a plans folder on this device — in the CodeTrellis app, ${PLANS_FOLDER_WHERE}.` }); return; }
+  // The folder the person picked, not a root: linkPlansFolder takes it only
+  // as a real directory that is a copy of the folder the config names.
+  const rawFolder: unknown = req.body?.path;
+  try {
+    linkPlansFolder(projectRoot, rawFolder, changedBy(req));
+  } catch (err) {
+    if (err instanceof PlansFolderError) { res.status(400).json({ error: err.message }); return; }
+    throw err;
+  }
+  const imported = await rebindPlansFolder(projectRoot);
+  res.json({ ...getPlansFolder(projectRoot), imported });
+});
+
+app.delete('/api/plans-folder/link', async (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  unlinkPlansFolder(projectRoot);
+  await rebindPlansFolder(projectRoot);
+  res.json(getPlansFolder(projectRoot));
+});
+
+// Phase 32 C4.1 — recurring playbooks. A rule lives in the committed config,
+// so setting or removing one is the person's (as naming a plans folder is);
+// starting a run is anyone's, as making a plan is, and starting it twice is
+// one run.
+const RECURRING_WHERE = 'Settings → Recurring playbooks';
+
+app.get('/api/recurring', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json({ series: seriesFor(projectRoot) });
+});
+
+app.put('/api/recurring/:id', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can make a playbook recur — in the CodeTrellis app, ${RECURRING_WHERE}.` }); return; }
+  try {
+    // The rule's own fields, by name: nothing else in the body reaches the config.
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const fields = { id: req.params.id, playbook: b.playbook, title: b.title, every: b.every, on: b.on, at: b.at, timeZone: b.timeZone, carryOver: b.carryOver, skills: b.skills };
+    const rule = setRule(projectRoot, fields, changedBy(req));
+    broadcast('recurring-changed', { project: projectRoot });
+    res.json({ rule, series: seriesFor(projectRoot).find((s) => s.rule.id === rule.id) });
+  } catch (err) {
+    if (err instanceof RecurringError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+// Phase 32 A7.1 — architecture rules: path boundaries the team keeps in the
+// committed config. Reading them, with what breaks each today, is anyone's;
+// setting or stopping one is the person's, as a plans folder is.
+const RULES_WHERE = 'Settings → Architecture rules';
+
+app.get('/api/rules', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json({ rules: rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)) });
+});
+
+app.put('/api/rules/:id', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can set an architecture rule — in the CodeTrellis app, ${RULES_WHERE}.` }); return; }
+  try {
+    // The rule's own fields, by name: nothing else in the body reaches the config.
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const rule = setArchitectureRule(projectRoot, { id: req.params.id, from: b.from, mayNotImport: b.mayNotImport, except: b.except, because: b.because }, changedBy(req));
+    broadcast('rules-changed', { project: projectRoot });
+    const person = personFrom(req);
+    recordDecision('rule_changed', { projectRoot, ruleId: rule.id, change: 'set', from: rule.from, mayNotImport: rule.mayNotImport, except: rule.except, because: rule.because, author: person.author, authorType: person.authorType }, person.authorType);
+    // A7.2 — work in flight is checked against the new rule at once.
+    try { refreshSignals(projectRoot); } catch (err) { console.warn('[Awareness] refresh failed:', err); }
+    res.json({ rule, view: rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)).find((v) => v.rule.id === rule.id) });
+  } catch (err) {
+    if (err instanceof RuleError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+app.delete('/api/rules/:id', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can stop an architecture rule — in the CodeTrellis app, ${RULES_WHERE}.` }); return; }
+  try {
+    removeArchitectureRule(projectRoot, req.params.id);
+    broadcast('rules-changed', { project: projectRoot });
+    const person = personFrom(req);
+    recordDecision('rule_changed', { projectRoot, ruleId: req.params.id, change: 'stopped', author: person.author, authorType: person.authorType }, person.authorType);
+    try { refreshSignals(projectRoot); } catch (err) { console.warn('[Awareness] refresh failed:', err); }
+    res.json({ removed: req.params.id });
+  } catch (err) {
+    if (err instanceof RuleError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+app.delete('/api/recurring/:id', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can stop a playbook recurring — in the CodeTrellis app, ${RECURRING_WHERE}.` }); return; }
+  try {
+    removeRule(projectRoot, req.params.id);
+    broadcast('recurring-changed', { project: projectRoot });
+    res.json({ removed: req.params.id });
+  } catch (err) {
+    if (err instanceof RecurringError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+// C4.3b — on this device, start an agent on each run of a rule: the person's
+// alone, since it starts a process here. `agent` is claude, codex, or null (off).
+const RUN_AGENT_NOT_HERE = 'the run was started over plain HTTP; only you in the app, the schedule, or a phone allowed to open terminals start one';
+app.put('/api/recurring/:id/agent', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can have an agent start on each run — in the CodeTrellis app, ${RECURRING_WHERE}.` }); return; }
+  const agent = (req.body ?? {}).agent;
+  if (agent !== null && !isRunAgent(agent)) { res.status(400).json({ error: 'agent must be claude, codex or null' }); return; }
+  try {
+    const series = seriesFor(projectRoot).find((s) => s.rule.id === req.params.id);
+    if (!series) { res.status(404).json({ error: `No recurring playbook "${req.params.id}" in this project` }); return; }
+    setRunAgent(projectRoot, req.params.id, agent, changedBy(req));
+    broadcast('recurring-changed', { project: projectRoot });
+    res.json({ series: seriesFor(projectRoot).find((s) => s.rule.id === req.params.id) });
+  } catch (err) {
+    if (err instanceof RecurringError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+app.post('/api/recurring/:id/start', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  try {
+    const who = personFrom(req);
+    const run = startRun(projectRoot, req.params.id, who);
+    // C4.3b — its agent, when the rule has one on this device: from the app
+    // window, never from plain HTTP (loopback is not a person).
+    const agent = run.created
+      ? startRunAgent(projectRoot, req.params.id, run.plan, who.authorType === 'human' ? true : RUN_AGENT_NOT_HERE, (session) => broadcast('terminal-created', { session }))
+      : null;
+    if (run.created) {
+      broadcast('plan-created', { plan: run.plan });
+      broadcast('recurring-changed', { project: projectRoot });
+    }
+    res.json({ planUid: run.plan.uid, title: run.plan.title, created: run.created, recurrence: run.info, agent });
+  } catch (err) {
+    if (err instanceof RecurringError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+// C4.2b — which series a plan is a run of. The root is the stored plan's,
+// never the request's.
+app.get('/api/plans/:uid/recurrence', (req, res) => {
+  const plan = planService.getPlan(req.params.uid);
+  if (!plan) { res.status(404).json({ error: 'Plan not found' }); return; }
+  if (!plan.projectPath) { res.json({ recurrence: null }); return; }
+  res.json({ recurrence: recurrenceOf(plan.projectPath, plan.uid) });
+});
+
+// C4.2a — "Not this time": the due run is left unstarted on this device, and
+// reads missed once its period ends. Only hides the question here.
+app.post('/api/recurring/:id/dismiss', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  try {
+    const out = dismissDue(projectRoot, req.params.id, changedBy(req));
+    broadcast('recurring-changed', { project: projectRoot });
+    res.json(out);
+  } catch (err) {
+    if (err instanceof RecurringError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+// C3.2 — keep this machine's state of a task people set two ways at once.
+app.post('/api/items/:uid/keep-state', (req, res) => {
+  const out = keepMyState(req.params.uid, personFrom(req));
+  if (!out.ok) { res.status(out.status).json({ error: out.error }); return; }
+  const item = planItemService.getItem(req.params.uid);
+  if (item) broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { settled: true } });
+  res.json({ settled: true, record: out.file });
+});
+
+app.delete('/api/review-host/token', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const status = forgetReviewHostToken(projectRoot);
+  forgetHostReads();
+  broadcast('review-host-changed', { project: projectRoot });
+  res.json(status);
+});
+
 /** Delete a task attachment. */
 app.delete('/api/attachments/:uid', (req, res) => {
   const ok = taskAttachmentsService.deleteAttachment(req.params.uid);
@@ -2032,6 +2873,321 @@ app.get('/api/plans/:planUid/items', (req, res) => {
     filtered = filtered.filter((i) => i.kind === req.query.kind);
   }
   res.json(filtered);
+});
+
+/**
+ * The skills in effect on an item, own and inherited, each with the item it
+ * comes from (Phase 32 C1.2) and whether it was used (C1.3). For people: a
+ * link location is included.
+ */
+app.get('/api/items/:uid/skills', (req, res) => {
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  const rows = planItemService.resolveSkillsWithSource(item);
+  // C1.3: whether each was used, once an agent has worked the task.
+  const proof = skillProof(item, rows.map((r) => r.skill));
+  // A8.4: how each use was seen.
+  const sources = skillUseSources(item.uid);
+  // C1.4: a skill that arrived in a plan file and waits for a person, with who added it.
+  const waiting = new Map<string, Map<string, SkillArrival>>();
+  const pendingOf = (uid: string) => { if (!waiting.has(uid)) waiting.set(uid, pendingArrivals(uid)); return waiting.get(uid)!; };
+  res.json({ skills: rows.map((r) => {
+    const p = proof?.get(r.skill.name) ?? null;
+    return { ...r, proof: p, proofSource: p === 'used' ? sourceOf(sources, r.skill.name) : null, pending: pendingOf(r.fromUid).get(r.skill.name) ?? null };
+  }) });
+});
+
+/**
+ * Which worktree an item is worked in (Phase 32 C5.1): its own branch, and
+ * the section's in effect (its own or inherited), with where that is.
+ */
+/**
+ * Phase 32 B7.1 — spec links. For a task, the pages (or sections) it relies
+ * on; for a page, every task relying on it in any plan of its project,
+ * optionally one section (`?section=<slug>`).
+ */
+app.get('/api/items/:uid/spec-links', (req, res) => {
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  const section = typeof req.query.section === 'string' && req.query.section ? req.query.section : undefined;
+  const by = item.kind === 'object' ? reliedOnBy(item.uid, section) : [];
+  res.json({ uid: item.uid, kind: item.kind, reliesOn: reliesOn(item.uid), reliedOnBy: by, words: reliedOnWords(by), specChanged: specChangedFor(item.uid) });
+});
+
+/** Set what a task relies on: `{ reliesOn: [{ page, section? }] }`, replacing the list. The author is how the call arrived. */
+app.put('/api/items/:uid/relies-on', (req, res) => {
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  const raw = req.body?.reliesOn;
+  if (!Array.isArray(raw) || raw.some((r) => !r || typeof r.page !== 'string' || (r.section !== undefined && typeof r.section !== 'string'))) {
+    res.status(400).json({ error: 'reliesOn must be a list of { page, section? }' });
+    return;
+  }
+  const refs = raw.map((r: SpecRef) => ({ page: r.page, section: r.section || undefined }));
+  const problem = specRefProblem(item.uid, refs);
+  if (problem) { res.status(400).json({ error: problem }); return; }
+  setReliesOn(item.uid, refs, personFrom(req));
+  broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { reliesOn: refs } });
+  saveNow(() => exportDatabase());
+  res.json({ uid: item.uid, reliesOn: reliesOn(item.uid) });
+});
+
+/**
+ * Phase 32 B7.2 — propose a change to a spec page (whole, or one section by
+ * heading slug): `{ section?, text, why, evidence? }`. The page is not
+ * changed; the proposal lists who relies on it. The author is how the call
+ * arrived.
+ */
+app.post('/api/items/:uid/spec-proposals', (req, res) => {
+  const b = req.body ?? {};
+  if (typeof b.text !== 'string' || typeof b.why !== 'string' || (b.section !== undefined && typeof b.section !== 'string')) {
+    res.status(400).json({ error: 'text and why are required; section is a heading slug' });
+    return;
+  }
+  const evidence = b.evidence && typeof b.evidence === 'object' ? b.evidence : undefined;
+  const input = { page: req.params.uid, section: b.section || undefined, text: b.text, why: b.why, evidence };
+  const problem = proposalProblem(input);
+  if (problem) { res.status(400).json({ error: problem }); return; }
+  const proposal = proposeSpecChange(input, { ...personFrom(req), sessionId: null });
+  broadcast('spec-proposal-created', { proposal });
+  saveNow(() => exportDatabase());
+  res.json(proposal);
+});
+
+/** Proposed spec changes, newest first: `?page=<uid>`, or an opened `?project=`; `&status=`. */
+app.get('/api/spec-proposals', (req, res) => {
+  const status = typeof req.query.status === 'string' && ['open', 'accepted', 'rejected', 'withdrawn'].includes(req.query.status)
+    ? req.query.status as ProposalStatus : undefined;
+  const pageUid = typeof req.query.page === 'string' && req.query.page ? req.query.page : undefined;
+  if (pageUid) { res.json({ proposals: listProposals({ pageUid, status }) }); return; }
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  res.json({ proposals: listProposals({ projectPath, status }) });
+});
+
+app.get('/api/spec-proposals/:uid', (req, res) => {
+  const proposal = getProposal(req.params.uid);
+  if (!proposal) { res.status(404).json({ error: 'No such proposal' }); return; }
+  res.json(proposal);
+});
+
+/**
+ * A person decides a proposal (Phase 32 B7.4): `{ decision: "accept" | "amend" | "reject", text?, note? }`.
+ * Amend needs the text as it should read. The decider is how the call arrived; no MCP tool can do this.
+ */
+app.post('/api/spec-proposals/:uid/decision', (req, res) => {
+  const input = {
+    uid: req.params.uid,
+    decision: req.body?.decision as ProposalDecision,
+    text: typeof req.body?.text === 'string' ? req.body.text : undefined,
+    note: typeof req.body?.note === 'string' ? req.body.note : undefined,
+  };
+  if (!getProposal(input.uid)) { res.status(404).json({ error: 'No such proposal' }); return; }
+  const problem = decisionProblem(input);
+  if (problem) { res.status(problem.includes('already') ? 409 : 400).json({ error: problem }); return; }
+  const who = personFrom(req);
+  const { proposal, flagged } = decideProposal(input, { author: who.author, authorType: who.authorType });
+  broadcast('spec-proposal-decided', { uid: proposal.uid, status: proposal.status, pageUid: proposal.pageUid });
+  if (proposal.hitRef) broadcast('breakpoint-answered', { ref: proposal.hitRef, planUid: proposal.planUid, decision: proposal.status === 'rejected' ? 'stop' : 'continue' });
+  if (proposal.status === 'accepted') broadcast('plan-item-updated', { planUid: proposal.planUid, itemUid: proposal.pageUid, kind: 'object', changes: { body: true } });
+  saveNow(() => exportDatabase());
+  res.json({ proposal, flagged: flagged.map((t) => ({ itemUid: t.itemUid, title: t.title, planTitle: t.planTitle })) });
+});
+
+app.get('/api/items/:uid/workstream', (req, res) => {
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  const root = getActiveProjectPath();
+  let workstreams: ReturnType<typeof listWorkstreams> = [];
+  try { workstreams = root ? listWorkstreams(root, { includeIdle: true }) : []; } catch { /* no git */ }
+  const section = resolveSection(item, planItemService.getItem);
+  res.json({
+    own: item.workstream ?? null,
+    section,
+    where: section ? whereWorked(section.branch, workstreams) : null,
+    root: section ? workstreamOfBranch(section.branch, workstreams)?.root ?? null : null,
+  });
+});
+
+/**
+ * Set or clear the worktree a section is worked in: `{ workstream: "<branch>" | null }`.
+ * The branch must be a workstream CodeTrellis knows; the root is never the
+ * request's. The author is how the call arrived.
+ */
+app.put('/api/items/:uid/workstream', (req, res) => {
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  const raw = req.body?.workstream;
+  let branch: string | null = null;
+  if (raw !== null) {
+    const root = getActiveProjectPath();
+    let workstreams: ReturnType<typeof listWorkstreams> = [];
+    try { workstreams = root ? listWorkstreams(root, { includeIdle: true }) : []; } catch { /* no git */ }
+    branch = cleanBranch(raw);
+    if (!branch || !workstreamOfBranch(branch, workstreams)) {
+      res.status(400).json({ error: 'workstream must be the branch of a known workstream, or null' });
+      return;
+    }
+  }
+  const updated = planItemService.updateItem(item.uid, {
+    workstream: branch,
+    changeSummary: branch ? `Worked on ${branch}` : 'Worked in any worktree',
+    ...personFrom(req),
+  });
+  if (!updated) { res.status(404).json({ error: 'Item not found' }); return; }
+  broadcast('plan-item-updated', { planUid: updated.planUid, itemUid: updated.uid, kind: updated.kind, changes: { workstream: branch } });
+  saveNow(() => exportDatabase());
+  res.json({ own: updated.workstream ?? null, section: resolveSection(updated, planItemService.getItem) });
+});
+
+/**
+ * "Work this section in a new worktree" (Phase 32 C5.2): a new branch (the
+ * one given, or one named after the plan and the section) from the plan's
+ * base, in a new folder beside the project, and the section assigned to it.
+ * It makes a folder on the person's machine, so it is the person's: the app
+ * window, or a test backend. The folder and the root are never the
+ * request's; the branch is checked, and nothing that exists is reused.
+ */
+app.post('/api/items/:uid/worktree', (req, res) => {
+  if (!mayGrant(req)) {
+    res.status(403).json({ error: 'Making a worktree creates a folder on your machine, so it is done from the CodeTrellis window.' });
+    return;
+  }
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  const root = getActiveProjectPath();
+  if (!root) { res.status(409).json({ error: 'Open the project first' }); return; }
+  const plan = planService.getPlan(item.planUid);
+  const branch = req.body?.branch === undefined || req.body?.branch === ''
+    ? cleanBranch(suggestSectionBranch(plan?.title ?? '', item.title))
+    : cleanBranch(req.body.branch);
+  if (!branch) { res.status(400).json({ error: 'branch must be a branch name: letters, digits, ".", "_", "-" and "/", not starting with "-"' }); return; }
+  const dir = worktreeDirFor(root, branch);
+  const base = usableBase(plan?.baseRef);
+  try {
+    createWorktree(root, { branch, dir, base });
+  } catch (err) {
+    if (err instanceof WorktreeError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+  const updated = planItemService.updateItem(item.uid, {
+    workstream: branch,
+    changeSummary: `Worked on ${branch}, in a new worktree`,
+    ...personFrom(req),
+  });
+  if (updated) broadcast('plan-item-updated', { planUid: updated.planUid, itemUid: updated.uid, kind: updated.kind, changes: { workstream: branch } });
+  broadcast('workstreams-changed', { root: dir });
+  saveNow(() => exportDatabase());
+  res.status(201).json({ branch, root: dir, base: base ?? 'HEAD' });
+});
+
+/**
+ * Skills that arrived in a plan file and wait for a person before any agent
+ * is told them (Phase 32 C1.4), for the plan's readiness list.
+ */
+app.get('/api/plans/:uid/skill-arrivals', (req, res) => {
+  if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
+  res.json({ arrivals: planArrivals(req.params.uid) });
+});
+
+/**
+ * A person accepts a skill that arrived in a plan file: agents are told it
+ * from now on. Who accepted comes from how the call arrived, never the body.
+ */
+app.post('/api/items/:uid/skill-arrivals/accept', (req, res) => {
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  const skill = typeof req.body?.skill === 'string' ? req.body.skill : '';
+  const who = personFrom(req);
+  if (!acceptArrival({ itemUid: item.uid, skill, by: who.author, byType: who.authorType })) {
+    res.status(404).json({ error: `No skill "${skill}" is waiting on this item` });
+    return;
+  }
+  broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { skillAccepted: skill } });
+  res.json({ accepted: skill });
+});
+
+// ── Breakpoints (Phase 32 B4) ──────────────────────────────────────
+//
+// A person says where agents must stop and ask; agents' calls there are held
+// at the MCP interception until a person answers. Who set, cleared or
+// answered comes from how the call arrived, never the body; the plan comes
+// from the item.
+
+/** Breakpoints still set; `?plan=` narrows to one plan's items. */
+app.get('/api/breakpoints', (req, res) => {
+  const plan = typeof req.query.plan === 'string' ? req.query.plan : undefined;
+  res.json({ breakpoints: listBreakpoints(plan) });
+});
+
+/**
+ * Set a breakpoint: `{ kind: "task" | "spec", itemUid, note? }`;
+ * `{ kind: "code", path, symbol?, note? }` on a file or folder of the opened
+ * project; or `{ kind: "signal", signal: "collision" | "contract" | "drift" }`,
+ * a rule for the opened project (never a project named in the body). Setting
+ * one already set returns it.
+ */
+app.post('/api/breakpoints', (req, res) => {
+  const who = personFrom(req);
+  try {
+    const { breakpoint, created } = setBreakpoint({
+      kind: req.body?.kind, itemUid: req.body?.itemUid, path: req.body?.path, symbol: req.body?.symbol, signal: req.body?.signal, note: req.body?.note,
+      docUid: req.body?.docUid,
+      projectRoot: getActiveProjectPath(), by: who.author, byType: who.authorType,
+    });
+    if (created) broadcast('breakpoints-changed', { planUid: breakpoint.planUid });
+    res.status(created ? 201 : 200).json({ breakpoint });
+  } catch (err) {
+    if (err instanceof BreakpointError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+/** Clear a breakpoint. Calls still waiting on it are let through. */
+app.delete('/api/breakpoints/:id', (req, res) => {
+  const who = personFrom(req);
+  const bp = getBreakpoint(req.params.id);
+  let outcome: ReturnType<typeof clearBreakpoint>;
+  try {
+    outcome = clearBreakpoint({ id: req.params.id, by: who.author, byType: who.authorType });
+  } catch (err) {
+    if (err instanceof BreakpointError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+  const { cleared, released } = outcome;
+  if (!cleared) { res.status(404).json({ error: 'No such breakpoint is set' }); return; }
+  broadcast('breakpoints-changed', { planUid: bp?.planUid ?? null });
+  res.json({ cleared: req.params.id, released: released.map((h) => h.ref) });
+});
+
+/** Held calls: `?state=waiting` (the default) or `all`; `?plan=` narrows to one plan. */
+app.get('/api/breakpoint-hits', (req, res) => {
+  const state = req.query.state === 'all' ? 'all' : 'waiting';
+  // A call waiting on a signal the person has since answered in Awareness is let through first (B4.2b).
+  const root = getActiveProjectPath();
+  if (root) { try { releaseSettled(root); } catch { /* the list still answers */ } }
+  const plan = typeof req.query.plan === 'string' ? req.query.plan : undefined;
+  res.json({ hits: listHits({ state, planUid: plan }) });
+});
+
+/**
+ * Answer a held call: `{ decision: "continue" | "steer" | "stop", note? }`.
+ * A steer needs a note, which the agent reads. The first answer stands.
+ */
+app.post('/api/breakpoint-hits/:ref/answer', (req, res) => {
+  const decision = req.body?.decision;
+  if (!DECISIONS.includes(decision)) { res.status(400).json({ error: `decision must be one of ${DECISIONS.join(', ')}` }); return; }
+  if (decision === 'steer' && !cleanNote(req.body?.note)) { res.status(400).json({ error: 'A steer needs a note for the agent' }); return; }
+  const hit = getHit(req.params.ref);
+  if (!hit) { res.status(404).json({ error: 'No such breakpoint hit' }); return; }
+  if (hit.kind === 'proposal') { res.status(400).json({ error: 'A spec proposal is decided on the proposal: accept, amend or reject (POST /api/spec-proposals/:uid/decision).' }); return; }
+  const who = personFrom(req);
+  const answered = hit.answeredAt === null
+    ? answerHit({ ref: hit.ref, decision, note: req.body?.note, by: who.author, byType: who.authorType })
+    : null;
+  if (!answered) { res.status(409).json({ error: 'Already answered', hit: getHit(hit.ref) }); return; }
+  broadcast('breakpoint-answered', { ref: answered.ref, planUid: answered.planUid, decision: answered.decision });
+  res.json({ hit: answered });
 });
 
 /** Plan timeline (plan_events feed). */
@@ -2097,6 +3253,8 @@ export function postChannelEventAsPerson(input: {
   respondsTo?: string | null;
   attempted?: unknown;
   options?: unknown;
+  /** How the person reached us: the phone and the app window are `human`, plain HTTP `unverified`. */
+  by: Person['authorType'];
 }) {
   if (!planService.getPlan(input.planUid)) throw new PlanRequestError(404, 'Plan not found');
   const identity = getSettings().identity;
@@ -2111,7 +3269,7 @@ export function postChannelEventAsPerson(input: {
     eventType: input.eventType as any,
     payload,
     author,
-    authorType: 'human',
+    authorType: input.by,
     agentModel: null,
     respondsTo: input.respondsTo ?? null,
   });
@@ -2137,6 +3295,34 @@ export function postChannelEventAsPerson(input: {
   // Phase 2.3 — fire any matching routing rules.
   dispatchChannelEvent(created).catch((err) => console.warn('[Channels] dispatch failed:', err));
   return created;
+}
+
+/**
+ * A person's message about a signal (A4.1), from the app window, plain HTTP
+ * or the phone. Returns the reply and the steers posted, or null when the
+ * signal is not open in this project. The steer carries the signal's words
+ * so the plan's channel reads on its own.
+ */
+export function replyToSignalAsPerson(projectRoot: string, signalId: string, message: string, by: SignalStateBy) {
+  const kept = recordReply(projectRoot, signalId, message, by);
+  if (!kept) return null;
+  const steers: string[] = [];
+  for (const t of kept.tasks) {
+    try {
+      const event = postChannelEventAsPerson({
+        planUid: t.planUid,
+        itemUid: t.itemUid,
+        eventType: 'steer',
+        message: `About "${kept.signal.summary}": ${message}`,
+        by: by.actorType,
+      });
+      steers.push(event.uid);
+    } catch (err) {
+      console.warn('[Awareness] steer for a reply failed:', err instanceof Error ? err.message : err);
+    }
+  }
+  broadcast('awareness-changed', { projectRoot });
+  return { ...kept.reply, signalId, steers };
 }
 
 /** A person resolves, dismisses or reopens a channel event — app or phone, as above. */
@@ -2178,6 +3364,7 @@ app.post('/api/plans/:planUid/channels', (req, res) => {
       respondsTo: responds_to,
       attempted,
       options,
+      by: personFrom(req).authorType,
     }));
   } catch (err) {
     res.status(err instanceof PlanRequestError ? err.status : 400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -2212,6 +3399,12 @@ app.post('/api/plans/:planUid/items', (req, res) => {
     res.status(400).json({ error: `status must be one of: ${TASK_STATUSES.join(', ')}` });
     return;
   }
+  if (dependencies !== undefined) {
+    const problem = Array.isArray(dependencies)
+      ? dependencyProblem(null, dependencies, planItemService.getItem)
+      : 'dependencies must be a list of task uids';
+    if (problem) { res.status(400).json({ error: problem }); return; }
+  }
   try {
     const item = planItemService.createItem({
       planUid: req.params.planUid,
@@ -2227,8 +3420,7 @@ app.post('/api/plans/:planUid/items', (req, res) => {
       newConnections,
       removedConnections,
       dependencies,
-      author: getAuthorKey('human'),
-      authorType: 'human',
+      ...personFrom(req),
     });
     broadcast('plan-item-created', { planUid: item.planUid, item });
     saveNow(() => exportDatabase());
@@ -2299,6 +3491,14 @@ app.get('/api/items/:uid/criteria', async (req, res) => {
   // The authoritative check (§4.4): files change while the app is closed.
   await artefactService.refreshArtefactHashes(req.params.uid).catch(() => []);
   res.json(criteriaService.listCriteria(req.params.uid));
+});
+
+// Phase 32 B8.3b — how far an item's criteria rest on evidence: the line and
+// each criterion's grade, the same the phone and get_brief give.
+app.get('/api/items/:uid/grounding', async (req, res) => {
+  const g = await taskGrounding(req.params.uid);
+  if (!g) { res.status(404).json({ error: 'Item not found' }); return; }
+  res.json(g);
 });
 
 app.post('/api/items/:uid/criteria', (req, res) => {
@@ -2395,7 +3595,7 @@ app.post('/api/plans/:uid/check-runs', async (req, res) => {
   if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
   try {
     const run = await criterionLoop.runCheckRun({
-      planUid: req.params.uid, trigger: 'manual', by: getAuthorKey('human'), byType: 'human',
+      planUid: req.params.uid, trigger: 'manual', by: personFrom(req).author, byType: personFrom(req).authorType,
     });
     broadcast('plan-check-run', { planUid: req.params.uid, runUid: run.uid });
     saveNow(() => exportDatabase());
@@ -2425,7 +3625,7 @@ app.post('/api/items/:uid/artefacts', async (req, res) => {
       path: body.path,
       role: body.role,
       note: typeof body.note === 'string' ? body.note : null,
-      actor: { author: getAuthorKey('human'), authorType: 'human' },
+      actor: personFrom(req),
     });
     startArtefactWatching(artefact);
     criteriaChanged(req.params.uid);
@@ -2463,9 +3663,23 @@ app.put('/api/items/:uid', (req, res) => {
     res.status(400).json({ error: 'visibility must be shared or local' });
     return;
   }
+  // Skills are shown to agents (Phase 32 C1), so a bad one is refused here
+  // rather than stored and quietly trimmed.
+  if (body.skills !== undefined) {
+    const { problems } = normaliseSkills(body.skills);
+    if (problems.length) { res.status(400).json({ error: problems.join('; ') }); return; }
+  }
   if (body.status !== undefined && !isTaskStatus(body.status)) {
     res.status(400).json({ error: `status must be one of: ${TASK_STATUSES.join(', ')}` });
     return;
+  }
+  // Phase 32 B6.1 — any plan's task may be a dependency; one that names
+  // nothing, the item itself, or a page would hold it for ever.
+  if (body.dependencies !== undefined) {
+    const problem = Array.isArray(body.dependencies)
+      ? dependencyProblem(req.params.uid, body.dependencies, planItemService.getItem)
+      : 'dependencies must be a list of task uids';
+    if (problem) { res.status(400).json({ error: problem }); return; }
   }
   const item = planItemService.updateItem(req.params.uid, {
     title: body.title,
@@ -2495,8 +3709,7 @@ app.put('/api/items/:uid', (req, res) => {
     parentUid: body.parentUid,
     sortOrder: body.sortOrder,
     changeSummary: body.changeSummary,
-    author: getAuthorKey('human'),
-    authorType: 'human',
+    ...personFrom(req),
   });
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
   broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: body });
@@ -2546,8 +3759,7 @@ app.post('/api/items/:uid/code-reference', (req, res) => {
   const item = planItemService.updateItem(existing.uid, {
     fileSpecs,
     changeSummary: `Code reference ${filePath}:${start}${end === start ? '' : `-${end}`}`,
-    author: getAuthorKey('human'),
-    authorType: 'human',
+    ...personFrom(req),
   });
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
   broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { fileSpecs } });
@@ -2561,8 +3773,7 @@ app.post('/api/items/:uid/move', (req, res) => {
   const item = planItemService.moveItem(req.params.uid, {
     newParentUid: newParentUid === undefined ? undefined : (newParentUid === '' ? null : newParentUid),
     newSortOrder,
-    author: getAuthorKey('human'),
-    authorType: 'human',
+    ...personFrom(req),
   });
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
   broadcast('plan-item-moved', { planUid: item.planUid, itemUid: item.uid, toParentUid: item.parentUid, sortOrder: item.sortOrder });
@@ -2584,8 +3795,7 @@ app.delete('/api/items/:uid', (req, res) => {
   }
   const cascadedUids = planItemService.deleteItem(req.params.uid, {
     cascade,
-    author: getAuthorKey('human'),
-    authorType: 'human',
+    ...personFrom(req),
   });
   broadcast('plan-item-deleted', { planUid: target.planUid, itemUid: req.params.uid, cascadedUids });
   saveNow(() => exportDatabase());
@@ -2595,16 +3805,18 @@ app.delete('/api/items/:uid', (req, res) => {
 /** Atomically claim an Action. */
 app.post('/api/items/:uid/claim', (req, res) => {
   const { agentId, agentType, model } = req.body || {};
-  const result = planItemService.claimItem(
-    req.params.uid,
-    agentId || getAuthorKey('human'),
-    agentType || 'human',
-    model,
-  );
+  // The body names who the work is assigned to — a script or test can claim
+  // on an agent's behalf — but the change is recorded as the caller's. With
+  // no agent named, the caller takes it, as whoever they are: over plain
+  // HTTP that is `unverified`, never `human` (carried 2b).
+  const who = personFrom(req);
+  const assignee = agentId || who.author;
+  const assigneeType = agentType || who.authorType;
+  const result = planItemService.claimItem(req.params.uid, assignee, assigneeType, model, undefined, undefined, who);
   if (result.ok) {
     const item = planItemService.getItem(req.params.uid);
     if (item) {
-      broadcast('plan-item-claimed', { planUid: item.planUid, itemUid: item.uid, agentId: agentId || 'human', agentType: agentType || 'human' });
+      broadcast('plan-item-claimed', { planUid: item.planUid, itemUid: item.uid, agentId: assignee, agentType: assigneeType });
       if (result.conflicts) {
         broadcast('conflict-detected', { planUid: item.planUid, itemUid: item.uid, message: result.conflicts.join('; ') });
       }
@@ -2618,7 +3830,7 @@ app.post('/api/items/:uid/claim', (req, res) => {
 app.post('/api/items/:uid/restore-version/:version', (req, res) => {
   const v = Number(req.params.version);
   if (!Number.isFinite(v)) { res.status(400).json({ error: 'invalid version' }); return; }
-  const item = planItemService.restoreItemVersion(req.params.uid, v, getAuthorKey('human'), 'human');
+  const item = planItemService.restoreItemVersion(req.params.uid, v, personFrom(req).author, personFrom(req).authorType);
   if (!item) { res.status(404).json({ error: 'Item or version not found' }); return; }
   broadcast('plan-item-version-saved', { planUid: item.planUid, itemUid: item.uid, restoredFrom: v });
   saveNow(() => exportDatabase());
@@ -2642,7 +3854,7 @@ app.get('/api/items/:uid/comments', (req, res) => {
   res.json(commentService.listItemComments(req.params.uid));
 });
 app.post('/api/items/:uid/comments', (req, res) => {
-  const { kind, body, parentCommentUid, source } = req.body || {};
+  const { kind, body, parentCommentUid } = req.body || {};
   if (!body || typeof body !== 'string') { res.status(400).json({ error: 'body is required' }); return; }
   const item = planItemService.getItem(req.params.uid);
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
@@ -2653,10 +3865,12 @@ app.post('/api/items/:uid/comments', (req, res) => {
   const comment = commentService.addComment(
     'item',
     req.params.uid,
-    getAuthorKey('human'),
-    'human',
+    personFrom(req).author,
+    personFrom(req).authorType,
     body,
-    { kind, source: source ?? 'human', commentType: legacyType, parentUid: parentCommentUid },
+    // Whether it came from a person or an agent follows from how it arrived,
+    // never from a `source` in the body.
+    { kind, commentType: legacyType, parentUid: parentCommentUid },
   );
   broadcast('plan-item-comment-added', { planUid: item.planUid, itemUid: req.params.uid, comment });
   saveNow(() => exportDatabase());
@@ -2673,9 +3887,9 @@ app.post('/api/items/:uid/progress', (req, res) => {
   const item = planItemService.getItem(req.params.uid);
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
   if (item.kind !== 'action') { res.status(400).json({ error: 'Progress only applies to Actions.' }); return; }
-  planItemService.updateItem(req.params.uid, { progressPercent: percent, author: getAuthorKey('human'), authorType: 'human' });
+  planItemService.updateItem(req.params.uid, { progressPercent: percent, ...personFrom(req) });
   const body = (typeof message === 'string' && message.trim()) ? message.trim() : `Progress: ${percent}%`;
-  const comment = commentService.addComment('item', req.params.uid, getAuthorKey('human'), 'human', body, {
+  const comment = commentService.addComment('item', req.params.uid, personFrom(req).author, personFrom(req).authorType, body, {
     kind: 'progress', source: 'human', commentType: 'status_update', metadata: { progressPercent: percent },
   });
   broadcast('plan-item-progress', { planUid: item.planUid, itemUid: req.params.uid, percent, message: body, commentUid: comment.uid });
@@ -2691,8 +3905,8 @@ app.post('/api/items/:uid/blocked', (req, res) => {
   const item = planItemService.getItem(req.params.uid);
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
   if (item.kind !== 'action') { res.status(400).json({ error: 'Only Actions can be blocked.' }); return; }
-  planItemService.updateItem(req.params.uid, { status: 'blocked', blockedReason: reason, author: getAuthorKey('human'), authorType: 'human' });
-  const comment = commentService.addComment('item', req.params.uid, getAuthorKey('human'), 'human', reason, {
+  planItemService.updateItem(req.params.uid, { status: 'blocked', blockedReason: reason, ...personFrom(req) });
+  const comment = commentService.addComment('item', req.params.uid, personFrom(req).author, personFrom(req).authorType, reason, {
     kind: 'blocker', source: 'human', commentType: 'concern',
   });
   broadcast('plan-item-blocked', { planUid: item.planUid, itemUid: req.params.uid, reason, commentUid: comment.uid });
@@ -2720,8 +3934,7 @@ app.post('/api/items/:uid/attachments', (req, res) => {
       targetType: 'item',
       targetUid: req.params.uid,
       kind, value, label, contentType, dataBase64, projectRoot,
-      author: getAuthorKey('human'),
-      authorType: 'human',
+      ...personFrom(req),
     });
     broadcast('plan-item-attachment-added', { planUid: item.planUid, itemUid: req.params.uid, attachment });
     saveNow(() => exportDatabase());
@@ -2849,9 +4062,7 @@ app.post('/api/plans/:uid/reconcile', (req, res) => {
   const { deviations } = req.body ?? {}; // [{id, action}]
   if (!Array.isArray(deviations)) { res.status(400).json({ error: 'deviations array required' }); return; }
   try {
-    const resolved = reconcileDeviations(req.params.uid, deviations, cameFromAppWindow(req)
-      ? { actor: getAuthorKey('human'), actorType: 'human' }
-      : { actor: getAuthorKey('human'), actorType: 'unverified' });
+    const resolved = reconcileDeviations(req.params.uid, deviations, actorFrom(req));
     broadcast('deviations-resolved', { planUid: req.params.uid, ids: deviations.map((d: { id: unknown }) => d.id) });
     saveNow(() => exportDatabase());
     res.json({ ok: true, resolved });
@@ -2872,7 +4083,7 @@ app.get('/api/plans/:uid/docs', (req, res) => {
 });
 
 app.post('/api/plans/:uid/docs', (req, res) => {
-  const { docType, title, body, author, authorType, orderHint, parentDocUid } = req.body || {};
+  const { docType, title, body, orderHint, parentDocUid } = req.body || {};
   if (!docType || !title) {
     res.status(400).json({ error: 'docType and title are required' });
     return;
@@ -2882,8 +4093,7 @@ app.post('/api/plans/:uid/docs', (req, res) => {
     docType,
     title,
     body: body ?? '',
-    author: author ?? getAuthorKey('human'),
-    authorType: authorType ?? 'human',
+    ...personFrom(req),
     orderHint: orderHint ?? null,
     parentDocUid: parentDocUid ?? null,
   });
@@ -2910,9 +4120,10 @@ app.get('/api/plan-docs/:docUid', (req, res) => {
 });
 
 app.put('/api/plan-docs/:docUid', (req, res) => {
-  const { title, body, docType, changeSummary, author, orderHint, parentDocUid } = req.body || {};
+  // The version's author is whoever made the edit, never a name in the body.
+  const { title, body, docType, changeSummary, orderHint, parentDocUid } = req.body || {};
   const doc = updatePlanDocument(req.params.docUid, {
-    title, body, docType, changeSummary, author, orderHint, parentDocUid,
+    title, body, docType, changeSummary, ...personFrom(req), orderHint, parentDocUid,
   });
   if (!doc) { res.status(404).json({ error: 'Document not found' }); return; }
   broadcast('plan-doc-updated', { doc });
@@ -3035,6 +4246,15 @@ app.get('/api/file/at', (req, res) => {
   }
 
   try {
+    // Another workstream's copy (Phase 32 B3.2): chosen among the ones this
+    // project's repository has, read inside that workstream's own folder.
+    if (at.startsWith('workstream:')) {
+      // Its paths are from its repository's top: a project in a subfolder adds where it sits (E1).
+      const copy = readWorkstreamCopy(listWorkstreams(owningRoot, { includeIdle: true }), at.slice('workstream:'.length), `${projectPrefix(projectPath)}${relativePath}`);
+      if (!copy) { res.status(404).json({ error: `No workstream ${at.slice('workstream:'.length)} in this project.` }); return; }
+      res.json({ ok: true, content: copy.content, label: copy.label });
+      return;
+    }
     res.json(readFileAt(at, owningRoot, relativePath));
   } catch (err) {
     if (err instanceof ConfinementError) {
@@ -3103,6 +4323,130 @@ app.get('/api/file/overlay', (req, res) => {
 // Any two points, not just "live vs the pinned baseline". Making the
 // comparands explicit is most of what makes Diff mode legible: the
 // chrome can finally state what it is showing.
+// Phase 32 E1: what has changed in an opened project, by where, as an
+// editor's source control tab lists it: staged, unstaged, untracked,
+// committed since the graph's baseline, and each other worktree or branch,
+// each group with the two points its files are diffed between. No plan.
+app.get('/api/source-control', (req, res) => {
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  const trimRoot = (p: string) => p.replace(/[\\/]+$/, '');
+  const baseline = getBaseline();
+  const baselineCommit = baseline && baseline.projectPath && trimRoot(baseline.projectPath) === trimRoot(projectPath) ? baseline.commitHash ?? null : null;
+  let workstreams: ReturnType<typeof listWorkstreams> = [];
+  try { workstreams = listWorkstreams(projectPath, { includeIdle: false }); } catch { /* not a repository: the service says so */ }
+  res.json(sourceControl(projectPath, baselineCommit, workstreams));
+});
+
+// Phase 32 E2: every point a person can compare (branches, remote branches as
+// last fetched, tags, other worktrees' working copies), and the files that
+// differ between any two, each side said plainly and the command git would
+// use. A worktree is named by the id `listWorkstreams` gave it; refs are
+// checked before they reach git.
+app.get('/api/git/refs', (req, res) => {
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  let workstreams: ReturnType<typeof listWorkstreams> = [];
+  try { workstreams = listWorkstreams(projectPath, { includeIdle: true }); } catch { /* not a repository: the listing says so */ }
+  res.json(listRefs(projectPath, workstreams));
+});
+
+// Phase 32 E5 — branches here and on the remotes, as last fetched, with
+// upstream, ahead and behind; pull requests as gh last read them. Local only:
+// nothing here reaches a host.
+app.get('/api/git/branches', async (req, res) => {
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  res.json(await listBranches(projectPath, getSettings().git));
+});
+
+// Fetch now: `git fetch --all --prune`, then the pull requests through gh.
+// The person's action; the root is an opened project, never a body field.
+app.post('/api/git/fetch', async (req, res) => {
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  const result = await fetchRemotes(projectPath);
+  broadcast('git-remotes-changed', { project: projectPath });
+  res.json({ ...result, listing: await listBranches(projectPath, getSettings().git) });
+});
+
+app.get('/api/git/refs/compare', (req, res) => {
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  const before = typeof req.query.before === 'string' ? req.query.before : '';
+  const after = typeof req.query.after === 'string' ? req.query.after : '';
+  if (!before || !after) { res.status(400).json({ error: 'Choose both sides: before and after.' }); return; }
+  // Read only: git's worktrees, no agents placed, no watchers started.
+  const workstreams = worktreesForCompare(projectPath);
+  const result = filesBetween(projectPath, before, after, workstreams);
+  if (!result.ok) { res.status(400).json({ error: result.error }); return; }
+  const labels = { before: sideLabel(projectPath, before, workstreams), after: sideLabel(projectPath, after, workstreams) };
+  const n = result.files.length;
+  // Inside a sentence the app's own words start lower case; a branch keeps its name.
+  const said = (l: string) => (/^(Where|Your|Last|Staged|Tag|Nothing|Commit) /.test(l) ? l[0].toLowerCase() + l.slice(1) : l);
+  res.json({
+    before, after, labels, files: result.files, truncated: result.truncated,
+    command: diffCommand(before, after, workstreams, undefined),
+    words: n === 0
+      ? `${labels.before} and ${said(labels.after)} have the same files.`
+      : `${n}${result.truncated ? '+' : ''} file${n === 1 ? ' differs' : 's differ'} between ${said(labels.before)} and ${said(labels.after)}.`,
+  });
+});
+
+// Phase 32 E3: a file's positions on one side (its working copy, then each
+// commit that changed it, following renames), each with its git author and
+// what CodeTrellis knows of who made it; and the decisions recorded between
+// two moments, for what was decided between two commits.
+app.get('/api/git/file-history', (req, res) => {
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  const at = typeof req.query.at === 'string' && req.query.at ? req.query.at : 'live';
+  const rel = typeof req.query.path === 'string' ? req.query.path : '';
+  if (!isProjectRelativePath(rel)) {
+    res.status(400).json({ error: 'A path relative to the project is required.' });
+    return;
+  }
+  try {
+    res.json(fileHistory(projectPath, at, rel, worktreesForCompare(projectPath), recordedKnowledge(projectPath)));
+  } catch (err) {
+    if (err instanceof FileHistoryError) { res.status(400).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+// Phase 32 E4: who wrote each line of a file, as GitLens shows it (the git
+// author always), with what CodeTrellis knows of why: the agent, how it
+// knows, the session and the task and plan it worked on.
+app.get('/api/git/line-history', (req, res) => {
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  const at = typeof req.query.at === 'string' && req.query.at ? req.query.at : 'live';
+  const rel = typeof req.query.path === 'string' ? req.query.path : '';
+  if (!isProjectRelativePath(rel)) { res.status(400).json({ error: 'A path relative to the project is required.' }); return; }
+  try {
+    res.json(lineHistory(projectPath, at, rel, worktreesForCompare(projectPath), recordedKnowledge(projectPath)));
+  } catch (err) {
+    if (err instanceof LineHistoryError) { res.status(400).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+app.get('/api/record/decisions', (req, res) => {
+  const from = Number(req.query.from);
+  const to = Number(req.query.to);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from > to) {
+    res.status(400).json({ error: 'from and to are times in ms, from no later than to.' });
+    return;
+  }
+  const decisions = decisionsBetween(from, to);
+  res.json({
+    from, to, decisions,
+    words: decisions.length === 0
+      ? 'Nothing was decided on this computer between these two moments.'
+      : `${decisions.length} decision${decisions.length === 1 ? '' : 's'} recorded on this computer between these two moments.`,
+  });
+});
+
 app.get('/api/comparands', (req, res) => {
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
@@ -3133,6 +4477,88 @@ app.get('/api/plans/:uid/pr-draft', (req, res) => {
   });
   if (!result.ok) { res.status(404).json(result); return; }
   res.json(result.draft);
+});
+
+// The review queue (Phase 32 A5.4): each line of work with plan items, with
+// where it stands and a suggested merge order, reasons shown, never enforced.
+app.get('/api/review-queue', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(reviewQueue(projectRoot));
+});
+
+/**
+ * Phase 32 B6.2 — the stack: every active plan in the project and its tasks,
+ * with who is on each, where it is worked, and its dependencies across plans.
+ */
+app.get('/api/stack', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(buildStack(projectRoot));
+});
+
+/**
+ * Phase 32 B9.1 — play-forward: every active plan's planned changes at once,
+ * and where they will meet ("◇ planned overlap"), code and materials.
+ */
+app.get('/api/play-forward', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(buildPlayForward(projectRoot));
+});
+
+/**
+ * Phase 32 B9.3a — a person acts on a planned overlap: re-sequence the plans
+ * (`first`: the plan that goes first), tell the agents holding its tasks
+ * once, or leave it. The author comes from the transport; no MCP tool
+ * reaches these. The project is the query's, confined like every other.
+ */
+/** B9.3b — the inbox's notices of plans approved into planned overlaps, not yet seen. */
+app.get('/api/play-forward/notices', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json({ notices: approvalNotices(projectRoot) });
+});
+
+app.post('/api/play-forward/notices/:id/seen', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!markNoticeSeen(projectRoot, Number(req.params.id), personFrom(req))) { res.status(404).json({ error: 'No such notice, or it was seen already.' }); return; }
+  broadcast('play-forward-changed', { project: projectRoot });
+  saveNow(() => exportDatabase());
+  res.json({ ok: true });
+});
+
+app.post('/api/play-forward/overlaps/:id/:action', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const action = req.params.action;
+  if (action !== 'resequence' && action !== 'tell' && action !== 'leave') {
+    res.status(404).json({ error: 'Unknown action: resequence, tell or leave.' });
+    return;
+  }
+  const who = personFrom(req);
+  const by = { author: who.author, authorType: who.authorType };
+  try {
+    let result: Record<string, unknown> = {};
+    if (action === 'resequence') {
+      const first = typeof req.body?.first === 'string' ? req.body.first : '';
+      if (!first) { res.status(400).json({ error: 'Say which plan goes first: first (a plan uid).' }); return; }
+      const r = resequence(projectRoot, req.params.id, first, by);
+      for (const t of r.waiting) broadcast('plan-item-updated', { planUid: planItemService.getItem(t.uid)?.planUid, itemUid: t.uid, kind: 'action', changes: { dependencies: true } });
+      result = { waiting: r.waiting };
+    } else if (action === 'tell') {
+      result = tellAgents(projectRoot, req.params.id, by);
+    } else {
+      leaveOverlap(projectRoot, req.params.id, by);
+    }
+    broadcast('play-forward-changed', { project: projectRoot });
+    saveNow(() => exportDatabase());
+    res.json({ ...result, playForward: buildPlayForward(projectRoot) });
+  } catch (err) {
+    if (err instanceof OverlapActionError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
 });
 
 app.get('/api/plans/:uid/review', (req, res) => {
@@ -3172,7 +4598,7 @@ app.get('/api/plans/:uid/budget/changes', (req, res) => {
 app.post('/api/plans/:uid/budget/changes/:id/acknowledge', (req, res) => {
   if (!planService.getPlan(req.params.uid)) { res.status(404).json({ error: 'Plan not found' }); return; }
   const id = Number(req.params.id);
-  const change = Number.isInteger(id) ? budgetService.acknowledgeBudgetChange(req.params.uid, id, getAuthorKey('human')) : null;
+  const change = Number.isInteger(id) ? budgetService.acknowledgeBudgetChange(req.params.uid, id, personFrom(req).author) : null;
   if (!change) { res.status(404).json({ error: 'No such budget change on this plan' }); return; }
   broadcast('plan-budget-changed', { planUid: req.params.uid, acknowledged: change.id });
   res.json(change);
@@ -3207,9 +4633,7 @@ app.put('/api/plans/:uid/budget', (req, res) => {
     exempt: body.exempt,
     // Recorded with who made it, tagged by how it arrived, as a criterion
     // decision is (decisionFrom). A person's change is never flagged.
-    by: cameFromAppWindow(req)
-      ? { actor: getAuthorKey('human'), actorType: 'human', channel: 'desktop' }
-      : { actor: getAuthorKey('human'), actorType: 'unverified', channel: 'local-api' },
+    by: actorFrom(req),
   });
   broadcast('plan-budget-changed', { planUid: req.params.uid, budget });
   res.json(budgetService.getBudgetReport(req.params.uid));
@@ -3324,8 +4748,8 @@ app.post('/api/plans/import-external', (req, res) => {
   // Create the plan
   const plan = planService.createPlan(
     { title: result.title, description: result.description, tasks: [] },
-    getAuthorKey('human'),
-    'human',
+    personFrom(req).author,
+    personFrom(req).authorType,
     projectPath,
   );
 
@@ -3339,8 +4763,7 @@ app.post('/api/plans/import-external', (req, res) => {
       body: item.body,
       fileSpecs: item.fileSpecs,
       scopePath: item.scopePath,
-      author: getAuthorKey('human'),
-      authorType: 'human',
+      ...personFrom(req),
     });
     createdItems.push(created.uid);
   }
@@ -3389,7 +4812,8 @@ app.post('/api/plans/:uid/unlink', (req, res) => {
 
 app.get('/api/plans/:uid/signoff-pack', (req, res) => {
   try {
-    res.json(buildSignoffPack(req.params.uid));
+    // Sealed with this computer's key and the record's head (B10.3).
+    res.json(sealPack(buildSignoffPack(req.params.uid)));
   } catch (err) {
     res.status(404).json({ error: err instanceof Error ? err.message : String(err) });
   }
@@ -3397,7 +4821,7 @@ app.get('/api/plans/:uid/signoff-pack', (req, res) => {
 
 app.get('/api/plans/:uid/signoff-pack.html', (req, res) => {
   try {
-    const pack = buildSignoffPack(req.params.uid);
+    const pack = sealPack(buildSignoffPack(req.params.uid));
     const safe = pack.plan.title.replace(/[^A-Za-z0-9 _-]+/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'plan';
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     // A file to save, not a page to render inside the app's origin.
@@ -3423,12 +4847,58 @@ app.post(
         res.status(400).json({ error: err instanceof PackError ? err.message : 'That file is not a readable sign-off pack' });
         return;
       }
-      res.json(await verifyPack(req.params.uid, pack));
+      // The files still match? And the pack itself: who signed it, and unchanged since? (B10.3)
+      res.json({ ...(await verifyPack(req.params.uid, pack)), seal: checkSeal(pack) });
     } catch (err) {
       res.status(err instanceof PackError ? 400 : 500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   },
 );
+
+// --- Phase 32 B10.4: the evidence export ------------------------------
+//
+// For a plan (`?plan=`: its project and its time) or a window of an opened
+// project (`?project=&from=&to=`): the record's entries with how to
+// recompute them, the frames, the stack and signals at both ends, the
+// breakpoints and decisions, and the plan's sign-off pack; sealed with this
+// computer's key. `?format=html` is the page to save.
+
+app.get('/api/evidence', (req, res) => {
+  const ms = (v: unknown) => (typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : undefined);
+  const plan = typeof req.query.plan === 'string' && req.query.plan ? req.query.plan : undefined;
+  let projectPath: string | undefined;
+  if (!plan) {
+    const root = requireProjectRoot(req, res);
+    if (!root) return;
+    projectPath = root;
+  }
+  try {
+    const evidence = sealEvidence(buildEvidence({ planUid: plan, projectPath, from: ms(req.query.from), to: ms(req.query.to) }));
+    if (req.query.format !== 'html') { res.json(evidence); return; }
+    const name = (evidence.window.plan?.title ?? 'window').replace(/[^A-Za-z0-9 _-]+/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'window';
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    // A file to save, not a page to render inside the app's origin.
+    res.setHeader('Content-Disposition', `attachment; filename="evidence-${name}.html"`);
+    res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.send(renderEvidenceHtml(evidence));
+  } catch (err) {
+    if (err instanceof EvidenceError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+/** "Verify evidence": the saved page or its JSON, as text. Who signed it, whether its chain holds, and what changed here since. */
+app.post('/api/evidence/verify', express.text({ type: 'text/plain', limit: '100mb' }), (req, res) => {
+  const text = typeof req.body === 'string' ? req.body : '';
+  if (!text.trim()) { res.status(400).json({ error: 'Send the saved evidence (.html or .json) as text' }); return; }
+  try {
+    res.json(verifyEvidence(evidenceFromText(text)));
+  } catch (err) {
+    if (err instanceof EvidenceError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
 
 // --- Plan Templates API (Phase 12 §G) ---
 
@@ -3469,7 +4939,7 @@ app.post('/api/plans/:uid/publish-as-template', (req, res) => {
 });
 
 app.post('/api/plans/from-template', (req, res) => {
-  const { templateId, projectPath: rawProjectPath, title, description, author, authorType, placeholderValues } = req.body || {};
+  const { templateId, projectPath: rawProjectPath, title, description, placeholderValues } = req.body || {};
   const projectPath = confineRoot(rawProjectPath, res, 'projectPath');
   if (!projectPath) return;
   if (!templateId || !projectPath) {
@@ -3478,7 +4948,7 @@ app.post('/api/plans/from-template', (req, res) => {
   }
   try {
     const result = applyTemplate({
-      templateId, projectPath, title, description, author, authorType,
+      templateId, projectPath, title, description, ...personFrom(req),
       placeholderValues,
     });
     broadcast('plan-created', { plan: result.plan });
@@ -3507,8 +4977,7 @@ app.post('/api/plans/:uid/apply-template', (req, res) => {
       planUid: req.params.uid,
       templateId,
       placeholderValues: placeholderValues && typeof placeholderValues === 'object' ? placeholderValues : undefined,
-      author: getAuthorKey('human'),
-      authorType: 'human',
+      ...personFrom(req),
     });
     for (const item of result.items) broadcast('plan-item-created', { planUid: req.params.uid, item });
     broadcast('plan-updated', { planUid: req.params.uid });
@@ -3560,7 +5029,7 @@ app.get('/api/comments', (req, res) => {
 app.post('/api/comments', (req, res) => {
   const { targetType, targetUid, body, commentType, parentUid } = req.body;
   if (!targetUid || !body) { res.status(400).json({ error: 'targetUid and body required' }); return; }
-  const comment = commentService.addComment(targetType || 'plan', targetUid, getAuthorKey('human'), 'human', body, commentType, parentUid);
+  const comment = commentService.addComment(targetType || 'plan', targetUid, personFrom(req).author, personFrom(req).authorType, body, commentType, parentUid);
   broadcast('comment-added', { comment });
   saveNow(() => exportDatabase());
   res.json(comment);
@@ -3573,6 +5042,16 @@ app.delete('/api/comments/:uid', (req, res) => {
   broadcast('comment-deleted', { uid: req.params.uid });
   saveNow(() => exportDatabase());
   res.json({ ok: true });
+});
+
+/**
+ * Phase 32 C2.5b — an item's approvals as signed statements: each one this
+ * machine signed with git's SSH key (or kept local, and why), and each one
+ * read from the plan's approvals/ folder, verified or not, and why not.
+ */
+app.get('/api/items/:uid/signed-approvals', (req, res) => {
+  if (!planItemService.getItem(req.params.uid)) { res.status(404).json({ error: 'Item not found' }); return; }
+  res.json(listSignedApprovals(req.params.uid));
 });
 
 // --- External References API (Phase 17.R) ---
@@ -3595,8 +5074,7 @@ app.post('/api/items/:itemUid/refs', (req, res) => {
       title,
       kind,
       metadata,
-      author: getAuthorKey('human'),
-      authorType: 'human',
+      ...personFrom(req),
     });
     broadcast('external-ref-added', { ref });
     saveNow(() => exportDatabase());
@@ -3908,6 +5386,22 @@ app.put('/api/settings', (req, res) => {
   if (before.mcp.port !== next.mcp.port) {
     broadcast('mcp-port-config-changed', { configuredPort: next.mcp.port });
   }
+  // B10.2 — a new retention window applies at once, and is itself kept in
+  // the record: shortening it is what removes evidence.
+  if (before.data.retentionDays !== next.data.retentionDays) {
+    const person = personFrom(req);
+    recordDecision('retention_changed', {
+      from: before.data.retentionDays, to: next.data.retentionDays,
+      fromWords: retentionWords(before.data.retentionDays), toWords: retentionWords(next.data.retentionDays),
+      author: person.author, authorType: person.authorType,
+    }, person.authorType);
+    setLogRetention(next.data.retentionDays);
+    try {
+      pruneAgentEvents();
+      pruneFrames();
+      if (next.data.retentionDays !== null) pruneOldLogs(getLogDir(), new Date(), next.data.retentionDays);
+    } catch (err) { console.warn('[Retention] applying the new window failed:', err); }
+  }
   // Phase 19 — live-toggle the LAN listener when the user changes it.
   //
   // Without this, turning exposure OFF would leave :19480 bound until the
@@ -4169,9 +5663,7 @@ app.put('/api/freeze', (req, res) => {
   }
   // Recorded with who made it and how it arrived, as a budget change is
   // (owner's decision, 0.4k). A person's change is never flagged.
-  const status = setFreeze(projectPath, { active, reason, until, allowedPlanUids }, cameFromAppWindow(req)
-    ? { actor: getAuthorKey('human'), actorType: 'human', channel: 'desktop' }
-    : { actor: getAuthorKey('human'), actorType: 'unverified', channel: 'local-api' });
+  const status = setFreeze(projectPath, { active, reason, until, allowedPlanUids }, actorFrom(req));
   broadcast('freeze-changed', { projectRoot: projectPath, status });
   res.json(status);
 });
@@ -4190,7 +5682,7 @@ app.post('/api/freeze/changes/:id/acknowledge', (req, res) => {
   const projectPath = confineRoot((req.body ?? {}).projectPath, res, 'projectPath');
   if (!projectPath) return;
   const id = Number(req.params.id);
-  const change = Number.isInteger(id) ? acknowledgeFreezeChange(projectPath, id, getAuthorKey('human')) : null;
+  const change = Number.isInteger(id) ? acknowledgeFreezeChange(projectPath, id, personFrom(req).author) : null;
   if (!change) { res.status(404).json({ error: 'No such freeze change on this project' }); return; }
   broadcast('freeze-changed', { projectRoot: projectPath, acknowledged: change.id });
   res.json(change);
@@ -4523,9 +6015,7 @@ app.post('/api/peers/remote-input-requests/:requestId/respond', (req, res) => {
     const { response } = req.body as { response?: string };
     if (!response) { res.status(400).json({ error: 'response required' }); return; }
     // The app window is the person; plain HTTP is recorded as unverified (0.4d).
-    const sent = peerService.respondToInputRequest(req.params.requestId, response, cameFromAppWindow(req)
-      ? { actor: getAuthorKey('human'), actorType: 'human', channel: 'desktop' }
-      : { actor: getAuthorKey('human'), actorType: 'unverified', channel: 'local-api' });
+    const sent = peerService.respondToInputRequest(req.params.requestId, response, actorFrom(req));
     if (!sent) { res.status(404).json({ error: 'No pending input request with that id' }); return; }
     res.json({ sent });
   } catch (err) {
@@ -4687,7 +6177,7 @@ app.post('/api/system-docs', (req, res) => {
     // The app window is the person; plain HTTP is unverified (0.4d).
     const doc = svc.createSystemDoc({
       projectPath, title, body, owner, tags, references, slug,
-      author, authorType: cameFromAppWindow(req) ? 'human' : 'unverified',
+      author, authorType: personFrom(req).authorType,
     });
     broadcast('system-doc-created', { uid: doc.uid, projectPath: doc.projectPath });
     saveNow(() => exportDatabase());
@@ -4708,7 +6198,7 @@ app.put('/api/system-docs/:uid', (req, res) => {
     const updated = svc.updateSystemDoc(req.params.uid, {
       title, body, owner, tags, references,
       author: identity.email || identity.displayName || 'human',
-      authorType: cameFromAppWindow(req) ? 'human' : 'unverified',
+      authorType: personFrom(req).authorType,
     });
     if (!updated) { res.status(404).json({ error: 'not found' }); return; }
     broadcast('system-doc-updated', { uid: updated.uid, projectPath: updated.projectPath });
@@ -4832,6 +6322,7 @@ function rearmProjectWatchers(): void {
       startProjectConfigWatcher(proj.path);
       try {
         void startPlanFileWatcher(proj.path);
+        void startRecordWatcher(proj.path);
       } catch {
         // plan-file watcher may need a project scan to be useful;
         // best-effort.
@@ -4866,7 +6357,50 @@ export async function initializeBackend(): Promise<void> {
   console.log(`[Auth] Capability token ready — ${getTokenFilePath()}`);
 
   await initDatabase();
+  // A guarded plan document changed on disk is settled when its hold is answered (B7.5b).
+  registerDiskHoldSettling();
   await initParser();
+
+  // Phase 32 B1: keep every agent event that is broadcast, from here on.
+  // This launch's token is masked if a tool argument ever carries it.
+  // How long things are kept is the person's (B10.2); the log files learn it here.
+  setLogRetention(retentionDays());
+  startAgentEventLog(addBroadcastTarget, () => [getCapabilityToken()]);
+  // B1.2: what the app records itself (a spec body edited) goes out the same way.
+  setEventPublisher(broadcast);
+  // B5.1: replay frames, at a turn's end, a status change and a commit, for
+  // the project the server holds and never while it scans.
+  setHeldProject(() => ({ path: lastScannedProject, scanning: scanInFlight ? scanInFlight.path : null }));
+  setFramePublisher(broadcast);
+  startReplayFrames();
+  setRecordedListener((evt) => noteAgentActivity(evt));
+  // C3.1: a state change made here is written as this device's record (when
+  // its project shares task state); a teammate's record taken is told to the
+  // window; a plan imported from its files has its records read.
+  planItemService.setStateWriteListener((item, by) => { writeRecordFor(item, by); });
+  setRecordAppliedListener((item) => {
+    broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { status: item.status, fromRecord: true } });
+  });
+  setPlanImportedListener((planUid, projectRoot) => {
+    readAndTell(projectRoot, planUid);
+    // A teammate's materials arrive with the plan's files (C3.4c).
+    try { _lazy___services_artefact_watcher.watchPlanArtefacts(projectRoot, planUid); } catch (err) { console.warn('[Artefacts] Could not watch an imported plan\'s files:', err); }
+  });
+  // C3.2: people setting a task two ways at once is a signal; it starts and
+  // ends with the records, so the project's signals are refreshed then.
+  setSplitChangedListener((projectRoot) => { refreshSignals(projectRoot); });
+  // D1.5a: a teammate's test run arrived (or was forgotten): grounding is asked again.
+  setRunsChangedListener((projectRoot) => { broadcast('tests-reported', { project: projectRoot }); });
+  planItemService.setStatusChangeListener(({ planUid, itemUid }) => {
+    const plan = planService.getPlan(planUid);
+    if (!plan?.projectPath) return;
+    const acting = actingSession();
+    requestFrame({
+      projectPath: plan.projectPath, reason: 'status', ref: itemUid,
+      sessionId: acting?.sessionId ?? null, agentType: acting?.agentType ?? null,
+      workstreamRoot: workstreamOfItem(itemUid),
+    });
+  });
 
   // Start persistent auto-save for plan data
   startAutoSave(() => exportDatabase(), 30000);
@@ -4943,6 +6477,23 @@ export async function initializeBackend(): Promise<void> {
     console.warn('[Backend] Project watcher re-arm failed:', err);
   }
 
+  // Phase 32 C4.2a — recurring runs start as their moment comes while the app
+  // runs; one that fell due while it was closed is asked about in the inbox.
+  startRecurringScheduler((projectRoot, run) => {
+    // C4.3b — the schedule may start a run's agent, when the person turned it on here.
+    startRunAgent(projectRoot, run.info.rule, run.plan, true, (session) => broadcast('terminal-created', { session }));
+    broadcast('plan-created', { plan: run.plan });
+    broadcast('recurring-changed', { project: projectRoot });
+  });
+
+  // Phase 32 E5 — keep remotes current, only when Settings → Git says so
+  // (off by default), and only for the project open in the window.
+  startRemoteKeeper({
+    settings: () => getSettings().git,
+    activeRoot: () => getActiveProjectPath(),
+    onFetched: (projectRoot) => broadcast('git-remotes-changed', { project: projectRoot }),
+  });
+
   // Restore the active project on boot. The frontend restores the project
   // VIEW from the persisted DB but never re-scans, so the backend's
   // `lastScannedProject` stayed null after a restart — making
@@ -4958,6 +6509,7 @@ export async function initializeBackend(): Promise<void> {
       if (restore) {
         lastScannedProject = restore.path;
         setActiveProjectRoot(restore.path);
+        seedHeads(restore.path);
         console.log(`[Backend] Restored active project: ${restore.path}`);
       }
     }
@@ -4982,19 +6534,28 @@ export async function initializeBackend(): Promise<void> {
   // fails (e.g. a bundler edge in packaged Electron), the rest of
   // the backend boot keeps going. Updates can be checked manually
   // later via Settings → Updates → Check for Updates.
-  try {
-    startUpdatePolling();
-  } catch (err) {
-    console.warn('[Backend] Update polling failed to start:', err);
+  // Headless (`codetrellis serve`, Phase 32 D1.1): a cloud session or a CI
+  // job runs this for its agent, with nobody to offer an update to and no
+  // reason to ask the network anything. It makes no request of its own.
+  const headless = process.env.CODETRELLIS_HEADLESS === '1';
+  if (!headless) {
+    try {
+      startUpdatePolling();
+    } catch (err) {
+      console.warn('[Backend] Update polling failed to start:', err);
+    }
   }
 
   // CDev Phase 9 — peer connection manager. Starts mDNS discovery
   // and prepares for QR-based WebRTC pairing. Best-effort: if mDNS
   // fails (e.g. port 5353 in use), the rest of the app is unaffected.
-  try {
-    peerService.startPeerManager();
-  } catch (err) {
-    console.warn('[Backend] Peer connection manager failed to start:', err);
+  // Nor headless: no discovery and no phone to pair with on a runner.
+  if (!headless) {
+    try {
+      peerService.startPeerManager();
+    } catch (err) {
+      console.warn('[Backend] Peer connection manager failed to start:', err);
+    }
   }
 }
 
@@ -5119,45 +6680,43 @@ function getRecentGitCommits(projectPath: string, limit = 20): GitCommitSummary[
   }
 }
 
+const execFileAsync = promisify(execFile);
+
 async function captureGitCommitSnapshot(projectPath: string, commitHash: string): Promise<GitCommitSnapshotResult | null> {
   // Never hand git something it would read as an option (git-safety).
   if (!isSafeGitRef(commitHash)) return null;
   try {
-    const commitMeta = execFileSync(
+    // Asynchronous throughout: this reads and parses a whole commit, and the
+    // server answers nothing else while the event loop is held (see git-blobs).
+    const { stdout: commitMeta } = await execFileAsync(
       'git',
       ['-C', projectPath, 'show', '-s', '--format=%H\t%h', commitHash],
       { encoding: 'utf8' },
-    ).trim();
+    );
+    if (!commitMeta.trim()) return null;
 
-    if (!commitMeta) return null;
-
-    const [resolvedCommitHash, shortCommitHash] = commitMeta.split('\t');
-    const fileListOutput = execFileSync(
+    const [resolvedCommitHash, shortCommitHash] = commitMeta.trim().split('\t');
+    const { stdout: fileListOutput } = await execFileAsync(
       'git',
       ['-C', projectPath, 'ls-tree', '-r', '--name-only', resolvedCommitHash],
       { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 },
     );
 
+    // Only what a parser reads: images, lockfiles and the rest were fetched and thrown away.
+    const parseable = new Set(getParseableExtensions());
     const relativePaths = fileListOutput
       .split('\n')
       .map((line) => line.trim())
-      .filter(Boolean);
+      .filter((line) => line && parseable.has(path.extname(line).toLowerCase()));
 
-    const parsedFiles = relativePaths
-      .map((relativePath) => {
-        const absolutePath = path.join(projectPath, relativePath);
-        try {
-          const content = execFileSync(
-            'git',
-            ['-C', projectPath, 'show', `${resolvedCommitHash}:${relativePath}`],
-            { encoding: 'utf8', maxBuffer: 5 * 1024 * 1024 },
-          );
-          return parseVirtualFile(absolutePath, content);
-        } catch {
-          return null;
-        }
-      })
-      .filter((file): file is NonNullable<typeof file> => Boolean(file));
+    const contents = await readBlobsAtCommit(projectPath, resolvedCommitHash, relativePaths);
+    const parsedFiles: NonNullable<ReturnType<typeof parseVirtualFile>>[] = [];
+    let sinceYield = 0;
+    for (const [relativePath, content] of contents) {
+      const parsed = parseVirtualFile(path.join(projectPath, relativePath), content);
+      if (parsed) parsedFiles.push(parsed);
+      if (++sinceYield >= 8) { sinceYield = 0; await new Promise<void>((r) => setImmediate(r)); }
+    }
 
     const parsedByRelativePath = new Map(
       parsedFiles.map((file) => [path.relative(projectPath, file.path), file]),

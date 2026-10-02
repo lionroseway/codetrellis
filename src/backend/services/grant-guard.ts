@@ -26,11 +26,20 @@ import type { AppSettings } from '../../shared/types';
 const GRANT_FIELDS: Array<[keyof AppSettings, string, string]> = [
   ['mcp', 'capabilities', 'Settings → MCP Server'],
   ['mcp', 'projectScope', 'Settings → MCP Server'],
+  // Who may change things over plain HTTP (carried item 2b). Otherwise a
+  // script refused a change could turn changes back on and try again.
+  ['mcp', 'acceptLocalApiChanges', 'Settings → MCP Server → Local API'],
   ['device', 'exposeMobileApi', 'Settings → Devices'],
   ['device', 'advertise', 'Settings → Devices'],
   ['device', 'shareAudio', 'Settings → Devices'],
   ['webhooks', 'allowedHosts', 'Settings → Plans'],
   ['webhooks', 'allowLoopback', 'Settings → Plans'],
+  // How long the record is kept (B10.2): shortening it erases evidence, so
+  // no agent or script may, only the person.
+  ['data', 'retentionDays', 'Settings → Data'],
+  // Keeping remotes current (E5) has the app reach hosts on its own, on a
+  // timer: what it can reach widens, so only the person turns it on.
+  ['git', 'keepRemotesCurrent', 'Settings → Git'],
 ];
 
 /** A test backend that lets the harnesses grant over HTTP. */

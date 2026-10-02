@@ -160,7 +160,7 @@ test.describe('Item as context (V2)', () => {
     }
   });
 
-  test('plan export → import round-trips body, file specs, attachments, comments and progress', async () => {
+  test('plan export → import round-trips body, file specs, attachments and comments; progress stays on this machine', async () => {
     const h = await setupHarness('task-context-export-roundtrip');
     try {
       await h.client.scanProject(h.fixture.projectPath);
@@ -190,14 +190,15 @@ test.describe('Item as context (V2)', () => {
       expect(parsed.body).toBe('Body text');
       expect(parsed.scopePath).toBe('src/');
       expect(parsed.fileSpecs).toEqual([{ path: 'a.ts', action: 'create' }]);
-      expect(parsed.progressPercent).toBe(33);
       expect(parsed.attachments).toHaveLength(1);
       expect(parsed.attachments[0].value).toBe('https://example.com/ref');
+      // Progress is state, and the plan's files keep intent (Phase 32 C2.4b):
+      // neither the percent nor the progress report is written, so recording
+      // progress rewrites no file. The note is people's words, and rides.
+      expect(parsed).not.toHaveProperty('progressPercent');
       const kinds = parsed.comments.map((c: { kind: string }) => c.kind);
       expect(kinds).toContain('note');
-      expect(kinds).toContain('progress');
-      const progressComment = parsed.comments.find((c: { kind: string }) => c.kind === 'progress');
-      expect(progressComment.metadata?.progressPercent).toBe(33);
+      expect(kinds).not.toContain('progress');
 
       // Re-import, as a teammate pulling the plan would: copy it aside
       // (unlink wipes the dir), drop the plan, put the files back where git
@@ -218,9 +219,8 @@ test.describe('Item as context (V2)', () => {
       expect(full.item.body).toBe('Body text');
       expect(full.item.scopePath).toBe('src/');
       expect(full.item.fileSpecs).toEqual([{ path: 'a.ts', action: 'create' }]);
-      expect(full.item.progressPercent).toBe(33);
       expect(full.attachments.map((a) => a.value)).toContain('https://example.com/ref');
-      expect(full.comments.map((c) => c.kind)).toEqual(expect.arrayContaining(['note', 'progress']));
+      expect(full.comments.map((c) => c.kind)).toContain('note');
     } finally {
       await h.teardown();
     }

@@ -126,6 +126,34 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="breakpoints"
+          options={{
+            title: 'Waiting on you',
+            headerStyle: { backgroundColor: '#0a0c18' },
+          }}
+        />
+        <Stack.Screen
+          name="signal-detail"
+          options={{
+            title: 'Overlap',
+            headerStyle: { backgroundColor: '#0a0c18' },
+          }}
+        />
+        <Stack.Screen
+          name="workstreams"
+          options={{
+            title: 'Lines of work',
+            headerStyle: { backgroundColor: '#0a0c18' },
+          }}
+        />
+        <Stack.Screen
+          name="workstream-detail"
+          options={{
+            title: 'Line of work',
+            headerStyle: { backgroundColor: '#0a0c18' },
+          }}
+        />
+        <Stack.Screen
           name="approvals"
           options={{
             title: 'Waiting for you',
@@ -157,6 +185,27 @@ export default function RootLayout() {
           name="plan-channel"
           options={{
             title: 'Discussion',
+            headerStyle: { backgroundColor: '#0a0c18' },
+          }}
+        />
+        <Stack.Screen
+          name="review-queue"
+          options={{
+            title: 'Review queue',
+            headerStyle: { backgroundColor: '#0a0c18' },
+          }}
+        />
+        <Stack.Screen
+          name="stack"
+          options={{
+            title: 'Stack',
+            headerStyle: { backgroundColor: '#0a0c18' },
+          }}
+        />
+        <Stack.Screen
+          name="recurring"
+          options={{
+            title: 'Recurring',
             headerStyle: { backgroundColor: '#0a0c18' },
           }}
         />

@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import type { CriterionKind, CriterionPolicy, CriterionState, ItemCriterion, TaskAttachment } from '@shared/types';
+import type { CriterionKind, CriterionPolicy, CriterionState, ItemCriterion, SignedApproval, TaskAttachment } from '@shared/types';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { describeLocator, openArtefactAt } from '../../../lib/open-artefact-at';
 import { BRIEF_WORDS, briefState } from '../../../lib/brief-vocabulary';
 import { criterionOrigin } from '../../../lib/criterion-origin';
+import { UnverifiedIf } from '../../UnverifiedTag';
+import { SignedApprovalLines, useSignedApprovals } from './SignedApprovalLines';
+import { GroundingLine, useTaskGrounding } from './GroundingLine';
 
 /**
  * Phase 31 §4.1–4.3 — what this item is judged on, and where each
@@ -62,6 +65,12 @@ export function CriteriaBlock({
   const setDraft = (text: string) => setPending(itemUid, { text, kind });
   const setKind = (k: CriterionKind) => setPending(itemUid, { text: draft, kind: k });
   const [error, setError] = useState<string | null>(null);
+  // C2.5b — each approval signed, kept local, verified or not, read again when a decision changes.
+  // Above the early return below: a hook must run on every render.
+  const nonce = criteria.map((c) => `${c.uid}:${c.state}:${c.latestSignoff?.uid ?? ''}:${c.latestSubmission[0]?.uid ?? ''}`).join('|');
+  const signed = useSignedApprovals(itemUid, nonce);
+  // B8.3b — how far they rest on evidence, asked again as they change.
+  const grounding = useTaskGrounding(itemUid, nonce);
 
   const met = criteria.filter((c) => c.state === 'met').length;
 
@@ -90,8 +99,9 @@ export function CriteriaBlock({
       <h3 className="text-[12px] uppercase tracking-[0.1em] text-foreground-subtle font-semibold mb-3">
         {vocabulary === 'brief' ? BRIEF_WORDS.criteria : 'Acceptance criteria'} <span className="opacity-60">· {met}/{criteria.length} met</span>
       </h3>
+      <GroundingLine grounding={grounding} />
       <ul className="space-y-2">
-        {criteria.map((c) => <CriterionRow key={c.uid} itemUid={itemUid} criterion={c} attachments={attachments} vocabulary={vocabulary} you={you} />)}
+        {criteria.map((c) => <CriterionRow key={c.uid} itemUid={itemUid} criterion={c} attachments={attachments} vocabulary={vocabulary} you={you} signed={signed.filter((a) => a.criterionUid === c.uid)} graded={grounding?.criteria.find((g) => g.uid === c.uid) ?? null} />)}
       </ul>
 
       {adding ? (
@@ -140,10 +150,14 @@ export function CriteriaBlock({
 }
 
 function CriterionRow({
-  itemUid, criterion: c, attachments, vocabulary, you,
+  itemUid, criterion: c, attachments, vocabulary, you, signed, graded,
 }: {
   itemUid: string;
   criterion: ItemCriterion;
+  /** B8.3b — its grade on the task's grounding line, and why. */
+  graded: { grade: string; why: string } | null;
+  /** C2.5b — its approvals as signed statements. */
+  signed: SignedApproval[];
   attachments: TaskAttachment[];
   vocabulary: 'plan' | 'brief';
   you: string | null;
@@ -169,7 +183,7 @@ function CriterionRow({
     ? c.latestSignoff.actorType === 'human'
       ? c.latestSignoff.actor
       : c.latestSignoff.actorType === 'unverified'
-        ? `${c.latestSignoff.actor} (local API, unverified)`
+        ? c.latestSignoff.actor // tagged beside it (carried item 2b)
         : `${c.latestSignoff.actor} (agent)`
     : null;
   const origin = criterionOrigin(c);
@@ -200,14 +214,15 @@ function CriterionRow({
             {vocabulary === 'brief' && c.state === 'met' ? (
               <span className={state.tone}>
                 {briefState(c.state, c.latestSignoff ? { actor: c.latestSignoff.actor, actorType: c.latestSignoff.actorType, at: c.latestSignoff.createdAt } : null, you).words}
+                <UnverifiedIf type={c.latestSignoff?.actorType} />
               </span>
             ) : (
               <>
                 <span className={state.tone}>{state.label}</span>
-                {decidedBy && c.state !== 'submitted' && <> — {decidedBy}</>}
+                {decidedBy && c.state !== 'submitted' && <> — {decidedBy}<UnverifiedIf type={c.latestSignoff?.actorType} /></>}
               </>
             )}
-            {origin && <>{' · '}<span data-testid="criterion-origin" className="text-cyan-300/80">{origin}</span></>}
+            {origin && <>{' · '}<span data-testid="criterion-origin" className="text-cyan-300/80">{origin}</span><UnverifiedIf type={c.authorType} /></>}
             {' · '}{KIND_LABEL[c.kind]}{' · '}
             {c.kind === 'manual' ? (
               <span title="A judgement — only a person can meet it">{POLICY_LABEL.human}</span>
@@ -224,6 +239,10 @@ function CriterionRow({
               </select>
             )}
           </p>
+          {/* B8.4a — a report older than the code says so where the criterion is, not only on hover. */}
+          {graded?.grade === 'tests_older' && (
+            <p className="text-[11px] text-amber-300 mt-1" data-testid="criterion-tests-older">{graded.why}</p>
+          )}
           {(c.state === 'submitted' || c.state === 'stale') && (evidenceNote || evidenceCount > 0) && (
             <p className="text-[11px] text-foreground-muted mt-1">
               {evidenceNote}
@@ -247,6 +266,7 @@ function CriterionRow({
               )}
             </p>
           )}
+          <SignedApprovalLines approvals={signed} />
           {c.state === 'stale' && (
             <p className="text-[11px] text-amber-300/90 mt-1">⚠ A file this was approved on has changed since. Look again.</p>
           )}

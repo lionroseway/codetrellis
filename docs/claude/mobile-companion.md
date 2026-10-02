@@ -44,6 +44,10 @@ Routes are file-based under `mobile/app/`, with `_layout.tsx` driving a Stack at
 - `event-detail`, `changes`, `graph-file-detail` — event/diff viewers
 - `input-request` *(modal)* — user input requested by an agent
 - `approvals`, `approval` — work waiting on the person, and approving or sending back one criterion (Phase 31 §12; see below)
+- `signal-detail` — one overlap between lines of work, and the person's answer to it (Phase 32 A4.5b; see below)
+- `workstreams`, `workstream-detail` — the lines of work, and one line's files and recent turns (Phase 32 A4.5b)
+- `plan-review`, `review-queue` — one plan's review, and which line of work to merge first and why (Phase 29; queue Phase 32 A5.6; see below)
+- `stack` — every plan under way: progress, overlaps in words, who is on what and what is waiting (Phase 32 B6.6; see below)
 - `body-editor` *(modal)* — content editor
 - `connection-switcher` *(modal)* — switch between paired desktops
 - `doc-viewer` — document rendering
@@ -75,6 +79,250 @@ The person can approve an agent's work, or send it back, from the phone. How it 
   - a document's page;
   - lines of a file;
   - or an image, which Electron scales down for the phone.
+
+## Breakpoints on the phone (Phase 32 B4.4)
+
+An agent held at a breakpoint the person set is answered from the phone as it is on the desktop. How it fits together:
+
+- **Where it starts.**
+  - On Home, "An agent is waiting on you" is the first card under NEEDS ATTENTION, above approvals: an agent is stopped until the person answers. It opens `/breakpoints`.
+  - The snapshot carries `waitingBreakpoints`, a live count of held calls. An open app re-reads the list when it moves, so a new one shows without a push, and the tab badge counts it.
+  - A phone that is not connected gets a push: "Waiting on you" for a pause, "Edited past a breakpoint" for a breach. The words name the agent only; which file, task or note is held loads over WebRTC once the app wakes. The data is `{ type: 'breakpoint', ref, planUid? }`, and `routeForNotification` opens `/breakpoints`.
+- **What it shows.** Each card is the desktop's own wording, from `src/shared/lib/breakpoint-words.ts` and `workstream-words.ts`:
+  - who wants to do what, in which workstream;
+  - why it is waiting on the person;
+  - the note the person left on the breakpoint.
+  A breach is never worded as a pause: it happened, and the agent was told to stop and wait.
+- **What it calls.** `mobile/lib/breakpoints.ts` wraps two RPCs:
+  - `breakpoint.waiting` (read) returns the held calls, oldest first;
+  - `breakpoint.answer` (write) sends continue, steer (with a note the agent reads) or stop. It also needs a pairing confirmed on the desktop, because the answer is recorded as the person's. It is audited against the device, and the desktop is told.
+  The first answer stands wherever it was given. A late answer from the phone gets back the answer that stood, marked `alreadyAnswered`.
+  The desktop half is `src/backend/services/mobile-breakpoints.ts`.
+- **A proposed spec change (B7.6)** waits in the same list and counts in `waitingBreakpoints`. Its hit carries `proposalUid`, and the screen shows a proposal card instead of the three answers:
+  - who proposes what and why, the evidence, the note on the page's spec breakpoint if the person guards it;
+  - the text now and proposed;
+  - what every relying plan replied ("Changes 1 task — …", "No impact").
+  The words are the desktop's own, from `src/shared/lib/proposal-words.ts`. `mobile/lib/proposals.ts` wraps three RPCs:
+  - `proposal.list` (read): open proposals in the opened project, oldest first;
+  - `proposal.get` (read): one proposal, any status;
+  - `proposal.decide` (write): accept or reject, with a note for the proposer. Like an answer, it needs a pairing confirmed on the desktop, is audited, and is recorded as the person's. Amending needs the text edited, so it is done in the window. A late decision gets back the one that stood, marked `alreadyDecided`.
+  `breakpoint.answer` refuses a proposal: it is decided on the proposal, never answered like a held call. The desktop half is `src/backend/services/mobile-proposals.ts`.
+
+### What overlaps (Phase 32 A4.2)
+
+The desktop half is `src/backend/services/mobile-awareness.ts`; the screens
+come in A4.5. It follows the approvals pattern: pulled over RPC, with a count
+in the snapshot.
+
+- **The count.** The snapshot carries `openSignals`: open high and medium
+  signals in the opened project, as the desktop's Awareness tab counts them
+  (`countNeedsYou`, one indexed count). The folder and ref watchers keep the
+  stored signals current, window open or not.
+- **What it calls.**
+  - `awareness.needsYou` (read) returns the digest's lines (`awareness-digest.ts`)
+    and the high and medium signals still in play: open first, then seen. Low
+    and set-aside signals are left to the desktop.
+  - `awareness.signal` (read) returns one signal with each side in plain words
+    (`src/shared/lib/signal-words.ts`, the desktop's words), its files, the
+    agents told and what they said, and the replies.
+  - `awareness.answer` (write) acknowledges, marks intended, dismisses or
+    reopens.
+  - `awareness.reply` (write) sends the person's words to the agents in the
+    signal's workstreams, the desktop's own path (`replyToSignalAsPerson`,
+    A4.1). The agent reads it as "from the person, from their phone".
+  Both writes need a pairing confirmed on the desktop, are audited against the
+  device, carry the phone as the channel (`phoneActor()`), and tell the
+  desktop.
+
+### A serious overlap, pushed (Phase 32 A4.4)
+
+When a high signal opens (new, back after resolving, reopened after the
+person answered it, or raised to high while open: `newlySerious` in
+`awareness-signals.ts`), `refreshSignals` calls `pushForSignal`. A phone that
+is not connected gets "Needs you" with one sentence naming the kind of
+overlap and nothing else. No file, function, branch or agent reaches Expo.
+The data is `{ type: 'signal', id }`. One push per kind per minute per
+device, never to a phone watching live, whose `openSignals` count moves
+instead. The watchers run this with no window open, which is the point.
+
+A phone counts as away once the desktop has let go of its link. A phone
+that closes cleanly drops at once. One that just stops answering is let go
+after three missed heartbeats, 10 s apart (`webrtc-service.ts`), so up to
+about 40 s. Until then its count moves and it is not pushed.
+
+The whole journey, from the push to the agent reading the reply, is tested
+in `tests/e2e/awareness-m4.test.ts` (the M4 "done when", A4.6).
+
+`CODETRELLIS_PUSH_URL` can point pushes at a receiver on this machine
+(`127.0.0.1` or `localhost` only; anything else is ignored), which is how the
+harness sees them. Tapping the push opens `/signal-detail?id=` (A4.5b,
+`routeForNotification` in `mobile/lib/push.ts`).
+
+### The lines of work (Phase 32 A4.3)
+
+`src/backend/services/mobile-workstreams.ts`, read-only:
+
+- `workstreams.list` returns each line of work as the strip names it
+  (`chipLabel`), idle ones left out: its agents, the unfinished tasks they
+  have claimed, how many files it has changed, the live signals naming it and
+  how many of those need the person.
+- `workstreams.detail` takes an id from that list, never a folder the phone
+  makes up. It returns the changed files (with line counts where git gave
+  them), how far it is from main, and its ten most recent turns, newest first,
+  grouped and summarised by the Timeline's own code
+  (`src/shared/lib/agent-turns.ts` and `tool-phrasing.ts`, moved from the
+  frontend for this). A turn is named by its session's agent as it stands now,
+  not by the `mcp-client` guess a session carries until its client names
+  itself.
+
+### The screens (Phase 32 A4.5b)
+
+- **Needs you** (`components/NeedsYou.tsx`, the top of Activity). Agents held
+  at a breakpoint, then the digest's lines with the question each asks, then
+  each high and medium overlap in its own card, which opens its detail. The
+  heading's count is the snapshot's `waitingBreakpoints + openSignals`, the
+  same count the Home badge adds in. The words are pulled when `openSignals`
+  moves or the tab is focused. When nothing is waiting, a line says so.
+  "Lines of work ›" opens the list.
+- **`signal-detail`**, which is also where the push lands. It shows the
+  summary, each side in the desktop's words, the files, and what each told
+  agent said. Below that are the person's own replies, each with whether an
+  agent has read it yet. Three buttons answer: Acknowledge, Intended (not
+  shown for stale-base, where there is nothing to intend) and Reply to agent,
+  whose words each agent in either line of work reads on its next step. A
+  signal that has gone shows the desktop's refusal and says it may have
+  resolved.
+- **`workstreams`** lists each line of work with its shape, what it changed,
+  its overlaps, its agents (one name per agent, however many sources saw
+  it) and its tasks. **`workstream-detail`** adds the changed files with line
+  counts, the distance from main and the recent turns in the Timeline's words.
+
+The types and calls are in `mobile/lib/awareness.ts`. Each screen is
+photographed by `tests/phone/awareness.spec.ts`.
+
+### The review queue (Phase 32 A5.6)
+
+- **`review.queue`** (read) returns what `/api/review-queue` does, for an
+  opened project only. A nominated `projectPath` goes through
+  `resolveTrustedProjectRoot`, like `review.compare`.
+- **`review-queue`**, from the Plans tab's header, lists each line of work in
+  the suggested merge order. Each line shows its place, branch, plan and
+  status chip (the desktop's labels, `mobile/lib/review-queue.ts`), the reason
+  for its place, its status in a sentence, and its facts. A line opens
+  `plan-review`, compared commit to commit: main's branch against the line's.
+  A line waiting for sign-off also opens `approvals`, and a held one opens
+  `workstreams`, where the overlap is.
+- **`plan-review`** takes `before` and `after` as its starting comparison.
+  It shows **Other work in flight** above the items: each overlap in the
+  desktop's words, the merge line, what became of it, and the agents' notes.
+
+`tests/phone/review-queue.spec.ts` photographs both screens. The harness
+checks the RPC from a paired phone in `review-queue.test.ts` and
+`awareness-m5.test.ts`.
+
+### The stack (Phase 32 B6.6)
+
+- **`stack.summary`** (read) returns what `/api/stack` does (B6.2), for an
+  opened project only; a nominated `projectPath` goes through
+  `resolveTrustedProjectRoot`. The phone summarises it.
+- **`stack`**, from the Plans tab's header, shows one card per plan under
+  way: its label (the ticket key when it has one), progress, "needs you",
+  each overlap in words with its detail, **On it** (each unfinished task
+  someone has, with its branch) and **Waiting** (each task's wait, in the
+  desktop's sentence). A card opens `plan-detail`.
+
+`tests/phone/stack.spec.ts` photographs it; the harness checks the RPC from
+a paired phone in `stack.test.ts`.
+
+### Play-forward (Phase 32 B9.3b)
+
+- **`playForward.summary`** (read) returns what `/api/play-forward` does
+  (B9.1), with the inbox's unseen approval notices (`notices`), for an
+  opened project only.
+- **`playForward.decide`** (write) does what the window's bar does (B9.3a):
+  `overlapId` and `action` (`resequence` with `first`, the plan that goes
+  first; `tell`; or `leave`). The decision is the person's, from
+  `phonePerson()`, and the answer carries the new `playForward`.
+- **`plan.update`** answers `plannedOverlaps` when approving the plan put it
+  in a planned overlap that was not sequenced or left, as `PUT
+  /api/plans/:uid` does.
+
+- **`stack`** (B9.4) opens with **Played forward** when any planned overlap
+  exists: the words, the approvals not yet marked seen, and each overlap
+  with what was last decided and Re-sequence (pick which goes first), Tell
+  both agents, Fine, leave it. Each plan's card says "◇ will overlap
+  JIRA-150: charge.ts". A decision reloads the stack, because re-sequencing
+  changes what waits.
+
+The harness checks the RPCs from a paired phone in
+`play-forward-approval.test.ts` and `play-forward-g3.test.ts`;
+`tests/phone/stack.spec.ts` photographs the screen.
+
+### Recurring playbooks (Phase 32 C4.3a)
+
+- **`recurring.list`** (read) returns what `GET /api/recurring` does (C4.1):
+  each series with its rule, its schedule in words, one mark per period and
+  what is due, for an opened project only.
+- **`recurring.start`** (write) starts the run due now, as `POST
+  /api/recurring/:id/start` does: `ruleId`. The run is the person's, from
+  `phonePerson()`; starting it again, or after a teammate, answers the same
+  plan with `created: false`. The answer carries the new `series`. Setting
+  or stopping a rule has no RPC: it is the person's, in the app window.
+- **`recurring`**, from the Plans tab's header, shows one card per series:
+  its words, "W38 ✓ · W39 ✗ missed · W40 due · W41 next" (a run opens its
+  plan), and what is due with Start. Starting opens the run's plan and says
+  "Started …" or "… was already started; opening it".
+
+- **An agent on each run** (C4.3b): when the person has the desktop start
+  an agent on each run of a rule, the series carries `agent` and the card
+  says "On the computer, Claude Code starts on each run". `recurring.start`
+  answers `agent`: started (a phone granted `terminal`), or why not ("this
+  phone is not allowed to open terminals"). The phone never turns it on.
+
+The harness checks the RPCs from a paired phone in `recurring.test.ts` and
+`recurring-two-machines.test.ts`; `tests/phone/recurring.spec.ts`
+photographs the screen.
+
+### A plan's status (Phase 32 C2.4)
+
+- **`plan.status`** (read) returns what `/api/plans/:uid/status` does: every
+  item's state with its source and the plan's view (progress, waiting, in
+  progress, lineage). `mobile/lib/plan-status.ts`.
+- **`plan-detail`** shows it as a **Status** card under the overview, each
+  line saying "from the plan", "from git" or the host; the header's count is
+  the status's, so the two agree. A desktop without `plan.status` shows the
+  plan without the card.
+
+`tests/phone/plan-status.spec.ts` photographs it; the harness checks the RPC
+from a paired phone in `plan-status.test.ts`.
+
+## Seeing the screens (Phase 32 A4.5a)
+
+`npm run test:phone` renders the real screens from `mobile/` in a browser and
+photographs them to `test-results/phone/`. `tools/phone-preview` is a Vite
+page: `react-native` is react-native-web, `expo-router` and the native
+modules are stand-ins in `tools/phone-preview/stubs/`, and `mobile/lib/rpc.ts`
+answers from fixtures. A spec (`tests/phone/*.spec.ts`) opens one screen with
+the desktop's side given:
+
+```ts
+await openScreen(page, 'breakpoints', {
+  state: { waitingBreakpoints: 2 },                  // typed as WorkspaceSnapshot
+  rpc: { 'breakpoint.waiting': { hits: [HELD] } },   // answers to the phone's calls
+});
+expect(await calls(page)).toContainEqual(...);        // what a tap sent
+expect(await navigations(page)).toContainEqual(...);  // where it asked to go
+```
+
+Fixtures have to cross into the page as plain data. An answer that depends
+on the params is written `{ __byParam: 'id', answers: { k1: … } }`, and a
+refusal is written `{ __error: 'No such open signal in this project' }`, which
+the call throws the way the desktop's refusal reaches the phone.
+
+A new screen joins the preview's table in `tools/phone-preview/main.tsx` (name,
+title, import). CI runs the specs and uploads the screenshots. It is a way to
+see screens, not a web build: WebRTC, the camera, push and the terminal never
+run there.
 
 ## State sync
 

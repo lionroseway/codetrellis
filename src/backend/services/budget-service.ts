@@ -1,4 +1,5 @@
 import { getDb } from './database';
+import { TURN_GAP_MS } from '../../shared/lib/turn-gap';
 import { markDirty } from './persistence';
 import { costOf, PRICING_VERSION, type TokenCounts } from './pricing';
 
@@ -37,7 +38,7 @@ import { costOf, PRICING_VERSION, type TokenCounts } from './pricing';
  */
 
 /** Same threshold as the Timeline's turn grouping, for the same reason. */
-export const TURN_GAP_MS = 30_000;
+export { TURN_GAP_MS };
 
 /**
  * A turn left open by an agent that simply stopped is flushed after
@@ -142,15 +143,20 @@ export interface BudgetChange extends BudgetChangeBy {
   before: BudgetCeiling | null;
   after: BudgetCeiling;
   at: number;
-  /** An agent's change, not yet acknowledged by a person. */
+  /** An agent's change, or one over the local API, not yet acknowledged by a person. */
   flagged: boolean;
   acknowledgedAt: number | null;
   acknowledgedBy: string | null;
 }
 
-/** A change is flagged when an agent made it: a person's, or the local API's, is not. */
+/**
+ * A change is flagged unless the person made it in the app window. An
+ * agent's is; so is one over the local API, whose name could not be checked
+ * (owner's decision, Phase 32 carried item 2b): it is shown, tagged
+ * unverified, until the person says they have seen it.
+ */
 export function isFlaggedActor(actorType: string): boolean {
-  return actorType !== 'human' && actorType !== 'unverified';
+  return actorType !== 'human';
 }
 
 // ── Pure logic ───────────────────────────────────────────────────────
@@ -519,7 +525,7 @@ export function listBudgetChanges(planUid: string, limit = 50): BudgetChange[] {
   }
 }
 
-/** An agent's changes no person has acknowledged, oldest first. */
+/** Changes no person has acknowledged (an agent's, or the local API's), oldest first. */
 export function flaggedBudgetChanges(planUid: string): BudgetChange[] {
   return listBudgetChanges(planUid, 500).filter((c) => c.flagged).reverse();
 }

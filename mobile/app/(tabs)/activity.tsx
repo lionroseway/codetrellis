@@ -1,7 +1,9 @@
 /**
- * Activity tab — live walkthrough, input requests, agents, channel events.
+ * Activity tab — what needs you, live walkthrough, input requests, agents,
+ * channel events.
  *
- * Four sections, shown in priority order:
+ * Five sections, shown in priority order:
+ *   0. Needs you: held agents and overlaps between lines of work (A4.5b)
  *   1. Live walkthrough banner (when walkthroughActive)
  *   2. Pending input requests (actionable — tappable to respond)
  *   3. Connected agents with session info
@@ -26,6 +28,7 @@ import {
   usePlans,
 } from '../../lib/store';
 import Markdown from '../../components/Markdown';
+import NeedsYou from '../../components/NeedsYou';
 
 // Tone → accent color for walkthrough narration cards.
 const PRESENCE_TONE: Record<string, string> = {
@@ -94,6 +97,8 @@ export default function ActivityTab() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <NeedsYou />
+
       {/* ── Live Walkthrough ──────────────────────────────────────── */}
       {(walkthroughActive || presence.length > 0) && (
         <View style={styles.section}>

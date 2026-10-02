@@ -64,6 +64,17 @@ export interface McpSettings {
    * is that nothing reaches a path the user did not see opened.
    */
   projectScope?: McpProjectScope;
+  /**
+   * Phase 32, carried item 2b — may anything outside the app window change
+   * things over the local API (plain HTTP with this launch's token: the web
+   * build, a script, another tool)?
+   *
+   * Absent or true: yes, and each change is recorded and shown as
+   * `unverified`. False: only the app window changes anything; every other
+   * change is refused with where to turn this back on. Reads, MCP and the
+   * phone are unaffected. Changed only from the app window (grant-guard).
+   */
+  acceptLocalApiChanges?: boolean;
 }
 
 /** See `McpSettings.projectScope`. */
@@ -128,7 +139,18 @@ export interface DataSettings {
    * - `'full'`: entire pantry (DB minus machine-local exclusions).
    */
   personalSyncMode: PersonalSyncMode;
+  /**
+   * Phase 32 B10.2 — how long the record and the activity around it are
+   * kept, in days: agent events (and so the record), replay snapshots,
+   * signal spans, test runs, log files and the device log. `null` keeps
+   * everything. One of `RETENTION_CHOICES`; the person's to set.
+   */
+  retentionDays: RetentionDays;
 }
+
+/** The choices for `data.retentionDays` (B10.2); `null` keeps everything. */
+export const RETENTION_CHOICES = [14, 30, 90, 365, null] as const;
+export type RetentionDays = (typeof RETENTION_CHOICES)[number];
 
 /**
  * Session-persistence plan / Track A — independent triggers for the
@@ -211,6 +233,22 @@ export interface UpdateSettings {
   autoCheck: boolean;
 }
 
+/** How often keeping remotes current fetches, in minutes. */
+export const FETCH_INTERVAL_CHOICES = [5, 15, 30, 60] as const;
+
+/** Git (Phase 32 E5): whether remotes are kept current in the background. */
+export interface GitSettings {
+  /**
+   * Fetch the project open in the window (`git fetch --all --prune`, then
+   * its pull requests through gh) every `everyMinutes`. Off by default
+   * (owner's decision, 2026-10-02): CodeTrellis reaches a host only when
+   * asked, and Fetch now always works.
+   */
+  keepRemotesCurrent: boolean;
+  /** One of FETCH_INTERVAL_CHOICES. */
+  everyMinutes: number;
+}
+
 export interface AppSettings {
   identity: IdentitySettings;
   mcp: McpSettings;
@@ -234,6 +272,8 @@ export interface AppSettings {
   webhooks: WebhookSettings;
   /** Background update checks — the one request the app makes on its own. */
   updates: UpdateSettings;
+  /** Keeping remotes current (Phase 32 E5), off by default. */
+  git: GitSettings;
   /**
    * Phase 5.1 — true once the user completes the first-run wizard.
    * When false (or absent in older settings files), the frontend
@@ -264,6 +304,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     dataDirOverride: '',
     personalSyncPath: '',
     personalSyncMode: 'none',
+    retentionDays: 14,
   },
   device: {
     deviceName: '',  // '' = auto-detect from os.hostname()
@@ -312,6 +353,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // Settings should still hear about it.
   updates: {
     autoCheck: true,
+  },
+  // Off: a fetch reaches a host, and that is the person's to ask for.
+  git: {
+    keepRemotesCurrent: false,
+    everyMinutes: 15,
   },
   firstRunComplete: false,
   updatedAt: '',

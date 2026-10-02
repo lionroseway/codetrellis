@@ -19,10 +19,11 @@ import {
   extractRpcMethods,
   extractSettingsSections,
   extractToolSections,
-  filesMatching,
-  filesReaching,
+  callsIn,
+  callsRoute,
+  filesCalling,
   helperChunks,
-  quotedPattern,
+  invokedNames,
   reconcileTools,
   routePattern,
 } from './extract';
@@ -118,13 +119,7 @@ describe('test references', () => {
     assert.ok(!routePattern('/api/plans').test('get(`/api/plans/${uid}`)'));
   });
 
-  test('a quoted name needs its quotes, so prose does not count', () => {
-    const p = quotedPattern('project.list');
-    assert.ok(p.test("rpc('project.list')"));
-    assert.ok(!p.test('the opened project.list would make it impossible'));
-  });
-
-  test('a test is credited with what its helper methods reach', () => {
+  test('a test is credited with what its helper methods send', () => {
     const helper = `export function createClient() {
   return {
     async getBuildInfo() {
@@ -137,14 +132,17 @@ describe('test references', () => {
 }`;
     const chunks = helperChunks(helper);
     assert.deepEqual(chunks.map((c) => c.name).filter((n) => n !== 'createClient'), ['getBuildInfo', 'getPlan']);
-    const files = new Map([
-      ['a.test.ts', 'await client.getBuildInfo();'],
-      ['b.test.ts', "await fetch('/api/build-info')"],
-      ['c.test.ts', 'nothing relevant'],
-    ]);
-    const p = routePattern('/api/build-info');
-    assert.deepEqual(filesMatching(p, files), ['b.test.ts']);
-    assert.deepEqual(filesReaching(p, files, chunks), ['a.test.ts', 'b.test.ts']);
+    const helpers = chunks.map((c) => ({ name: c.name, calls: callsIn(c.body) }));
+    const files = new Map(
+      [
+        ['a.test.ts', 'await client.getBuildInfo();'],
+        ['b.test.ts', "await fetch('/api/build-info')"],
+        ['c.test.ts', "// nothing relevant, though it mentions '/api/build-info'"],
+      ].map(([f, text]) => [f, { text, calls: callsIn(text) }]),
+    );
+    const hit = (c: ReturnType<typeof callsIn>) => callsRoute(c, 'GET', '/api/build-info');
+    assert.deepEqual(filesCalling(hit, files), ['b.test.ts']);
+    assert.deepEqual(filesCalling(hit, files, helpers), ['a.test.ts', 'b.test.ts']);
   });
 });
 
@@ -169,5 +167,102 @@ describe('the committed matrix', () => {
     );
     const committed = fs.readFileSync(path.resolve(__dirname, '..', '..', 'docs', 'PHASE-32-VERIFICATION.md'), 'utf8');
     assert.ok(committed === markdown, 'docs/PHASE-32-VERIFICATION.md is stale — run `npm run inventory` and commit it');
+  });
+});
+
+describe('a test is credited with what it sends, not what it mentions (bug 49)', () => {
+  test('a tool or RPC name counts where it is sent, not where a fixture or a check names it', () => {
+    const names = invokedNames(`
+      await agent.callTool('create_plan', { title: 'x' });
+      await phone.rpc('plan.list');
+      await phone.rpcError('plan.delete', { uid });
+      await client.callTool({ name: 'list_recent_projects', arguments: {} });
+      await mobile.handleBudgetMethod('budget.get', params);
+      const e = toolCall('search_items', { query: 'EMEA' }, 1000);
+      assertMcpMayCall('get_brief', grants);
+      expect(names).toContain('claim_item');
+      // agent.callTool('in_a_comment')
+    `);
+    assert.deepEqual([...names].sort(), ['budget.get', 'create_plan', 'list_recent_projects', 'plan.delete', 'plan.list']);
+  });
+
+  test('a call with type arguments is a call: phone.rpc<T>(…) is credited, a comparison is not (A4.2)', () => {
+    const names = invokedNames(`
+      const got = await phone.rpc<{ hits: Hit[]; map: Map<string, (x: number) => void> }>('awareness.needsYou');
+      const one = await phone.rpc<Detail>('awareness.signal', { id });
+      if (rpc < limit) log('not.a.call');
+    `);
+    assert.deepEqual([...names].sort(), ['awareness.needsYou', 'awareness.signal']);
+  });
+
+  test("a test's own wrappers around callTool are callers, a wrapper of a wrapper too", () => {
+    const names = invokedNames(`
+      const json = async (tool: string, args: Record<string, unknown>) => {
+        const res = await agent.callTool(tool, args);
+        return JSON.parse(res.text);
+      };
+      const refused = (tool, args) => json(tool, args).catch(() => null);
+      function viaAgent(a, tool) { return a.callTool(tool, {}); }
+      await json('get_plan', { uid });
+      await refused('delete_plan', {});
+      await viaAgent(other, 'list_plans');
+    `);
+    assert.deepEqual([...names].sort(), ['delete_plan', 'get_plan', 'list_plans']);
+  });
+
+  test('a loop sends every name it passes to a caller; a table sends the column it passes', () => {
+    const names = invokedNames(`
+      for (const tool of ['open_plan', 'refresh_ui']) await agent.callTool(tool, {});
+      const cases = [
+        ['graph_focus', { path: 'a' }, 'ui-graph-focus'],
+        ['graph_select', { paths: [] }, 'ui-graph-select'],
+      ];
+      for (const [tool, args, event] of cases) {
+        await agent.callTool(tool, args);
+        await events.waitFor(event);
+      }
+      for (const required of ['register_session', 'claim_item']) {
+        expect(listed).toContain(required);
+      }
+    `);
+    assert.deepEqual([...names].sort(), ['graph_focus', 'graph_select', 'open_plan', 'refresh_ui']);
+  });
+
+  test('a request counts for the method it sends, so GET does not cover PUT on the same path', () => {
+    const calls = callsIn(`
+      await h.client.raw('GET', \`/api/plans/\${uid}/budget\`);
+      const req = async (method: string, url: string) => (await h.client.raw(method, url)).json();
+      await req('DELETE', \`/api/items/\${uid}\`);
+      await get('/api/artefacts/abc/content');
+      await fetch(h.backend.baseUrl + \`/api/plans/\${uid}/signoff-pack/verify\`, { method: 'POST', body });
+      await authFetch(h.backend, '/api/health');
+    `);
+    assert.ok(callsRoute(calls, 'GET', '/api/plans/:uid/budget'));
+    assert.ok(!callsRoute(calls, 'PUT', '/api/plans/:uid/budget'));
+    assert.ok(callsRoute(calls, 'DELETE', '/api/items/:uid'));
+    assert.ok(!callsRoute(calls, 'GET', '/api/items/:uid'));
+    assert.ok(callsRoute(calls, 'GET', '/api/artefacts/:uid/content'));
+    assert.ok(callsRoute(calls, 'POST', '/api/plans/:uid/signoff-pack/verify'));
+    assert.ok(callsRoute(calls, 'GET', '/api/health'));
+  });
+
+  test('a route defined in a fixture is not a request; a table of endpoints its loop requests is', () => {
+    const calls = callsIn(`
+      app.post('/api/terminals', handler);
+      router.get('/api/recent-projects', handler);
+      const rows = [{ method: 'GET', url: '/api/health' }];
+      const ENDPOINTS = [
+        { name: 'systems', path: () => '/api/systems' },
+        { name: 'review', path: (uid: string) => \`/api/plans/\${uid}/review\` },
+      ];
+      for (const ep of ENDPOINTS) {
+        const res = await h.client.raw('GET', ep.path(uid));
+      }
+    `);
+    assert.ok(!callsRoute(calls, 'POST', '/api/terminals'));
+    assert.ok(!callsRoute(calls, 'GET', '/api/recent-projects'));
+    assert.ok(callsRoute(calls, 'GET', '/api/health'));
+    assert.ok(callsRoute(calls, 'GET', '/api/systems'));
+    assert.ok(callsRoute(calls, 'GET', '/api/plans/:uid/review'));
   });
 });

@@ -116,6 +116,7 @@ const electronAPI = {
    * to reveal an arbitrary file. Resolves null when nothing is ready.
    */
   revealUpdateDownload: (): Promise<string | null> => ipcRenderer.invoke('updates:reveal'),
+  saveUpdateDownload: (): Promise<{ ok: boolean; path?: string; reason?: string }> => ipcRenderer.invoke('updates:save'),
   getLogPath: (): Promise<string> => ipcRenderer.invoke('logs:get-path'),
   /**
    * Phase 31 §7.4 — show an attachment's file in Finder / Explorer. Takes
@@ -141,6 +142,23 @@ const electronAPI = {
   claudeDesktop: {
     preview: (): Promise<unknown> => ipcRenderer.invoke('claude-desktop:preview'),
     apply: (shownHash: string): Promise<unknown> => ipcRenderer.invoke('claude-desktop:apply', shownHash),
+  },
+  /**
+   * Phase 32 A3.4 — the `codetrellis-parallel` skill and the optional hook,
+   * for Claude Code. `apply` takes, for each chosen file, the hash of the
+   * file shown, and writes only those.
+   */
+  claudeCode: {
+    preview: (): Promise<unknown> => ipcRenderer.invoke('claude-code:preview'),
+    apply: (choice: { skill?: string; hook?: string }): Promise<unknown> => ipcRenderer.invoke('claude-code:apply', choice),
+  },
+  /**
+   * Phase 32 A8.3 — the breakpoint hook for Gemini CLI. `apply` takes the
+   * hash of the settings file shown, and writes only if it is still that one.
+   */
+  geminiCli: {
+    preview: (): Promise<unknown> => ipcRenderer.invoke('gemini-cli:preview'),
+    apply: (shownHash: string): Promise<unknown> => ipcRenderer.invoke('gemini-cli:apply', shownHash),
   },
   htmlReport: {
     show: (uid: string, bounds: { x: number; y: number; width: number; height: number }, scripts: boolean): Promise<{ ok: boolean; reason?: string }> =>

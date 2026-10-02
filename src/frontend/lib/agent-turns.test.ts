@@ -226,3 +226,14 @@ describe('the Brief says the same events in its own words (Phase 31 §10.5)', ()
     assert.match(turns[0].summary, /Wrote summary\.docx/);
   });
 });
+
+describe('events with no session group per workstream (Phase 32 B2.2)', () => {
+  test('two lanes\' app events a moment apart are two turns, not one', () => {
+    const at = 1_000_000;
+    const ev = (id: string, root: string | null, t: number): AgentEvent => ({
+      id, timestamp: t, source: 'app', type: 'check_run', payload: { passed: 1, failed: 0, ...(root ? { workstreamRoot: root } : {}) },
+    });
+    const turns = groupIntoTurns([ev('a', '/w/auth', at), ev('b', '/w/billing', at + 1000), ev('c', '/w/auth', at + 2000), ev('d', null, at + 3000)]);
+    assert.deepEqual(turns.map((t) => t.events.map((e) => e.id)), [['a', 'c'], ['b'], ['d']]);
+  });
+});

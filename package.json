@@ -10,6 +10,9 @@
     "url": "https://github.com/lionroseway/codetrellis-releases"
   },
   "main": "out/main/main.js",
+  "bin": {
+    "codetrellis": "bin/codetrellis.mjs"
+  },
   "scripts": {
     "postinstall": "patch-package",
     "predev": "bash scripts/free-dev-ports.sh && npm run build:connector && npm run build:rendition && npm run build:reader",
@@ -40,10 +43,14 @@
     "build": "tsc --noEmit && vite build --config vite.web.config.ts",
     "test": "playwright test",
     "test:unit": "node --import tsx --test 'src/**/*.test.ts' 'tools/**/*.test.ts'",
+    "test:unit:junit": "node -e \"require('fs').mkdirSync('test-results',{recursive:true})\" && node --import tsx --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/unit.xml 'src/**/*.test.ts' 'tools/**/*.test.ts'",
     "inventory": "tsx tools/inventory/run.ts",
+    "status": "NODE_USE_ENV_PROXY=1 tsx tools/status/run.ts",
+    "status:check": "NODE_USE_ENV_PROXY=1 tsx tools/status/run.ts --check",
     "inventory:check": "tsx tools/inventory/run.ts --check",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
+    "test:phone": "playwright test --config=playwright.phone.config.ts",
     "test:harness": "playwright test --config=playwright.harness.config.ts",
     "test:harness:headed": "playwright test --config=playwright.harness.config.ts --headed",
     "capture": "playwright test --config=playwright.marketing.config.ts",
@@ -78,6 +85,7 @@
     "jsqr": "^1.4.0",
     "patch-package": "^8.0.1",
     "png2icons": "^2.0.1",
+    "react-native-web": "0.21.3",
     "tailwindcss": "^4.0.0",
     "tree-sitter-java": "^0.23.5",
     "tree-sitter-javascript": "^0.25.0",
@@ -152,7 +160,7 @@
   "build": {
     "appId": "dev.codetrellis.app",
     "productName": "CodeTrellis",
-    "copyright": "Copyright \u00a9 2026 CodeTrellis Contributors",
+    "copyright": "Copyright © 2026 CodeTrellis Contributors",
     "directories": {
       "output": "out/make",
       "buildResources": "resources"

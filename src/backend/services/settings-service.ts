@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
-import { DEFAULT_SETTINGS, type AppSettings, type PowerTriggers } from '../../shared/types';
+import { DEFAULT_SETTINGS, FETCH_INTERVAL_CHOICES, RETENTION_CHOICES, type AppSettings, type PowerTriggers } from '../../shared/types';
 import { getSettingsDir } from './persistence';
 import { ALL_CAPABILITIES } from './peer-capabilities';
 import type { PeerCapabilityName } from '../../shared/types/peer';
@@ -84,6 +84,7 @@ export function settingsPatchProblem(patch: unknown): string | null {
     ['mcp.capabilities', (v) => Array.isArray(v) && v.every((c: unknown) => typeof c === 'string' && (ALL_CAPABILITIES as readonly string[]).includes(c)),
       `a list of: ${ALL_CAPABILITIES.join(', ')}`],
     ['mcp.projectScope', (v) => v === 'opened' || v === 'anywhere', 'opened or anywhere'],
+    ['mcp.acceptLocalApiChanges', (v) => typeof v === 'boolean', 'true or false'],
     ['plans.defaultVisibility', (v) => v === 'shared' || v === 'local', 'shared or local'],
     ['plans.attachmentLocation', (v) => v === 'project' || v === 'user', 'project or user'],
     ['data.dataDirOverride', (v) => typeof v === 'string', 'text'],
@@ -99,8 +100,11 @@ export function settingsPatchProblem(patch: unknown): string | null {
     ['webhooks.allowedHosts', (v) => Array.isArray(v) && v.every((h: unknown) => typeof h === 'string'), 'a list of host names'],
     ['webhooks.allowLoopback', (v) => typeof v === 'boolean', 'true or false'],
     ['updates.autoCheck', (v) => typeof v === 'boolean', 'true or false'],
+    ['git.keepRemotesCurrent', (v) => typeof v === 'boolean', 'true or false'],
+    ['git.everyMinutes', (v) => (FETCH_INTERVAL_CHOICES as readonly unknown[]).includes(v), `${FETCH_INTERVAL_CHOICES.join(', ')} minutes`],
+    ['data.retentionDays', (v) => (RETENTION_CHOICES as readonly unknown[]).includes(v), '14, 30, 90 or 365 days, or null to keep everything'],
   ];
-  for (const name of ['identity', 'mcp', 'plans', 'data', 'device', 'power', 'webhooks', 'updates']) {
+  for (const name of ['identity', 'mcp', 'plans', 'data', 'device', 'power', 'webhooks', 'updates', 'git']) {
     const sec = section(name);
     if (typeof sec === 'string') return sec;
   }
@@ -159,6 +163,7 @@ export function updateSettings(patch: DeepPartial<AppSettings>): AppSettings {
     updates: {
       autoCheck: typeof patch.updates?.autoCheck === 'boolean' ? patch.updates.autoCheck : current.updates.autoCheck,
     },
+    git: { ...current.git, ...(patch.git ?? {}) },
     firstRunComplete: patch.firstRunComplete ?? current.firstRunComplete,
     updatedAt: new Date().toISOString(),
   };
@@ -314,6 +319,9 @@ export function mergeWithDefaults(raw: any): AppSettings {
       // CONFINES path-taking tools rather than leaving them open because
       // nobody had an opinion yet.
       projectScope: raw?.mcp?.projectScope === 'anywhere' ? 'anywhere' : 'opened',
+      // Carried item 2b. Only an explicit false turns local API changes off;
+      // anything else (absent, malformed) leaves them on, as before.
+      ...(raw?.mcp?.acceptLocalApiChanges === false ? { acceptLocalApiChanges: false } : {}),
     },
     plans: {
       defaultVisibility: raw?.plans?.defaultVisibility === 'local' ? 'local' : DEFAULT_SETTINGS.plans.defaultVisibility,
@@ -323,6 +331,7 @@ export function mergeWithDefaults(raw: any): AppSettings {
       dataDirOverride: typeof raw?.data?.dataDirOverride === 'string' ? raw.data.dataDirOverride : DEFAULT_SETTINGS.data.dataDirOverride,
       personalSyncPath: typeof raw?.data?.personalSyncPath === 'string' ? raw.data.personalSyncPath : DEFAULT_SETTINGS.data.personalSyncPath,
       personalSyncMode: ['none', 'selective', 'full'].includes(raw?.data?.personalSyncMode) ? raw.data.personalSyncMode : DEFAULT_SETTINGS.data.personalSyncMode,
+      retentionDays: (RETENTION_CHOICES as readonly unknown[]).includes(raw?.data?.retentionDays) ? raw.data.retentionDays : DEFAULT_SETTINGS.data.retentionDays,
     },
     device: {
       deviceName: typeof raw?.device?.deviceName === 'string' ? raw.device.deviceName : DEFAULT_SETTINGS.device.deviceName,
@@ -378,6 +387,10 @@ export function mergeWithDefaults(raw: any): AppSettings {
     },
     updates: {
       autoCheck: typeof raw?.updates?.autoCheck === 'boolean' ? raw.updates.autoCheck : DEFAULT_SETTINGS.updates.autoCheck,
+    },
+    git: {
+      keepRemotesCurrent: typeof raw?.git?.keepRemotesCurrent === 'boolean' ? raw.git.keepRemotesCurrent : DEFAULT_SETTINGS.git.keepRemotesCurrent,
+      everyMinutes: (FETCH_INTERVAL_CHOICES as readonly unknown[]).includes(raw?.git?.everyMinutes) ? raw.git.everyMinutes : DEFAULT_SETTINGS.git.everyMinutes,
     },
     firstRunComplete: typeof raw?.firstRunComplete === 'boolean' ? raw.firstRunComplete : DEFAULT_SETTINGS.firstRunComplete,
     updatedAt: typeof raw?.updatedAt === 'string' ? raw.updatedAt : '',

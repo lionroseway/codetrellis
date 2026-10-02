@@ -12,10 +12,17 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { type Page, type Locator, type APIRequestContext, expect } from '@playwright/test';
+import { type Page, type Locator, type APIRequestContext, expect, test } from '@playwright/test';
 
 export const API = 'http://localhost:3001/api';
 export const PROJECT_PATH = process.cwd();
+/**
+ * The committed sample app (`tests/fixtures/sample-app`), opened with this
+ * repository before any spec runs. Specs that click graph nodes open it
+ * rather than this repository (Phase 32 HD2): its graph is small and stays
+ * put, where this repository's changes with every PR that adds a file.
+ */
+export const FIXTURE_PATH = path.join(PROJECT_PATH, 'tests', 'fixtures', 'sample-app');
 
 /**
  * Every API call from a test needs the per-launch capability token.
@@ -94,6 +101,13 @@ export async function gotoWithProject(
   const projectPath = opts.projectPath ?? PROJECT_PATH;
   const skipOnboarding = opts.skipOnboarding ?? true;
 
+  // The waits below (another project's scan, up to 60 s; the canvas, up to
+  // 30 s) outlast the default 30 s test budget, so a test that opened a
+  // project while another scan ran timed out inside this helper with the
+  // graph arriving (edge-visuals on #226, at 32 s). Give the test room for
+  // the waits it asked for; a test that set a longer budget keeps it.
+  try { test.info().setTimeout(Math.max(test.info().timeout, 120_000)); } catch { /* not inside a test */ }
+
   if (skipOnboarding) {
     await page.addInitScript((pp: string) => {
       // The guide auto-opens once on first run and covers the app, so a
@@ -156,8 +170,10 @@ export async function gotoWithProject(
     );
   }, projectPath);
 
-  // Wait for graph canvas to render
-  await page.locator('.react-flow').waitFor({ timeout: 15_000 });
+  // Wait for graph canvas to render. Laying out the whole repository's graph
+  // on a CI runner shared with a second worker has taken past 15s with the
+  // page still on "Building dependency graph…" (PR #188, Browser suite 1/3).
+  await page.locator('.react-flow').waitFor({ timeout: 30_000 });
 }
 
 /**
@@ -262,6 +278,10 @@ export async function openPlan(page: Page, planTitle: string) {
   // first; the Plans tab underneath it cannot be clicked.
   const openWorkspace = page.getByTestId('copy-ref-plan').first();
   if (await openWorkspace.isVisible().catch(() => false)) {
+    // Escape is ignored while a text field has focus (it may be the user
+    // leaving the field), and a task with an empty body opens with its
+    // editor focused, so let go of it first (B6.1's spec opens one).
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await page.keyboard.press('Escape');
     await openWorkspace.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
   }
@@ -366,6 +386,36 @@ export async function getStoreState(page: Page, storeName: string) {
 }
 
 /**
+ * What the canvas holds, for a failure message: an empty or culled canvas,
+ * nodes under something, and nodes still moving are different bugs, and
+ * "covered or off-screen" or a bare timeout named none of them.
+ */
+async function describeCanvas(page: Page) {
+  return page.evaluate(() => {
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>('.react-flow__node'));
+    const covers = new Map<string, number>();
+    let zero = 0;
+    for (const n of nodes) {
+      const r = n.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) { zero++; continue; }
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      if (hit && !n.contains(hit)) {
+        const el = hit as HTMLElement;
+        const what = `${el.tagName.toLowerCase()}${el.getAttribute('data-testid') ? `[data-testid=${el.getAttribute('data-testid')}]` : ''}${el.className && typeof el.className === 'string' ? `.${el.className.split(' ').slice(0, 2).join('.')}` : ''}`;
+        covers.set(what, (covers.get(what) ?? 0) + 1);
+      } else if (!hit) covers.set('off-screen', (covers.get('off-screen') ?? 0) + 1);
+    }
+    return {
+      inDom: nodes.length,
+      zeroSize: zero,
+      inMinimap: document.querySelectorAll('.react-flow__minimap-node').length,
+      viewport: (document.querySelector('.react-flow__viewport') as HTMLElement | null)?.style.transform ?? null,
+      coveredBy: Object.fromEntries(covers),
+    };
+  });
+}
+
+/**
  * Graph nodes a pointer can actually reach, in DOM order.
  *
  * The canvas has panels floating over it (baseline / Auto-track top right,
@@ -375,27 +425,45 @@ export async function getStoreState(page: Page, storeName: string) {
  * only. A node counts when the element at its centre is inside it.
  */
 export async function reachableNodes(page: Page, timeoutMs = 15_000): Promise<Locator[]> {
-  await page.locator('.react-flow__node').first().waitFor({ timeout: timeoutMs });
+  // A visible node: the first in the DOM can be a cluster node that stays
+  // hidden (node-click on #224 waited on one for all 15 s).
+  try {
+    await page.locator('.react-flow__node:visible').first().waitFor({ timeout: timeoutMs });
+  } catch (err) {
+    // multi-select on #226 timed out here with nothing to say what the canvas held.
+    throw new Error(`reachableNodes: no graph node became visible in ${timeoutMs} ms. Saw ${JSON.stringify(await describeCanvas(page))}. ${(err as Error).message.split('\n')[0]}`);
+  }
   // Polled: right after load the layout is still settling (nodes placed
   // off-screen, then fitted), and a toast or a broadcast-opened workspace can
   // cover the canvas for a moment. Sampled once, that returned no nodes.
+  //
+  // And only once it has stopped moving: a node reachable mid-animation can
+  // settle under the canvas's own controls ("Check now", top right), which
+  // then take the click (#205). So a node counts when two samples 250 ms
+  // apart put it in the same place with its centre uncovered both times.
   const deadline = Date.now() + timeoutMs;
   let ids: string[] = [];
+  let previous = new Map<string, string>();
   for (;;) {
-    ids = await page.evaluate(() =>
+    const sample = await page.evaluate(() =>
       Array.from(document.querySelectorAll<HTMLElement>('.react-flow__node'))
-        .filter((n) => {
+        .map((n) => {
           const r = n.getBoundingClientRect();
-          if (r.width === 0 || r.height === 0) return false;
+          if (r.width === 0 || r.height === 0 || typeof n.dataset.id !== 'string') return null;
           const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-          return hit !== null && n.contains(hit);
+          if (hit === null || !n.contains(hit)) return null;
+          return { id: n.dataset.id, at: [r.left, r.top, r.width, r.height].map((v) => Math.round(v)).join(',') };
         })
-        .map((n) => n.dataset.id)
-        .filter((id): id is string => typeof id === 'string'),
+        .filter((x): x is { id: string; at: string } => x !== null),
     );
+    ids = sample.filter((s) => previous.get(s.id) === s.at).map((s) => s.id);
+    previous = new Map(sample.map((s) => [s.id, s.at]));
     if (ids.length > 0 || Date.now() > deadline) break;
     await page.waitForTimeout(250);
   }
-  if (ids.length === 0) throw new Error('reachableNodes: every graph node is covered or off-screen');
+  if (ids.length === 0) {
+    const seen = await describeCanvas(page);
+    throw new Error(`reachableNodes: no graph node was uncovered and still for two samples in ${timeoutMs} ms. Saw ${JSON.stringify(seen)}, and ${previous.size} uncovered in the last sample (moving if more than 0).`);
+  }
   return ids.map((id) => page.locator(`.react-flow__node[data-id="${id.replace(/"/g, '\\"')}"]`));
 }

@@ -26,6 +26,8 @@ import { markDirty } from './persistence';
 import { resolveWithin, isInside, canonicalRoot, ConfinementError } from './confined-fs';
 import { resolveTrustedProjectRoot } from './trusted-roots';
 import { sha256FileWithin } from '../lib/sha256-file';
+import { NotOnDeviceError } from './cloud-files';
+import { isPlacePath, locateStored, placeOf, PLANS_PREFIX } from './material-place';
 
 export type ArtefactRole = 'material' | 'output' | 'evidence';
 export const ARTEFACT_ROLES: readonly ArtefactRole[] = ['material', 'output', 'evidence'];
@@ -130,6 +132,21 @@ export function projectRootForItem(itemUid: string): string {
  */
 function toProjectRelative(root: string, input: string): string {
   if (typeof input !== 'string' || !input.trim()) throw new ArtefactError('path is required');
+  const trimmed = input.trim();
+  // In the project's linked plans folder (C3.4c): stored by its place there,
+  // `plans://…`, the same on every machine whatever the folder's path.
+  const placed = isPlacePath(trimmed) ? trimmed
+    : path.isAbsolute(trimmed) ? placeOf(path.resolve(trimmed), canonicalRoot(root)) ?? placeOf(path.resolve(trimmed), root)
+      : null;
+  if (placed && isPlacePath(placed)) {
+    const loc = locateStored(placed, root);
+    if (!loc) throw new ArtefactError('This project has no plans folder linked on this device — Settings → Plans folder');
+    try { resolveWithin(loc.root, loc.rel, 'artefact'); } catch (err) {
+      if (err instanceof ConfinementError) throw new ArtefactError('The path must be a file inside the plans folder, reached without a symbolic link');
+      throw err;
+    }
+    return `${PLANS_PREFIX}${loc.rel.split(path.sep).join('/')}`;
+  }
   const canonRoot = canonicalRoot(root);
   let resolved: string;
   try {
@@ -175,9 +192,11 @@ export async function recordArtefact(input: {
   }
 
   let hashed;
+  const at = locateStored(rel, root) ?? { root, rel };
   try {
-    hashed = await sha256FileWithin(root, rel);
+    hashed = await sha256FileWithin(at.root, at.rel);
   } catch (err) {
+    if (err instanceof NotOnDeviceError) throw new ArtefactError(`${err.message}. Make it available on this device, then record it.`, 409);
     if (err instanceof ConfinementError) throw new ArtefactError('The path must be a regular file inside this item\'s project, not a link or folder');
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') throw new ArtefactError(`No file at ${rel}`, 404);
     throw err;
@@ -233,13 +252,17 @@ export async function refreshArtefactHashes(itemUid: string): Promise<string[]> 
   for (const a of artefacts) {
     let next: { sha256: string | null; size: number | null; mtime: number | null };
     try {
-      const abs = resolveWithin(root, a.path, 'artefact');
+      const at = locateStored(a.path, root);
+      if (!at) throw new ConfinementError('not placed on this device');
+      const abs = resolveWithin(at.root, at.rel, 'artefact');
       const st = fs.lstatSync(abs);
       if (!st.isFile()) throw new ConfinementError('not a file');
       if (st.size === a.size && Math.round(st.mtimeMs) === a.mtime && a.sha256) continue;
-      const h = await sha256FileWithin(root, a.path);
+      const h = await sha256FileWithin(at.root, at.rel);
       next = { sha256: h.sha256, size: h.size, mtime: Math.round(h.mtimeMs) };
-    } catch {
+    } catch (err) {
+      // Still only in the cloud: not a change, and not gone. Keep what was taken (C3.4b).
+      if (err instanceof NotOnDeviceError) continue;
       next = { sha256: null, size: null, mtime: null };
     }
     if (next.sha256 !== a.sha256 || next.size !== a.size || next.mtime !== a.mtime) {

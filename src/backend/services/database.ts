@@ -5,6 +5,8 @@ import type { ParsedFile, ParsedSymbol, AliasMapping, DiscoveredSystem, Supporte
 import { getDataDir, ensureDataDir } from './persistence';
 import { getResolverForLanguage } from './resolvers';
 import { reconcileSchemaFromSql } from './schema-reconciler';
+// Called, never read at load: the two modules name each other.
+import { importersOf } from './importers';
 import {
   SCHEMA_AST,
   SCHEMA_PLANS_CORE,
@@ -249,6 +251,11 @@ export async function initDatabase(): Promise<void> {
   // Phase 17.B+ — host terminal ID for self-write detection
   try { db.run(`ALTER TABLE agent_sessions ADD COLUMN host_terminal_id TEXT DEFAULT NULL`); } catch { /* exists */ }
 
+  // Phase 32 A6.1 — the task a session works on, when it has no folder
+  // (Claude Desktop): the item it last called get_brief on.
+  try { db.run(`ALTER TABLE agent_sessions ADD COLUMN brief_item_uid TEXT DEFAULT NULL`); } catch { /* exists */ }
+  try { db.run(`ALTER TABLE agent_sessions ADD COLUMN brief_bound_at INTEGER DEFAULT NULL`); } catch { /* exists */ }
+
   // Deviation file_path — stores the concrete path so accepted can amend the plan
   try { db.run(`ALTER TABLE deviations ADD COLUMN file_path TEXT DEFAULT NULL`); } catch { /* exists */ }
 
@@ -376,8 +383,8 @@ export function storeParsedFile(parsed: ParsedFile, projectRoot: string): void {
     // Store imports
     for (const imp of parsed.imports) {
       d.run(
-        `INSERT INTO imports (file_id, source_path, specifiers, is_default, is_namespace, is_relative) VALUES (?, ?, ?, ?, ?, ?)`,
-        [fileId, imp.source, JSON.stringify(imp.specifiers), imp.isDefault ? 1 : 0, imp.isNamespace ? 1 : 0, imp.isRelative ? 1 : 0]
+        `INSERT INTO imports (file_id, source_path, specifiers, is_default, is_namespace, is_relative, is_reexport) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [fileId, imp.source, JSON.stringify(imp.specifiers), imp.isDefault ? 1 : 0, imp.isNamespace ? 1 : 0, imp.isRelative ? 1 : 0, imp.isReexport ? 1 : 0]
       );
     }
 
@@ -607,6 +614,17 @@ export function setImportResolutionContext(projectRoot: string, aliasMap: AliasM
   resolutionContext = { projectRoot, aliasMap, systems };
 }
 
+/** The project whose import context (aliases, systems) is held: the last one scanned (A7.2). */
+export function resolutionContextRoot(): string | null {
+  return resolutionContext?.projectRoot ?? null;
+}
+
+/** The alias map and systems the last scan of this project resolved with (empty for another project). */
+export function getImportResolutionContext(projectRoot: string): { aliasMap: AliasMapping[]; systems: DiscoveredSystem[] } {
+  const ctx = resolutionContext?.projectRoot === projectRoot ? resolutionContext : null;
+  return { aliasMap: ctx?.aliasMap ?? [], systems: ctx?.systems ?? [] };
+}
+
 /**
  * Resolve the imports a watcher re-parse stored (they arrive with no
  * `resolved_path`), using the last scan's alias map and systems.
@@ -646,6 +664,10 @@ export function resolveImports(
   try {
     d.run(`ALTER TABLE imports ADD COLUMN resolved_path TEXT`);
   } catch { /* column already exists */ }
+  // "Who imports this file?" is a lookup by resolved path, asked for every
+  // file an agent is about to change (check_footprint) and every signature
+  // a workstream changes (A2.2). Without this it scanned the whole table.
+  try { d.run(`CREATE INDEX IF NOT EXISTS idx_imports_resolved ON imports(resolved_path)`); } catch { /* should not happen post-ALTER */ }
 
   // Phase 12 §C: spec doc ordering + nesting. order_hint is a sortable
   // string like "00", "01", "01.5" (matches the swf-style "00-…/01-…"
@@ -824,8 +846,9 @@ export function getAllGraphEdges(): GraphEdge[] {
  * Get what a specific file imports and what imports it.
  */
 export function getFileDependencies(filePath: string): {
-  imports: Array<{ path: string; relativePath: string; specifiers: string[] }>;
-  importedBy: Array<{ path: string; relativePath: string; specifiers: string[] }>;
+  imports: Array<{ path: string; relativePath: string; specifiers: string[]; reexport?: boolean }>;
+  importedBy: Array<{ path: string; relativePath: string; specifiers: string[]; reexport?: boolean }>;
+  throughReexports: Array<{ path: string; relativePath: string; specifiers: string[]; via: string[]; possibly?: boolean }>;
 } {
   const d = getDb();
 
@@ -840,7 +863,7 @@ export function getFileDependencies(filePath: string): {
 
   // What this file imports
   const importsResult = d.exec(`
-    SELECT f2.path, f2.relative_path, i.specifiers
+    SELECT f2.path, f2.relative_path, i.specifiers, i.is_reexport
     FROM imports i
     JOIN files f1 ON i.file_id = f1.id
     JOIN files f2 ON i.resolved_path = f2.path
@@ -849,23 +872,25 @@ export function getFileDependencies(filePath: string): {
 
   // What imports this file
   const importedByResult = d.exec(`
-    SELECT f1.path, f1.relative_path, i.specifiers
+    SELECT f1.path, f1.relative_path, i.specifiers, i.is_reexport
     FROM imports i
     JOIN files f1 ON i.file_id = f1.id
     WHERE i.resolved_path = ?
   `, [filePath]);
 
+  const toDep = (r: any[]) => ({
+    path: r[0] as string,
+    relativePath: r[1] as string,
+    specifiers: JSON.parse((r[2] as string) || '[]'),
+    // `export … from` (Phase 32 A2.2): passes the names on rather than using them.
+    ...(r[3] === 1 ? { reexport: true } : {}),
+  });
   return {
-    imports: (importsResult[0]?.values || []).map((row: any[]) => ({
-      path: row[0] as string,
-      relativePath: row[1] as string,
-      specifiers: JSON.parse((row[2] as string) || '[]'),
-    })),
-    importedBy: (importedByResult[0]?.values || []).map((row: any[]) => ({
-      path: row[0] as string,
-      relativePath: row[1] as string,
-      specifiers: JSON.parse((row[2] as string) || '[]'),
-    })),
+    imports: (importsResult[0]?.values || []).map(toDep),
+    importedBy: (importedByResult[0]?.values || []).map(toDep),
+    // Files that reach this one through a barrel's re-exports, and which barrels.
+    throughReexports: importersOf(filePath).filter((i) => i.via.length > 0)
+      .map((i) => ({ path: i.path, relativePath: i.relativePath, specifiers: i.names, via: i.via, ...(i.possibly ? { possibly: true } : {}) })),
   };
 }
 

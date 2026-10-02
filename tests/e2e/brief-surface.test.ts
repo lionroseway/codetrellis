@@ -137,7 +137,9 @@ test.describe.serial('Brief surface', () => {
     const meta = JSON.parse(text);
     expect(meta).toMatchObject({
       uid: sales.uid, itemUid: item, path: 'data/sales.csv', name: 'sales.csv', role: 'material',
-      sha256: sales.sha256, viewable: true, recordedByType: 'human',
+      // Recorded over plain HTTP, so the person is `unverified` (§0.4d);
+      // the app window records `human`. Carried item 2 changed this.
+      sha256: sales.sha256, viewable: true, recordedByType: 'unverified',
     });
     expect(meta.contentType).toMatch(/^text\/csv/);
     expect((await h.client.raw('GET', '/api/artefacts/5a0c0000-0000-4000-8000-00000000dead')).status).toBe(404);

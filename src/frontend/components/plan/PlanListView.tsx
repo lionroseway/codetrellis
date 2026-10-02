@@ -1,7 +1,9 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { RecurringSeriesList } from './RecurringSeriesList';
 import { ClipboardList, Plus, FolderInput, Layers, Trash2, Search, X, CheckSquare, Square, AlertTriangle, RefreshCw, FolderOpen } from 'lucide-react';
 import { usePlanStore } from '../../stores/plan-store';
 import { useProjectStore } from '../../stores/project-store';
+import { useUiStore } from '../../stores/ui-store';
 import { useToastStore } from '../../stores/toast-store';
 import { StatusBadge } from './StatusBadge';
 import { CrossRepoSection } from './CrossRepoSection';
@@ -212,8 +214,11 @@ export function PlanList() {
       });
       if (!res.ok) throw new Error(await res.text());
       const plan = await res.json();
-      await fetchPlans();
+      // Open it first, then refresh the list: waiting for the whole list
+      // before showing the new plan left the person looking at nothing for
+      // seconds on a project with many plans.
       await setActivePlan(plan.uid);
+      void fetchPlans();
     } catch (err) {
       addToast({ type: 'error', title: 'Could not create plan', message: String(err) });
     }
@@ -507,6 +512,9 @@ export function PlanList() {
         </div>
       )}
 
+      {/* Phase 32 C4.2a — each recurring playbook as one row: its runs by period. */}
+      <RecurringSeriesList root={root ?? null} />
+
       {activePlanRow && (
         <button
           onClick={() => setActivePlan(activePlanRow.uid)}
@@ -548,7 +556,10 @@ export function PlanList() {
                 }
               </button>
               <button
-                onClick={() => setActivePlan(plan.uid)}
+                // The workspace opens when the active plan changes, so the
+                // plan already active (minimised, or navigated away from)
+                // opened nothing when clicked. It opens it now.
+                onClick={() => (activePlanUid === plan.uid ? useUiStore.getState().setWorkspaceMode('plan') : setActivePlan(plan.uid))}
                 className="flex-1 min-w-0 text-left"
                 title="Click to open the plan workspace"
               >
@@ -561,6 +572,16 @@ export function PlanList() {
                 {planScope === 'all' && plan.projectPath && (
                   <span className="text-[10.5px] text-foreground-muted/60 truncate block mt-0.5">
                     {projectName(plan.projectPath)}
+                  </span>
+                )}
+                {/* Phase 32 C2.6a — a teammate's plan, as git says it arrived. */}
+                {plan.arrival && (
+                  <span
+                    data-testid="plan-arrival"
+                    title="This plan reached this machine through its files (a pull or a copy). Who added it and in which commit is what git says."
+                    className="text-[10.5px] text-sky-300/80 truncate block mt-0.5"
+                  >
+                    {plan.arrival.addedBy && plan.arrival.commit ? `from ${plan.arrival.addedBy}, in ${plan.arrival.commit}` : 'arrived in its files, not committed yet'}
                   </span>
                 )}
               </button>

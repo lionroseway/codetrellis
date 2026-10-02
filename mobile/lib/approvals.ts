@@ -68,9 +68,18 @@ export async function listAwaiting(): Promise<AwaitingEntry[]> {
   return Array.isArray(entries) ? entries : [];
 }
 
+/** B8.3b — the task's grounding line, and each criterion's grade and why, as the desktop says them. */
+export interface PhoneGrounding {
+  words: string | null;
+  grounded: boolean;
+  grades: Record<string, { grade: string; why: string }>;
+}
+
 export function listItemCriteria(itemUid: string): Promise<{
   item: { uid: string; title: string; planUid: string };
   criteria: PhoneCriterion[];
+  /** Absent from a desktop from before B8.3b. */
+  grounding?: PhoneGrounding | null;
 }> {
   return rpc('criteria.list', { itemUid });
 }

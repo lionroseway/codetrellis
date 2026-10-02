@@ -12,6 +12,7 @@
  * See docs/cdev/08-agent-collaboration.md.
  */
 
+import { authorFromExtra } from '../helpers';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
@@ -226,8 +227,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
  *
  * The human (per settings.identity) is always recorded as the author —
  * accountability rests with the named human (Principle 5). The agent
- * is recorded in authorType + agentModel when the calling session is
- * a registered agent.
+ * is recorded in authorType + agentModel: its type when it registered,
+ * `mcp-client` or `agent` when it did not — never `human`.
  *
  * Reads sessionId from the deps bag (bound at McpServer-instance setup)
  * rather than the SDK's `extra` arg — the SDK doesn't reliably populate
@@ -239,23 +240,18 @@ function resolveAttribution(
   const settings = deps.getSettings();
   const humanAuthor = settings.identity.email || 'human';
 
-  const sessions = deps.sessionService.getActiveSessions();
-  const match = sessions.find((s) => s.sessionId === deps.sessionId);
-  if (!match) {
-    return { author: humanAuthor, authorType: 'human', agentModel: null };
-  }
-
-  // 'mcp-client' is the generic auto-registered type — if it hasn't
-  // been upgraded by register_session, treat as human (no agent
-  // identity to report).
-  if (match.agentType === 'mcp-client') {
-    return { author: humanAuthor, authorType: 'human', agentModel: null };
-  }
-
+  // The agent is whoever made the call (`authorFromExtra`), never the person.
+  // An agent that had not called register_session — no session, or the
+  // generic 'mcp-client' — used to be recorded as `human`, so its posts read
+  // as the person's own (Phase 32, carried item 2).
+  // A channel event carries the agent's type as its authorType (the pane
+  // shows it), which is what `authorFromExtra` names as the author.
+  const agentType = authorFromExtra(deps, undefined).author;
+  const match = deps.sessionService.getActiveSessions().find((s) => s.sessionId === deps.sessionId);
   return {
     author: humanAuthor,
-    authorType: match.agentType || 'human',
-    agentModel: match.model ?? null,
+    authorType: agentType,
+    agentModel: match?.model ?? null,
   };
 }
 

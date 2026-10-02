@@ -202,6 +202,18 @@ since the unified item model, so a note written in the app reaches
 everyone who can read the repository — including, for a public repo, the
 public.
 
+**Ticket refs ride too** (Phase 32 C2.5a). `plan.yaml` names the plan's
+tickets and each item's file names its links, under `refs` (url, key,
+kind, title), so a plan's lineage survives a pull. Import adds a ref the
+machine lacks and never removes one; only http(s) links are read.
+
+**Approvals ride only as signed statements** (Phase 32 C2.5b). A sign-off
+in a plain field would let any edit say a person approved something, so the
+criteria are exported and their decisions are not. Where git signing is set
+up with an SSH key, a person's approval is also written as
+`approvals/<uid>.yaml`, signed with that key, and a teammate's import counts
+it only when it verifies against git's allowed signers.
+
 **To keep something off disk**, mark the item `local` (Phase 3.2). A
 local item — and so its comments and attachments — is filtered out of the
 export by `listItemsForExport`. Its children are local too, unless one
@@ -210,6 +222,29 @@ under the nearest exported ancestor.
 
 **Runtime / device-local state** (DB only, NOT exported):
 
+- **An item's state** (Phase 32 C2.4b): its `status`, `progressPercent`,
+  `blockedReason`, who has claimed it (`assignee`, `assigneeType`,
+  `assigneeModel`), its progress reports (comments of kind `progress`) and
+  its `updatedAt`. The item's file says what the task is; its state is read
+  from git, a review host, or this machine's record (C2.4a), so a status
+  change, a claim or progress rewrites no file and a pull carries no churn.
+  A file written before this still carries a `status`, and it is read; a
+  file without a claim leaves this machine's claim alone. A file whose
+  content would not change is not rewritten. With Settings → Shared task
+  state on (C3.1), each change is also written as a record under
+  `.codetrellis/records/` (below), which is how a teammate sees it.
+- **Task-state records** (Phase 32 C3.1), only when the person turns on
+  Settings → Shared task state for the project: one file per state change,
+  `.codetrellis/records/<plan uid>/<item uid>/<writer>-<counter>.yaml`,
+  written once by one device and never edited or removed. It carries the
+  writer (a random id per device), the name its records go by (Settings →
+  Identity), its counter, the highest counter it had seen from each other
+  writer of that task, the time, who made the change there (the person or
+  which agent) and the state. The state everyone sees is read from all of
+  them: a record made having seen this machine's latest is the task's state
+  here too, recorded by that teammate "in their record, unverified"; people
+  acting at once are each kept, nothing is picked. Two people never write
+  one file, so git and a synced folder never merge one.
 - Deviations (re-derived on scan)
 - Trellis snapshots (per-device baseline)
 - Agent sessions (live state)
@@ -260,6 +295,9 @@ acceptanceCriteria: |
 ```
 
 ### `tasks/001-add-jwt-types.yaml`
+
+A legacy (V1) task file. A plan item's file under `items/` has the same
+spirit but carries no state (§9): no `status`, `assignee` or progress.
 
 ```yaml
 uid: 7c8d9e0f-aaaa-bbbb-cccc-ddddeeeeffff

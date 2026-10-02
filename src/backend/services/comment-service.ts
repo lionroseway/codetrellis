@@ -29,7 +29,9 @@ export interface AddCommentOptions {
 
 function inferSource(authorType: string, explicit?: CommentSource): CommentSource {
   if (explicit) return explicit;
-  return authorType === 'human' ? 'human' : 'agent';
+  // `unverified` is the local API standing in for the person (Phase 32
+  // §0.4d): not an agent's, and labelled as unverified where it is shown.
+  return authorType === 'human' || authorType === 'unverified' ? 'human' : 'agent';
 }
 
 /**

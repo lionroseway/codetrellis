@@ -47,7 +47,10 @@ export const SCHEMA_AST = `
     specifiers TEXT,
     is_default INTEGER DEFAULT 0,
     is_namespace INTEGER DEFAULT 0,
-    is_relative INTEGER DEFAULT 0
+    is_relative INTEGER DEFAULT 0,
+    -- Phase 32 A2.2: \`export … from\` — the file passes these names on
+    -- rather than using them, so an importer lookup follows it.
+    is_reexport INTEGER DEFAULT 0
   );
 
   CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_id);
@@ -109,6 +112,8 @@ export const SCHEMA_PLANS_CORE = `
     snapshot TEXT NOT NULL,
     change_summary TEXT,
     author TEXT NOT NULL,
+    -- How the edit arrived (carried 2b). Null on rows from before it was kept.
+    author_type TEXT,
     created_at INTEGER NOT NULL,
     UNIQUE(plan_uid, version)
   );
@@ -169,7 +174,590 @@ export const SCHEMA_PLANS_CORE = `
     active_plan_uid TEXT REFERENCES plans(uid),
     connected_at INTEGER NOT NULL,
     last_seen INTEGER NOT NULL,
-    status TEXT NOT NULL DEFAULT 'active'
+    status TEXT NOT NULL DEFAULT 'active',
+    -- The workstream it works in (Phase 32 A1.1): a trusted root or one of
+    -- its worktrees, as the user opened it. Re-derived on every connect.
+    workstream_root TEXT
+  );
+
+  -- Phase 32 B1: every agent event that was broadcast (tool calls, watcher
+  -- events, sessions starting and ending), kept so the Timeline survives a
+  -- reload and replay has a record. Stamped at the tap with the session, the
+  -- agent and the workstream it works in. Kept 14 days (agent-event-log.ts).
+  CREATE TABLE IF NOT EXISTS agent_events (
+    id TEXT PRIMARY KEY,
+    at INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    type TEXT NOT NULL,
+    session_id TEXT,
+    agent_type TEXT,
+    workstream_root TEXT,
+    payload TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_agent_events_at ON agent_events(at);
+  CREATE INDEX IF NOT EXISTS idx_agent_events_session ON agent_events(session_id, at);
+  CREATE INDEX IF NOT EXISTS idx_agent_events_workstream ON agent_events(workstream_root, at);
+
+  -- Phase 32 B10.1: the record. One link per agent event, each hashing the
+  -- one before it, so a change, a removal or a forged row is found by
+  -- walking it (record-chain.ts). The anchor is the last link retention
+  -- trimmed, so what is kept still verifies.
+  CREATE TABLE IF NOT EXISTS record_chain (
+    seq INTEGER PRIMARY KEY,
+    event_id TEXT NOT NULL UNIQUE,
+    linked_at INTEGER NOT NULL,
+    digest TEXT NOT NULL,
+    prev TEXT NOT NULL,
+    hash TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_record_chain_linked ON record_chain(linked_at);
+  CREATE TABLE IF NOT EXISTS record_anchor (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    through_seq INTEGER NOT NULL,
+    hash TEXT NOT NULL,
+    at INTEGER NOT NULL
+  );
+
+  -- Phase 32 C1.3: proof a skill was used on a task. Claude Code records each
+  -- skill it loads as a Skill tool call; the watcher stores one row per task
+  -- that a Claude Code session in the same workstream is working. Kept with
+  -- the task, not the 14-day event log: the sign-off pack cites it.
+  CREATE TABLE IF NOT EXISTS skill_uses (
+    item_uid TEXT NOT NULL,
+    skill TEXT NOT NULL,
+    session_id TEXT,
+    workstream_root TEXT,
+    at INTEGER NOT NULL,
+    -- Phase 32 A8.4: how it was seen. 'session_log' (Claude Code's own log,
+    -- read by the watcher) or 'mcp' (read through get_skill, any client).
+    source TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_skill_uses_item ON skill_uses(item_uid, skill);
+
+  -- Phase 32 A6.2: which session read which material through read_material,
+  -- and the file's hash when it did. item_uid is the task the read counts
+  -- for: the session's brief task, or the material's own task when the
+  -- session has none. path is the attachment's value (project-relative for
+  -- a recorded file), so two tasks' attachments of one file name the same
+  -- material.
+  CREATE TABLE IF NOT EXISTS material_reads (
+    item_uid TEXT NOT NULL,
+    session_id TEXT,
+    attachment_uid TEXT NOT NULL,
+    path TEXT NOT NULL,
+    sha256 TEXT,
+    locator TEXT,
+    at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_material_reads_item ON material_reads(item_uid, at);
+  CREATE INDEX IF NOT EXISTS idx_material_reads_path ON material_reads(path);
+
+  -- Phase 32 C2.2a: a review host turned on for a project, on this device.
+  -- Kept here and not in .codetrellis/config.json, which is committed: a
+  -- cloned repository must never be able to turn on a request to a host.
+  -- slug is the repository it was turned on for; if the remote later names
+  -- another, the switch no longer applies. No token is ever stored here
+  -- (secret-store.ts).
+  CREATE TABLE IF NOT EXISTS review_hosts (
+    project_root TEXT PRIMARY KEY,
+    hostname TEXT NOT NULL,
+    slug TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    changed_at INTEGER NOT NULL,
+    changed_by TEXT NOT NULL
+  );
+
+  -- Phase 32 B8.1: test reports an agent or a test criterion handed over,
+  -- and each test's last result from them. CodeTrellis never runs tests:
+  -- these are what the runs said, with when they ran (the report's mtime).
+  CREATE TABLE IF NOT EXISTS test_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_root TEXT NOT NULL,
+    path TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    tests INTEGER NOT NULL,
+    passed INTEGER NOT NULL,
+    failed INTEGER NOT NULL,
+    errors INTEGER NOT NULL,
+    skipped INTEGER NOT NULL,
+    ran_at INTEGER NOT NULL,
+    reported_at INTEGER NOT NULL,
+    reported_by TEXT NOT NULL,
+    reported_by_type TEXT NOT NULL,
+    UNIQUE (project_root, sha256)
+  );
+  CREATE TABLE IF NOT EXISTS test_results (
+    project_root TEXT NOT NULL,
+    test_key TEXT NOT NULL,
+    suite TEXT,
+    classname TEXT,
+    name TEXT NOT NULL,
+    file TEXT,
+    result TEXT NOT NULL,
+    duration_ms INTEGER,
+    message TEXT,
+    report_id INTEGER NOT NULL,
+    ran_at INTEGER NOT NULL,
+    PRIMARY KEY (project_root, test_key)
+  );
+  -- Phase 32 B8.4b: every report's own cases, so replay can say what the
+  -- tests said at a past moment (test_results keeps only the latest). Kept
+  -- as long as replay frames are.
+  CREATE TABLE IF NOT EXISTS test_report_cases (
+    report_id INTEGER NOT NULL,
+    test_key TEXT NOT NULL,
+    suite TEXT,
+    classname TEXT,
+    name TEXT NOT NULL,
+    file TEXT,
+    result TEXT NOT NULL,
+    duration_ms INTEGER,
+    message TEXT,
+    PRIMARY KEY (report_id, test_key)
+  );
+
+  -- Phase 32 B9.3a: what a person did about a planned overlap (re-sequenced
+  -- the plans, told the agents, or left it), by its id (the subject and the
+  -- plans it is between), with who from the transport and when.
+  CREATE TABLE IF NOT EXISTS planned_overlap_decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    overlap_id TEXT NOT NULL,
+    project_root TEXT NOT NULL,
+    action TEXT NOT NULL,
+    words TEXT NOT NULL,
+    by_name TEXT NOT NULL,
+    by_type TEXT NOT NULL,
+    at INTEGER NOT NULL
+  );
+  -- Phase 32 B9.3b: a plan approved into planned overlaps, said once in the
+  -- inbox until a person marks it seen.
+  CREATE TABLE IF NOT EXISTS planned_overlap_notices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_root TEXT NOT NULL,
+    plan_uid TEXT NOT NULL,
+    plan_label TEXT NOT NULL,
+    words_json TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    seen_at INTEGER,
+    seen_by TEXT
+  );
+  -- Phase 32 C4.1: a recurring playbook's run, as started here: its series,
+  -- period, the run before it and the tasks carried from it. A run started on
+  -- another machine is found by its id (derived from rule and period), not here.
+  CREATE TABLE IF NOT EXISTS recurring_runs (
+    plan_uid TEXT PRIMARY KEY,
+    project_root TEXT NOT NULL,
+    rule_id TEXT NOT NULL,
+    period TEXT NOT NULL,
+    label TEXT NOT NULL,
+    previous_uid TEXT,
+    carried_json TEXT NOT NULL DEFAULT '[]',
+    started_at INTEGER NOT NULL,
+    started_by TEXT NOT NULL
+  );
+  -- Phase 32 C4.2a: a due run the person chose not to start this time, on
+  -- this device. It stays due until its period ends, then reads missed.
+  CREATE TABLE IF NOT EXISTS recurring_dismissed (
+    project_root TEXT NOT NULL,
+    rule_id TEXT NOT NULL,
+    period TEXT NOT NULL,
+    by_name TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    PRIMARY KEY (project_root, rule_id, period)
+  );
+  -- Phase 32 C4.3b: on this device, start an agent on each run of a rule.
+  -- Off unless the person turned it on here; never in the committed config.
+  CREATE TABLE IF NOT EXISTS recurring_agents (
+    project_root TEXT NOT NULL,
+    rule_id TEXT NOT NULL,
+    agent TEXT NOT NULL,
+    by_name TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    PRIMARY KEY (project_root, rule_id)
+  );
+  -- Each session told of a planned overlap its task is in, read once.
+  CREATE TABLE IF NOT EXISTS planned_overlap_tells (
+    overlap_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    read_at INTEGER,
+    PRIMARY KEY (overlap_id, session_id)
+  );
+
+  -- Phase 32 C3.1: task state shared as records in the project's files, per
+  -- project, on this device only (never the committed config). Off until
+  -- the person turns it on.
+  CREATE TABLE IF NOT EXISTS shared_task_state (
+    project_root TEXT PRIMARY KEY,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    changed_at INTEGER NOT NULL,
+    changed_by TEXT NOT NULL
+  );
+
+  -- Phase 32 C3.1: this device's writer id for task-state records (one row),
+  -- and, per item, the record whose state this machine last took or wrote:
+  -- reading the same records again changes nothing.
+  CREATE TABLE IF NOT EXISTS task_record_writer (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    writer TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS task_record_heads (
+    item_uid TEXT PRIMARY KEY,
+    writer TEXT NOT NULL,
+    counter INTEGER NOT NULL,
+    split TEXT,
+    verdict TEXT
+  );
+
+  -- Phase 32 C3.3: this device's own signing key for its records (one row),
+  -- used when git signing has no SSH key; the private half stays here. And
+  -- teammates' device keys, as introduced in a project's .codetrellis/keys:
+  -- 'new' until the person trusts or refuses one, in Settings.
+  -- Phase 32 C3.4a: this device's copy of a project's plans folder, as the
+  -- person confirmed it. The committed config only names the folder; a
+  -- cloned repository never points the app at one by itself.
+  CREATE TABLE IF NOT EXISTS linked_plans_folder (
+    project_root TEXT PRIMARY KEY,
+    local_path TEXT NOT NULL,
+    ref TEXT NOT NULL,
+    confirmed_at INTEGER NOT NULL,
+    confirmed_by TEXT NOT NULL
+  );
+
+  -- Phase 32 C3.5: teammates' material reads. The switch, per project on this
+  -- device: no row means on whenever task state is shared (the owner's
+  -- choice); a row says the person turned it off, or back on. And each
+  -- teammate's read record read here, with whether it verified (C3.3); none
+  -- of this device's own, which material_reads already has.
+  CREATE TABLE IF NOT EXISTS shared_material_reads (
+    project_root TEXT PRIMARY KEY,
+    enabled INTEGER NOT NULL,
+    changed_at INTEGER NOT NULL,
+    changed_by TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS teammate_material_reads (
+    writer TEXT NOT NULL,
+    item_uid TEXT NOT NULL,
+    counter INTEGER NOT NULL,
+    plan_uid TEXT NOT NULL,
+    name TEXT NOT NULL,
+    reader TEXT NOT NULL,
+    attachment_uid TEXT,
+    path TEXT NOT NULL,
+    sha256 TEXT,
+    at INTEGER NOT NULL,
+    verdict TEXT,
+    PRIMARY KEY (writer, item_uid, counter)
+  );
+  CREATE INDEX IF NOT EXISTS idx_teammate_material_reads_item ON teammate_material_reads(item_uid, at);
+
+  -- Phase 32 D1.5a: each teammate device's latest test run in a project, read
+  -- from its run record in the plans folder (.codetrellis/runs/). One row per
+  -- device: a newer run replaces it. Forgotten when sharing is turned off.
+  CREATE TABLE IF NOT EXISTS teammate_test_runs (
+    project_root TEXT NOT NULL,
+    writer TEXT NOT NULL,
+    counter INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    by_author TEXT NOT NULL,
+    by_type TEXT NOT NULL,
+    commit_sha TEXT,
+    dirty TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    report TEXT NOT NULL,
+    totals TEXT NOT NULL,
+    files TEXT NOT NULL,
+    verdict TEXT,
+    PRIMARY KEY (project_root, writer)
+  );
+
+  CREATE TABLE IF NOT EXISTS task_record_device_key (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    public_key TEXT NOT NULL,
+    private_key TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS task_record_keys (
+    writer TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    public_key TEXT NOT NULL,
+    name TEXT NOT NULL,
+    project_root TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'new',
+    first_seen INTEGER NOT NULL,
+    decided_at INTEGER,
+    decided_by TEXT,
+    PRIMARY KEY (writer, fingerprint)
+  );
+
+  -- Phase 32 C2.6a: a plan that first reached this machine through its files
+  -- (a pull, a copy, an import), with who added it and in which commit, as
+  -- git says; nulls when it was not committed yet. A plan made here has none.
+  CREATE TABLE IF NOT EXISTS plan_arrivals (
+    plan_uid TEXT PRIMARY KEY,
+    added_by TEXT,
+    commit_sha TEXT,
+    arrived_at INTEGER NOT NULL
+  );
+
+  -- Phase 32 C2.5b: approvals as signed statements. One row per approval
+  -- this machine signed (or could not), and per signed record read from a
+  -- plan's approvals/ folder, with whether it verified and why not. A
+  -- verified record also adds the person's sign-off to criterion_signoffs.
+  CREATE TABLE IF NOT EXISTS signed_approvals (
+    uid TEXT PRIMARY KEY,
+    plan_uid TEXT NOT NULL,
+    item_uid TEXT NOT NULL,
+    criterion_uid TEXT NOT NULL,
+    signer TEXT,
+    origin TEXT NOT NULL,
+    state TEXT NOT NULL,
+    reason TEXT,
+    file TEXT,
+    at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_signed_approvals_item ON signed_approvals(item_uid);
+
+  -- Phase 32 C1.4: a skill that arrived in a plan file (pulled through git,
+  -- or edited by hand) is held back from agents until a person accepts it.
+  -- One row per arrival: who added it and in which commit, as git says.
+  CREATE TABLE IF NOT EXISTS skill_arrivals (
+    item_uid TEXT NOT NULL,
+    skill TEXT NOT NULL,
+    added_by TEXT,
+    commit_sha TEXT,
+    arrived_at INTEGER NOT NULL,
+    accepted_at INTEGER,
+    accepted_by TEXT,
+    accepted_by_type TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_skill_arrivals_item ON skill_arrivals(item_uid, skill);
+
+  -- Phase 32 B4: a place a person has said "stop and ask me". A task
+  -- breakpoint fires when an agent claims or finishes the task (or anything
+  -- under it); a spec breakpoint when an agent changes its description; a
+  -- code breakpoint (B4.2) when a workstream changes a file under it, its
+  -- target a repository-relative path (a folder ends in /, a function is
+  -- path#name) in project_root; a signal breakpoint (B4.2b) is a project
+  -- rule whose target is a signal kind. Kept after it is cleared, because
+  -- the hits it caused cite it.
+  CREATE TABLE IF NOT EXISTS breakpoints (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    target TEXT NOT NULL,
+    plan_uid TEXT,
+    project_root TEXT,
+    note TEXT,
+    created_at INTEGER NOT NULL,
+    created_by TEXT NOT NULL,
+    created_by_type TEXT NOT NULL,
+    cleared_at INTEGER,
+    cleared_by TEXT,
+    cleared_by_type TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_breakpoints_target ON breakpoints(target);
+
+  -- Phase 32 B4: one agent call held at a breakpoint, and the person's
+  -- answer. The agent waits on it by ref (await_decision), from the database,
+  -- so the wait survives timeouts and restarts. \`consumed_at\` is set when
+  -- the agent's next matching call spends the answer. A code hit (B4.2) names
+  -- the file in \`path\` (item_uid is empty); \`breach\` is 1 when the change was
+  -- only seen after it was made, never paused. A signal hit (B4.2b) names
+  -- the signal that held the call in \`signal_id\`.
+  CREATE TABLE IF NOT EXISTS breakpoint_hits (
+    ref TEXT PRIMARY KEY,
+    breakpoint_id TEXT NOT NULL,
+    tool TEXT NOT NULL,
+    action TEXT NOT NULL,
+    item_uid TEXT NOT NULL,
+    path TEXT,
+    breach INTEGER NOT NULL DEFAULT 0,
+    signal_id TEXT,
+    plan_uid TEXT,
+    agent TEXT,
+    session_id TEXT,
+    workstream_root TEXT,
+    hit_at INTEGER NOT NULL,
+    decision TEXT,
+    note TEXT,
+    answered_at INTEGER,
+    answered_by TEXT,
+    answered_by_type TEXT,
+    consumed_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_breakpoint_hits_waiting ON breakpoint_hits(answered_at, hit_at);
+
+  -- Phase 32 A1.6: one thing worth knowing about parallel work. Deduplicated
+  -- by id (kind, subject, workstreams); resolved when its cause goes away.
+  CREATE TABLE IF NOT EXISTS awareness_signals (
+    id TEXT PRIMARY KEY,
+    project_root TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    workstreams TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    first_seen INTEGER NOT NULL,
+    last_seen INTEGER NOT NULL,
+    state TEXT NOT NULL DEFAULT 'open',
+    resolved_at INTEGER,
+    -- A1.8: who set the state (JSON, from actorFrom) and when.
+    state_by TEXT,
+    state_at INTEGER,
+    -- A3.2: what it is about, fingerprinted; an answer holds while it does.
+    shape TEXT,
+    -- A3.2: it was acknowledged or intended, and opened again when its shape changed.
+    reopened_from TEXT,
+    reopened_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_awareness_project ON awareness_signals(project_root);
+
+  -- Phase 32 A2.6: which agent session was told about a signal (once), and
+  -- the note it left with acknowledge_signal. The agent's own words: shown
+  -- to the person, never to another agent.
+  CREATE TABLE IF NOT EXISTS awareness_signal_notes (
+    signal_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    agent_type TEXT NOT NULL,
+    told_at INTEGER,
+    note TEXT,
+    noted_at INTEGER,
+    PRIMARY KEY (signal_id, session_id)
+  );
+
+  -- Phase 32 B5.2: each time a signal was open, for replay. A signal keeps
+  -- one row in awareness_signals and is reopened in place, so its earlier
+  -- openings would be lost; here each opening is a row, closed when it
+  -- resolves. Kept 14 days after it closes, like the agent event log.
+  CREATE TABLE IF NOT EXISTS awareness_signal_spans (
+    signal_id TEXT NOT NULL,
+    project_root TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    workstreams TEXT NOT NULL,
+    opened_at INTEGER NOT NULL,
+    closed_at INTEGER,
+    PRIMARY KEY (signal_id, opened_at)
+  );
+  CREATE INDEX IF NOT EXISTS idx_signal_spans_project ON awareness_signal_spans(project_root, opened_at);
+
+  -- Phase 32 A4.1: a person's message to the agents about a signal, and
+  -- which agent sessions have read it (once each, on their next tool call).
+  CREATE TABLE IF NOT EXISTS awareness_signal_replies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    signal_id TEXT NOT NULL,
+    project_root TEXT NOT NULL,
+    message TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    actor_type TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_signal_replies_signal ON awareness_signal_replies(signal_id, created_at);
+  CREATE TABLE IF NOT EXISTS awareness_signal_reply_reads (
+    reply_id INTEGER NOT NULL,
+    session_id TEXT NOT NULL,
+    agent_type TEXT NOT NULL,
+    read_at INTEGER NOT NULL,
+    PRIMARY KEY (reply_id, session_id)
+  );
+
+  -- Phase 32 B7.1: what a task relies on, a spec page or one section of it
+  -- (a heading, by slug; '' for the whole page). Who relies on a page is
+  -- read back across every plan of its project.
+  CREATE TABLE IF NOT EXISTS spec_links (
+    item_uid TEXT NOT NULL,
+    page_uid TEXT NOT NULL,
+    section TEXT NOT NULL DEFAULT '',
+    author TEXT NOT NULL,
+    author_type TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (item_uid, page_uid, section)
+  );
+  CREATE INDEX IF NOT EXISTS idx_spec_links_page ON spec_links(page_uid);
+
+  -- Phase 32 B7.2: a proposed change to a spec page, made against a version
+  -- of it, with why and the evidence. The page is not touched until a person
+  -- accepts (B7.4). \`affected\` is who relied on it when it was made.
+  CREATE TABLE IF NOT EXISTS spec_proposals (
+    uid TEXT PRIMARY KEY,
+    page_uid TEXT NOT NULL,
+    plan_uid TEXT NOT NULL,
+    section TEXT NOT NULL DEFAULT '',
+    base_version INTEGER NOT NULL,
+    before_text TEXT NOT NULL,
+    proposed_text TEXT NOT NULL,
+    why TEXT NOT NULL,
+    evidence TEXT NOT NULL DEFAULT '{}',
+    affected TEXT NOT NULL DEFAULT '[]',
+    author TEXT NOT NULL,
+    author_type TEXT NOT NULL,
+    session_id TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at INTEGER NOT NULL,
+    decided_at INTEGER,
+    decided_by TEXT,
+    decided_by_type TEXT,
+    decision_note TEXT,
+    hit_ref TEXT,
+    decided_text TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_spec_proposals_page ON spec_proposals(page_uid, status);
+
+  -- Phase 32 B7.3: each session holding an affected task is told of an open
+  -- proposal once; this is who has been.
+  CREATE TABLE IF NOT EXISTS spec_proposal_reads (
+    proposal_uid TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    agent_type TEXT,
+    read_at INTEGER NOT NULL,
+    PRIMARY KEY (proposal_uid, session_id)
+  );
+
+  -- Phase 32 B7.3: what a proposal would mean for the work relying on it,
+  -- from the agent doing that work: none, or changes with a sentence.
+  CREATE TABLE IF NOT EXISTS spec_proposal_impacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    proposal_uid TEXT NOT NULL,
+    impact TEXT NOT NULL,
+    words TEXT NOT NULL DEFAULT '',
+    tasks INTEGER,
+    item_uid TEXT,
+    plan_uid TEXT,
+    author TEXT NOT NULL,
+    author_type TEXT NOT NULL,
+    session_id TEXT,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_spec_proposal_impacts ON spec_proposal_impacts(proposal_uid);
+
+  -- Phase 32 B7.4: a task whose spec changed under it, by an accepted
+  -- proposal. Flagged until the agent holding it has been told (read_at).
+  CREATE TABLE IF NOT EXISTS spec_change_flags (
+    item_uid TEXT NOT NULL,
+    proposal_uid TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    read_at INTEGER,
+    read_by_session TEXT,
+    PRIMARY KEY (item_uid, proposal_uid)
+  );
+
+  -- Phase 32 B7.4: the proposing session told of the decision, once.
+  CREATE TABLE IF NOT EXISTS spec_proposal_outcome_reads (
+    proposal_uid TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    read_at INTEGER NOT NULL,
+    PRIMARY KEY (proposal_uid, session_id)
+  );
+
+  -- Phase 32 A1.7c: folders an agent reported that the person said "not now"
+  -- to. Asked once per folder, not once per connection.
+  CREATE TABLE IF NOT EXISTS folder_request_dismissals (
+    folder TEXT PRIMARY KEY,
+    dismissed_at INTEGER NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS deviations (
@@ -202,7 +790,20 @@ export const SCHEMA_PLANS_CORE = `
     git_branch TEXT,
     files_json TEXT NOT NULL,
     edges_json TEXT NOT NULL,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    -- Phase 32 B5.1: a replay frame (snapshot_type 'frame') says whose graph
+    -- it is, what caused it and at which commit. A frame whose graph matches
+    -- the one before points at it (same_as) and stores no copy. Indexed by
+    -- replay-frames.ts once these columns exist on an older database.
+    project_path TEXT,
+    reason TEXT,
+    ref TEXT,
+    session_id TEXT,
+    agent_type TEXT,
+    workstream_root TEXT,
+    commit_sha TEXT,
+    digest TEXT,
+    same_as INTEGER
   );
 
   CREATE INDEX IF NOT EXISTS idx_trellis_plan ON trellis_snapshots(plan_uid);
@@ -233,11 +834,27 @@ export const SCHEMA_PLANS_CORE = `
     body TEXT NOT NULL,
     change_summary TEXT,
     author TEXT NOT NULL,
+    -- How the edit arrived (carried 2b). Null on rows from before it was kept.
+    author_type TEXT,
     created_at INTEGER NOT NULL,
     UNIQUE(doc_uid, version)
   );
 
   CREATE INDEX IF NOT EXISTS idx_plan_doc_versions ON plan_document_versions(doc_uid);
+
+  -- A guarded plan document's file changed on disk (Phase 32 B7.5b): the
+  -- file's version, kept beside the breakpoint hit until a person decides.
+  -- The app's own version stays in plan_documents meanwhile.
+  CREATE TABLE IF NOT EXISTS plan_doc_disk_holds (
+    ref TEXT PRIMARY KEY,
+    doc_uid TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_plan_doc_disk_holds_doc ON plan_doc_disk_holds(doc_uid);
 
   CREATE TABLE IF NOT EXISTS recent_projects (
     path TEXT PRIMARY KEY,
@@ -301,6 +918,13 @@ export const SCHEMA_PLAN_ITEMS = `
     assignee         TEXT,
     assignee_type    TEXT,
     assignee_model   TEXT,
+    -- The MCP session that claimed it (Phase 32 bug 1): two agents of one
+    -- type are two claimants. Runtime only, never written to plan files.
+    assignee_session TEXT,
+    -- Phase 32 C5.1 — the branch this section is worked on, inherited by
+    -- everything under it. A branch, not a folder: plan files are shared
+    -- across checkouts and machines, and a folder means nothing on another.
+    workstream       TEXT,
     progress_percent INTEGER,
     blocked_reason   TEXT,
     scope_path       TEXT,

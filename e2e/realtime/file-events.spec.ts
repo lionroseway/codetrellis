@@ -93,10 +93,17 @@ test.describe('File events', () => {
       data: { projectPath: PROJECT_PATH },
     });
 
-    const res = await request.get(`${API}/dependencies?include=cross_system`);
-    expect(res.ok()).toBeTruthy();
-    const edges = await res.json();
+    // A scan on the other worker answers 503 "scanning" until it lands, as the
+    // canvas sees it; wait it out the same way.
+    let edges: unknown = null;
+    await expect.poll(async () => {
+      const res = await request.get(`${API}/dependencies?include=cross_system`);
+      if (res.status() === 503) return 'scanning';
+      expect(res.ok()).toBeTruthy();
+      edges = await res.json();
+      return 'answered';
+    }, { timeout: 60_000 }).toBe('answered');
     expect(Array.isArray(edges)).toBe(true);
-    expect(edges.length).toBeGreaterThan(0);
+    expect((edges as unknown[]).length).toBeGreaterThan(0);
   });
 });

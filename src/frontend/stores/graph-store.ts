@@ -6,6 +6,18 @@ import { useUiStore } from './ui-store';
 
 export type BaselineMode = 'pinned' | 'auto';
 
+/**
+ * Phase 32 B6.4 / B6.4b — the plan chosen in the Stack tab: its footprint on
+ * the graph, and what makes a Timeline turn its work.
+ */
+export interface StackFocus {
+  planUid: string;
+  label: string;
+  paths: string[];
+  taskUids: string[];
+  sessions: string[];
+}
+
 interface GraphState {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -69,6 +81,12 @@ interface GraphState {
   /** Phase 18 — MCP graph_focus: pending focus target for the canvas. */
   pendingFocus: { path: string; highlight: boolean } | null;
   focusNode: (path: string, highlight?: boolean) => void;
+  /**
+   * Phase 32 B6.4 — a plan chosen in the Stack tab, drawn on the graph by
+   * its footprint (the files its tasks name) whatever plan is open.
+   */
+  stackFocus: StackFocus | null;
+  setStackFocus: (focus: StackFocus | null) => void;
   clearPendingFocus: () => void;
 }
 
@@ -235,5 +253,7 @@ export const useGraphStore = create<GraphState>((set) => ({
   // Phase 18 — MCP graph_focus
   pendingFocus: null,
   focusNode: (path, highlight = true) => set({ pendingFocus: { path, highlight } }),
+  stackFocus: null,
+  setStackFocus: (focus) => set({ stackFocus: focus }),
   clearPendingFocus: () => set({ pendingFocus: null }),
 }));

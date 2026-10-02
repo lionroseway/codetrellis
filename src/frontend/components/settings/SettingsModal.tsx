@@ -20,14 +20,30 @@ import {
   QrCode,
   Loader2,
   Zap,
+  GitPullRequest,
+  Users,
+  FolderGit2,
+  Repeat,
+  ShieldCheck,
+  GitBranch,
 } from 'lucide-react';
 import { generateQrSvg } from '../../lib/qr-svg';
 import { VerifiedUpdateDownload } from './VerifiedUpdateDownload';
 import { explainSaveError } from '../../lib/settings-words';
 import { useUiStore, type GraphStyle } from '../../stores/ui-store';
 import { configText, copyText, fetchMcpSetup, maskToken, recommendedConfigText, tokenOf, type McpSetup } from '../../lib/mcp-setup';
-import type { AppSettings, PowerStatus, PowerTriggers, PeerCapabilityName } from '@shared/types';
+import { FETCH_INTERVAL_CHOICES, type AppSettings, type PowerStatus, type PowerTriggers, type PeerCapabilityName, type RetentionDays } from '@shared/types';
+import { useProjectStore } from '../../stores/project-store';
+import { useBranchesStore } from '../../stores/branches-store';
 import { AddToClaudeDesktop } from './AddToClaudeDesktop';
+import { ReviewHostSection } from './ReviewHostSection';
+import { SharedTaskStateSection } from './SharedTaskStateSection';
+import { PlansFolderSection } from './PlansFolderSection';
+import { RecurringSection } from './RecurringSection';
+import { ArchitectureRulesSection } from './ArchitectureRulesSection';
+import { RecordSection } from './RecordSection';
+import { AddToClaudeCode } from './AddToClaudeCode';
+import { AddToGeminiCli } from './AddToGeminiCli';
 
 // --- Per-device access (Phase 19, finding 15) -------------------------------
 
@@ -154,13 +170,20 @@ const MCP_CAPABILITIES: Array<{
  * `settings-changed` so other open instances stay in sync.
  */
 
-type Section = 'identity' | 'appearance' | 'mcp' | 'plans' | 'data' | 'devices' | 'power' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'about';
+export type SettingsSection = 'identity' | 'appearance' | 'mcp' | 'plans' | 'review-hosts' | 'plans-folder' | 'recurring' | 'rules' | 'shared-state' | 'data' | 'devices' | 'power' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'git' | 'about';
+
+type Section = SettingsSection;
 
 const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'identity', label: 'Identity', Icon: User },
   { key: 'appearance', label: 'Appearance', Icon: Palette },
   { key: 'mcp', label: 'MCP Server', Icon: Plug },
   { key: 'plans', label: 'Plans', Icon: ClipboardList },
+  { key: 'review-hosts', label: 'Review hosts', Icon: GitPullRequest },
+  { key: 'plans-folder', label: 'Plans folder', Icon: FolderGit2 },
+  { key: 'recurring', label: 'Recurring playbooks', Icon: Repeat },
+  { key: 'rules', label: 'Architecture rules', Icon: ShieldCheck },
+  { key: 'shared-state', label: 'Shared task state', Icon: Users },
   { key: 'data', label: 'Data', Icon: HardDrive },
   { key: 'devices', label: 'Devices', Icon: Smartphone },
   { key: 'power', label: 'Power', Icon: Zap },
@@ -168,6 +191,7 @@ const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'logs', label: 'Logs', Icon: Terminal },
   { key: 'telemetry', label: 'Telemetry', Icon: Eye },
   { key: 'updates', label: 'Updates', Icon: Download },
+  { key: 'git', label: 'Git', Icon: GitBranch },
   { key: 'about', label: 'About', Icon: Info },
 ];
 
@@ -281,6 +305,11 @@ export function SettingsModal({
             {section === 'plans' && (
               <PlansSection settings={settings} onChange={update} />
             )}
+            {section === 'review-hosts' && <ReviewHostSection />}
+            {section === 'plans-folder' && <PlansFolderSection />}
+            {section === 'recurring' && <RecurringSection />}
+            {section === 'rules' && <ArchitectureRulesSection />}
+            {section === 'shared-state' && <SharedTaskStateSection />}
             {section === 'logs' && <LogsSection />}
             {section === 'sync' && (
               <SyncSection settings={settings} onChange={update} />
@@ -296,6 +325,7 @@ export function SettingsModal({
             )}
             {section === 'telemetry' && <TelemetrySection />}
             {section === 'updates' && <UpdatesSection settings={settings} onChange={update} />}
+            {section === 'git' && <GitSection settings={settings} onChange={update} />}
             {section === 'about' && <AboutSection onJumpToSection={setSection} />}
           </div>
 
@@ -583,6 +613,29 @@ function McpSection({
         </p>
       </Field>
 
+      {/* Carried item 2b: changes that arrive over plain HTTP are tagged
+          "unverified"; a person who wants none of them turns them off. */}
+      <Field label="Local API">
+        <label className="flex items-start gap-2 cursor-pointer" data-testid="local-api-changes">
+          <input
+            id="settings-local-api-changes"
+            type="checkbox"
+            checked={settings.mcp.acceptLocalApiChanges !== false}
+            onChange={(e) => onChange({ mcp: { ...settings.mcp, acceptLocalApiChanges: e.target.checked } })}
+            className="mt-0.5 accent-accent"
+          />
+          <span className="min-w-0">
+            <span className="text-[11px] text-foreground">Accept changes over the local API</span>
+            <span className="block text-[10px] text-foreground-subtle leading-relaxed">
+              Scripts, browser tabs and other tools on this machine can use CodeTrellis&apos;s local API with this
+              launch&apos;s token. Anything they change is marked <strong>unverified</strong>, because the app
+              cannot tell who sent it. Turn this off to refuse their changes; they can still read, and agents
+              connected over MCP and your paired phone are not affected.
+            </span>
+          </span>
+        </label>
+      </Field>
+
       <Field label="Connect an agent">
         {setup?.connector ? (
           <>
@@ -618,6 +671,8 @@ function McpSection({
           onCopy={copy}
         />
         {setup?.connector && <AddToClaudeDesktop />}
+        {setup && <AddToClaudeCode />}
+        {setup && <AddToGeminiCli />}
         {setup?.connector && (
           <details className="mt-2 group">
             <summary className="cursor-pointer text-[10.5px] text-foreground-subtle hover:text-foreground-muted">
@@ -1084,6 +1139,29 @@ function DataSection({
       <p className="text-[10px] text-foreground-subtle">
         Takes effect when CodeTrellis restarts; until then it keeps using the current directory.
       </p>
+
+      <Field label="Keep the record for">
+        <select
+          data-testid="retention-select"
+          value={settings.data.retentionDays === null ? 'all' : String(settings.data.retentionDays)}
+          onChange={(e) => onChange({ data: { ...settings.data, retentionDays: e.target.value === 'all' ? null : Number(e.target.value) as RetentionDays } })}
+          className="bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-accent/40"
+        >
+          <option value="14">14 days</option>
+          <option value="30">30 days</option>
+          <option value="90">90 days</option>
+          <option value="365">A year</option>
+          <option value="all">Everything</option>
+        </select>
+        <p data-testid="retention-words" className="mt-1 text-[10px] text-foreground-subtle leading-relaxed">
+          {settings.data.retentionDays === null
+            ? 'Everything is kept: agent activity and the record, replay snapshots, test runs and log files, and the database grows with them. The device log keeps its last 10,000 entries.'
+            : `Agent activity and the record, replay snapshots, test runs, log files and the device log are kept ${settings.data.retentionDays === 365 ? 'a year' : `${settings.data.retentionDays} days`}, then the oldest go. The record still verifies: where old entries were removed, it keeps the last one's hash.`}
+          {' '}Only you can change this, in this window: shortening it removes evidence, so the change itself is kept in the record.
+        </p>
+      </Field>
+
+      <RecordSection />
     </>
   );
 }
@@ -1804,6 +1882,9 @@ function TelemetrySection() {
           <li>
             <span className="text-foreground">Channel webhooks</span> — only to hosts you have approved in Settings.
           </li>
+          <li>
+            <span className="text-foreground">Review host</span> — only for a project where you turned one on in Settings → Review hosts: its pull requests, checks and reviews are read from that host.
+          </li>
         </ul>
         <p className="mt-1">
           Spell-check dictionaries ship with the app, so none is downloaded from Google as Chromium otherwise would.
@@ -2294,6 +2375,80 @@ function PowerSection({
           </>
         ) : (
           <>Loading current status…</>
+        )}
+      </div>
+    </>
+  );
+}
+
+/**
+ * Settings → Git (Phase 32 E5): keeping remotes current.
+ *
+ * Off by default (owner's decision, 2026-10-02): CodeTrellis reaches a host
+ * only when asked. On, the project open in the window is fetched every
+ * interval (git fetch, then its pull requests through gh), with the person's
+ * own git and gh credentials. Fetch now works either way.
+ */
+function GitSection({
+  settings,
+  onChange,
+}: {
+  settings: AppSettings;
+  onChange: (patch: Partial<AppSettings>) => void;
+}) {
+  const root = useProjectStore((s) => s.root);
+  const { listing, fetching, fetchWords, fetchFailed, load, fetchNow } = useBranchesStore();
+  useEffect(() => { if (root) void load(root); }, [root, load]);
+  const git = settings.git;
+  return (
+    <>
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3" data-testid="git-settings">
+        <div data-testid="git-keep-current">
+          <Toggle
+            checked={git.keepRemotesCurrent}
+            onChange={(v) => onChange({ git: { ...git, keepRemotesCurrent: v } })}
+            label="Keep remotes current"
+            sub="Fetch the project open in this window in the background, then read its pull requests through gh. It uses your own git and gh sign-in, as a terminal would; CodeTrellis sends nothing itself. Off, remote branches are as last fetched, and Fetch now still works."
+          />
+        </div>
+        <Field label="Every">
+          <select
+            value={git.everyMinutes}
+            disabled={!git.keepRemotesCurrent}
+            onChange={(e) => onChange({ git: { ...git, everyMinutes: Number(e.target.value) } })}
+            className="bg-surface border border-border rounded-md px-2 py-1 text-[11.5px] text-foreground disabled:opacity-50"
+            data-testid="git-every"
+          >
+            {FETCH_INTERVAL_CHOICES.map((m) => <option key={m} value={m}>{m} minutes</option>)}
+          </select>
+        </Field>
+        <p className="text-[10px] text-foreground-subtle">
+          Runs <code className="font-mono">git fetch --all --prune</code> and <code className="font-mono">gh pr list</code>.
+          Pull requests need the gh CLI, installed and signed in (<code className="font-mono">gh auth login</code>).
+        </p>
+      </div>
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4" data-testid="git-project">
+        {root && listing ? (
+          <div className="flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] uppercase tracking-wider text-foreground-subtle">This project</div>
+              <div className="text-[12px] text-foreground mt-0.5 truncate" title={root}>{root.split(/[\\/]/).filter(Boolean).pop()}</div>
+              <div className="text-[11px] text-foreground-muted mt-0.5" data-testid="git-last-fetched">{listing.fetch.words}</div>
+              <div className="text-[10.5px] text-foreground-subtle mt-0.5" data-testid="git-pulls-words">{listing.pulls.words}</div>
+              {fetchWords && <div className={`text-[10.5px] mt-1 ${fetchFailed ? 'text-danger' : 'text-foreground-muted'}`}>{fetchWords}</div>}
+            </div>
+            <button
+              onClick={() => { void fetchNow(root); }}
+              disabled={fetching || listing.remotes.length === 0}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] rounded-lg border border-border text-foreground-muted hover:text-foreground disabled:opacity-50"
+              data-testid="git-fetch-now"
+            >
+              <RefreshCw size={12} className={fetching ? 'animate-spin' : ''} />
+              {fetching ? 'Fetching…' : 'Fetch now'}
+            </button>
+          </div>
+        ) : (
+          <div className="text-[11px] text-foreground-subtle">Open a project to see when it was last fetched.</div>
         )}
       </div>
     </>

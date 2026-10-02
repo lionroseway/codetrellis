@@ -253,6 +253,25 @@ test.describe('Plan template picker (M26)', () => {
   });
 });
 
+const AVAILABLE_999 = {
+  status: 'available',
+  lastCheckedAt: Date.now(),
+  platform: 'darwin-arm64',
+  currentVersion: '0.1.14',
+  lastError: null,
+  result: {
+    available: true,
+    latest: '9.9.9',
+    current: '0.1.14',
+    source: 'github',
+    download: {
+      url: 'https://example.invalid/CodeTrellis-9.9.9-arm64.dmg',
+      filename: 'CodeTrellis-9.9.9-arm64.dmg',
+      size: 170_000_000,
+    },
+  },
+};
+
 test.describe('Verified update download (M30)', () => {
   test.setTimeout(90_000);
 
@@ -323,6 +342,87 @@ test.describe('Verified update download (M30)', () => {
     await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText(/%\s·\s.*of/)).toBeVisible({ timeout: 20_000 });
   });
+
+  test('progress still appears when the first polls after pressing Download read idle', async ({ page }) => {
+    // The owner's 0.1.16 → 0.1.17 report: no progress at all. The backend
+    // stayed "idle" while it fetched the signed manifest, and the panel took
+    // the first idle poll as finished and stopped polling. The stub above
+    // flips to "downloading" the instant the POST is issued, which the real
+    // backend never did, so it could not catch this.
+    let started = false;
+    let polls = 0;
+    await page.route('**/api/updates/status', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(AVAILABLE_999) }),
+    );
+    await page.route('**/api/updates/download/status', (route) => {
+      if (started) polls++;
+      const phase = !started || polls <= 3 ? 'idle' : polls <= 5 ? 'preparing' : 'downloading';
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          phase,
+          version: started ? '9.9.9' : null,
+          bytesDownloaded: phase === 'downloading' ? Math.min((polls - 5) * 17_000_000, 170_000_000) : 0,
+          totalBytes: 170_000_000,
+          error: null,
+        }),
+      });
+    });
+    await page.route('**/api/updates/download', () => { started = true; });
+
+    await openApp(page);
+    await page.getByTitle(/^Settings/).click();
+    await page.getByRole('button', { name: 'Updates', exact: true }).click();
+    await expect(page.getByText('v9.9.9 is available')).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: /Download CodeTrellis/ }).click();
+
+    await expect(page.getByText(/signed checksum list/)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible();
+    await expect(page.getByText(/%\s·\s.*of/)).toBeVisible({ timeout: 20_000 });
+  });
+
+  test('a verified download can be saved where the person chooses, and says where it went', async ({ page }) => {
+    // The desktop's save dialog and copy live in the main process; here the
+    // bridge is stubbed so the panel's side of it is what is tested.
+    let saved = false;
+    await page.addInitScript(() => {
+      (window as unknown as { electronAPI: Record<string, unknown> }).electronAPI = {
+        ...((window as unknown as { electronAPI?: Record<string, unknown> }).electronAPI ?? {}),
+        saveUpdateDownload: async () => {
+          (window as unknown as { __savedUpdate: boolean }).__savedUpdate = true;
+          return { ok: true, path: '/Users/sam/Downloads/CodeTrellis-9.9.9-arm64.dmg' };
+        },
+        revealUpdateDownload: async () => '/Users/sam/Downloads/CodeTrellis-9.9.9-arm64.dmg',
+      };
+    });
+    await page.route('**/api/updates/status', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(AVAILABLE_999) }),
+    );
+    await page.route('**/api/updates/download/status', async (route) => {
+      saved = saved || (await page.evaluate(() => (window as unknown as { __savedUpdate?: boolean }).__savedUpdate === true).catch(() => false));
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          phase: 'ready', version: '9.9.9', filename: 'CodeTrellis-9.9.9-arm64.dmg',
+          bytesDownloaded: 170_000_000, totalBytes: 170_000_000,
+          filePath: '/data/updates/CodeTrellis-9.9.9-arm64.dmg', error: null,
+          savedPath: saved ? '/Users/sam/Downloads/CodeTrellis-9.9.9-arm64.dmg' : null,
+        }),
+      });
+    });
+
+    await openApp(page);
+    await page.getByTitle(/^Settings/).click();
+    await page.getByRole('button', { name: 'Updates', exact: true }).click();
+    await expect(page.getByText('v9.9.9 is available')).toBeVisible({ timeout: 15_000 });
+
+    await page.getByRole('button', { name: 'Save to…' }).click();
+    await expect(page.getByText('/Users/sam/Downloads/CodeTrellis-9.9.9-arm64.dmg')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('button', { name: 'Save to…' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Show in folder' })).toBeVisible();
+  });
 });
 
 test.describe('Linked ticket chip (m8)', () => {
@@ -367,7 +467,9 @@ test.describe('Linked ticket chip (m8)', () => {
     );
 
     await page.getByRole('button', { name: 'Plans', exact: true }).first().click();
-    await page.getByText('ct-m8 ticket chip').first().click();
+    // The row's own button: "ct-m8 ticket chip" is also the text of the
+    // "New plan created" toast, which `getByText(...).first()` could click.
+    await page.getByTitle('Click to open the plan workspace').filter({ hasText: 'ct-m8 ticket chip' }).first().click();
 
     const chip = page.getByTitle('Linked tickets and whether they have drifted from this plan');
     await chip.waitFor({ timeout: 20_000 });

@@ -71,7 +71,9 @@ test.describe('planning by hand', () => {
     // lives, and it must be distinguishable from an action — which is
     // the thing that was wrong when pages and actions both counted as
     // "0/0 actions".
-    await page.locator('button:has-text("Page")').first().click();
+    // By exact name: `has-text` matches a substring, and the header's
+    // "0 of 0 tasks done" chip (C2.4a) is a button too.
+    await page.getByRole('button', { name: 'Page', exact: true }).first().click();
     await page.waitForTimeout(800);
 
     // ── a task, for the work ──────────────────────────────────────
@@ -80,13 +82,16 @@ test.describe('planning by hand', () => {
       await newBtn.click();
       await page.waitForTimeout(300);
     }
-    const taskBtn = page.locator('button:has-text("Task")').first();
+    const taskBtn = page.getByRole('button', { name: 'Task', exact: true }).first();
     await taskBtn.click();
-    await page.waitForTimeout(900);
 
-    const items = await listItems(page, planUid!);
-    expect(items.filter((i) => i.kind === 'object').length, 'the page').toBeGreaterThanOrEqual(1);
-    expect(items.filter((i) => i.kind === 'action').length, 'the task').toBeGreaterThanOrEqual(1);
+    // Polled, not slept: a fixed 900ms read the items before the create landed
+    // on a loaded CI runner and found no task (PR #188's Browser suite 2/3).
+    let items: Item[] = [];
+    await expect.poll(async () => {
+      items = await listItems(page, planUid!);
+      return items.filter((i) => i.kind === 'object').length >= 1 && items.filter((i) => i.kind === 'action').length >= 1;
+    }, { message: 'the page and the task the user just added should exist', timeout: 10_000 }).toBe(true);
 
     // ── name the task, the way a person would ─────────────────────
     const action = items.find((i) => i.kind === 'action')!;
@@ -114,13 +119,16 @@ test.describe('planning by hand', () => {
     await expect(firstRow, 'the picker should find a file that exists in the fixture')
       .toBeVisible({ timeout: 8000 });
     await firstRow.click();
-    await page.waitForTimeout(1500);
 
     // The list endpoint returns summaries, which carry no fileSpecs —
-    // the anchor has to be read from the item itself.
-    const anchored = await getItem(page, action.uid);
-    const specs = anchored?.fileSpecs ?? [];
-    expect(specs.length, 'picking a file should anchor the item to it').toBeGreaterThanOrEqual(1);
+    // the anchor has to be read from the item itself. Polled, not slept: a
+    // fixed 1.5s read the item before the anchor's save landed on a loaded
+    // CI runner (PR #253's Browser suite 2/3).
+    let specs: NonNullable<Item['fileSpecs']> = [];
+    await expect.poll(async () => {
+      specs = (await getItem(page, action.uid))?.fileSpecs ?? [];
+      return specs.length;
+    }, { message: 'picking a file should anchor the item to it', timeout: 10_000 }).toBeGreaterThanOrEqual(1);
     const stored = specs[0].path;
     expect(stored, `stored path was "${stored}"`).toContain(TARGET_FILE);
     expect(

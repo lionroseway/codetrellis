@@ -1,14 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X, Maximize2, Minimize2 } from 'lucide-react';
-import { useUiStore } from '../../stores/ui-store';
+import { useUiStore, type PlanPanelTab } from '../../stores/ui-store';
 import { useAgentStore } from '../../stores/agent-store';
 import { usePlanStore } from '../../stores/plan-store';
 import { PlanList } from '../plan/PlanListView';
 import { CommentThread } from '../plan/CommentThread';
 import { ProposedChanges } from '../plan/ProposedChanges';
 import { AgentTurnList, useAgentTurns } from './AgentTurns';
+import { AwarenessTab, useAwarenessFeed } from './AwarenessTab';
+import { ReviewTab } from './ReviewTab';
+import { StackTab } from './StackTab';
+import { useBreakpointsFeed } from './Breakpoints';
+import { TimelineLanes } from './TimelineLanes';
+import { ReplayBar, ReplayStart } from './ReplayBar';
+import { PlayForwardBar, PlayForwardStart } from './PlayForwardBar';
+import { useGraphStore } from '../../stores/graph-store';
+import { turnInPlan } from '../../lib/stack-timeline';
 
-type Tab = 'plans' | 'timeline' | 'changes' | 'proposed' | 'comments';
+type Tab = PlanPanelTab;
 
 /*
  * Phase 29 §4.15 — the flat event renderer that used to live here
@@ -24,7 +33,11 @@ export function PlanPanel() {
   const visible = useUiStore((s) => s.agentPanelVisible);
   const expanded = useUiStore((s) => s.planPanelExpanded);
   const togglePlanPanelExpanded = useUiStore((s) => s.togglePlanPanelExpanded);
-  const [activeTab, setActiveTab] = useState<Tab>('plans');
+  const activeTab = useUiStore((s) => s.planPanelTab);
+  const setActiveTab = useUiStore((s) => s.setPlanPanelTab);
+  // Open overlaps nobody has answered (A1.8): the Awareness tab's number.
+  // The inbox count: signals that need you, and calls waiting at a breakpoint (B4.3).
+  const needsYou = useAwarenessFeed() + useBreakpointsFeed();
 
   const events = useAgentStore((s) => s.events);
   const status = useAgentStore((s) => s.status);
@@ -39,7 +52,17 @@ export function PlanPanel() {
   // Phase 22 wrote that view into `AgentPanel`, which `PlanPanel` had
   // already replaced in this slot, so nothing ever rendered it. See
   // `AgentTurns.tsx`.
-  const turns = useAgentTurns(events);
+  const allTurns = useAgentTurns(events);
+  // Phase 32 B6.4b — one selection: a plan chosen in the Stack tab narrows
+  // the Timeline to its work, until "Show all" lets it go.
+  const stackFocus = useGraphStore((s) => s.stackFocus);
+  const turns = useMemo(() => {
+    if (!stackFocus) return allTurns;
+    const scope = { planUid: stackFocus.planUid, taskUids: new Set(stackFocus.taskUids), sessions: new Set(stackFocus.sessions) };
+    return allTurns.filter((t) => turnInPlan(t, scope));
+  }, [allTurns, stackFocus]);
+  // A turn clicked on the lanes (B2.1): opened and brought into view below.
+  const [focusTurn, setFocusTurn] = useState<{ turnId: string; seq: number } | null>(null);
 
   const fileChanges = events.filter(
     (e) => e.type === 'file_changed' && (e.payload.action === 'write' || e.payload.action === 'edit')
@@ -49,15 +72,22 @@ export function PlanPanel() {
   // tab (which depends on it), bounce back to Plans.
   useEffect(() => {
     if (activeTab === 'proposed' && !activePlan) setActiveTab('plans');
-  }, [activeTab, activePlan]);
+  }, [activeTab, activePlan, setActiveTab]);
 
   if (!visible) return null;
 
   const tabs: { key: Tab; label: string; count?: number; disabled?: boolean }[] = [
     { key: 'plans', label: 'Plans' },
+    // Every plan under way at once (B6.4).
+    { key: 'stack', label: 'Stack' },
     // Counts turns, not events — the number on the tab has to be the
     // number of rows in the body.
     { key: 'timeline', label: 'Timeline', count: turns.length || undefined },
+    // What overlaps between parallel lines of work (A1.8). The number is what
+    // still needs you, not every signal: answered ones are listed below it.
+    { key: 'awareness', label: 'Awareness', count: needsYou || undefined },
+    // What is in review and a suggested merge order (A5.5).
+    { key: 'review', label: 'Review' },
     { key: 'changes', label: 'Changes', count: fileChanges.length || undefined },
     // Proposed Changes (Phase 12 §B) requires an active plan — task
     // fields are the source of truth.
@@ -117,6 +147,8 @@ export function PlanPanel() {
         </button>
       </div>
 
+      <ReplayBar />
+      <PlayForwardBar />
       <div className="flex-1 overflow-y-auto p-2">
         {activeTab === 'plans' && (
           <PlanList />
@@ -124,9 +156,43 @@ export function PlanPanel() {
 
         {activeTab === 'timeline' && (
           <div className="text-[11px]">
-            <AgentTurnList turns={turns} status={status} detectedPlan={detectedPlan} />
+            {/* Pinned while the Timeline scrolls: a filter nobody can see reads as missing work. */}
+            {stackFocus && (
+              <div className="sticky -top-2 z-10 bg-surface-solid pt-1.5 pb-1">
+                <div data-testid="timeline-following" className="flex items-center gap-2 mx-2 px-2 py-1 rounded border border-accent/30 bg-accent/[0.05] text-foreground-muted">
+                  <span>
+                    Showing <span className="text-foreground font-medium">{stackFocus.label}</span>&rsquo;s work: {turns.length} of {allTurns.length} {allTurns.length === 1 ? 'turn' : 'turns'}
+                  </span>
+                  <span className="flex-1" />
+                  <button
+                    data-testid="timeline-show-all"
+                    className="text-accent hover:underline"
+                    onClick={() => useGraphStore.getState().setStackFocus(null)}
+                  >
+                    Show all
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <ReplayStart />
+              <PlayForwardStart where="timeline" />
+            </div>
+            <TimelineLanes
+              turns={turns}
+              onSelectTurn={(turnId) => setFocusTurn((f) => ({ turnId, seq: (f?.seq ?? 0) + 1 }))}
+              onSelectSignal={() => setActiveTab('awareness')}
+              onSelectHit={() => setActiveTab('awareness')}
+            />
+            <AgentTurnList turns={turns} status={status} detectedPlan={detectedPlan} focus={focusTurn} />
           </div>
         )}
+
+        {activeTab === 'awareness' && <AwarenessTab />}
+
+        {activeTab === 'stack' && <StackTab />}
+
+        {activeTab === 'review' && <ReviewTab />}
 
         {activeTab === 'changes' && (
           <div className="text-[11px]">

@@ -1,3 +1,4 @@
+import * as _lazy___plan_file_service from './plan-file-service';
 import { randomUUID } from 'node:crypto';
 import { getDb } from './database';
 import { markDirty } from './persistence';
@@ -113,7 +114,7 @@ export function getPlanExternalRefs(planUid: string): PlanExternalRef[] {
  * that differ there may well be two different things, and collapsing
  * them would lose a ref rather than deduplicate one.
  */
-function sameUrl(a: string, b: string): boolean {
+export function sameUrl(a: string, b: string): boolean {
   const norm = (u: string): string => {
     try {
       const p = new URL(u);
@@ -160,6 +161,11 @@ export function findPlanByExternalKey(key: string): string | null {
   }
 }
 
+/** A plan's tickets ride in its `plan.yaml` (Phase 32 C2.5a): a change schedules its write-through. */
+function writePlanThrough(planUid: string): void {
+  try { _lazy___plan_file_service.scheduleWriteThrough(planUid); } catch { /* auto-sync not wired */ }
+}
+
 /**
  * Attach a ticket to a plan. Idempotent on `(plan, key)` so re-importing
  * an epic updates rather than duplicating.
@@ -204,6 +210,7 @@ export function setPlanExternalRef(input: {
       existing.uid,
     ]);
     markDirty();
+    writePlanThrough(input.planUid);
     return { ...existing, url: input.url, title, kind };
   }
 
@@ -216,6 +223,7 @@ export function setPlanExternalRef(input: {
     [uid, input.planUid, kind, input.url, title, key, author, authorType, now],
   );
   markDirty();
+  writePlanThrough(input.planUid);
   return {
     uid, planUid: input.planUid, kind, url: input.url, title,
     externalKey: key, author, authorType, createdAt: now,

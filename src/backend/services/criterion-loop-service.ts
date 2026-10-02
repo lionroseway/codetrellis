@@ -18,6 +18,8 @@
  * needs the plan review, and the review reads criteria.
  */
 
+import { ingestTestReport } from './tests/test-results';
+import { recordCheckRun } from './agent-event-log';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -34,6 +36,7 @@ import {
 import { runChecks, type CheckContext, type EvidenceFact } from './criterion-checks';
 import { getItem, listAllItems } from './plan-item-service';
 import { reviewPlan } from './plan-review-service';
+import { getEffectiveSensorConfig } from './project-config-service';
 import { resolveWithin } from './confined-fs';
 import { formatReference } from '../../shared/lib/references';
 import { postCriterionNotice } from './sensor-bridge-service';
@@ -108,8 +111,12 @@ function lastTargetChangeAt(item: PlanItem, root: string | null): number | null 
   return newest;
 }
 
-/** One review per plan per run: a `code` criterion reads its item's verdict. */
-type CodeVerdicts = Map<string, NonNullable<CheckContext['code']>>;
+/**
+ * One review per plan per run: a `code` criterion reads its item's verdict,
+ * and, where the project holds sign-off on them (A5.3), the open high
+ * overlaps the review lists under "Other work in flight".
+ */
+type CodeVerdicts = Map<string, NonNullable<CheckContext['code']>> & { openHighSignals?: CheckContext['openHighSignals'] };
 
 function codeVerdicts(planUid: string): CodeVerdicts | { unavailable: string } {
   const projectPath = rows(`SELECT project_path FROM plans WHERE uid = ?`, [planUid])[0]?.[0];
@@ -117,7 +124,13 @@ function codeVerdicts(planUid: string): CodeVerdicts | { unavailable: string } {
   try {
     const r = reviewPlan({ planUid, projectPath });
     if (!r.ok) return { unavailable: r.error };
-    return new Map(r.review.items.map((i) => [i.uid, { verdict: i.verdict, missing: i.missing }]));
+    const verdicts: CodeVerdicts = new Map(r.review.items.map((i) => [i.uid, { verdict: i.verdict, missing: i.missing }]));
+    if (getEffectiveSensorConfig(projectPath).awareness.holdSignOffOnHighSignals) {
+      verdicts.openHighSignals = (r.review.otherWork?.entries ?? [])
+        .filter((e) => e.outcome === 'open' && e.severity === 'high')
+        .map((e) => ({ heading: e.heading, words: [...e.sides.map((s) => s.words), e.merge].filter(Boolean).join(' ') }));
+    }
+    return verdicts;
   } catch (err) {
     return { unavailable: (err as Error).message };
   }
@@ -146,11 +159,13 @@ function check(
 ): CriterionCheck {
   const root = rootOf(item.uid);
   let code: CheckContext['code'];
+  let openHighSignals: CheckContext['openHighSignals'];
   if (criterion.kind === 'code') {
     const v = verdicts();
     code = 'unavailable' in v && typeof v.unavailable === 'string'
       ? { unavailable: v.unavailable }
       : (v as CodeVerdicts).get(item.uid) ?? { unavailable: 'the item is not in the plan review' };
+    if (v instanceof Map) openHighSignals = v.openHighSignals;
   }
   const startedAt = itemStartedAt(item);
   return runChecks({
@@ -162,6 +177,11 @@ function check(
     itemArtefacts: listArtefacts(item.uid),
     materialsRead: criterion.kind === 'citation' ? materialsReadSince(item.uid, startedAt) : undefined,
     code,
+    openHighSignals,
+    // B8.1: a JUnit report read by a test check keeps each test's result.
+    onTestReport: criterion.kind === 'test' && root
+      ? (a) => { ingestTestReport(root, a.path, { author: a.recordedBy, authorType: a.recordedByType }); }
+      : undefined,
   });
 }
 
@@ -194,6 +214,23 @@ export async function checkCriterion(uid: string, offered?: OfferedEvidence[]): 
   await refreshArtefactHashes(before.itemUid).catch(() => []);
   const criterion = criteria.getCriterion(uid)!;
   return check(criterion, item, offered, once(() => codeVerdicts(item.planUid)));
+}
+
+/**
+ * What stops an agent's "done" (B8.4a, JOURNEYS J1): each test criterion on
+ * the item whose report ran before the item's files last changed, said as
+ * the check says it. Empty when nothing does. A person marking it done is
+ * their call and is not asked this.
+ */
+export async function testsOlderThanCode(itemUid: string): Promise<Array<{ criterionUid: string; text: string; why: string }>> {
+  const out: Array<{ criterionUid: string; text: string; why: string }> = [];
+  for (const c of criteria.listCriteria(itemUid)) {
+    if (c.kind !== 'test') continue;
+    const r = await checkCriterion(c.uid).catch(() => null);
+    const older = r?.findings.find((f) => f.status === 'fail' && f.reason === 'tests_older');
+    if (older) out.push({ criterionUid: c.uid, text: c.text, why: older.message });
+  }
+  return out;
 }
 
 /**
@@ -438,5 +475,9 @@ export async function runCheckRun(input: {
     ],
   );
   markDirty();
+  // ✓ / ✗ on the Timeline lanes of the workstreams its items are worked in (B2.2).
+  if (outcomes.length) {
+    recordCheckRun({ runUid: uid, planUid: input.planUid, trigger: input.trigger, by: input.by, byType: input.byType, outcomes });
+  }
   return { uid, planUid: input.planUid, trigger: input.trigger, by: input.by, byType: input.byType, startedAt, finishedAt, outcomes, sinceLast };
 }

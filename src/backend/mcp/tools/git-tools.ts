@@ -18,8 +18,50 @@ import { commitManifestChanges, type AgentAttribution } from '../../services/git
 import { getTeamActivity, getPlanCommitHistory, searchPlanHistory } from '../../services/git-activity-service';
 import { getPlanAtCommit, diffPlanBetweenCommits } from '../../services/plan-history-service';
 import { detectManifestConflicts, resolveFileConflict, resolveFileConflictBySide } from '../../services/plan-conflict-service';
+import { lineHistory, lineWords, LineHistoryError } from '../../services/line-history';
+import { worktreesForCompare } from '../../services/git-refs';
+import { isProjectRelativePath, recordedKnowledge } from '../../services/commit-attribution';
 
 export function register(server: McpServer, deps: ToolDeps): void {
+  // --- line_history (Phase 32 E4) ---
+
+  server.registerTool(
+    'line_history',
+    {
+      description:
+        'Who wrote a line (or lines) of a file and why: the commit, its git author and time, and what CodeTrellis knows ' +
+        'of who made it and how it knows (from the commit message, seen when it landed in a recorded session, or by ' +
+        'timing in this checkout), with the session, task and plan where known. Lines not yet committed say so. ' +
+        'Read only; with no line, every run of lines from one commit.',
+      inputSchema: {
+        path: z.string().describe('The file, relative to the project.'),
+        line: z.number().int().positive().optional().describe('The line (1-based). Omit for the whole file.'),
+        end_line: z.number().int().positive().optional().describe('The last line of a range, with line.'),
+        at: z.string().optional().describe('Which side: live (default), commit:<ref>, or workstream:<id> from list_workstreams.'),
+        project_path: z.string().optional().describe('An opened project. Defaults to the active project.'),
+      },
+    },
+    async ({ path: rel, line, end_line, at, project_path }) => {
+      const projectRoot = project_path ?? deps.getActiveProjectPath();
+      if (!projectRoot) return { isError: true, content: [{ type: 'text' as const, text: 'No project is open.' }] };
+      if (!isProjectRelativePath(rel)) return { isError: true, content: [{ type: 'text' as const, text: 'path must be relative to the project.' }] };
+      try {
+        const h = lineHistory(projectRoot, at ?? 'live', rel, worktreesForCompare(projectRoot), recordedKnowledge(projectRoot));
+        const from = line ?? 1;
+        const to = line ? Math.max(end_line ?? line, line) : h.lineCount;
+        const said = h.hunks.filter((x) => x.end >= from && x.start <= to).map((x) => lineWords(h, Math.max(x.start, from)));
+        const words = line ? said.join('\n') : `${h.path}: ${h.hunks.length} run${h.hunks.length === 1 ? '' : 's'} of lines.\n${said.join('\n')}`;
+        return {
+          _meta: { summary: said[0] ?? `${h.path} has no lines.` },
+          content: [{ type: 'text' as const, text: `${words}\n\n$ ${h.command}` }],
+        };
+      } catch (err) {
+        if (err instanceof LineHistoryError) return { isError: true, content: [{ type: 'text' as const, text: err.message }] };
+        throw err;
+      }
+    },
+  );
+
   // --- commit_manifest_changes ---
 
   server.registerTool(

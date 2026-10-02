@@ -36,6 +36,9 @@ let capNoticeWritten = false;
  * bounded amount of disk, not the disk.
  */
 export const LOG_RETENTION_DAYS = 14;
+/** The person's window (B10.2), set once settings load; null keeps every log file. */
+let logRetentionDays: number | null = LOG_RETENTION_DAYS;
+export function setLogRetention(days: number | null): void { logRetentionDays = days; }
 export const LOG_DAILY_CAP_BYTES = 50 * 1024 * 1024;
 
 export function installFileLogger(): void {
@@ -168,7 +171,7 @@ function rotateIfNeeded(): void {
   currentLogPath = targetPath;
   try { currentBytes = fs.statSync(targetPath).size; } catch { currentBytes = 0; }
   capNoticeWritten = false;
-  pruneOldLogs(logDir(), new Date());
+  if (logRetentionDays !== null) pruneOldLogs(logDir(), new Date(), logRetentionDays);
 }
 
 /**

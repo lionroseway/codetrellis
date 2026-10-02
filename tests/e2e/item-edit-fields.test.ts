@@ -62,7 +62,8 @@ test.describe.serial('PUT /api/items/:uid saves what the editor sends', () => {
     expect(res.ok).toBe(true);
 
     const item = await readBack();
-    expect(item.skills).toEqual([{ name: 'sql-review' }]);
+    // Skills are stored normalised (Phase 32 C1.1): an absent source is a skill, an absent required is false.
+    expect(item.skills).toEqual([{ name: 'sql-review', source: 'skill', required: false }]);
     expect(item.skillsMode).toBe('replace');
     expect(item.claimPolicy).toEqual({ allowedAgents: ['claude-code'] });
     expect(item.claimPolicyMode).toBe('replace');

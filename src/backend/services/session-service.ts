@@ -1,13 +1,31 @@
 import { getDb } from './database';
 import { markDirty } from './persistence';
 import type { AgentSessionInfo, AgentCapability } from '../../shared/types';
+import { clearIntent } from './intent-service';
+import { adoptSessionEvents } from './agent-event-log';
 
+/**
+ * Register a session, or update it in place.
+ *
+ * `INSERT OR REPLACE` deleted the row and wrote a new one, so an agent calling
+ * register_session after connecting (to say what it is) lost the plan it had
+ * set active and its terminal link (Phase 32 bug 2). Now what the call names
+ * is updated and the rest kept: the active plan always, the model, terminal
+ * and capabilities unless given, and when it first connected.
+ */
 export function registerSession(sessionId: string, agentType: string, model?: string, capabilities?: AgentCapability[], hostTerminalId?: string): void {
   const now = Date.now();
   getDb().run(
-    `INSERT OR REPLACE INTO agent_sessions (session_id, agent_type, model, capabilities, host_terminal_id, connected_at, last_seen, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
-    [sessionId, agentType, model || null, JSON.stringify(capabilities ?? []), hostTerminalId || null, now, now]
+    `INSERT INTO agent_sessions (session_id, agent_type, model, capabilities, host_terminal_id, connected_at, last_seen, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'active')
+     ON CONFLICT(session_id) DO UPDATE SET
+       agent_type = excluded.agent_type,
+       model = COALESCE(excluded.model, agent_sessions.model),
+       capabilities = CASE WHEN ? THEN excluded.capabilities ELSE agent_sessions.capabilities END,
+       host_terminal_id = COALESCE(excluded.host_terminal_id, agent_sessions.host_terminal_id),
+       last_seen = excluded.last_seen,
+       status = 'active'`,
+    [sessionId, agentType, model || null, JSON.stringify(capabilities ?? []), hostTerminalId || null, now, now, capabilities ? 1 : 0]
   );
   markDirty();
 }
@@ -57,7 +75,8 @@ export function heartbeat(sessionId: string): void {
 
 export function getActiveSessions(): AgentSessionInfo[] {
   const result = getDb().exec(
-    `SELECT session_id, agent_type, model, active_plan_uid, connected_at, last_seen, status, capabilities
+    `SELECT session_id, agent_type, model, active_plan_uid, connected_at, last_seen, status, capabilities,
+            workstream_root, host_terminal_id, brief_item_uid
      FROM agent_sessions WHERE status = 'active' ORDER BY connected_at DESC`
   );
   if (!result[0]) return [];
@@ -66,10 +85,45 @@ export function getActiveSessions(): AgentSessionInfo[] {
     sessionId: r[0], agentType: r[1], model: r[2], activePlanUid: r[3],
     connectedAt: r[4], lastSeen: r[5], status: r[6] as 'active' | 'inactive',
     capabilities: (() => { try { return JSON.parse(r[7] as string ?? '[]'); } catch { return []; } })(),
+    workstreamRoot: (r[8] as string | null) ?? null,
+    hostTerminalId: (r[9] as string | null) ?? null,
+    briefItemUid: (r[10] as string | null) ?? null,
   }));
 }
 
+/**
+ * Record the task a session works on (Phase 32 A6.1): the item it called
+ * `get_brief` on, the latest winning. Only ever the calling session's own
+ * id, from the MCP transport; the item was found before this is called.
+ */
+export function bindBrief(sessionId: string, itemUid: string, now = Date.now()): void {
+  getDb().run(
+    'UPDATE agent_sessions SET brief_item_uid = ?, brief_bound_at = ? WHERE session_id = ?',
+    [itemUid, now, sessionId],
+  );
+  markDirty();
+}
+
+/**
+ * Record which workstream a session works in, and its terminal (Phase 32
+ * A1.1). The caller has already validated both — `workstream-binding` for the
+ * root, the terminal service for the terminal — so this only writes. A null
+ * root unbinds; a null terminal leaves the one it had.
+ */
+export function bindSession(sessionId: string, workstreamRoot: string | null, hostTerminalId?: string | null): void {
+  getDb().run(
+    `UPDATE agent_sessions SET workstream_root = ?, host_terminal_id = COALESCE(?, host_terminal_id) WHERE session_id = ?`,
+    [workstreamRoot, hostTerminalId ?? null, sessionId],
+  );
+  // Its first calls may have been logged before this binding landed (MCP
+  // roots are asked for after connect): they belong here too (B1.1).
+  if (workstreamRoot) adoptSessionEvents(sessionId, workstreamRoot);
+  markDirty();
+}
+
 export function disconnectSession(sessionId: string): void {
+  // A declared intent lasts as long as its session (A2.4).
+  clearIntent(sessionId);
   getDb().run(`UPDATE agent_sessions SET status = 'inactive', last_seen = ? WHERE session_id = ?`, [Date.now(), sessionId]);
   markDirty();
 }

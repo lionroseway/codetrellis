@@ -104,10 +104,28 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
     ...process.env,
     CODETRELLIS_OTA_URL: NOWHERE,
     CODETRELLIS_GITHUB_API: NOWHERE,
+    // The review hosts (Phase 32 C2.3): a test that turns one on points it at its stand-in.
+    CODETRELLIS_GITLAB_API: NOWHERE,
+    CODETRELLIS_BITBUCKET_API: NOWHERE,
+    // Phase 32 C2.5b: approvals are not signed with the machine's own git key,
+    // which may sit behind an agent that prompts; the signing spec turns it on.
+    CODETRELLIS_SIGN_APPROVALS: '0',
+    // Nor records with git's key: they are signed with the device's key (C3.3).
+    CODETRELLIS_GIT_SIGN_RECORDS: '0',
+    // No machine's own OneDrive or SharePoint folders (C3.4b): a test names its own.
+    CODETRELLIS_CLOUD_ROOTS: '[]',
+    // A recurring run's agent (C4.3b) is `echo`, never the machine's own claude or codex.
+    CODETRELLIS_RUN_AGENT_COMMAND: 'echo',
     // The harness has no app window, and granting is otherwise the app
     // window's alone (grant-guard.ts). A test of that rule turns this off.
     CODETRELLIS_ALLOW_HTTP_GRANTS: '1',
     CODETRELLIS_DATA_DIR: opts.dataDir,
+    // Claude Code's session records. The backend follows every live Claude
+    // session under a folder it trusts, and left alone it reads the machine's
+    // own ~/.claude — whatever sessions the person running the suite has open
+    // (Phase 32 A1.2). An empty folder per backend; a test of the watcher
+    // plants sessions in its own.
+    CODETRELLIS_CLAUDE_DIR: path.join(opts.dataDir, 'claude-home'),
     CODETRELLIS_BACKEND_PORT: String(backendPort),
     CODETRELLIS_MCP_PORT: String(mcpPort),
     // Every local transport requires a capability token (Phase 19 Gate 1.1).
@@ -184,6 +202,17 @@ export async function startBackend(opts: StartBackendOptions): Promise<RunningBa
   }
 
   let stopped = false;
+  // A backend that dies mid-suite left nothing behind but the next request's
+  // ECONNREFUSED (Phase 32 C3.5's CI run): say how it ended, and what it
+  // last wrote, where the CI log shows it.
+  child.once('exit', (code, signal) => {
+    if (stopped) return;
+    const tail = stderrTail.join('').slice(-4000);
+    console.error(
+      `[harness] backend on :${backendPort} exited unexpectedly (code ${code}, signal ${signal})` +
+        (tail ? `\n--- last stderr ---\n${tail}` : '\n(no stderr)'),
+    );
+  });
   const stop = async () => {
     if (stopped) return;
     stopped = true;

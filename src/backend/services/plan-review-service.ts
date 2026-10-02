@@ -7,6 +7,8 @@ import { getBudgetReport } from './budget-service';
 import { listCriteria } from './criteria-service';
 import { rowsForCriterion, type SignoffRow } from './signoff-rows';
 import type { PlanItem } from '../../shared/types';
+import { otherWorkFor } from './review-other-work';
+import { otherWorkMarkdown, type OtherWorkInFlight } from '../../shared/lib/other-work';
 
 /**
  * Review a change against the plan that asked for it — Phase 25.
@@ -81,6 +83,12 @@ export interface PlanReview {
   unplannedEdges: Array<{ source: string; target: string }>;
   /** Edges an item planned to remove that are still there. */
   unremovedEdges: Array<{ source: string; target: string }>;
+  /**
+   * The other lines of work around the one under review (Phase 32 A5.2): the
+   * overlaps that name it and what happened to each. Null when awareness has
+   * nothing to say for this project.
+   */
+  otherWork: OtherWorkInFlight | null;
   summary: {
     itemsLanded: number;
     itemsPartial: number;
@@ -131,10 +139,9 @@ function edgeKey(source: string, target: string): string {
  * Review a plan against the change between two points.
  *
  * Defaults to baseline → live, which is "what has happened since I
- * pinned the baseline". Any two comparands work — including a commit
- * range, though a commit contributes files only (see
- * `snapshot-compare-service`), so edge findings need a checkpoint on
- * both sides.
+ * pinned the baseline". Any two comparands work, including a commit
+ * range: a commit side carries its dependency edges since Phase 32 A5.1
+ * (`commit-edges.ts`), so edge findings come back for branch reviews.
  */
 /**
  * What to compare against when the caller does not say.
@@ -258,6 +265,7 @@ export function reviewPlan(params: {
       unclaimedChanges,
       unplannedEdges,
       unremovedEdges,
+      otherWork: otherWorkFor(params.projectPath, { after: params.after, itemWorkstreams: items.map((i) => i.workstream) }),
       summary: {
         itemsLanded: reviewed.filter((i) => i.verdict === 'landed').length,
         itemsPartial: reviewed.filter((i) => i.verdict === 'partial').length,
@@ -345,6 +353,8 @@ export function renderReviewMarkdown(review: PlanReview, planTitle?: string): st
     }
     lines.push('');
   }
+
+  if (review.otherWork) lines.push(otherWorkMarkdown(review.otherWork));
 
   if (review.unremovedEdges.length > 0) {
     lines.push('### Dependencies the plan said to remove, still present');

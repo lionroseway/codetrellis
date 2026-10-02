@@ -21,6 +21,7 @@ import {
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { rpc } from '../lib/rpc';
+import { fetchPlanStatus, type PhonePlanStatus, type StatusLine } from '../lib/plan-status';
 import Markdown from '../components/Markdown';
 import MarkdownBody from '../components/MarkdownBody';
 import CommentComposer from '../components/CommentComposer';
@@ -202,6 +203,26 @@ function relTime(ts?: number | null): string {
 
 // --- Component ---------------------------------------------------------------
 
+/**
+ * An agent's change, or one over the desktop's local API, whose name could
+ * not be checked (carried 2b). No tooltip on a phone, so the words say it.
+ */
+function byWords(byType: string): string {
+  return byType === 'unverified' ? '(local API, unverified)' : '(agent)';
+}
+
+/** One line of the plan's status: the item, its state, and where that came from. */
+function StatusRow({ line, glyph }: { line: StatusLine; glyph: string }) {
+  return (
+    <View style={styles.statusRow} testID="plan-status-line">
+      <Text style={styles.statusRowText}>
+        {glyph} <Text style={styles.statusRowTitle}>{line.title}</Text> — {line.words}
+      </Text>
+      <Text style={line.source === 'plan' ? styles.statusSourcePlan : styles.statusSourceGit}>{line.from}</Text>
+    </View>
+  );
+}
+
 export default function PlanDetailScreen() {
   const { uid } = useLocalSearchParams<{ uid: string }>();
   const router = useRouter();
@@ -216,6 +237,7 @@ export default function PlanDetailScreen() {
 
   const [budget, setBudget] = useState<PhoneBudget | null>(null);
   const [freeze, setFreeze] = useState<PhoneFreeze | null>(null);
+  const [planStatus, setPlanStatus] = useState<PhonePlanStatus | null>(null);
 
   const fetchPlan = useCallback(async () => {
     if (!uid) return;
@@ -238,6 +260,13 @@ export default function PlanDetailScreen() {
       setFreeze(await rpc<PhoneFreeze>('freeze.get', { planUid: uid }));
     } catch {
       setFreeze(null);
+    }
+    // And the plan's status, read on the desktop from git, a review host and
+    // the plan itself (Phase 32 C2.4).
+    try {
+      setPlanStatus(await fetchPlanStatus(uid));
+    } catch {
+      setPlanStatus(null);
     }
   }, [uid]);
 
@@ -382,8 +411,10 @@ export default function PlanDetailScreen() {
   const documents = data.documents ?? [];
   const externalRefs = data.externalRefs ?? [];
   const comments = data.comments ?? [];
-  const totalItems = items.length;
-  const doneItems = items.filter((i) => i.status === 'done' || i.status === 'completed').length;
+  // The status's count where the desktop sends one (C2.4): it counts a task
+  // done when git shows its branch merged too, so the header and the card agree.
+  const totalItems = planStatus?.progress.total ?? items.length;
+  const doneItems = planStatus?.progress.done ?? items.filter((i) => i.status === 'done' || i.status === 'completed').length;
   const inProgress = items.filter((i) => i.status === 'in_progress' || i.status === 'assigned').length;
   const pct = totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : 0;
   const pendingDeviations = deviations.filter((d) => d.resolution === 'pending');
@@ -541,6 +572,25 @@ export default function PlanDetailScreen() {
         )}
       </View>
 
+      {/* Status: read from git, a review host and the plan itself, each line saying which (Phase 32 C2.4) */}
+      {planStatus && (
+        <View style={styles.section} testID="plan-status">
+          <Text style={styles.sectionTitle}>STATUS</Text>
+          <View style={styles.budgetCard}>
+            <Text style={styles.budgetLine} testID="plan-status-progress">{planStatus.progress.words}</Text>
+            <View style={styles.statusBar}>
+              <View style={[styles.statusBarFill, { width: `${planStatus.progress.total ? Math.round((planStatus.progress.done / planStatus.progress.total) * 100) : 0}%` }]} />
+            </View>
+          </View>
+          {planStatus.waiting.length > 0 && <Text style={styles.statusHeading}>Waiting on someone</Text>}
+          {planStatus.waiting.map((l) => <StatusRow key={l.itemUid} line={l} glyph="⏸" />)}
+          {planStatus.inProgress.length > 0 && <Text style={styles.statusHeading}>In progress</Text>}
+          {planStatus.inProgress.map((l) => <StatusRow key={l.itemUid} line={l} glyph="▶" />)}
+          <Text style={styles.statusHeading}>Lineage</Text>
+          {planStatus.lineage.map((l) => <Text key={l} style={styles.statusLineage} testID="plan-status-lineage">{l}</Text>)}
+        </View>
+      )}
+
       {/* Freeze on this plan's project, and an agent's changes to it to review */}
       {freeze && (freeze.active || freeze.flaggedChanges.length > 0) && (
         <View style={styles.section} testID="plan-freeze">
@@ -561,7 +611,7 @@ export default function PlanDetailScreen() {
           {freeze.flaggedChanges.map((c) => (
             <View key={c.id} style={styles.budgetFlag} testID="plan-freeze-flag">
               <Text style={styles.budgetFlagText}>
-                <Text style={styles.budgetFlagWho}>{c.by}</Text> (agent) {c.words}
+                <Text style={styles.budgetFlagWho}>{c.by}</Text> {byWords(c.byType)} {c.words}
               </Text>
               <View style={styles.budgetFlagFooter}>
                 <Text style={styles.budgetSub}>
@@ -597,7 +647,7 @@ export default function PlanDetailScreen() {
           {budget.flaggedChanges.map((c) => (
             <View key={c.id} style={styles.budgetFlag} testID="plan-budget-flag">
               <Text style={styles.budgetFlagText}>
-                <Text style={styles.budgetFlagWho}>{c.by}</Text> (agent) {c.words}
+                <Text style={styles.budgetFlagWho}>{c.by}</Text> {byWords(c.byType)} {c.words}
               </Text>
               <View style={styles.budgetFlagFooter}>
                 <Text style={styles.budgetSub}>
@@ -1046,6 +1096,17 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 10,
   },
+
+  // Status (C2.4)
+  statusBar: { height: 6, borderRadius: 3, backgroundColor: '#27272a', marginTop: 8, overflow: 'hidden' },
+  statusBarFill: { height: 6, borderRadius: 3, backgroundColor: '#6366f1' },
+  statusHeading: { color: '#a1a1aa', fontSize: 12, fontWeight: '600', marginTop: 10, marginBottom: 6 },
+  statusRow: { backgroundColor: '#18181b', borderRadius: 10, padding: 10, marginBottom: 6, borderWidth: 1, borderColor: '#27272a' },
+  statusRowText: { color: '#d4d4d8', fontSize: 13 },
+  statusRowTitle: { color: '#f4f4f5', fontWeight: '600' },
+  statusSourcePlan: { color: '#5eead4', fontSize: 11, marginTop: 4 },
+  statusSourceGit: { color: '#7dd3fc', fontSize: 11, marginTop: 4 },
+  statusLineage: { color: '#a1a1aa', fontSize: 12, fontFamily: 'monospace' },
 
   // Budget card
   budgetCard: {

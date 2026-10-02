@@ -1070,6 +1070,12 @@
   "rpc:freeze.acknowledge": {
     "behaviour": "✓ 0.4k: unflags in the person's name, audited, desktop told; bad id refused (freeze-flags)"
   },
+  "rpc:breakpoint.waiting": {
+    "behaviour": "✓ B4.4: held calls oldest first in the desktop's words, pauses and breaches, with the three answers worded for each (phone-breakpoints)"
+  },
+  "rpc:breakpoint.answer": {
+    "behaviour": "✓ B4.4: continue, steer (needs a note) or stop in the person's name; confirmed pairing only, audited, desktop told; the first answer stands (phone-breakpoints)"
+  },
   "rest:GET /api/settings": {
     "behaviour": "✓ 0.4k: every section; what was saved comes back after a restart (settings-surface)"
   },
@@ -1111,6 +1117,10 @@
   "settings:plans": {
     "behaviour": "✓ 0.4k: default visibility saves (e2e sections-save, e2e plans)",
     "ux": "✓ 0.5a — stale \"coming\" note and raw markdown link fixed"
+  },
+  "settings:review-hosts": {
+    "behaviour": "✓ C2.2a: off until turned on per project; turning on and saving a token only from the app window; token never echoed, kept in the OS keychain or memory only; the switch no longer applies when the remote names another repository; nothing requested (harness review-host-switch)",
+    "ux": "✓ C2.2a: names the host and what it would read before anything is; says where the token is kept (e2e review-host-settings)"
   },
   "settings:devices": {
     "behaviour": "✓ 0.4k: share-audio saves (e2e sections-save); per-device grants incl. capture (phone-grants, peer-device-access)",

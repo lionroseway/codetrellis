@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Zap, ArrowRight, Lock } from 'lucide-react';
+import { revealPlanItem } from '../../../lib/open-plan-item';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import type { PlanItem } from '@shared/types';
 
@@ -23,19 +24,24 @@ import type { PlanItem } from '@shared/types';
  */
 
 /**
- * Actions that are pending but waiting on something unfinished. Mirrors
- * the server's notion of "done" — a skipped dependency does not hold
- * anything up, because nobody is going to come back and do it.
+ * Phase 32 B6.1 — what the server says each held task waits on. The count
+ * used to be worked out here from the one plan the window had loaded, so a
+ * dependency in another plan was never found and counted as blocked for
+ * ever, even after it was done there (bug 11).
  */
-export function countBlocked(items: PlanItem[]): number {
-  const settled = new Set(
-    items.filter((i) => i.status === 'done' || i.status === 'skipped').map((i) => i.uid),
-  );
-  return items.filter((i) =>
-    i.kind === 'action'
-    && i.status === 'pending'
-    && (i.dependencies ?? []).some((d) => !settled.has(d)),
-  ).length;
+export interface DependencyWait {
+  uid: string;
+  problem: 'unfinished' | 'missing' | 'page';
+  title: string | null;
+  planUid: string | null;
+  planTitle: string | null;
+  words: string;
+}
+export interface ItemWait {
+  itemUid: string;
+  itemTitle: string;
+  waits: DependencyWait[];
+  sentence: string;
 }
 
 /**
@@ -58,9 +64,15 @@ export function NextUpStrip({ planUid }: { planUid: string }) {
 
   const items = useMemo(() => Object.values(itemsByUid), [itemsByUid]);
 
+  const [waits, setWaits] = useState<ItemWait[]>([]);
+
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/plans/${planUid}/next-task`);
+      const [res, waitsRes] = await Promise.all([
+        fetch(`/api/plans/${planUid}/next-task`),
+        fetch(`/api/plans/${planUid}/waits`),
+      ]);
+      if (waitsRes.ok) setWaits(((await waitsRes.json()) as { waits: ItemWait[] }).waits ?? []);
       if (!res.ok) return;
       const data = await res.json() as (Partial<PlanItem> & { description?: string }) | { none: true };
       setNext('none' in data ? null : data);
@@ -75,7 +87,8 @@ export function NextUpStrip({ planUid }: { planUid: string }) {
   // exactly what makes a different one next.
   useEffect(() => { load(); }, [load, items.length, items.map((i) => i.status).join(',')]);
 
-  const blocked = useMemo(() => countBlocked(items), [items]);
+  const blocked = waits.length;
+  const sentences = waits.map((w) => w.sentence).join('\n');
 
   if (!loaded) return null;
 
@@ -86,14 +99,30 @@ export function NextUpStrip({ planUid }: { planUid: string }) {
 
   if (!next) {
     return (
-      <div className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.05]">
-        <Lock size={12} className="text-amber-300 shrink-0" />
-        <span className="text-[12.5px] text-amber-200/90">
-          Nothing is ready to start
-        </span>
-        <span className="text-[11.5px] text-amber-300/60">
-          {blocked} action{blocked === 1 ? '' : 's'} waiting on something unfinished
-        </span>
+      <div data-testid="next-up-waiting" className="px-3.5 py-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.05] space-y-1.5">
+        <div className="flex items-center gap-2">
+          <Lock size={12} className="text-amber-300 shrink-0" />
+          <span className="text-[12.5px] text-amber-200/90">
+            Nothing is ready to start
+          </span>
+          <span className="text-[11.5px] text-amber-300/60">
+            {blocked} task{blocked === 1 ? '' : 's'} waiting on something unfinished
+          </span>
+        </div>
+        <ul className="space-y-1 pl-5">
+          {waits.map((w) => (
+            <li key={w.itemUid} data-testid="next-up-wait" className="text-[11.5px] text-amber-100/80">
+              <button className="hover:underline" onClick={() => selectItem(w.itemUid)}>“{w.itemTitle}”</button>
+              {' '}
+              {w.waits.map((d, i) => (
+                <span key={d.uid}>
+                  {i > 0 && ', and '}
+                  <WaitWords wait={d} />
+                </span>
+              ))}
+            </li>
+          ))}
+        </ul>
       </div>
     );
   }
@@ -111,7 +140,7 @@ export function NextUpStrip({ planUid }: { planUid: string }) {
         {labelOf(next)}
       </span>
       {blocked > 0 && (
-        <span className="text-[11px] text-foreground-subtle shrink-0">
+        <span className="text-[11px] text-foreground-subtle shrink-0" title={sentences}>
           {blocked} blocked
         </span>
       )}
@@ -121,5 +150,28 @@ export function NextUpStrip({ planUid }: { planUid: string }) {
         className="text-foreground-subtle group-hover:text-accent shrink-0 transition-colors"
       />
     </button>
+  );
+}
+
+/**
+ * One dependency in words. A task in another plan is a link to it: that is
+ * where the person goes to see why it is not done.
+ */
+function WaitWords({ wait }: { wait: DependencyWait }) {
+  if (wait.problem !== 'unfinished' || !wait.planUid || !wait.planTitle) return <>{wait.words}</>;
+  const planUid = wait.planUid;
+  return (
+    <>
+      waits on{' '}
+      <button
+        data-testid="next-up-wait-link"
+        className="text-accent hover:underline"
+        onClick={() => { void revealPlanItem(planUid, wait.uid); }}
+        title={`Open “${wait.title}” in ${wait.planTitle}`}
+      >
+        “{wait.title}”
+      </button>
+      {' '}in plan “{wait.planTitle}”
+    </>
   );
 }

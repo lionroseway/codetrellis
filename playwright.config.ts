@@ -74,8 +74,49 @@ const MARKETING_IGNORE = process.env.E2E_MARKETING ? [] : ['**/marketing/**'];
  */
 const TARGETED = process.argv.some((a) => /\.(spec|setup)\.ts(:\d+)*$/.test(a) || /(^|\/)e2e\/[^-]/.test(a));
 
+/**
+ * CI runs the two projects in separate jobs (Phase 32 HD4): `chromium`
+ * sharded three ways, `serial` sharded two ways, each job with its own
+ * backend. As setup's teardown, `serial` ran in full in every shard: 170
+ * tests, one at a time, three times over, most of each shard's 18–28 min,
+ * because Playwright never shards a teardown. Split, it depends on setup
+ * like everything else, and each serial spec still has its backend alone.
+ */
+const SPLIT = process.env.E2E_SPLIT === '1';
+
+/**
+ * Specs that graph the sample app (tests/fixtures/sample-app) rather than
+ * this repository (Phase 32 HD2). The backend holds one project at a time,
+ * so a spec scanning the sample app beside one scanning the repository
+ * swaps the project under both: on #208 a repository spec's inspector read
+ * the sample app's dependencies, and a plan seeded in the sample app went
+ * missing from the list while the repository was the one held.
+ */
+const FIXTURE_SPECS = [
+  '**/golden-chain/onboarding-to-plan.spec.ts',
+  '**/golden-chain/plan-to-graph.spec.ts',
+  '**/graph/context-menu.spec.ts',
+  '**/graph/depth-selector.spec.ts',
+  '**/graph/graph-breakpoints.spec.ts',
+  '**/graph/graph-overlays.spec.ts',
+  '**/graph/layout-controls.spec.ts',
+  '**/graph/multi-select.spec.ts',
+  '**/graph/node-click.spec.ts',
+  '**/graph/node-visuals.spec.ts',
+  '**/graph/signal-to-lines.spec.ts',
+  '**/inspector/cluster-view.spec.ts',
+  '**/inspector/file-view.spec.ts',
+  '**/inspector/symbol-view.spec.ts',
+  '**/keyboard/shortcuts.spec.ts',
+  '**/project/scan.spec.ts',
+  // Scans the sample app over REST; beside it, the repository's re-exports
+  // spec found its inspector empty (#208's second run).
+  '**/live-agent/file-watcher-pipeline.spec.ts',
+];
+
 /** Specs that need the backend to themselves — see the `serial` project. */
 const SERIAL_SPECS = [
+  ...FIXTURE_SPECS,
   // Their agents navigate every open page.
   '**/live-agent/preseeded-execution.spec.ts',
   '**/live-agent/preseeded-deviation.spec.ts',
@@ -90,10 +131,17 @@ const SERIAL_SPECS = [
   // Changes shared settings — plan visibility, identity — that a parallel
   // spec creating plans would pick up.
   '**/settings/sections-save.spec.ts',
+  // Turns off local API changes, so a parallel spec creating a plan over
+  // REST is refused while it is off (workspace-shell failed on #168).
+  '**/plan/unverified-tag.spec.ts',
   // Answers about whichever project was scanned last.
   '**/mcp-tools/graph-tools.spec.ts',
   // Opens the sample app, which swaps the one project every parallel spec reads.
   '**/inspector/add-to-plan.spec.ts',
+  // Scans the sample app on purpose, to see the canvas keep its own project's graph.
+  '**/graph/graph-own-project.spec.ts',
+  // navigate_to 'code' on the sample app, which moves every open page's code view.
+  '**/inspector/workstream-gutter.spec.ts',
   // request_plan_deletion opens its confirmation on every open page.
   '**/plan/plan-deletion-request.spec.ts',
   // Its agent posts presence cards, asks to delete a plan and freezes the project.
@@ -102,6 +150,8 @@ const SERIAL_SPECS = [
   '**/plan/brief-mode.spec.ts',
   // They read the graph of whichever project was scanned last.
   '**/parsers/**',
+  // Opens a temporary git worktree as the project.
+  '**/git/worktree-checkout.spec.ts',
 ];
 
 export default defineConfig({
@@ -150,6 +200,11 @@ export default defineConfig({
         // specs saw no engine in CI and a real one on a machine that had
         // packaged, and the "without the engine" specs failed only there.
         CODETRELLIS_RENDITION_ENGINE: process.env.CODETRELLIS_RENDITION_ENGINE || path.join(E2E_DATA_DIR, 'no-rendition-engine'),
+        // Claude Code's session records. The backend follows every live Claude
+        // session in a folder it trusts (Phase 32 A1.2), and this suite opens
+        // the repository itself — so on a developer's machine it picked up
+        // their own Claude sessions in this checkout. An empty folder instead.
+        CODETRELLIS_CLAUDE_DIR: path.join(E2E_DATA_DIR, 'claude-home'),
       },
       // Reusing whatever is on :3001 meant testing against the developer's
       // dev backend and its real data, with a token this run does not
@@ -176,7 +231,7 @@ export default defineConfig({
     // teardown ignores the file filter, so every targeted run also ran all
     // 39 agent specs, while running one of THOSE files alone skipped setup.
     // Targeted, serial depends on setup like everything else.
-    { name: 'setup', testMatch: /project\.setup\.ts$/, ...(TARGETED ? {} : { teardown: 'serial' }) },
+    { name: 'setup', testMatch: /project\.setup\.ts$/, ...(TARGETED || SPLIT ? {} : { teardown: 'serial' }) },
     {
       name: 'chromium',
       use: { browserName: 'chromium' },
@@ -193,11 +248,13 @@ export default defineConfig({
     //    are the graph of whichever project was scanned LAST. Any other
     //    worker's scan between their scan and their read replaced it, and
     //    "the fixture has an HTTP pairing" read zero edges.
+    //  - The graph specs open the sample app (FIXTURE_SPECS), and every
+    //    parallel spec reads whichever project was scanned last.
     {
       name: 'serial',
       use: { browserName: 'chromium' },
       testMatch: SERIAL_SPECS,
-      ...(TARGETED ? { dependencies: ['setup'] } : {}),
+      ...(TARGETED || SPLIT ? { dependencies: ['setup'] } : {}),
       workers: 1,
     },
   ],

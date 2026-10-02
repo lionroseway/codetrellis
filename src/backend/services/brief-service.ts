@@ -17,14 +17,22 @@
  */
 
 import path from 'node:path';
-import { getItem, listAllItems } from './plan-item-service';
+import { getItem, listAllItems, resolveSkillsWithSource } from './plan-item-service';
+import { pendingArrivals } from './skill-arrival-service';
+import { agentSkills, skillsNote } from './skills-service';
 import { getPlan } from './plan-service';
 import { listArtefacts, refreshArtefactHashes, type Artefact } from './artefact-service';
 import { listCriteria } from './criteria-service';
 import { formatReference } from '../../shared/lib/references';
 import { TEXT_EXTS } from '../../shared/lib/locator';
 import type { PlanItem } from '../../shared/types';
+import { listWorkstreams } from './workstream-service';
+import { resolveSection, branchOfRoot, whereWorked } from './section-workstreams';
+import { readSoFar } from './material-footprints';
+import { affectedByOtherWork } from './other-work';
+import { planGitStates, refreshPlanHostStates } from './item-git-state';
 import type { ItemCriterion } from '../../shared/types/criteria';
+import { taskGrounding } from './task-grounding';
 
 const MAX_BODY_CHARS = 20_000;
 const MAX_GUIDE_BODY_CHARS = 4_000;
@@ -145,7 +153,11 @@ function materialsFor(items: PlanItem[], item: PlanItem): MaterialSummary[] {
   return out;
 }
 
-export async function getBrief(itemUid: string) {
+/**
+ * `workstreamRoot` is the folder the asking agent works in, when known, so a
+ * recommended skill missing from its checkout is said to be (Phase 32 C1).
+ */
+export async function getBrief(itemUid: string, opts: { workstreamRoot?: string | null; refreshSignals?: boolean } = {}) {
   const item = getItem(itemUid);
   if (!item) return null;
   const plan = getPlan(item.planUid);
@@ -194,8 +206,73 @@ export async function getBrief(itemUid: string) {
     materials: materialsFor(items, item),
     criteria,
     sent_back: criteria.filter((c) => c.state === 'sent_back').length,
+    // How far the criteria rest on evidence, as the window and the phone say it (B8.3b).
+    grounding: await groundingForBrief(item.uid),
+    // What this task has read through read_material, and the hash each saw (A6.2).
+    read_so_far: readSoFar(item.uid),
+    // What git proves about the task's branch (C2.1), when it is worked on one.
+    git_state: taskGitState(item.planUid, item.uid),
+    // What other tasks' work did to this one, from this task's side (A6.4).
+    affected_by_other_work: affectedByOtherWork(item.uid, plan?.projectPath ?? null, { refresh: opts.refreshSignals }),
+    ...skillsBlock(item, plan?.projectPath ?? null, opts.workstreamRoot ?? null),
+    ...worktreeBlock(item, plan?.projectPath ?? null, opts.workstreamRoot ?? null),
     how_to_work: HOW_TO_WORK,
     about_materials: ABOUT_MATERIALS,
+  };
+}
+
+/** The grounding line and each criterion's grade, in the brief's snake case. */
+async function groundingForBrief(itemUid: string) {
+  const g = await taskGrounding(itemUid);
+  if (!g || g.total === 0) return null;
+  return { says: g.words, grounded: g.grounded, criteria: g.criteria.map((c) => ({ uid: c.uid, grade: c.grade, why: c.why })) };
+}
+
+/**
+ * Where the task is worked (Phase 32 C5.1): its section's branch and
+ * worktree, and whether that is the asking agent's own. Nothing when no
+ * section above it names one.
+ */
+export function worktreeBlock(item: PlanItem, projectRoot: string | null, workstreamRoot: string | null) {
+  const section = resolveSection(item, getItem);
+  if (!section) return {};
+  let workstreams: ReturnType<typeof listWorkstreams> = [];
+  try { workstreams = projectRoot ? listWorkstreams(projectRoot, { includeIdle: true }) : []; } catch { /* no git */ }
+  const yours = branchOfRoot(workstreamRoot, workstreams) === section.branch;
+  return {
+    worktree: {
+      branch: section.branch,
+      section: section.fromTitle,
+      where: whereWorked(section.branch, workstreams),
+      yours,
+      note: yours
+        ? `This task is in “${section.fromTitle}”, worked on ${section.branch}: your worktree.`
+        : `This task is in “${section.fromTitle}”, worked on ${whereWorked(section.branch, workstreams)}, not in your worktree. Only an agent there can claim it.`,
+    },
+  };
+}
+
+/**
+ * The task's required and recommended skills, as the agent is told about
+ * them, and the one line that says so (Phase 32 C1). Shared by get_brief,
+ * claim_item and get_next_item so all three say the same thing.
+ */
+export function skillsBlock(item: PlanItem, projectRoot: string | null, workstreamRoot: string | null) {
+  // C1.4: a skill that arrived in a plan file and is waiting for a person is
+  // not told to an agent, wherever in the tree it was set.
+  const pending = new Map<string, Set<string>>();
+  const waiting = (uid: string) => {
+    if (!pending.has(uid)) pending.set(uid, new Set(pendingArrivals(uid).keys()));
+    return pending.get(uid)!;
+  };
+  const inEffect = resolveSkillsWithSource(item).filter((r) => !waiting(r.fromUid).has(r.skill.name)).map((r) => r.skill);
+  const skills = agentSkills(inEffect, { projectRoot, workstreamRoot });
+  // A8.4: any client loads a repo skill through CodeTrellis, which is how its use is seen.
+  const repo = skills.filter((s) => s.where?.kind === 'repo').map((s) => s.name);
+  return {
+    skills,
+    skills_note: skillsNote(skills),
+    ...(repo.length ? { skills_load: `Load ${repo.length === 1 ? 'it' : 'each'} with get_skill(name): ${repo.join(', ')}. Reading it there shows the person you used it.` } : {}),
   };
 }
 
@@ -208,4 +285,21 @@ export async function listMaterials(planUid: string): Promise<MaterialSummary[] 
     for (const a of listArtefacts(item.uid)) out.push(summarise(a, item));
   }
   return out;
+}
+
+/**
+ * A task's git state, for its brief: the branch, the words and the proof;
+ * null when it is worked on no branch. What a review host said comes from
+ * what is kept (C2.2b): the brief never waits on the network, and a refresh
+ * is started for the next ask.
+ */
+function taskGitState(planUid: string, itemUid: string) {
+  const s = planGitStates(planUid)?.items.find((x) => x.itemUid === itemUid);
+  if (s) refreshPlanHostStates(planUid);
+  return s
+    ? {
+      branch: s.branch, state: s.state, says: s.words, commit: s.commit, source: s.source,
+      ...(s.review ? { pull_request: s.review } : {}), ...(s.hostNote ? { host_note: s.hostNote } : {}),
+    }
+    : null;
 }

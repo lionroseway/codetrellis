@@ -30,9 +30,19 @@ import { clearBaseline } from '../services/diff-engine';
 import * as planService from '../services/plan-service';
 import * as commentService from '../services/comment-service';
 import * as sessionService from '../services/session-service';
+import { readBindingHeaders } from './binding-headers';
+import { recordFolderRequest } from '../services/folder-requests';
+import { noticeFor } from '../services/awareness-notices';
+import { replyNoticeFor } from '../services/awareness-replies';
+import { proposalNoticeFor } from '../services/spec-proposals-service';
+import { plannedOverlapNoticeFor } from '../services/planned-overlap-actions';
+import { candidateWorkstreamRoots, firstWorkstreamRoot, matchWorkstreamRoot } from '../services/workstream-binding';
+import { fileURLToPath } from 'node:url';
 import * as budgetService from '../services/budget-service';
 import * as taskAttachmentsService from '../services/task-attachments-service';
 import * as planItemService from '../services/plan-item-service';
+import { agentView } from '../services/skill-model';
+import { pendingArrivals } from '../services/skill-arrival-service';
 import * as planEventService from '../services/plan-event-service';
 import * as planChangesService from '../services/plan-changes-service';
 import * as planFileService from '../services/plan-file-service';
@@ -49,7 +59,7 @@ import {
   addCriterionAsAgent,
   CriterionError,
 } from '../services/criteria-service';
-import { checkCriterion, submitChecked, getWorklist, runCheckRun } from '../services/criterion-loop-service';
+import { checkCriterion, submitChecked, getWorklist, runCheckRun, testsOlderThanCode } from '../services/criterion-loop-service';
 import {
   recordArtefact,
   refreshArtefactHashes,
@@ -58,7 +68,7 @@ import {
   ArtefactError,
 } from '../services/artefact-service';
 import { startArtefactWatching } from '../services/artefact-watcher';
-import { getBrief, listMaterials } from '../services/brief-service';
+import { getBrief, listMaterials, skillsBlock } from '../services/brief-service';
 import { readMaterial } from '../services/material-reader/reader-host';
 import { applyTemplate } from '../services/plan-templates-service';
 import { listTemplates } from '../services/plan-templates';
@@ -83,6 +93,10 @@ import {
 } from '../services/recent-projects-service';
 import { buildSkillGuide } from './skill-guide';
 import { agentTypeFromClientInfo } from './client-identity';
+import { eventId, withEventContext } from '../services/agent-event-log';
+import { enforce as enforceBreakpoints, pausedResult, stoppedResult, steerText } from '../services/breakpoint-service';
+import { breachNoticeFor } from '../services/code-breakpoints';
+import { attemptOf, enforceSignalsForSession, signalHeldResult, signalSteerText } from '../services/signal-breakpoints';
 import { writeEndpointFile, removeEndpointFile } from './connector/files';
 import {
   resolveConnectorCommand,
@@ -116,6 +130,8 @@ import { register as registerReviewTools } from './tools/review-tools';
 import { registerContributionTools } from './tools/contribution-tools';
 import { registerAudioTools } from './tools/audio-tools';
 import { registerPeerTools } from './tools/peer-tools';
+import { register as registerAwarenessTools } from './tools/awareness-tools';
+import { register as registerTestTools } from './tools/test-tools';
 import { register as registerResources } from './resources';
 
 // ── Constants ───────────────────────────────────────────────────────
@@ -131,7 +147,6 @@ let httpServer: http.Server | null = null;
 let boundPort: number = DEFAULT_MCP_PORT;
 const connectedTransports = new Map<string, SSEServerTransport>();
 
-let toolEventCounter = 0;
 
 /**
  * Shared pending-response map. Used by screenshot, clipboard_read,
@@ -171,6 +186,25 @@ const pendingResponses: PendingResponses = new Map();
  */
 let electronScreenshotCapture: (() => Promise<string>) | undefined;
 
+
+/**
+ * A session's MCP roots, asked for once it has initialised, by session id
+ * (Phase 32 C5.2). Until the answer comes the session has no worktree, so a
+ * tool call waits for it (at most `maxMs`): otherwise an agent's first call
+ * after connecting is treated as "worktree unknown" and a later one is not.
+ */
+const pendingBindings = new Map<string, Promise<void>>();
+export function bindingSettled(sessionId: string, maxMs = 2000): Promise<void> {
+  const pending = pendingBindings.get(sessionId);
+  if (!pending) return Promise.resolve();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  // A client that never answers costs its first call the wait, not every call.
+  const giveUp = new Promise<void>((resolve) => {
+    timer = setTimeout(() => { if (pendingBindings.get(sessionId) === pending) pendingBindings.delete(sessionId); resolve(); }, maxMs);
+  });
+  return Promise.race([pending, giveUp]).finally(() => clearTimeout(timer));
+}
+
 export function setElectronScreenshotCapture(captureFn: () => Promise<string>): void {
   electronScreenshotCapture = captureFn;
 }
@@ -193,15 +227,26 @@ interface ToolEventPayload {
    * sheet Regional"); the Timeline would otherwise show the uid.
    */
   summary?: string;
+  /** The workstream the session works in, when it is bound (B2.1: its Timeline lane). */
+  workstreamRoot?: string;
 }
 
 function broadcastToolEvent(payload: ToolEventPayload): void {
+  // Placed on its workstream's lane (Phase 32 B2.1). A session bound later
+  // (MCP roots arrive after connect) is placed by the window from the
+  // workstream's agents, and the log adopts it (B1.1).
+  let workstreamRoot: string | undefined;
+  try {
+    if (payload.sessionId) {
+      workstreamRoot = sessionService.getActiveSessions().find((s) => s.sessionId === payload.sessionId)?.workstreamRoot ?? undefined;
+    }
+  } catch { /* placing it is best-effort */ }
   broadcast('agent-event', {
-    id: `mcp-tool-${++toolEventCounter}`,
+    id: eventId('mcp-tool'),
     timestamp: Date.now(),
     source: 'mcp',
     type: payload.phase === 'error' ? 'tool_error' : 'tool_call',
-    payload,
+    payload: workstreamRoot ? { ...payload, workstreamRoot } : payload,
   });
 
   // Phase 4.4 — feed the stuck sensor. Fire-and-forget; the sensor
@@ -267,7 +312,9 @@ function buildToolDeps(sessionId: string): ToolDeps {
 
     // Service modules
     planService,
-    planItemService,
+    // Items as an agent reads them: a skill's `link` location is for people only (Phase 32 C1).
+    // …and a skill that arrived in a plan file stays out until a person accepts it (C1.4).
+    planItemService: agentView(planItemService, (itemUid, skill) => pendingArrivals(itemUid).has(skill)),
     commentService,
     sessionService,
     taskAttachmentsService,
@@ -283,10 +330,10 @@ function buildToolDeps(sessionId: string): ToolDeps {
     projectConfigService,
     // An agent's view of criteria only — see ToolDeps.criteriaService.
     criteriaService: { listCriteria, getCriterion, addCriterionAsAgent, CriterionError },
-    criterionLoop: { checkCriterion, submitChecked, getWorklist, runCheckRun },
+    criterionLoop: { checkCriterion, submitChecked, getWorklist, runCheckRun, testsOlderThanCode },
     artefactService: { recordArtefact, refreshArtefactHashes, listArtefacts, getArtefact, ArtefactError },
     startArtefactWatching,
-    briefService: { getBrief, listMaterials },
+    briefService: { getBrief, listMaterials, skillsBlock },
     readMaterial,
 
     // Specific functions
@@ -433,8 +480,18 @@ function setupMcpServerInstance(sessionId: string): McpServer {
     REGISTERED_TOOL_ARGS.set(name, schema && typeof schema === 'object' ? Object.keys(schema) : []);
   };
 
+  // Requests that reached `instrument`. A tools/call that comes back as an
+  // error without being in here was refused by the SDK itself (an unknown
+  // tool, or arguments its schema rejects) and is broadcast below (B1.2).
+  const reached = new Set<unknown>();
+
   const instrument = (name: string, handler: any) => async (args: any, extra: any) => {
     const start = Date.now();
+    if (extra?.requestId !== undefined) reached.add(extra.requestId);
+    // Which worktree this session is in may still be on its way (its MCP roots
+    // are asked for once it has initialised): wait for it, briefly, so a call
+    // made straight after connecting is placed like every later one (C5.2).
+    await bindingSettled(sessionId);
     // Heartbeat: any tool call counts as activity, push last_seen.
     try { sessionService.heartbeat(sessionId); } catch { /* best-effort */ }
     const agentInfo = inferAgentFromSession(sessionId);
@@ -474,7 +531,49 @@ function setupMcpServerInstance(sessionId: string): McpServer {
     }
 
     try {
-      const result = await handler(args, extra);
+      // What the handler records (a spec body edited, B1.2) is this session's.
+      const result = await withEventContext({ sessionId, agentType: agentInfo.type }, async () => {
+        // BREAKPOINTS (B4) — here, after the capability and scope checks and
+        // before the handler, so a held call does nothing, for every tool that
+        // claims, finishes or edits an item. The pause is an ordinary result,
+        // broadcast and logged below like any other.
+        // A signal rule first (B4.2b): a serious open signal naming this
+        // session's workstream holds its next guarded call.
+        const attempt = attemptOf(name, args);
+        const bySignal = attempt ? enforceSignalsForSession(getActiveProjectPath(), sessionId, attempt) : { kind: 'pass' as const };
+        if (bySignal.kind === 'paused' || bySignal.kind === 'stop') return signalHeldResult(bySignal);
+        const held = enforceBreakpoints(name, args, { agent: agentInfo.type ?? 'mcp-agent', sessionId });
+        if (held.kind === 'paused') return pausedResult(held.hit);
+        if (held.kind === 'stop') return stoppedResult(held.hit);
+        const out = await handler(args, extra);
+        const steers = [
+          bySignal.kind === 'continue' && bySignal.steer ? signalSteerText(bySignal.hit) : null,
+          held.kind === 'continue' ? steerText(held.hit) : null,
+        ].filter((x): x is string => !!x);
+        if (steers.length && out && !out.isError && Array.isArray(out.content)) for (const text of steers) out.content.push({ type: 'text', text });
+        return out;
+      });
+      // Being told without asking (A2.6): an unseen high or medium signal for
+      // this session's workstream rides on the result it was getting anyway,
+      // once, as its own clearly marked block.
+      if (result && !result.isError && Array.isArray(result.content)) {
+        const notice = noticeFor(sessionId, name, getActiveProjectPath());
+        if (notice) result.content.push({ type: 'text', text: notice });
+        // The person's own message about a signal on this work (A4.1), once.
+        const reply = replyNoticeFor(sessionId, getActiveProjectPath());
+        if (reply) result.content.push({ type: 'text', text: reply });
+        // A breakpoint breach (B4.2): a file with a breakpoint that this
+        // workstream changed with its own editor, which nothing could pause.
+        const breach = breachNoticeFor(sessionId, getActiveProjectPath());
+        if (breach) result.content.push({ type: 'text', text: breach });
+        // A spec change proposed to a page this session's task relies on (B7.3), once.
+        // When it tells the agent a spec changed, the task's page says so at once (B7.4).
+        const proposal = proposalNoticeFor(sessionId, agentInfo.type ?? null, Date.now(), (itemUids) => broadcast('spec-proposal-told', { itemUids }));
+        if (proposal) result.content.push({ type: 'text', text: proposal });
+        // A planned overlap a person asked this session to know about (B9.3a), once.
+        const planned = plannedOverlapNoticeFor(sessionId);
+        if (planned) result.content.push({ type: 'text', text: planned });
+      }
       const summary = result?._meta?.summary;
       broadcastToolEvent({
         tool: name,
@@ -500,6 +599,43 @@ function setupMcpServerInstance(sessionId: string): McpServer {
       });
       throw err;
     }
+  };
+
+  // The SDK validates arguments, and resolves the tool name, BEFORE it calls
+  // a tool's handler, so a call it refuses never reaches `instrument` and
+  // was never in the Timeline or the event log (found in B1.1). Its
+  // tools/call handler is wrapped through the public `setRequestHandler`
+  // (the SDK registers it on the first registerTool, after this line); a
+  // call that comes back as an error without having reached `instrument`
+  // is broadcast as a tool_error, like one refused at the interception.
+  const originalSetRequestHandler = (mcpServer.server.setRequestHandler as any).bind(mcpServer.server);
+  (mcpServer.server as any).setRequestHandler = (schema: any, handler: any) => {
+    const method = schema?.shape?.method?.value ?? schema?.shape?.method?._def?.value;
+    if (method !== 'tools/call') return originalSetRequestHandler(schema, handler);
+    return originalSetRequestHandler(schema, async (request: any, extra: any) => {
+      const start = Date.now();
+      const id = extra?.requestId;
+      try {
+        const result = await handler(request, extra);
+        if (result?.isError && !reached.has(id)) {
+          const agentInfo = inferAgentFromSession(sessionId);
+          const text = Array.isArray(result.content) ? result.content.map((c: any) => (typeof c?.text === 'string' ? c.text : '')).join(' ') : '';
+          broadcastToolEvent({
+            tool: String(request?.params?.name ?? 'unknown'),
+            args: summarizeArgs(request?.params?.arguments ?? {}),
+            phase: 'error',
+            durationMs: Date.now() - start,
+            sessionId,
+            agentType: agentInfo.type,
+            agentModel: agentInfo.model,
+            error: text.slice(0, 1000) || 'Refused by the MCP server before the tool ran.',
+          });
+        }
+        return result;
+      } finally {
+        reached.delete(id);
+      }
+    });
   };
 
   const originalRegisterTool = (mcpServer.registerTool as any).bind(mcpServer);
@@ -542,12 +678,14 @@ function setupMcpServerInstance(sessionId: string): McpServer {
   registerChannelTools(mcpServer, deps);
   registerSystemDocsTools(mcpServer, deps);
   registerGovernanceTools(mcpServer, deps);
+  registerTestTools(mcpServer, deps);
   registerBudgetTools(mcpServer, deps);
   registerIntakeTools(mcpServer, deps);
   registerReviewTools(mcpServer, deps);
   registerContributionTools(mcpServer);
   registerAudioTools(mcpServer);
   registerPeerTools(mcpServer, deps);
+  registerAwarenessTools(mcpServer, deps);
   registerResources(mcpServer, deps);
 
   return mcpServer;
@@ -679,11 +817,46 @@ export async function startMcpServer(): Promise<void> {
         : 'mcp-client';
       sessionService.registerSession(sessionId, inferredAgentType);
 
+      // Bind it to the workstream it works in (Phase 32 A1.1): the folder the
+      // connector reports, checked against roots we already trust, and the
+      // CodeTrellis terminal it runs in if that terminal exists. Session ids
+      // are per connection, so this is derived afresh on every connect.
+      const hint = readBindingHeaders(req.headers);
+      let bound = false;
+      try {
+        const root = matchWorkstreamRoot(hint.cwd, candidateWorkstreamRoots());
+        const terminal = hint.hostTerminal && terminalService.getTerminal(hint.hostTerminal) ? hint.hostTerminal : null;
+        if (root || terminal) sessionService.bindSession(sessionId, root, terminal);
+        bound = root !== null;
+        // A folder no trusted root covers may be a clone of the opened repo
+        // (A1.7c). Nothing is read from it: it is shown to the person, who
+        // decides whether to include it.
+        if (!bound && hint.cwd && getActiveProjectPath()) {
+          recordFolderRequest({ folder: hint.cwd, sessionId, agentType: inferredAgentType });
+        }
+      } catch { /* binding is best-effort; it must never break a connection */ }
+
       // Then name it from what it says it is. The user-agent above is a
       // guess, and through the stdio connector it is always the connector's,
       // whichever agent launched it (see client-identity). `retypeSession`
       // only replaces the guess, so an explicit `register_session` wins.
       mcpServer.server.oninitialized = () => {
+        // A client that sent no folder but exposes MCP roots (Claude Code
+        // does) is asked for them: the second source, after the connector.
+        if (!bound && mcpServer.server.getClientCapabilities()?.roots) {
+          const lookup = mcpServer.server.listRoots().then(({ roots }) => {
+            const folders = roots.flatMap((r) => {
+              try { return r.uri.startsWith('file:') ? [fileURLToPath(r.uri)] : []; } catch { return []; }
+            });
+            const root = firstWorkstreamRoot(folders);
+            if (!root) return;
+            sessionService.bindSession(sessionId, root);
+            broadcast('mcp-session-changed', { reason: 'bound', sessionId });
+          }).catch(() => { /* a client that cannot answer stays unbound */ })
+            .finally(() => { if (pendingBindings.get(sessionId) === lookup) pendingBindings.delete(sessionId); });
+          pendingBindings.set(sessionId, lookup);
+        }
+
         const claimed = agentTypeFromClientInfo(mcpServer.server.getClientVersion()?.name);
         if (!claimed || claimed === inferredAgentType) return;
         try {
@@ -717,7 +890,7 @@ export async function startMcpServer(): Promise<void> {
         sessionService.disconnectSession(sessionId);
         console.log(`[MCP] Client disconnected: ${sessionId}`);
         broadcast('agent-event', {
-          id: `mcp-disconnect-${Date.now()}`,
+          id: eventId('mcp-disconnect'),
           timestamp: Date.now(),
           source: 'mcp',
           type: 'session_end',
@@ -728,7 +901,7 @@ export async function startMcpServer(): Promise<void> {
 
       console.log(`[MCP] Client connected: ${sessionId} (${inferredAgentType})`);
       broadcast('agent-event', {
-        id: `mcp-connect-${Date.now()}`,
+        id: eventId('mcp-connect'),
         timestamp: Date.now(),
         source: 'mcp',
         type: 'session_start',

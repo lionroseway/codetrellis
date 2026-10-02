@@ -98,6 +98,7 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   'plan.items': 'read',
   'plan.list': 'read',
   'plan.nextItem': 'read',
+  'plan.status': 'read',
   'plan.template.list': 'read',
   // Phase 29 mobile review flow. All four are read-only by
   // construction: review and pr-draft never touch the repository (the
@@ -109,6 +110,11 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   'review.compare': 'read',
   'review.get': 'read',
   'review.prDraft': 'read',
+  'review.queue': 'read',
+  'stack.summary': 'read',
+  'playForward.summary': 'read',
+  // Phase 32 C4.3a — the recurring series, and starting the run due now.
+  'recurring.list': 'read',
   'power.status': 'read',
   'project.active': 'read',
   'project.list': 'read',
@@ -122,6 +128,17 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   // A plan's budget and the agent changes still flagged (mobile-budget.ts).
   'budget.get': 'read',
   'freeze.get': 'read',
+  // Phase 32 B4.4 — what is held for the person (mobile-breakpoints.ts).
+  'breakpoint.waiting': 'read',
+  // Phase 32 B7.6 — proposed spec changes, in the desktop's words (mobile-proposals.ts).
+  'proposal.list': 'read',
+  'proposal.get': 'read',
+  // Phase 32 A4.2 — what overlaps, in the desktop's words (mobile-awareness.ts).
+  'awareness.needsYou': 'read',
+  'awareness.signal': 'read',
+  // Phase 32 A4.3 — the lines of work and their turns (mobile-workstreams.ts).
+  'workstreams.list': 'read',
+  'workstreams.detail': 'read',
 
   // ── write ───────────────────────────────────────────────────────────
   'channel.post': 'write',
@@ -132,6 +149,15 @@ export const METHOD_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Obj
   // Marking an agent's budget change seen: also needs a CONFIRMED pairing.
   'budget.acknowledge': 'write',
   'freeze.acknowledge': 'write',
+  // Answering a held call: also needs a CONFIRMED pairing, and is audited.
+  'breakpoint.answer': 'write',
+  // Deciding a spec change: also a CONFIRMED pairing, audited; the person's, never an agent's.
+  'proposal.decide': 'write',
+  'playForward.decide': 'write',
+  'recurring.start': 'write',
+  // Answering a signal or replying to its agents: also a CONFIRMED pairing, audited.
+  'awareness.answer': 'write',
+  'awareness.reply': 'write',
   'channel.resolve': 'write',
   'comment.add': 'write',
   'deviation.resolve': 'write',

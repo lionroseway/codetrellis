@@ -15,6 +15,7 @@
  * the facts and hands them in, so the rules here are testable on their own.
  */
 
+import { parseJUnit, testLabel } from './tests/junit';
 import fs from 'node:fs';
 import path from 'node:path';
 import { readFileWithin, resolveWithin } from './confined-fs';
@@ -24,6 +25,8 @@ import { decodeXml, parseWorkbookSheets, sheetDimension } from '../../shared/lib
 import { parseRange, toSpan, TEXT_EXTS } from '../../shared/lib/locator';
 import { csvShape, parseCsv } from '../../shared/lib/csv';
 import type { CheckFinding, CriterionCheck, CriterionKind } from '../../shared/types';
+import { locateStored } from './material-place';
+import { isPlaceholder } from './cloud-files';
 
 /** Past this, a file is not read for a check — the finding says so. */
 export const MAX_CHECK_READ_BYTES = 50 * 1024 * 1024;
@@ -66,6 +69,17 @@ export interface CheckContext {
   materialsRead?: ReadonlySet<string>;
   /** A `code` criterion's review verdict; undefined when not computed. */
   code?: { verdict: 'landed' | 'partial' | 'untouched' | 'no-targets'; missing: string[] } | { unavailable: string };
+  /**
+   * The open high overlaps with other work, each in the desktop's words,
+   * when the project holds sign-off on them (A5.3). Undefined when it does
+   * not, or when they were not gathered.
+   */
+  openHighSignals?: Array<{ heading: string; words: string }>;
+  /**
+   * Told of each JUnit report a `test` check read (B8.1), so each test's
+   * result is kept, credited to whoever recorded the file.
+   */
+  onTestReport?: (artefact: Artefact) => void;
 }
 
 const pass = (message: string, attachmentUid: string | null = null): CheckFinding => ({ status: 'pass', message, attachmentUid });
@@ -76,14 +90,21 @@ const unverified = (message: string, attachmentUid: string | null = null): Check
 
 type Read = { ok: true; buf: Buffer } | { ok: false; finding: CheckFinding };
 
-function readForCheck(root: string, a: Artefact): Read {
+function readForCheck(projectRoot: string, a: Artefact): Read {
+  // Project-relative, or a place in the linked plans folder (C3.4c).
+  const at = locateStored(a.path, projectRoot);
+  if (!at) return { ok: false, finding: unverified(`${a.path} is in a plans folder not linked on this device, so it was not checked`, a.uid) };
+  const { root, rel } = at;
   try {
-    const st = fs.lstatSync(resolveWithin(root, a.path, 'artefact'));
+    const abs = resolveWithin(root, rel, 'artefact');
+    const st = fs.lstatSync(abs);
     if (!st.isFile()) return { ok: false, finding: fail(`${a.path} is no longer a regular file in the project`, a.uid) };
+    // Still only in the cloud (C3.4b): opening it to check it would download it.
+    if (isPlaceholder(abs)) return { ok: false, finding: unverified(`${a.path} is not on this device yet, so its contents were not checked`, a.uid) };
     if (st.size > MAX_CHECK_READ_BYTES) {
       return { ok: false, finding: unverified(`${a.path} is larger than ${MAX_CHECK_READ_BYTES / 1024 / 1024} MB, so its contents were not checked`, a.uid) };
     }
-    return { ok: true, buf: readFileWithin(root, a.path, 'artefact') };
+    return { ok: true, buf: readFileWithin(root, rel, 'artefact') };
   } catch {
     return { ok: false, finding: fail(`${a.path} is not in the project any more, or is now a link`, a.uid) };
   }
@@ -397,16 +418,32 @@ export function runChecks(ctx: CheckContext): CriterionCheck {
       }
       for (const a of reports) {
         if (ctx.lastTargetChangeAt !== null && a.mtime !== null && a.mtime < ctx.lastTargetChangeAt - MTIME_SLACK_MS) {
-          findings.push(fail(`${a.path} is older than the last change to this item's files (${when(ctx.lastTargetChangeAt)}) — run the tests again`, a.uid));
+          findings.push({
+            ...fail(`⚠ tests older than the code: ${a.path} ran ${when(a.mtime)}, before the last change to this item's files (${when(ctx.lastTargetChangeAt)}) — run the tests again`, a.uid),
+            reason: 'tests_older',
+          });
           continue;
         }
         const read = readForCheck(root!, a);
         if (!read.ok) { findings.push(read.finding); continue; }
-        const counts = /\.xml$/i.test(a.path) ? junitCounts(read.buf.toString('utf8')) : null;
+        const xml = /\.xml$/i.test(a.path) ? read.buf.toString('utf8') : null;
+        // The cases themselves when the report lists them (B8.1); its totals
+        // attributes otherwise, which some runners leave out.
+        const parsed = xml !== null ? parseJUnit(xml) : null;
+        const counts = parsed && parsed.cases.length
+          ? { tests: parsed.totals.tests, failures: parsed.totals.failed, errors: parsed.totals.errors }
+          : xml !== null ? junitCounts(xml) : null;
+        if (counts && ctx.onTestReport) {
+          try { ctx.onTestReport(a); } catch { /* keeping results never changes the check */ }
+        }
         if (!counts) {
           findings.push(unverified(`${a.path} is not a JUnit report, so its pass and fail counts were not read`, a.uid));
         } else if (counts.failures + counts.errors > 0) {
-          findings.push(fail(`${a.path} reports ${counts.failures + counts.errors} of ${counts.tests} tests failing`, a.uid));
+          // Which tests (B8.1): the first three by name, with the first line of why.
+          const cases = (parsed?.cases ?? []).filter((c) => c.result === 'failed' || c.result === 'error');
+          const named = cases.slice(0, 3).map((c) => `${testLabel(c)}${c.message ? ` (${c.message})` : ''}`);
+          const more = cases.length > 3 ? `; and ${cases.length - 3} more` : '';
+          findings.push(fail(`${a.path} reports ${counts.failures + counts.errors} of ${counts.tests} tests failing${named.length ? `: ${named.join('; ')}${more}` : ''}`, a.uid));
         } else if (counts.tests === 0) {
           findings.push(fail(`${a.path} reports no tests run`, a.uid));
         } else {
@@ -424,6 +461,9 @@ export function runChecks(ctx: CheckContext): CriterionCheck {
       else if (code.verdict === 'no-targets') findings.push(unverified('This item names no files, so its changes cannot be checked'));
       else if (code.verdict === 'untouched') findings.push(fail(`None of this item's files have changed yet: ${code.missing.join(', ')}`));
       else findings.push(fail(`Not changed yet: ${code.missing.join(', ')}`));
+      for (const s of ctx.openHighSignals ?? []) {
+        findings.push(fail(`A high overlap with other work is still open (${s.heading}): ${s.words} Answer it on the Awareness tab, or fix it, and check again.`));
+      }
       break;
     }
   }

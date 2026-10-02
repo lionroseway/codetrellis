@@ -20,6 +20,6 @@ test('met says who approved it', () => {
   assert.match(briefState('met', { actor: 'dana@example.com', actorType: 'human', at }, 'saif@example.com').words, /^met — dana@example\.com, /);
   // The agent's own name, not "Claude" for every agent (§0.4d).
   assert.equal(briefState('met', { actor: 'codex-cli', actorType: 'mcp', at }).words, 'met — approved by codex-cli (agent)');
-  assert.match(briefState('met', { actor: 'saif@example.com', actorType: 'unverified', at }, 'saif@example.com').words, /^met — local API \(unverified\), /);
+  assert.match(briefState('met', { actor: 'saif@example.com', actorType: 'unverified', at }, 'saif@example.com').words, /^met — saif@example\.com, /, 'the name as given, never "you"');
   assert.equal(briefState('met').words, 'met');
 });

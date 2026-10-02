@@ -27,6 +27,9 @@ Deep-dive docs live in `docs/claude/`:
 - [`docs/claude/peer-network.md`](docs/claude/peer-network.md) — BYO-VPN model, mDNS discovery, WebRTC mesh, the four data channels, QR pairing.
 - [`docs/claude/mobile-companion.md`](docs/claude/mobile-companion.md) — Expo app, routes, RPC/bridge layers, mobile MCP commands, release flow.
 - [`docs/claude/mcp-tools.md`](docs/claude/mcp-tools.md) — the 18 MCP tool categories grouped by domain.
+- [`docs/claude/awareness.md`](docs/claude/awareness.md) — parallel awareness: workstreams, footprints, signals, the digest, notices, and the Claude Code skill and hook.
+- [`docs/claude/cli.md`](docs/claude/cli.md) — the `codetrellis` CLI in sessions and pipelines: `start`/`stop`, the SessionStart hook and CI recipes in `docs/recipes/`, the conformity gate and its exit codes.
+- [`docs/claude/record.md`](docs/claude/record.md) — the record and its evidence: the hash chain, retention, signed packs and the evidence export, verifying months later, and what it does not prove.
 
 The team's design docs (vision, UX, plans) live alongside these at the
 `docs/` root — `ARCHITECTURE.md`, `MCP-INTEGRATION.md`, etc.
@@ -36,7 +39,15 @@ The team's design docs (vision, UX, plans) live alongside these at the
 **Read [`docs/PHASE-32-LOG.md`](docs/PHASE-32-LOG.md) first.** Its
 **Now** block names the current step and the very next action. The work
 is long-running and runs across sessions, so the log, not the
-conversation, is the state. Update it at the start and end of every
+conversation, is the state. **Now and the checklist are generated.**
+[`docs/PHASE-32-STATUS.yaml`](docs/PHASE-32-STATUS.yaml) holds only intent
+(steps, titles, order, parts, follow-ups, next action); whether a step is
+building, in review or done, and its PRs, is **read from git and GitHub**
+(its branch `feat/phase-32-<id>-…`, its squash commit `Phase 32 <id>: …
+(#N)`). Edit the YAML and run `npm run status` (it needs
+`git fetch origin feat/phase-32`); `tools/status/status.test.ts` fails when
+the log's items differ from the YAML. Name every step branch and merge
+title that way, or git cannot see the step. Update it at the start and end of every
 step, after every decision, before any long command, and at least every
 30 minutes ([`docs/PHASE-32-EXECUTION.md`](docs/PHASE-32-EXECUTION.md)
 §1).
@@ -142,7 +153,7 @@ a tagged candidate and on packaged artifacts.
 - **Mobile runtime**: Expo SDK 57 + React Native 0.86.3 companion app
   in `mobile/`. iOS + Android. Talks to desktop over WebRTC, not HTTP.
 - **Frontend**: React 19 + TypeScript, Tailwind CSS 4 (dark theme),
-  ReactFlow 11 (custom nodes/edges), Zustand 5, react-markdown +
+  React Flow 12 (`@xyflow/react`; custom nodes/edges), Zustand 5, react-markdown +
   remark-gfm.
 - **AST**: web-tree-sitter (WASM) — runs synchronously in the
   Express process. 11 language tags: TS / TSX / JS / JSX / Python /
@@ -196,12 +207,18 @@ a tagged candidate and on packaged artifacts.
   longer the reflex.** v13 ships per-platform prebuilds under
   `node_modules/better-sqlite3/prebuilds/`, and there is no
   `build/Release/*.node` to inspect — the `file` check above applies to
-  v11 only. This matters because **npm 11.19+ does not run install
-  scripts by default**: `npm ci` prints an `install-scripts` warning and
-  skips `better-sqlite3`'s `node-gyp rebuild` (and `node-pty`'s)
-  entirely. Both load anyway, from their prebuilds — verified on Node
-  26.9.0 / npm 11.19.1. So treat that warning as expected, and check
-  that the module *loads* rather than that a script ran:
+  v11 only. **npm 11.19 still runs install scripts** — its
+  `install-scripts … not yet covered by allowScripts` warning says a later
+  version will stop, not that this one has (an earlier note here said it
+  skipped them; Phase 32 HD4c measured otherwise). So a plain `npm ci`
+  rebuilds `better-sqlite3` from source with node-gyp, which downloads
+  Node's headers and once crashed a CI job doing it. **CI installs with
+  `npm ci --ignore-scripts`**, and both modules load from their prebuilds.
+  That flag also skips the root `postinstall`, which is `patch-package`, so
+  every such install is followed by `npx patch-package && node
+  scripts/check-patches.cjs` — without it werift ships unpatched, which the
+  CI-built installers did until HD4c. Check that the modules *load*, not
+  that a script ran:
 
   ```
   node -e "new (require('better-sqlite3'))(':memory:'); console.log('ok')"
@@ -358,7 +375,7 @@ installed here; `fnm exec --using=26 -- <cmd>` or putting
   registered in the matching `index.ts`.
 - Zustand stores in `src/frontend/stores/` — one per domain
   (graph, agent, project, plan, ui, toast, presence, channels,
-  terminal, system-docs).
+  terminal, system-docs, awareness).
 - Tree-sitter WASM grammars stored in `resources/tree-sitter/`.
 - Bridge abstraction in `src/frontend/bridge/` picks transport at
   runtime: HTTP for web/dev, Electron IPC for desktop, WebRTC data
@@ -384,6 +401,12 @@ installed here; `fnm exec --using=26 -- <cmd>` or putting
 - Mobile uses `mobile/lib/rpc.ts` for JSON-RPC over the `control`
   channel; state syncs via snapshots + `fast-json-patch` diffs on
   the `ui` channel.
+- **Every record's author comes from how the call arrived**, through one
+  helper per transport: `personFrom(req)` / `actorFrom(req)` in `server.ts`
+  (app window `human`, plain HTTP `unverified`), `phonePerson()` /
+  `phoneActor()` for the phone, `authorFromExtra(deps, extra)` for MCP tools.
+  Never a literal, never a name from the request. `src/backend/authorship.test.ts`
+  enforces it (Phase 32, bug 52).
 - Per-service services follow `*-service.ts` naming; remote variants
   (`remote-terminal-service`, `remote-audio-service`,
   `remote-interaction-service`, `mobile-rpc-service`) wrap local
@@ -410,8 +433,15 @@ installed here; `fnm exec --using=26 -- <cmd>` or putting
 - `npm run typecheck` — Run TypeScript type checking
 - `npm run test:unit` — Pure-logic tests under Node's runner, plus
   `tools/**/*.test.ts` (~975 tests, ~30 s)
-- `npm run test:harness` — Full E2E harness (~380 tests). Budget ~19 min
-  in a 4-core container; ~6 min on an M-series dev machine.
+- `npm run test:phone` — The phone's screens rendered through
+  react-native-web and photographed to `test-results/phone/` (Phase 32
+  A4.5a); see `docs/claude/mobile-companion.md`.
+- `npm run test:harness` — Full E2E harness (~1240 tests). Budget ~28 min
+  in a 4-core container. CI runs it on every PR in four shards (~5–7 min)
+  and the browser suite in five, both blocking (Phase 32): `chromium` in
+  three and the `serial` project in two, split by `E2E_SPLIT=1` (HD4).
+  Without it, `serial` is setup's teardown and Playwright runs a teardown
+  in full in every shard, which is what took shards to 18–28 min.
 
 **Run `test:unit` as well as the harness.** It is not just faster
 coverage of the same things — two of its tests are *structural guards*

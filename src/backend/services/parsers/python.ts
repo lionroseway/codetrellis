@@ -1,4 +1,4 @@
-import type { ParserPlugin, SyntaxNode } from './base';
+import { shapeOf, signatureOf, type ParserPlugin, type SyntaxNode } from './base';
 import type { ParsedSymbol, ImportDeclaration } from '../../../shared/types';
 
 /**
@@ -32,6 +32,15 @@ function nodeToSymbol(node: SyntaxNode): ParsedSymbol | null {
     case 'async_function_definition': {
       const name = node.childForFieldName('name')?.text || 'anonymous';
       const modifiers = node.type === 'async_function_definition' ? ['async'] : [];
+      // Its signature (A2.1): type parameters (3.12), parameters, and the
+      // return annotation. Decorators are not part of it: adding a cache
+      // does not change how it is called.
+      const ret = shapeOf(node.childForFieldName('return_type'));
+      const signature = signatureOf(
+        shapeOf(node.childForFieldName('type_parameters')),
+        shapeOf(node.childForFieldName('parameters')),
+        ret ? ` -> ${ret}` : null,
+      );
       return {
         name,
         kind: 'function',
@@ -39,6 +48,7 @@ function nodeToSymbol(node: SyntaxNode): ParsedSymbol | null {
         endLine: node.endPosition.row + 1,
         children: [],
         modifiers,
+        ...(signature ? { signature } : {}),
       };
     }
     case 'class_definition': {
@@ -135,7 +145,10 @@ function extractImports(node: SyntaxNode): ImportDeclaration[] {
         if (c.type === 'import') { sawImport = true; continue; }
         if (!sawImport) continue;
         const target = readImportTarget(c);
-        if (target) names.push(target.alias || target.module);
+        // The ORIGINAL name (A2.2): `from x import a as b` imports `a`. The
+        // alias is this file's local name, and "who imports a?" is asked of
+        // what x exports.
+        if (target) names.push(target.module);
         else if (c.type === 'wildcard_import' || (c.type === '*' || c.text === '*')) names.push('*');
       }
       imports.push({

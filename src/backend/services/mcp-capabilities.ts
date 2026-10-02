@@ -105,8 +105,17 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   detect_conflicts: 'read',
   resolve_conflict: 'write',
 
+  // ── test-tools (Phase 32 B8.1) ──────────────────────────────────────
+  // Handing over a report keeps results in this machine's database: a write.
+  // Reading what the runs said is a read. Neither runs anything.
+  report_tests: 'write',
+  get_test_results: 'read',
+
   // ── governance-tools ────────────────────────────────────────────────
   get_freeze_status: 'read',
+  verify_record: 'read',
+  export_evidence: 'read',
+  line_history: 'read',
   set_freeze: 'write',
   check_freeze: 'read',
   exempt_plan_from_freeze: 'write',
@@ -155,6 +164,10 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   move_item: 'write',
   delete_item: 'write',
   claim_item: 'write',
+  // A project skill's text; records the read as proof of use on the caller's own tasks (A8.4).
+  get_skill: 'read',
+  // Phase 32 C5.1 — which worktree a section is worked in: a plan edit.
+  assign_workstream: 'write',
   get_next_item: 'read',
   // Retired in Phase 31.1 — it refuses. Kept one release so an agent that
   // learned it gets a direction rather than a missing tool.
@@ -199,6 +212,14 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   get_plan: 'read',
   update_plan: 'write',
   list_plans: 'read',
+  get_stack: 'read',
+  get_play_forward: 'read',
+  list_recurring: 'read',
+  list_rules: 'read',
+  get_spec_links: 'read',
+  list_spec_proposals: 'read',
+  reply_to_spec_proposal: 'write',
+  propose_spec_change: 'write',
   // Asks the person; deletes nothing (plan deletion left MCP in Phase 32 §0.4c-3).
   request_plan_deletion: 'write',
   export_plan_to_files: 'files',
@@ -223,6 +244,13 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   await_ack: 'write',
   dismiss_presence: 'write',
   await_user_input: 'write',
+  // Waiting on a person's answer changes nothing; the answer is spent by the next call.
+  await_decision: 'read',
+  // Asks whether a file is held by a breakpoint; records the hit so the person can answer it (B4.2).
+  check_breakpoint: 'read',
+  check_changes: 'read',
+  // Another workstream's changed lines, from git (B3.1): the repository, not an agent's words.
+  get_line_changes: 'read',
 
   // ── project-config-tools ────────────────────────────────────────────
   get_project_config: 'read',
@@ -236,6 +264,7 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   compare_snapshots: 'read',
   review_plan: 'read',
   get_pr_draft: 'read',
+  get_review_queue: 'read',
 
   // ── session-tools ───────────────────────────────────────────────────
   // `register_session` is the handshake and is deliberately the cheapest
@@ -337,6 +366,19 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   get_remote_audio: 'capture',
   list_remote_input_requests: 'read',
   respond_remote_input: 'write',
+
+  // ── awareness-tools ─────────────────────────────────────────────────
+  // Phase 32 A1.3. Reads only: who else is working, and where.
+  list_workstreams: 'read',
+  get_awareness: 'read',
+  check_footprint: 'read',
+  // A2.4: an agent says what it is about to change. It writes only its own
+  // session's intent, which ends with the session.
+  declare_intent: 'write',
+  // A2.6: the agent's own note beside a signal; it never sets the person's answer.
+  acknowledge_signal: 'write',
+  // B5.4: the project as it was at a moment. Reads only, like replay.
+  get_state_at: 'read',
 });
 
 export class McpAuthorizationError extends Error {

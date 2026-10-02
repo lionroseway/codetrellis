@@ -61,7 +61,7 @@ export function createPlan(
   projectPath: string,
 ): Plan {
   const db = getDb();
-  const uid = randomUUID();
+  const uid = input.uid ?? randomUUID();
   const now = Date.now();
   const normalizedPath = normalizePath(projectPath);
 
@@ -135,9 +135,9 @@ export function createPlan(
   // Rows written before this still carry the wrapper, so the reader
   // unwraps it rather than relying on this fix alone.
   db.run(
-    `INSERT INTO plan_versions (plan_uid, version, snapshot, change_summary, author, created_at)
-     VALUES (?, 1, ?, 'Plan created', ?, ?)`,
-    [uid, JSON.stringify(plan), author, now]
+    `INSERT INTO plan_versions (plan_uid, version, snapshot, change_summary, author, author_type, created_at)
+     VALUES (?, 1, ?, 'Plan created', ?, ?, ?)`,
+    [uid, JSON.stringify(plan), author, authorType, now]
   );
 
   markDirty();
@@ -270,6 +270,7 @@ export function updatePlan(
     | 'baseRef' | 'targetBranch' | 'targetWorktree' | 'autoCreateBranch'
   >>,
   author: string,
+  authorType: string,
 ): void {
   const db = getDb();
   const now = Date.now();
@@ -295,9 +296,9 @@ export function updatePlan(
     const vr = db.exec(`SELECT MAX(version) FROM plan_versions WHERE plan_uid = ?`, [planUid]);
     const nextVersion = ((vr[0]?.values[0]?.[0] as number) || 0) + 1;
     db.run(
-      `INSERT INTO plan_versions (plan_uid, version, snapshot, change_summary, author, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [planUid, nextVersion, JSON.stringify(plan), Object.keys(changes).join(', ') + ' updated', author, now]
+      `INSERT INTO plan_versions (plan_uid, version, snapshot, change_summary, author, author_type, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [planUid, nextVersion, JSON.stringify(plan), Object.keys(changes).join(', ') + ' updated', author, authorType, now]
     );
   }
   markDirty();
@@ -719,22 +720,21 @@ export function getNextTask(planUid: string, phaseUid?: string | null): Task | P
  * the new model.
  */
 function nextPlanItem(items: PlanItem[], parentUid?: string | null): PlanItem | null {
-  const done = new Set(
-    items.filter((i) => i.status === 'done' || i.status === 'skipped').map((i) => i.uid),
-  );
-
+  // The same dependency rule as `get_next_item`, so the two answers agree:
+  // a dependency in another plan counts once it is done there (bug 11).
+  const local = new Map(items.map((i) => [i.uid, i]));
   for (const item of items) {
     if (item.kind !== 'action') continue;
     if (item.status !== 'pending') continue;
     if (parentUid !== undefined && item.parentUid !== parentUid) continue;
-    if ((item.dependencies ?? []).every((d) => done.has(d))) return item;
+    if (planItemService.dependencyStateOf(item, local).met) return item;
   }
   return null;
 }
 
 export function getPlanVersions(planUid: string): PlanVersion[] {
   const result = getDb().exec(
-    `SELECT id, plan_uid, version, snapshot, change_summary, author, created_at
+    `SELECT id, plan_uid, version, snapshot, change_summary, author, created_at, author_type
      FROM plan_versions WHERE plan_uid = ? ORDER BY version DESC`,
     [planUid]
   );
@@ -742,6 +742,6 @@ export function getPlanVersions(planUid: string): PlanVersion[] {
 
   return result[0].values.map((r: any[]) => ({
     id: r[0], planUid: r[1], version: r[2], snapshot: r[3],
-    changeSummary: r[4], author: r[5], createdAt: r[6],
+    changeSummary: r[4], author: r[5], createdAt: r[6], authorType: r[7] ?? null,
   }));
 }

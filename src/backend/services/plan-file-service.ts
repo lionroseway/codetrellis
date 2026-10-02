@@ -40,6 +40,7 @@ import * as taskAttachmentsService from './task-attachments-service';
 import * as commentService from './comment-service';
 import * as criteriaService from './criteria-service';
 import { getDb } from './database';
+import { noteArrivals } from './skill-arrival-service';
 import { readTextWithin, resolveWithin } from './confined-fs';
 import type {
   Plan,
@@ -64,6 +65,15 @@ import type {
  */
 import { stampSelfWrite, wasJustWrittenByUs } from './self-write-tracker';
 import { getEffectiveDefaultVisibility } from './project-config-service';
+import { getPlansFolder, plansHome, PlansFolderError, projectOfPlansHome } from './plans-home';
+import { heldByAnotherCheckout } from './checkout-identity';
+import { cleanBranch } from './section-workstreams';
+import { guardDiskEdit, settleDiskHold } from './plan-doc-guard';
+import { onHitAnswered } from './breakpoint-service';
+import { importItemRefs, importPlanRefs, refsForItem, refsForPlan } from './plan-file-refs';
+import { importApprovals } from './signed-approvals';
+import { completePlanArrival, recordPlanArrival } from './plan-arrivals';
+import { isPlaceholder, NotOnDeviceError } from './cloud-files';
 
 // --- Public surface ---
 
@@ -192,19 +202,23 @@ export function exportPlan(planUid: string, projectRoot: string): ExportPlanResu
   // else has it, so it follows the title (Phase 32 §0.6): the window saves
   // the title as it is typed, and a plan written at its first save was
   // otherwise named for half a word.
-  const wanted = path.join(projectRoot, '.codetrellis', 'plans', makePlanSlug(plan));
+  // Where the project keeps its plans on this device (C3.4a): the project,
+  // or its linked plans folder. None when it names a folder not linked here.
+  const home = plansHome(projectRoot);
+  if (!home) throw new PlansFolderError(getPlansFolder(projectRoot).says);
+  const wanted = path.join(home, '.codetrellis', 'plans', makePlanSlug(plan));
   let planDir = getLinkedPlanDir(planUid, projectRoot);
-  if (planDir && planDir !== wanted) planDir = followTitleIfUncommitted(projectRoot, planDir, wanted);
+  if (planDir && planDir !== wanted) planDir = followTitleIfUncommitted(home, planDir, wanted);
   planDir ??= wanted;
   ensureDir(planDir);
 
   // Detect V2 items — if any exist, use V2 export path.
   const v2Items = planItemService.listAllItems(planUid);
   if (v2Items.length > 0) {
-    return exportPlanV2(plan, planDir, v2Items, projectRoot);
+    return exportPlanV2(plan, planDir, v2Items, home);
   }
 
-  return exportPlanV1(plan, planDir, planUid, projectRoot);
+  return exportPlanV1(plan, planDir, planUid, home);
 }
 
 /** V1 export path — phases + tasks + docs as separate directories. */
@@ -311,6 +325,11 @@ function exportPlanV2(plan: Plan, planDir: string, _allItems: PlanItem[], projec
   const writtenSet = new Set(files);
   for (const stale of preExisting) {
     if (writtenSet.has(stale)) continue;
+    // Still only in the cloud (C3.4b): deleting it would delete it there
+    // too, and it may hold a teammate's newer copy. Kept until the client
+    // brings it down; the watcher then imports it before a later export
+    // prunes it.
+    if (isPlaceholder(stale)) continue;
     stampSelfWrite(stale);
     try { fs.unlinkSync(stale); } catch { /* best-effort */ }
   }
@@ -398,6 +417,9 @@ function writeItemChildren(
  * refuses any symlinked component and anything outside the root.
  */
 function readPlanFile(planDir: string, file: string): string {
+  // A file a sync client has not brought down is never opened (C3.4b):
+  // opening it would download it.
+  if (isPlaceholder(path.resolve(file))) throw new NotOnDeviceError(path.relative(planDir, file) || 'plan.yaml');
   // Relative, because the helper canonicalises the ROOT: an absolute path
   // spelled through a symlinked prefix (/tmp vs /private/tmp on macOS)
   // would otherwise read as outside it.
@@ -437,10 +459,31 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
   }
 
   const planUid = planRaw.uid as string;
+
+  // Another checkout of this repository holds this plan (bug 46): nothing
+  // from this copy is imported over it — not its title, status or items. If
+  // this copy differs, it is this workstream's change.
+  const held = planService.getPlan(planUid);
+  const checkout = checkoutOfPlanDir(planDir);
+  const sitsIn = checkout ? projectOfPlansHome(checkout) ?? checkout : null;
+  if (held && sitsIn && heldByAnotherCheckout(held.projectPath, sitsIn)) {
+    return {
+      plan: held, phases: [], tasks: [], docs: [], items: [],
+      version: planRaw.version === 2 || fs.existsSync(path.join(planDir, 'items')) ? 2 : 1,
+      warnings: [`Not imported: this plan is held by ${held.projectPath}, another checkout of this repository. This copy's differences are that checkout's workstream changes.`],
+    };
+  }
+
   const projectPath = importedPlanRoot(planUid, planDir, planRaw.projectPath);
 
-  // 1. Plan upsert (same for V1 and V2).
+  // 1. Plan upsert (same for V1 and V2), and its tickets (C2.5a). A plan new
+  // to this machine arrived through its files: who added it, and in which
+  // commit, as git says (C2.6a).
+  const arriving = !planService.getPlan(planUid);
   upsertPlan(planUid, planRaw, projectPath);
+  if (arriving) recordPlanArrival(planUid, planFile);
+  else completePlanArrival(planUid, planFile);
+  if (planRaw.refs !== undefined) importPlanRefs(planUid, planRaw.refs);
 
   // 2. Detect format: version:2 in plan.yaml OR items/ directory → V2.
   const isV2 = planRaw.version === 2 || fs.existsSync(path.join(planDir, 'items'));
@@ -465,7 +508,38 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
     // Channel event service not available (test isolation) — skip.
   }
 
+  // Phase 32 C2.5b — teammates' approvals, each checked against git's allowed
+  // signers. A verified one adds that person's sign-off; anything else is
+  // kept as "can't verify" and counts for nothing.
+  try {
+    const checked = importApprovals(planDir, planUid, projectPath, {
+      criterion: (uid) => {
+        const c = criteriaService.getCriterion(uid);
+        const item = c ? planItemService.getItem(c.itemUid) : null;
+        return c && item ? { text: c.text, itemUid: c.itemUid, planUid: item.planUid } : null;
+      },
+      addSignoff: (input) => criteriaService.addVerifiedSignoff(input),
+    });
+    if (checked.unverified) warnings.push(`${checked.unverified} approval record${checked.unverified === 1 ? '' : 's'} could not be verified and count for nothing.`);
+  } catch (err) {
+    warnings.push(`Approval records were not read: ${err instanceof Error ? err.message : err}`);
+  }
+
+  // Phase 32 C3.1 — teammates' task-state records for this plan, once its
+  // items are known (a pull can land the records before the plan).
+  if (planImportedListener) {
+    try { planImportedListener(planUid, projectPath); } catch (err) {
+      warnings.push(`Task-state records were not read: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
   return result;
+}
+
+let planImportedListener: ((planUid: string, projectRoot: string) => void) | null = null;
+/** Told after a plan is imported from its files (C3.1 reads its task-state records then). */
+export function setPlanImportedListener(fn: ((planUid: string, projectRoot: string) => void) | null): void {
+  planImportedListener = fn;
 }
 
 /** V1 import path — reads phases/, tasks/, docs/ directories. */
@@ -582,10 +656,12 @@ function importItemsFromDir(
       const stat = fs.lstatSync(fullPath);
 
       if (stat.isFile() && (entry.endsWith('.yaml') || entry.endsWith('.yml'))) {
-        // Leaf item
+        // Leaf item. One still only in the cloud is skipped, never deleted:
+        // the task this machine has stays as it was (C3.4b).
+        if (isPlaceholder(fullPath)) { warnings.push(`${path.relative(planDir, fullPath)} is not on this device`); continue; }
         const raw = parseYaml(readPlanFile(planDir, fullPath));
         if (!raw?.uid) { warnings.push(`Skipping ${fullPath} — missing uid`); continue; }
-        const item = upsertItem(planUid, parentUid, raw, warnings);
+        const item = upsertItem(planUid, parentUid, raw, warnings, fullPath);
         if (item) collected.push(item);
       } else if (stat.isDirectory()) {
         // Item with children — read _self.yaml first
@@ -594,9 +670,10 @@ function importItemsFromDir(
           warnings.push(`Skipping directory ${fullPath} — no _self.yaml`);
           continue;
         }
+        if (isPlaceholder(selfPath)) { warnings.push(`${path.relative(planDir, selfPath)} is not on this device`); continue; }
         const raw = parseYaml(readPlanFile(planDir, selfPath));
         if (!raw?.uid) { warnings.push(`Skipping ${selfPath} — missing uid`); continue; }
-        const item = upsertItem(planUid, parentUid, raw, warnings);
+        const item = upsertItem(planUid, parentUid, raw, warnings, selfPath);
         if (item) {
           collected.push(item);
           // Recurse into children
@@ -618,25 +695,30 @@ function upsertItem(
   parentUid: string | null,
   raw: any,
   warnings: string[],
+  file: string,
 ): PlanItem | null {
   const uid = String(raw.uid);
   const existing = planItemService.getItem(uid);
+  const skillsBefore = existing?.skills ?? [];
 
   const kind = raw.kind === 'object' ? 'object' : 'action';
   const now = Date.now();
 
   if (existing) {
-    // Update existing item
-    planItemService.updateItem(uid, {
+    // Update existing item. A state an older file still carries is the
+    // file's, not this machine's, so it is never written as our record (C3.1).
+    planItemService.withoutStateRecords(() => planItemService.updateItem(uid, {
       title: typeof raw.title === 'string' ? raw.title : undefined,
       body: typeof raw.body === 'string' ? raw.body : undefined,
       template: raw.template ?? null,
+      // State is no longer written (C2.4b). A file from before that still
+      // carries it is read; a file without it leaves this machine's alone.
       status: isTaskStatus(raw.status) ? raw.status : undefined,
-      assignee: raw.assignee ?? null,
-      assigneeType: raw.assigneeType ?? null,
-      assigneeModel: raw.assigneeModel ?? null,
+      assignee: 'assignee' in raw ? raw.assignee ?? null : undefined,
+      assigneeType: 'assignee' in raw ? raw.assigneeType ?? null : undefined,
+      assigneeModel: 'assignee' in raw ? raw.assigneeModel ?? null : undefined,
       progressPercent: typeof raw.progressPercent === 'number' ? raw.progressPercent : undefined,
-      blockedReason: raw.blockedReason ?? null,
+      blockedReason: 'blockedReason' in raw ? raw.blockedReason ?? null : undefined,
       scopePath: raw.scopePath ?? null,
       fileSpecs: Array.isArray(raw.fileSpecs) ? raw.fileSpecs : undefined,
       symbolSpecs: Array.isArray(raw.symbolSpecs) ? raw.symbolSpecs : undefined,
@@ -647,6 +729,8 @@ function upsertItem(
       skillsMode: raw.skillsMode ?? undefined,
       claimPolicy: raw.claimPolicy ?? undefined,
       claimPolicyMode: raw.claimPolicyMode ?? undefined,
+      // Phase 32 C5.1 — a branch name, or nothing: a file is anyone's text.
+      workstream: cleanBranch(raw.workstream),
       executionConfig: raw.executionConfig ?? undefined,
       executionConfigMode: raw.executionConfigMode ?? undefined,
       constraints: raw.constraints ?? undefined,
@@ -658,7 +742,7 @@ function upsertItem(
       parentUid,
       author: 'file-import',
       authorType: 'system',
-    });
+    }));
   } else {
     // Create new item with preserved UID
     planItemService.createItem({
@@ -686,6 +770,7 @@ function upsertItem(
       skillsMode: raw.skillsMode ?? 'inherit',
       claimPolicy: raw.claimPolicy ?? null,
       claimPolicyMode: raw.claimPolicyMode ?? 'inherit',
+      workstream: cleanBranch(raw.workstream),
       executionConfig: raw.executionConfig ?? null,
       executionConfigMode: raw.executionConfigMode ?? 'inherit',
       constraints: raw.constraints ?? null,
@@ -725,6 +810,7 @@ function upsertItem(
         author: String(a.author ?? 'human'),
         authorType: String(a.authorType ?? 'human'),
         createdAt: toEpoch(a.createdAt) ?? Date.now(),
+        role: typeof a.role === 'string' ? a.role as 'material' : null,
       });
       if (!stored) warnings.push(`Skipped attachment ${String(a.uid)}: it belongs to another item`);
     }
@@ -735,6 +821,9 @@ function upsertItem(
   if (item && Array.isArray(raw.criteria)) {
     criteriaService.importCriteria(item.uid, raw.criteria);
   }
+
+  // Phase 32 C2.5a — its links, cleaned; a file adds, never removes.
+  if (item && raw.refs !== undefined) importItemRefs(item.uid, raw.refs);
 
   // Inline comments
   if (Array.isArray(raw.comments)) {
@@ -757,6 +846,14 @@ function upsertItem(
     }
   }
 
+  // Phase 32 C1.4: a skill this file brought that the item did not have is
+  // held back from agents until a person accepts it.
+  if (item) {
+    try {
+      noteArrivals({ itemUid: item.uid, before: skillsBefore, after: item.skills ?? [], file });
+    } catch { /* never let the flag break an import */ }
+  }
+
   return item;
 }
 
@@ -766,7 +863,9 @@ function upsertItem(
  * explicit import step.
  */
 export function discoverPlanDirs(projectRoot: string): string[] {
-  const root = path.join(projectRoot, '.codetrellis', 'plans');
+  const home = plansHome(projectRoot);
+  if (!home) return [];
+  const root = path.join(home, '.codetrellis', 'plans');
   if (!fs.existsSync(root)) return [];
   return fs.readdirSync(root)
     .map((name) => path.join(root, name))
@@ -774,7 +873,7 @@ export function discoverPlanDirs(projectRoot: string): string[] {
       try {
         // lstat: a link in the plans dir is not a plan directory, wherever
         // it points.
-        return fs.lstatSync(p).isDirectory() && fs.existsSync(path.join(p, 'plan.yaml'));
+        return fs.lstatSync(p).isDirectory() && fs.existsSync(path.join(p, 'plan.yaml')) && !isPlaceholder(path.join(p, 'plan.yaml'));
       } catch {
         return false;
       }
@@ -792,7 +891,9 @@ export function discoverPlanDirs(projectRoot: string): string[] {
 export function getLinkedPlanDir(planUid: string, projectRoot: string): string | null {
   const plan = planService.getPlan(planUid);
   if (!plan) return null;
-  const plansRoot = path.join(projectRoot, '.codetrellis', 'plans');
+  const home = plansHome(projectRoot);
+  if (!home) return null;
+  const plansRoot = path.join(home, '.codetrellis', 'plans');
   const dir = path.join(plansRoot, makePlanSlug(plan));
   if (fs.existsSync(path.join(dir, 'plan.yaml'))) return dir;
 
@@ -938,7 +1039,9 @@ export function reconcilePlanState(projectRoot: string): {
  */
 export function pruneOrphanedDirs(projectRoot: string, dirPaths: string[]): { removed: number; skipped: string[] } {
   const orphans = new Set(reconcilePlanState(projectRoot).orphanedOnDisk.map((o) => o.dirPath));
-  const plansRoot = path.join(projectRoot, '.codetrellis', 'plans');
+  const home = plansHome(projectRoot);
+  if (!home) return { removed: 0, skipped: [...dirPaths] };
+  const plansRoot = path.join(home, '.codetrellis', 'plans');
   let removed = 0;
   const skipped: string[] = [];
   for (const dir of dirPaths) {
@@ -1045,7 +1148,11 @@ export function startPlanFileWatcher(projectRoot: string): Promise<void> {
     return watcherReady.get(projectRoot) ?? Promise.resolve(); // already watching
   }
 
-  const plansRoot = path.join(projectRoot, '.codetrellis', 'plans');
+  // The project's plans folder on this device (C3.4a); none to watch when it
+  // names one not linked here. Linking restarts this watcher.
+  const home = plansHome(projectRoot);
+  if (!home) return Promise.resolve();
+  const plansRoot = path.join(home, '.codetrellis', 'plans');
 
   // Pre-create the plans dir before binding chokidar to it. Without
   // this, chokidar v4 + `ignoreInitial: true` + a target that comes
@@ -1281,6 +1388,9 @@ function serializePlan(plan: Plan & { tasks?: Task[] }, version?: 1 | 2) {
   if (plan.scope && plan.scope.length > 0) {
     obj.scope = [...plan.scope].sort();
   }
+  // Phase 32 C2.5a — the plan's tickets, so its lineage survives a pull.
+  const refs = refsForPlan(plan.uid);
+  if (refs.length) obj.refs = refs;
   return obj;
 }
 
@@ -1291,7 +1401,10 @@ function serializePlan(plan: Plan & { tasks?: Task[] }, version?: 1 | 2) {
  */
 function serializeItem(item: PlanItem): Record<string, unknown> {
   const attachments = taskAttachmentsService.listItemAttachments(item.uid);
-  const comments = commentService.listItemComments(item.uid);
+  // A progress report is state, like the percent it carries (C2.4b), so it
+  // stays on this machine; notes, blockers and questions are people's words
+  // to the team and ride with the item.
+  const comments = commentService.listItemComments(item.uid).filter((c) => c.kind !== 'progress');
 
   const obj: Record<string, unknown> = {
     uid: item.uid,
@@ -1303,16 +1416,11 @@ function serializeItem(item: PlanItem): Record<string, unknown> {
   if (item.body) obj.body = item.body;
   if (item.template) obj.template = item.template;
 
-  // Action-only fields — only include when present
+  // Action-only fields — only include when present. Its state (status,
+  // progress, blocked reason, claim) is not written (Phase 32 C2.4b): the
+  // file says what the task is, and its state is read from git, a host or
+  // this machine's record of it, so a status change rewrites nothing.
   if (item.kind === 'action') {
-    if (item.status) obj.status = item.status;
-    if (item.assignee) {
-      obj.assignee = item.assignee;
-      if (item.assigneeType) obj.assigneeType = item.assigneeType;
-      if (item.assigneeModel) obj.assigneeModel = item.assigneeModel;
-    }
-    if (item.progressPercent != null) obj.progressPercent = item.progressPercent;
-    if (item.blockedReason) obj.blockedReason = item.blockedReason;
     if (item.scopePath) obj.scopePath = item.scopePath;
     if (item.fileSpecs?.length) obj.fileSpecs = item.fileSpecs;
     if (item.symbolSpecs?.length) obj.symbolSpecs = item.symbolSpecs;
@@ -1326,6 +1434,7 @@ function serializeItem(item: PlanItem): Record<string, unknown> {
     obj.skills = item.skills;
     if (item.skillsMode && item.skillsMode !== 'inherit') obj.skillsMode = item.skillsMode;
   }
+  if (item.workstream) obj.workstream = item.workstream;
   if (item.claimPolicy) {
     obj.claimPolicy = item.claimPolicy;
     if (item.claimPolicyMode && item.claimPolicyMode !== 'inherit') obj.claimPolicyMode = item.claimPolicyMode;
@@ -1349,7 +1458,13 @@ function serializeItem(item: PlanItem): Record<string, unknown> {
   obj.author = item.author;
   obj.authorType = item.authorType;
   obj.createdAt = new Date(item.createdAt).toISOString();
-  obj.updatedAt = new Date(item.updatedAt).toISOString();
+  // No updatedAt (C2.4b): every change bumps it, a status change too, so
+  // writing it would rewrite the file for state. When an item last changed
+  // is in git's history of its file.
+
+  // Phase 32 C2.5a — the links attached to it: tickets, designs, docs.
+  const refs = refsForItem(item.uid);
+  if (refs.length) obj.refs = refs;
 
   // Inline attachments
   if (attachments.length) {
@@ -1362,6 +1477,9 @@ function serializeItem(item: PlanItem): Record<string, unknown> {
       author: a.author,
       authorType: a.authorType,
       createdAt: new Date(a.createdAt).toISOString(),
+      // A file reference's role travels (C3.4c), so a material is one on a
+      // teammate's machine too. Its hash does not: each device takes its own.
+      ...(a.kind === 'file_ref' && a.role ? { role: a.role } : {}),
     }));
   }
 
@@ -1438,6 +1556,7 @@ function serializeTask(task: Task, attachments: TaskAttachment[], comments: Comm
       author: a.author,
       authorType: a.authorType,
       createdAt: new Date(a.createdAt).toISOString(),
+      ...(a.kind === 'file_ref' && a.role ? { role: a.role } : {}),
     })),
     comments: comments.map((c) => ({
       uid: c.uid,
@@ -1496,6 +1615,14 @@ function serializeDoc(doc: PlanDocument): string {
  *   3. only for a directory outside that layout, the file's absolute
  *      `projectPath`, and `'.'` as the last resort (the old behaviour).
  */
+/** The checkout a plan directory sits in (`<checkout>/.codetrellis/plans/<slug>`), or null outside that layout. */
+function checkoutOfPlanDir(planDir: string): string | null {
+  const slugDir = path.resolve(planDir);
+  const plansDir = path.dirname(slugDir);
+  const dotDir = path.dirname(plansDir);
+  return path.basename(plansDir) === 'plans' && path.basename(dotDir) === '.codetrellis' ? path.dirname(dotDir) : null;
+}
+
 export function importedPlanRoot(planUid: string, planDir: string, declared: unknown): string {
   const existing = planService.getPlan(planUid)?.projectPath;
   if (existing && path.isAbsolute(existing) && fs.existsSync(existing)) return existing;
@@ -1504,7 +1631,9 @@ export function importedPlanRoot(planUid: string, planDir: string, declared: unk
   const plansDir = path.dirname(slugDir);
   const dotDir = path.dirname(plansDir);
   if (path.basename(plansDir) === 'plans' && path.basename(dotDir) === '.codetrellis') {
-    return path.dirname(dotDir);
+    // A linked plans folder holds another project's plans (C3.4a): the plan
+    // belongs to that project, not to the folder it sits in.
+    return projectOfPlansHome(path.dirname(dotDir)) ?? path.dirname(dotDir);
   }
 
   if (typeof declared === 'string' && path.isAbsolute(declared)) return declared;
@@ -1760,6 +1889,9 @@ function upsertDoc(planUid: string, meta: any, body: string): void {
   const docUid = String(meta.uid);
   const existing = planDocsService.getPlanDocument(docUid);
   if (existing) {
+    // A document a person guards keeps the app's version until they decide (B7.5b).
+    const title = typeof meta.title === 'string' ? meta.title : undefined;
+    if (guardDiskEdit(docUid, { title, body }) === 'held') return;
     planDocsService.updatePlanDocument(docUid, {
       title: typeof meta.title === 'string' ? meta.title : undefined,
       body,
@@ -1791,6 +1923,24 @@ function upsertDoc(planUid: string, meta: any, body: string): void {
   );
 }
 
+/**
+ * Settle a guarded plan document once a person answers its hold (B7.5b):
+ * continue has applied the file's version (and the write-through that
+ * follows any document change); stop kept the app's, so write it back over
+ * the file. Registered once, by the server, so every surface that answers a
+ * hit (the window, the phone, a breakpoint cleared) settles it the same way.
+ */
+let settling = false;
+export function registerDiskHoldSettling(): void {
+  if (settling) return;
+  settling = true;
+  onHitAnswered((hit) => {
+    if (hit.action !== 'disk') return;
+    const outcome = settleDiskHold(hit);
+    if (outcome === 'restore' && hit.planUid) scheduleWriteThrough(hit.planUid);
+  });
+}
+
 // --- Helpers ---
 
 export function makePlanSlug(plan: Plan): string {
@@ -1817,6 +1967,17 @@ function ensureDir(dir: string): void {
 }
 
 function writeFileAtomic(filePath: string, content: string): void {
+  // A file still only in the cloud is neither read nor written (C3.4b):
+  // reading it would download it, and writing over it would replace what
+  // may be a teammate's newer copy with this machine's. It is written on a
+  // later export, once the client has brought it down.
+  if (isPlaceholder(filePath)) {
+    console.warn(`[Plans] ${filePath} is not on this device yet; not written, so a newer copy in the cloud is kept.`);
+    return;
+  }
+  // Unchanged content is not rewritten (C2.4b): a write-through re-exports
+  // the whole plan, and a file touched for nothing is noise to a sync client.
+  try { if (fs.readFileSync(filePath, 'utf-8') === content) return; } catch { /* not there yet */ }
   const tmp = `${filePath}.tmp`;
   fs.writeFileSync(tmp, content, 'utf-8');
   fs.renameSync(tmp, filePath);

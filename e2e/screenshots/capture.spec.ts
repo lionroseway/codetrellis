@@ -135,7 +135,7 @@ test.describe('Screenshot capture', () => {
 
   test('12 - Timeline', async ({ page }) => {
     await gotoWithProject(page);
-    await page.locator('button:has-text("Timeline")').first().click();
+    await page.getByRole('button', { name: /^Timeline( \d+)?$/ }).click();
     await page.waitForTimeout(500);
     await page.screenshot({ path: shot('12-timeline.png'), fullPage: true });
   });

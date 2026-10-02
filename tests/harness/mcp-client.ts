@@ -12,6 +12,9 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { ListRootsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { pathToFileURL } from 'node:url';
+import { bindingHeaders } from '../../src/backend/mcp/binding-headers';
 
 export interface McpClientOptions {
   /**
@@ -28,6 +31,17 @@ export interface McpClientOptions {
   clientName?: string;
   /** Default: `1.0.0`. */
   clientVersion?: string;
+  /**
+   * Folders to offer as MCP roots (absolute paths). When set, the client
+   * declares the `roots` capability and answers `roots/list` with them, as
+   * Claude Code does (Phase 32 A1.1's second binding source).
+   */
+  roots?: string[];
+  /**
+   * The folder to report as the agent's own, the way the stdio connector
+   * does with `x-codetrellis-cwd` (Phase 32 A1.1 / A1.7c).
+   */
+  cwd?: string;
 }
 
 export interface McpToolResult {
@@ -38,6 +52,12 @@ export interface McpToolResult {
   /** Best-effort decoded text — concatenation of every text-typed
    *  content entry. Empty string if there's no text. */
   text: string;
+  /**
+   * The tool's own answer: its first text entry. An awareness notice (Phase
+   * 32 A2.6) rides after it as a separate entry, so parse this, not `text`,
+   * when the answer is JSON and the agent may have been told something.
+   */
+  answer: string;
 }
 
 export interface ScriptedMcp {
@@ -49,6 +69,8 @@ export interface ScriptedMcp {
   callTool(name: string, args: Record<string, unknown>): Promise<McpToolResult>;
   /** Return the registered tool list (useful for introspection in tests). */
   listTools(): Promise<Array<{ name: string; description?: string }>>;
+  /** Read a resource by URI; its text contents, joined. */
+  readResource(uri: string): Promise<string>;
   /** True between `connect()` and `disconnect()`. */
   readonly connected: boolean;
 }
@@ -67,11 +89,19 @@ export function createMcpClient(opts: McpClientOptions): ScriptedMcp {
 
     async connect() {
       if (connected) return;
-      transport = new SSEClientTransport(url);
+      transport = new SSEClientTransport(url, opts.cwd ? {
+        eventSourceInit: {
+          fetch: (u, init) => fetch(u, { ...init, headers: { ...(init?.headers as Record<string, string> | undefined), ...bindingHeaders({ cwd: opts.cwd }) } }),
+        },
+      } : undefined);
       client = new Client(
         { name: opts.clientName ?? 'harness-client', version: opts.clientVersion ?? '1.0.0' },
-        { capabilities: {} },
+        { capabilities: opts.roots ? { roots: {} } : {} },
       );
+      if (opts.roots) {
+        const roots = opts.roots.map((p) => ({ uri: pathToFileURL(p).href, name: p }));
+        client.setRequestHandler(ListRootsRequestSchema, async () => ({ roots }));
+      }
       await client.connect(transport);
       connected = true;
     },
@@ -100,10 +130,12 @@ export function createMcpClient(opts: McpClientOptions): ScriptedMcp {
         .filter((c) => c.type === 'text' && typeof c.text === 'string')
         .map((c) => c.text as string)
         .join('\n');
+      const answer = (result.content ?? []).find((c) => c.type === 'text' && typeof c.text === 'string')?.text ?? '';
       return {
         content: result.content ?? [],
         isError: result.isError,
         text,
+        answer: answer as string,
       };
     },
 
@@ -113,6 +145,14 @@ export function createMcpClient(opts: McpClientOptions): ScriptedMcp {
       }
       const result = await client.listTools();
       return result.tools.map((t) => ({ name: t.name, description: t.description }));
+    },
+
+    async readResource(uri) {
+      if (!client || !connected) {
+        throw new Error('MCP client not connected — call connect() first');
+      }
+      const result = await client.readResource({ uri });
+      return (result.contents ?? []).map((c) => ('text' in c && typeof c.text === 'string' ? c.text : '')).join('\n');
     },
   };
 }

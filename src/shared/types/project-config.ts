@@ -1,3 +1,5 @@
+import type { RecurrenceRule } from './recurring';
+import type { ArchitectureRule } from './architecture-rules';
 /**
  * Per-project configuration — Phase 1.1 of the CDev target architecture
  * (see `docs/cdev/14-configuration-and-personal-continuity.md` and
@@ -31,7 +33,21 @@ export interface ProjectPlansConfig {
    * are stored. When absent, falls through to the per-user setting.
    */
   attachmentLocation?: AttachmentLocation;
+  /**
+   * Phase 32 C3.4a — where this project's plans live when not in the
+   * project itself: a planning repository, by its remote, or a folder a
+   * sync client carries, by its place under the provider's root. Never a
+   * full path: every teammate's copy sits somewhere else. Each device's copy
+   * is confirmed by its person before anything there is read.
+   */
+  folder?: PlansFolderRef;
 }
+
+export type PlansFolderProvider = 'onedrive' | 'sharepoint' | 'folder';
+
+export type PlansFolderRef =
+  | { kind: 'git'; remote: string }
+  | { kind: 'synced'; provider: PlansFolderProvider; place: string };
 
 // --- Channels routing (Phase 2.2) ------------------------------------------
 
@@ -160,10 +176,33 @@ export interface StuckSensorConfig {
   idleMinutes?: number;
 }
 
+/** Phase 32 — awareness of parallel work. */
+export interface AwarenessSensorConfig {
+  /**
+   * A branch with no checkout on this machine counts as a workstream when
+   * its last commit is this recent. Default: 7.
+   */
+  branchWindowDays?: number;
+  /**
+   * Tell an agent about an unseen high or medium signal for its workstream by
+   * appending a short notice to its next tool result, once per signal
+   * (A2.6, awareness spec §6.2). Default: true.
+   */
+  inlineNotices?: boolean;
+  /**
+   * A `code` criterion fails while the plan's workstream has an open high
+   * overlap with other work, so sign-off waits the way it would for a
+   * failing test (A5.3, awareness spec §9.2). Awareness never blocks a tool
+   * call; this is the one mechanical check, and it is opt-in. Default: false.
+   */
+  holdSignOffOnHighSignals?: boolean;
+}
+
 export interface SensorConfig {
   drift?: DriftSensorConfig;
   docs?: DocSensorConfig;
   stuck?: StuckSensorConfig;
+  awareness?: AwarenessSensorConfig;
 }
 
 // --- Sensor defaults (used by getEffectiveSensorConfig) ----------------------
@@ -172,6 +211,7 @@ export const SENSOR_DEFAULTS = {
   drift: { enabled: true, channelEvents: true, debounceMs: 2000 },
   docs: { enabled: true, channelEvents: true },
   stuck: { enabled: false, repetitionThreshold: 8, errorLoopThreshold: 5, idleMinutes: 15 },
+  awareness: { branchWindowDays: 7, inlineNotices: true, holdSignOffOnHighSignals: false },
 } as const;
 
 /** Phase 6.5 — freeze-period governance. */
@@ -202,6 +242,10 @@ export interface ProjectConfig {
   defaultSurface?: ProjectDefaultSurface;
   /** Phase 6.5 — freeze-period governance. */
   freeze?: FreezeConfig;
+  /** Phase 32 C4 — recurring playbooks, kept here so the team sees them. */
+  recurring?: RecurrenceRule[];
+  /** Phase 32 A7 — architecture rules: path boundaries the team keeps here. */
+  rules?: ArchitectureRule[];
   /** ISO timestamp of last save. Updated automatically. */
   updatedAt?: string;
 }

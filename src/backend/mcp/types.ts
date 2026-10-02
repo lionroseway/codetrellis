@@ -75,7 +75,7 @@ export interface ToolDeps {
    */
   criterionLoop: Pick<
     typeof import('../services/criterion-loop-service'),
-    'checkCriterion' | 'submitChecked' | 'getWorklist' | 'runCheckRun'
+    'checkCriterion' | 'submitChecked' | 'getWorklist' | 'runCheckRun' | 'testsOlderThanCode'
   >;
   /** Phase 31 §4.2 — record a file that matters; hashes kept current. */
   artefactService: Pick<
@@ -84,7 +84,7 @@ export interface ToolDeps {
   >;
   startArtefactWatching: typeof import('../services/artefact-watcher').startArtefactWatching;
   /** Phase 31 §5 — the Brief, and reading a material through us (§5.1). */
-  briefService: Pick<typeof import('../services/brief-service'), 'getBrief' | 'listMaterials'>;
+  briefService: Pick<typeof import('../services/brief-service'), 'getBrief' | 'listMaterials' | 'skillsBlock'>;
   readMaterial: typeof import('../services/material-reader/reader-host').readMaterial;
 
   // Specific function imports (not full modules)

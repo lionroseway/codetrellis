@@ -55,6 +55,7 @@ import { getDb } from './database';
 import { markDirty } from './persistence';
 import { stampSelfWrite, wasJustWrittenByUs } from './self-write-tracker';
 import type { SystemDoc, SystemDocReferences, SystemDocFreshness, SystemDocFreshnessReport } from '../../shared/types';
+import { heldByAnotherCheckout } from './checkout-identity';
 
 // ---------- Public surface ----------
 
@@ -630,7 +631,12 @@ function importDocFile(filePath: string, projectPath: string): boolean {
   const createdAt = parseEpoch(meta.createdAt) ?? now;
 
   const db = getDb();
-  const exists = db.exec(`SELECT uid FROM system_docs WHERE uid = ?`, [uid]);
+  const exists = db.exec(`SELECT uid, project_path FROM system_docs WHERE uid = ?`, [uid]);
+  // Another checkout of this repository holds this doc (bug 46): leave its
+  // row alone. This copy, if it differs, is this workstream's change.
+  if (exists[0]?.values[0] && heldByAnotherCheckout(exists[0].values[0][1] as string, projPath)) {
+    return false;
+  }
   if (exists[0]?.values[0]) {
     db.run(
       `UPDATE system_docs SET project_path = ?, slug = ?, title = ?, body = ?, owner = ?,

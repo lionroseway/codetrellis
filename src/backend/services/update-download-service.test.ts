@@ -175,3 +175,77 @@ describe('the artifact must be the release being offered (M29)', () => {
     assert.doesNotMatch(result.error ?? '', /does not carry that version/);
   });
 });
+
+describe('the download is in flight from the moment it starts (owner, 0.1.16 → 0.1.17)', () => {
+  test('state reads "preparing" before the manifest has been fetched, not "idle"', async () => {
+    // The panel polls from the moment Download is pressed. The state used to
+    // stay idle through the manifest fetch, the panel read idle as finished,
+    // stopped polling, and the whole download ran with no progress shown.
+    const run = svc.startUpdateDownload('0.1.9', {
+      url: 'https://github.com/lionroseway/codetrellis-releases/releases/download/v0.1.9/CodeTrellis-0.1.9-arm64.dmg',
+      filename: 'CodeTrellis-0.1.9-arm64.dmg',
+      size: 1234,
+    } as never);
+    const now = svc.getUpdateDownloadState();
+    assert.equal(now.phase, 'preparing');
+    assert.equal(now.version, '0.1.9');
+    assert.equal(now.totalBytes, 1234);
+    await run;
+  });
+
+  test('cancelling while preparing ends idle, with no error and nothing on disk', async () => {
+    const run = svc.startUpdateDownload('0.1.9', {
+      url: 'https://github.com/lionroseway/codetrellis-releases/releases/download/v0.1.9/CodeTrellis-0.1.9-arm64.dmg',
+      filename: 'CodeTrellis-0.1.9-arm64.dmg',
+    } as never);
+    svc.cancelUpdateDownload();
+    const result = await run;
+    assert.equal(result.phase, 'idle');
+    assert.equal(result.error, null);
+    const dir = path.join(tmp, 'updates');
+    assert.deepEqual(fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => !f.endsWith('.part')) : [], []);
+  });
+});
+
+describe('saving a copy where the person chooses', () => {
+  const staged = (bytes: string) => {
+    const dir = path.join(tmp, 'updates');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'CodeTrellis-9.9.9-arm64.dmg');
+    fs.writeFileSync(filePath, bytes);
+    return filePath;
+  };
+  const sha = (s: string) => createHash('sha256').update(s).digest('hex');
+
+  test('the verified file is copied, checked, and remembered as saved', async () => {
+    const filePath = staged('installer bytes');
+    svc._setVerifiedForTest({ version: '9.9.9', filename: 'CodeTrellis-9.9.9-arm64.dmg', filePath, sha256: sha('installer bytes') });
+    const dest = path.join(tmp, 'Downloads', 'CodeTrellis-9.9.9-arm64.dmg');
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+
+    assert.equal(await svc.saveVerifiedUpdateCopy(dest), dest);
+    assert.equal(fs.readFileSync(dest, 'utf8'), 'installer bytes');
+    assert.equal(fs.existsSync(`${dest}.part`), false);
+    assert.equal(svc.getUpdateDownloadState().savedPath, dest);
+    assert.equal(svc.getUpdateDownloadState().phase, 'ready');
+  });
+
+  test('a file changed on disk since it was verified is refused, and no copy is left behind', async () => {
+    const filePath = staged('installer bytes');
+    svc._setVerifiedForTest({ version: '9.9.9', filename: 'CodeTrellis-9.9.9-arm64.dmg', filePath, sha256: sha('installer bytes') });
+    fs.writeFileSync(filePath, 'tampered bytes');
+    const dest = path.join(tmp, 'copy.dmg');
+
+    await assert.rejects(svc.saveVerifiedUpdateCopy(dest), /changed on disk/);
+    assert.equal(fs.existsSync(dest), false);
+    assert.equal(fs.existsSync(`${dest}.part`), false);
+    assert.equal(svc.getUpdateDownloadState().savedPath, null);
+  });
+
+  test('nothing is saved before a download is verified, or to a relative path', async () => {
+    await assert.rejects(svc.saveVerifiedUpdateCopy(path.join(tmp, 'x.dmg')), /No verified download/);
+    const filePath = staged('installer bytes');
+    svc._setVerifiedForTest({ version: '9.9.9', filename: 'CodeTrellis-9.9.9-arm64.dmg', filePath, sha256: sha('installer bytes') });
+    await assert.rejects(svc.saveVerifiedUpdateCopy('relative/x.dmg'), /absolute/);
+  });
+});

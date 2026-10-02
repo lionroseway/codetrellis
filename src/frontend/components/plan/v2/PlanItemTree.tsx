@@ -6,7 +6,14 @@ import {
 } from 'lucide-react';
 import { usePlanItemsStore, buildItemTree } from '../../../stores/plan-items-store';
 import { useToastStore } from '../../../stores/toast-store';
+import { progressByWorktree, worktreeReadiness } from '../../../lib/section-worktrees';
+import { useAwarenessStore } from '../../../stores/awareness-store';
+import { useReplayStore } from '../../../stores/replay-store';
 import type { PlanItem, PlanItemKind, TaskStatus } from '@shared/types';
+import { usePlanGitStates, GIT_STATE_TONE, gitStateTitle, type PlanItemGitState } from '../../../lib/plan-git-state';
+import { usePlanStatus } from '../../../lib/plan-status';
+import { statusLine, type ItemStatus } from '@shared/lib/item-status';
+import { gitStateChip, sourceWords } from '@shared/lib/git-state-words';
 
 const STATUS_ICON: Record<TaskStatus, { Icon: typeof Circle; tint: string }> = {
   pending: { Icon: Circle, tint: 'text-zinc-500' },
@@ -54,6 +61,18 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
   );
 
   // Phase 5.2 — count local items for the bulk-toggle affordance.
+  // Phase 32 C5.3 — how far each worktree this plan is split across has got.
+  const worktreeProgress = useMemo(() => progressByWorktree(itemsByUid), [itemsByUid]);
+  // C5.3b — and whether each is ready to merge.
+  const workstreams = useAwarenessStore((s) => s.workstreams);
+  const signals = useAwarenessStore((s) => s.signals);
+  // C2.1 — what git proves about each section's branch; C2.4 — and every
+  // item's state with its source (git, a review host, or the plan itself).
+  const branchesNonce = useMemo(() => Object.values(itemsByUid).map((i) => `${i.uid}:${i.workstream ?? ''}`).join('|'), [itemsByUid]);
+  const gitStates = usePlanGitStates(planUid, branchesNonce);
+  const statusNonce = useMemo(() => Object.values(itemsByUid).map((i) => `${i.uid}:${i.status ?? ''}:${i.workstream ?? ''}:${i.updatedAt ?? ''}`).join('|'), [itemsByUid]);
+  const planStatus = usePlanStatus(planUid, statusNonce);
+  const statuses = useMemo(() => Object.fromEntries((planStatus?.items ?? []).map((s) => [s.itemUid, s])), [planStatus]);
   const localCount = useMemo(
     () => Object.values(itemsByUid).filter((i) => i.visibility === 'local').length,
     [itemsByUid],
@@ -147,6 +166,8 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
           setDrag={setDrag}
           isDropTarget={isDropTarget}
           onDrop={handleDrop}
+          gitState={gitStates[uid]}
+          status={statuses[uid]}
         />
         {isOpen && childUids.length > 0 && (
           <div>{childUids.map((c) => renderNode(c, depth + 1))}</div>
@@ -183,6 +204,38 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
         <NewButton planUid={planUid} parentUid={null} createItem={createItem} />
       </div>
 
+      {/* Phase 32 C5.3 — one plan across worktrees: done of to-do, per worktree. */}
+      {worktreeProgress.length > 0 && (
+        <div
+          data-testid="worktree-progress"
+          className="flex flex-wrap gap-x-3 gap-y-0.5 px-3.5 py-1.5 border-b border-white/[0.06] text-[10.5px] text-foreground-subtle"
+          title="Tasks done, of those to do, in each worktree this plan is split across"
+        >
+          {worktreeProgress.map((g) => {
+            const readiness = g.branch
+              ? worktreeReadiness(workstreams.find((w) => w.branch === g.branch && !w.root.startsWith('branch:')), signals)
+              : null;
+            return (
+              <span key={g.branch ?? '(any)'} data-testid="worktree-progress-entry" className="whitespace-nowrap">
+                <span className={g.branch ? 'font-mono text-sky-300/90' : 'italic'}>{g.branch ?? 'any worktree'}</span>
+                {': '}
+                <span className="text-foreground-muted">{g.done} of {g.total}</span>
+                {readiness && (
+                  <span
+                    data-testid="worktree-readiness"
+                    data-ready={readiness.ready ? 'true' : 'false'}
+                    title={readiness.lines.join('\n')}
+                    className={readiness.ready ? 'text-success' : 'text-warning/90'}
+                  >
+                    {' · '}{readiness.ready ? '✓ ' : ''}{readiness.short}
+                  </span>
+                )}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
       <div
         className="flex-1 overflow-y-auto py-1.5"
         onDragOver={(e) => e.preventDefault()}
@@ -218,7 +271,7 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
 
 function ItemRow({
   item, depth, isSelected, hasChildren, isOpen, onToggle, onClick,
-  drag, setDrag, isDropTarget, onDrop,
+  drag, setDrag, isDropTarget, onDrop, gitState, status,
 }: {
   item: PlanItem;
   depth: number;
@@ -231,6 +284,9 @@ function ItemRow({
   setDrag: (d: DragState) => void;
   isDropTarget: boolean;
   onDrop: (targetUid: string, position: DropPosition) => void;
+  gitState?: PlanItemGitState;
+  /** C2.4 — the item's state with its source. */
+  status?: ItemStatus;
 }) {
   const createItem = usePlanItemsStore((s) => s.createItem);
   const updateItem = usePlanItemsStore((s) => s.updateItem);
@@ -242,8 +298,14 @@ function ItemRow({
   const isLocal = item.visibility === 'local';
 
   const KindIcon = item.kind === 'action' ? Zap : FileText;
-  const statusMeta = item.kind === 'action' && item.status
-    ? STATUS_ICON[item.status]
+  // B5.3: while replaying, the task's status at the cursor's moment; a task
+  // made after it is shown faded, since it did not exist yet.
+  const replaying = useReplayStore((st) => st.active && st.state !== null);
+  const replayStatus = useReplayStore((st) => (st.active && st.state ? st.statuses[item.uid] : undefined));
+  const notYet = replaying && item.kind === 'action' && replayStatus === undefined;
+  const shownStatus = replaying && item.kind === 'action' ? replayStatus ?? null : item.status;
+  const statusMeta = item.kind === 'action' && shownStatus
+    ? STATUS_ICON[shownStatus as keyof typeof STATUS_ICON] ?? null
     : null;
 
   const handleDragStart = (e: React.DragEvent) => {
@@ -298,8 +360,13 @@ function ItemRow({
     <div
       ref={rowRef}
       aria-current={isSelected ? 'true' : undefined}
+      data-replay-status={replaying && item.kind === 'action' ? (notYet ? 'not-yet' : shownStatus ?? 'none') : undefined}
+      data-state={status?.state}
+      data-state-source={status?.source}
+      title={notYet ? 'Made after the moment being replayed' : status ? statusLine(status) : undefined}
       className={[
         'group relative flex items-center gap-1.5 px-1.5 py-1.5 cursor-pointer rounded-md mx-1.5',
+        notYet ? 'opacity-40' : '',
         isSelected ? 'bg-accent/10 ring-1 ring-accent/30' : 'hover:bg-white/[0.03]',
         dropIndicator && drag.position === 'inside' ? 'ring-1 ring-accent/50 bg-accent/5' : '',
       ].join(' ')}
@@ -342,6 +409,28 @@ function ItemRow({
       <span className={`text-[13px] truncate flex-1 ${isSelected ? 'text-foreground font-medium' : 'text-foreground-muted'}`}>
         {item.title || <em className="text-foreground-subtle">untitled</em>}
       </span>
+      {/* Phase 32 C5.3 — the worktree this section is kept to (set here; its tasks inherit it). */}
+      {item.workstream && (
+        <span
+          data-testid="item-worktree"
+          title={`Worked in ${item.workstream}: its tasks are offered only to agents working there`}
+          className="shrink-0 max-w-[45%] truncate rounded border border-sky-400/25 bg-sky-500/10 px-1 font-mono text-[10px] text-sky-300"
+        >
+          ⎇ {item.workstream}
+        </span>
+      )}
+      {/* C2.1 — what git proves about that branch, on the section that names it; C2.2b — and a review host, when turned on. */}
+      {item.workstream && gitState && gitState.state !== 'none' && (
+        <span
+          data-testid="item-git-state"
+          data-state={gitState.state}
+          data-source={gitState.source}
+          title={gitStateTitle(gitState, sourceWords(gitState))}
+          className={`shrink-0 rounded border px-1 text-[10px] ${GIT_STATE_TONE[gitState.state] ?? ''}`}
+        >
+          {gitStateChip(gitState)}
+        </span>
+      )}
       {item.kind === 'action' && typeof item.progressPercent === 'number' && item.progressPercent > 0 && (
         <span className="text-[10.5px] text-foreground-subtle shrink-0">{item.progressPercent}%</span>
       )}

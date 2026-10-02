@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { parseOverlays, type OverlayId } from '../lib/graph-overlays';
 
 export type SelectedNodeKind = 'cluster' | 'file' | 'symbol' | 'directory' | 'ghost' | null;
 
@@ -40,6 +41,9 @@ export interface SelectedNodeMeta {
  */
 export type WorkspaceMode = 'graph' | 'plan' | 'docs' | 'code' | 'brief';
 
+/** The bottom panel's tabs (`PlanPanel`). */
+export type PlanPanelTab = 'plans' | 'stack' | 'timeline' | 'awareness' | 'review' | 'changes' | 'proposed' | 'comments';
+
 interface UiState {
   sidebarVisible: boolean;
   inspectorVisible: boolean;
@@ -58,6 +62,11 @@ interface UiState {
 
   /** When true, the bottom plan panel grows to a much taller size, overriding Allotment's default sizing. */
   planPanelExpanded: boolean;
+  /** The bottom panel's tab. In the store so the workstreams strip can open Awareness (A1.8). */
+  planPanelTab: PlanPanelTab;
+  setPlanPanelTab: (tab: PlanPanelTab) => void;
+  /** Show the bottom panel on a tab, from anywhere in the app. */
+  openPlanPanelTab: (tab: PlanPanelTab) => void;
   /** When true, the right inspector panel grows wider for code/file inspection. */
   inspectorExpanded: boolean;
   /**
@@ -100,6 +109,9 @@ interface UiState {
    * How graph cards are drawn. See `GraphStyle`.
    */
   graphStyle: GraphStyle;
+  /** Phase 32 B3.3 — the graph overlays that are on. */
+  graphOverlays: OverlayId[];
+  toggleGraphOverlay: (id: OverlayId) => void;
   setGraphStyle: (style: GraphStyle) => void;
 }
 
@@ -127,6 +139,17 @@ interface UiState {
 export type GraphStyle = 'performance' | 'glass';
 
 const GRAPH_STYLE_KEY = 'codetrellis.graphStyle';
+/** Per machine, like the graph style: which overlays a person keeps on. */
+const GRAPH_OVERLAYS_KEY = 'codetrellis.graphOverlays';
+
+function readGraphOverlays(): OverlayId[] {
+  try {
+    const raw = localStorage.getItem(GRAPH_OVERLAYS_KEY);
+    return parseOverlays(raw ? JSON.parse(raw) : undefined);
+  } catch {
+    return parseOverlays(undefined);
+  }
+}
 
 function readGraphStyle(): GraphStyle {
   try {
@@ -148,6 +171,9 @@ export const useUiStore = create<UiState>((set) => ({
   selectedNodeMeta: {},
 
   planPanelExpanded: false,
+  planPanelTab: 'plans',
+  setPlanPanelTab: (planPanelTab) => set({ planPanelTab }),
+  openPlanPanelTab: (planPanelTab) => set({ planPanelTab, agentPanelVisible: true }),
   inspectorExpanded: false,
   driftComparePlanUid: null,
   graphStyle: readGraphStyle(),
@@ -155,6 +181,12 @@ export const useUiStore = create<UiState>((set) => ({
     try { localStorage.setItem(GRAPH_STYLE_KEY, graphStyle); } catch { /* private window — session only */ }
     set({ graphStyle });
   },
+  graphOverlays: readGraphOverlays(),
+  toggleGraphOverlay: (id) => set((s) => {
+    const graphOverlays = s.graphOverlays.includes(id) ? s.graphOverlays.filter((x) => x !== id) : [...s.graphOverlays, id];
+    try { localStorage.setItem(GRAPH_OVERLAYS_KEY, JSON.stringify(graphOverlays)); } catch { /* private window — session only */ }
+    return { graphOverlays };
+  }),
   splitView: false,
   toggleSplitView: () => set((s) => ({ splitView: !s.splitView })),
   audioBarVisible: false,

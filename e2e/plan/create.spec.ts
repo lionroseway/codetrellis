@@ -28,8 +28,9 @@ test.describe('Plan creation', () => {
     await page.getByRole('button', { name: 'Plans', exact: true }).click();
     await page.locator('button:has-text("New plan")').click();
 
+    // Three requests on a busy backend: create, open, and the list after.
     await expect(page.locator('input[placeholder="Untitled plan"]')).toBeVisible({
-      timeout: 5000,
+      timeout: 10_000,
     });
   });
 
@@ -38,19 +39,20 @@ test.describe('Plan creation', () => {
 
     await page.getByRole('button', { name: 'Plans', exact: true }).click();
     await page.locator('button:has-text("New plan")').click();
-    await page.waitForTimeout(1000);
 
-    await page.fill('input[placeholder="Untitled plan"]', 'E2E Create Title Test');
+    // Waited for, not slept on: on a busy runner the new plan's workspace
+    // took longer than the 1 s this used to allow, and the save longer than
+    // the 1.5 s after it (#197, Browser suite 2/3).
+    const title = page.locator('input[placeholder="Untitled plan"]');
+    await expect(title).toBeEditable({ timeout: 10_000 });
+    await title.fill('E2E Create Title Test');
     await page.keyboard.press('Tab');
-    await page.waitForTimeout(1500);
 
     // Verify via API that the plan was saved with the correct title
-    const res = await page.request.get(`${API}/plans`);
-    const plans = await res.json();
-    const created = plans.find(
-      (p: any) => p.title === 'E2E Create Title Test' && p.status !== 'archived',
-    );
-    expect(created).toBeTruthy();
+    await expect.poll(async () => {
+      const plans = (await (await page.request.get(`${API}/plans`)).json()) as Array<{ title: string; status: string }>;
+      return plans.some((p) => p.title === 'E2E Create Title Test' && p.status !== 'archived');
+    }, { timeout: 10_000 }).toBe(true);
   });
 
   test('newly created plan appears in plan list', async ({ page }) => {

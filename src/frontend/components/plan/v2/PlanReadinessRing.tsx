@@ -13,12 +13,14 @@
  *   ○ Tests mentioned (body references "test" or has test fileSpecs)
  *   ○ Constraints defined (at least one guardrail set)
  *   ○ Agent can reach files (connected agent has the right skills)
+ *   ✓ Skills from plan files accepted (Phase 32 C1.4: a skill that arrived
+ *     in a pulled plan file is held back from agents until a person accepts it)
  *
  * ✓ = required (amber if missing), ○ = suggested (muted if missing).
  * Nothing here is red: an unfinished plan is not a fault (Phase 32 §0.5).
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, CircleDashed, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { usePlanStore } from '../../../stores/plan-store';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
@@ -193,10 +195,32 @@ export function PlanReadinessRing() {
 
   const items = useMemo(() => Object.values(itemsByUid), [itemsByUid]);
 
+  // C1.4: skills that arrived in a plan file and wait for a person. Read from
+  // the server, again whenever the plan's items change (an accept, an import).
+  const [arrivals, setArrivals] = useState<Array<{ itemTitle: string; skill: string; addedBy: string | null; commit: string | null }>>([]);
+  useEffect(() => {
+    if (!plan) { setArrivals([]); return; }
+    let live = true;
+    fetch(`/api/plans/${plan.uid}/skill-arrivals`)
+      .then(async (r) => (r.ok ? ((await r.json()) as { arrivals?: typeof arrivals }).arrivals ?? [] : []))
+      .catch(() => [] as typeof arrivals)
+      .then((a) => { if (live) setArrivals(a); });
+    return () => { live = false; };
+  }, [plan, itemsByUid]);
+
   const checks = useMemo(() => {
     if (!plan) return [];
-    return computeChecks(plan, items);
-  }, [plan, items]);
+    const base = computeChecks(plan, items);
+    if (arrivals.length === 0) return base;
+    const who = (a: typeof arrivals[number]) => a.commit ? `${a.addedBy ?? 'someone'} in ${a.commit}` : 'an edit not committed yet';
+    return [...base, {
+      id: 'skill-arrivals',
+      label: 'Skills from plan files accepted',
+      level: 'required' as const,
+      passed: false,
+      detail: `${arrivals.map((a) => `${a.skill} on "${a.itemTitle}" (added by ${who(a)})`).join('; ')}. Agents are not told a skill from a plan file until you accept it on the task.`,
+    }];
+  }, [plan, items, arrivals]);
 
   if (!plan || checks.length === 0) return null;
 

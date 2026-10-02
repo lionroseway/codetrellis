@@ -22,6 +22,7 @@ import {
   type ChannelEventManifestRecord,
 } from './channel-event-service';
 import type { ChannelEvent } from '../../shared/types';
+import { plansHome } from './plans-home';
 
 const CHANNELS_DIR_NAME = 'channels';
 
@@ -38,7 +39,7 @@ export function channelsDirFor(planUid: string, projectRoot: string): string {
   if (linked) return path.join(linked, CHANNELS_DIR_NAME);
   const plan = getPlan(planUid);
   const slug = plan ? makePlanSlug(plan) : planUid;
-  return path.join(projectRoot, '.codetrellis', 'plans', slug, CHANNELS_DIR_NAME);
+  return path.join(plansHome(projectRoot) ?? projectRoot, '.codetrellis', 'plans', slug, CHANNELS_DIR_NAME);
 }
 
 /**

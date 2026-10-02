@@ -45,6 +45,14 @@ export function useWebSocket() {
             }
           })
           .catch(() => {});
+        // What agents did before this window connected (Phase 32 B1): the
+        // backend keeps it, so a reload or a reconnect keeps the Timeline.
+        fetch('/api/agent-events?limit=400')
+          .then((r) => (r.ok ? r.json() : null))
+          .then((body: { events?: AgentEvent[] } | null) => {
+            if (body?.events) useAgentStore.getState().loadHistory(body.events);
+          })
+          .catch(() => {});
         // Pull the current MCP session list so the ConnectedAgents
         // widget shows agents that were already connected before the
         // UI loaded.
@@ -61,6 +69,10 @@ export function useWebSocket() {
           if (type === 'agent-event') {
             const agentEvent = payload as AgentEvent;
             useAgentStore.getState().pushEvent(agentEvent);
+            // A call held at a breakpoint, or an answer (B4.3): the waiting list refetches.
+            if (agentEvent.type === 'breakpoint_hit' || agentEvent.type === 'breakpoint_answered') {
+              window.dispatchEvent(new CustomEvent('breakpoints-changed'));
+            }
 
             // Update agent status + refresh the connected-agents list
             // when sessions come and go (the per-row last-seen is also
@@ -239,9 +251,9 @@ export function useWebSocket() {
           }
           if (type === 'settings-changed') {
             // Another window saved settings. Settings panel re-reads
-            // on open; if it's currently open, the user may want to
-            // reload — but we don't have a clean push channel into
-            // SettingsModal yet. Future: dispatch a window event.
+            // on open; sections that follow a setting listen here
+            // (the record re-walks after its window changes, B10.2).
+            window.dispatchEvent(new CustomEvent('settings-changed'));
           }
 
           // --- Agent pulse — visual cue that an agent drove a UI change ---
@@ -385,6 +397,43 @@ export function useWebSocket() {
           // agent, or a material that changed). PlanCheckRunPanel re-reads.
           if (type === 'plan-check-run') {
             window.dispatchEvent(new CustomEvent('plan-check-run', { detail: payload }));
+          }
+          // Phase 32 B6.4 — the Stack tab shows every plan at once, so it
+          // re-reads when any plan or task changes, not only the open one.
+          if (typeof type === 'string' && (type.startsWith('plan-item-') || /^plan-(created|updated|deleted|status-changed)$/.test(type))) {
+            window.dispatchEvent(new CustomEvent('stack-changed'));
+          }
+          // Phase 32 B9.3a — a person acted on a planned overlap: play-forward reads again.
+          if (type === 'play-forward-changed') {
+            window.dispatchEvent(new CustomEvent('stack-changed'));
+          }
+          // Phase 32 C4 — a recurring playbook was set, started or dismissed: its series reads again.
+          if (type === 'recurring-changed') {
+            window.dispatchEvent(new CustomEvent('recurring-changed'));
+          }
+          // Phase 32 A7.1 — the project's architecture rules were set or stopped.
+          if (type === 'rules-changed') {
+            window.dispatchEvent(new CustomEvent('rules-changed'));
+          }
+          // Phase 32 C2.2a — a review host was turned on or off, or its token saved.
+          if (type === 'review-host-changed') {
+            window.dispatchEvent(new CustomEvent('review-host-changed', { detail: payload }));
+          }
+          // Phase 32 B8.3a — a test report was handed over: the grounding overlay reads again.
+          if (type === 'tests-reported') {
+            window.dispatchEvent(new CustomEvent('tests-reported', { detail: payload }));
+          }
+          // Phase 32 C3.1 — sharing task state through the project's files turned on or off.
+          if (type === 'shared-task-state-changed') {
+            window.dispatchEvent(new CustomEvent('shared-task-state-changed', { detail: payload }));
+          }
+          // C3.4a — a plans folder named, linked or unlinked: Settings refreshes.
+          if (type === 'plans-folder-changed') {
+            window.dispatchEvent(new CustomEvent('plans-folder-changed', { detail: payload }));
+          }
+          // Phase 32 B7.2 — a spec change was proposed (and, from B7.4, decided).
+          if (typeof type === 'string' && type.startsWith('spec-proposal-')) {
+            window.dispatchEvent(new CustomEvent('spec-proposals-changed', { detail: payload }));
           }
           // --- Cross-repo pointers (CDev Phase 3.5) ---
           if (type === 'external-pointers-changed' || type === 'plan-scope-changed') {
@@ -666,6 +715,31 @@ export function useWebSocket() {
           // scan truncates and repopulates `files` and `imports`, so a
           // canvas that fetched its edges mid-scan holds an empty list
           // that nothing would ever correct.
+          // A workstream's changed files moved (Phase 32 A1.4); the strip refetches.
+          if (type === 'workstreams-changed') {
+            window.dispatchEvent(new CustomEvent('workstreams-changed', { detail: payload }));
+            return;
+          }
+          // A fetch reached the remotes (Phase 32 E5): Fetch now, or keeping them current.
+          if (type === 'git-remotes-changed') {
+            window.dispatchEvent(new CustomEvent('git-remotes-changed', { detail: payload }));
+            return;
+          }
+          // An agent reported a folder that is not opened, or a request was answered (A1.7c).
+          if (type === 'folder-requests-changed') {
+            window.dispatchEvent(new CustomEvent('folder-requests-changed'));
+            return;
+          }
+          // Signals about parallel work changed (A1.6).
+          if (type === 'awareness-changed') {
+            window.dispatchEvent(new CustomEvent('awareness-changed', { detail: payload }));
+            return;
+          }
+          // A breakpoint set, cleared or answered (B4.3).
+          if (type === 'breakpoints-changed' || type === 'breakpoint-answered') {
+            window.dispatchEvent(new CustomEvent('breakpoints-changed', { detail: payload }));
+            return;
+          }
           if (type === 'graph-data-changed') {
             window.dispatchEvent(new CustomEvent('graph-data-changed', { detail: payload }));
             return;

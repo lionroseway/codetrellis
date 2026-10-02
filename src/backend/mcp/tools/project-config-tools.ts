@@ -145,6 +145,14 @@ export function register(server: McpServer, deps: ToolDeps): void {
               })
               .optional()
               .describe('Stuck sensor — detects agents looping without progress. Default off.'),
+            awareness: z
+              .object({
+                branchWindowDays: z.number().optional().describe('A branch with no checkout here counts as a line of work when its last commit is this recent, in days (default: 7).'),
+                inlineNotices: z.boolean().optional().describe('Tell an agent about an overlap on its next tool call (default: true).'),
+                holdSignOffOnHighSignals: z.boolean().optional().describe('A code criterion fails while the plan\'s line of work has an open high overlap with other work, so sign-off waits (default: false).'),
+              })
+              .optional()
+              .describe('Awareness of parallel work (Phase 32).'),
           })
           .optional()
           .describe(

@@ -16,7 +16,8 @@
  * Rate limit: max 1 push per event type per minute per device.
  */
 
-import type { ChannelEvent } from '../../shared/types';
+import type { AwarenessSignal, BreakpointHit, ChannelEvent } from '../../shared/types';
+import { agentName } from '../../shared/lib/breakpoint-words';
 import { getPeerConnection } from './webrtc-service';
 
 /**
@@ -67,6 +68,16 @@ const RATE_LIMIT_MS = 60_000;
 
 /** Expo Push API endpoint. */
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+
+/**
+ * Where pushes go: Expo, unless `CODETRELLIS_PUSH_URL` names a receiver on
+ * this machine (the harness's, Phase 32 A4.4). Anything else is ignored, so
+ * the setting can never send a push off the machine to a host of its own.
+ */
+export function pushUrl(env: NodeJS.ProcessEnv = process.env): string {
+  const u = env.CODETRELLIS_PUSH_URL;
+  return u && /^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\//.test(u) ? u : EXPO_PUSH_URL;
+}
 
 /** Event types that trigger push notifications. */
 const PUSH_WORTHY_EVENTS: ReadonlySet<string> = new Set([
@@ -249,6 +260,89 @@ export async function pushForBudgetChange(planUid: string, planTitle: string, ag
   if (payloads.length > 0) await sendExpoPush(payloads);
 }
 
+/**
+ * An agent is held at a person's breakpoint, or edited past one (Phase 32
+ * B4.4). A person away from the desk is told, and the tap opens the
+ * waiting list. The words name the agent only: which file, task or note is
+ * on the phone once it wakes and loads over WebRTC, never in a payload a
+ * push service sees. The data carries the hit's ref and plan id.
+ */
+export async function pushForBreakpoint(hit: Pick<BreakpointHit, 'ref' | 'breach' | 'agent' | 'planUid'> & { action?: BreakpointHit['action'] }): Promise<void> {
+  if (!started) return;
+  const tokens = Array.from(pushTokens.values());
+  if (tokens.length === 0) return;
+
+  const who = agentName(hit.agent);
+  const payloads: PushPayload[] = [];
+  for (const { token, fingerprint } of tokens) {
+    if (isDeviceActive(fingerprint)) continue; // already watching live — don't push
+    if (isRateLimited(fingerprint, 'breakpoint')) continue;
+    markSent(fingerprint, 'breakpoint');
+    payloads.push({
+      to: token,
+      title: hit.breach ? 'Edited past a breakpoint' : 'Waiting on you',
+      body: hit.breach
+        ? `${who} changed code past one of your breakpoints and was told to stop.`
+        : hit.action === 'disk'
+          // A plan document's file edited on disk (B7.5b): nothing is held, and who did it is not known.
+          ? 'A document you guard changed on disk. The app kept its version until you answer.'
+          : `${who} is held at one of your breakpoints until you answer.`,
+      data: { type: 'breakpoint', ref: hit.ref, ...(hit.planUid ? { planUid: hit.planUid } : {}) },
+      sound: 'default',
+      channelId: 'codetrellis-events',
+    });
+  }
+  if (payloads.length > 0) await sendExpoPush(payloads);
+}
+
+/** What kind of overlap, in words that name no file, function or agent. */
+const SIGNAL_WORDS: Record<AwarenessSignal['kind'], string> = {
+  contract: 'An exported function another line of work uses has changed.',
+  collision: 'Two lines of work are changing the same code.',
+  drift: 'A line of work is changing files outside its task.',
+  'stale-base': 'A line of work is behind main on files it changes.',
+  'version-split': 'Two tasks are working from different versions of the same file.',
+  'state-split': 'Two people set one task two ways at once.',
+  rule: 'A line of work adds an import one of your architecture rules forbids.',
+};
+
+/** A material signal's kind in words (A6.3): the same rule of naming nothing. */
+const MATERIAL_WORDS: Partial<Record<AwarenessSignal['kind'], string>> = {
+  contract: 'A file other tasks cite has changed.',
+  collision: 'Two tasks write the same output file.',
+  drift: 'A task is reading a file its brief does not include.',
+  'stale-base': 'A file several tasks read has changed.',
+};
+
+/**
+ * A serious overlap opened while the person is away (Phase 32 A4.4, awareness
+ * spec §8.4): high severity only, one push per kind per minute per device,
+ * never to a phone watching live. The words say what kind of overlap it is
+ * and nothing more; both sides load over WebRTC when the tap opens the
+ * signal. The data carries the signal's id.
+ */
+export async function pushForSignal(signal: Pick<AwarenessSignal, 'id' | 'kind' | 'severity'> & { subject?: AwarenessSignal['subject'] }): Promise<void> {
+  if (!started || signal.severity !== 'high') return;
+  const tokens = Array.from(pushTokens.values());
+  if (tokens.length === 0) return;
+  const kind = `signal:${signal.kind}`;
+  const payloads: PushPayload[] = [];
+  for (const { token, fingerprint } of tokens) {
+    if (isDeviceActive(fingerprint)) continue; // already watching live — don't push
+    if (isRateLimited(fingerprint, kind)) continue;
+    markSent(fingerprint, kind);
+    payloads.push({
+      to: token,
+      title: 'Needs you',
+      body: (signal.subject?.material ? MATERIAL_WORDS[signal.kind] : undefined) ?? SIGNAL_WORDS[signal.kind],
+      data: { type: 'signal', id: signal.id },
+      sound: 'default',
+      channelId: 'codetrellis-events',
+    });
+  }
+  if (payloads.length > 0) await sendExpoPush(payloads);
+}
+
 // --- Internals ---------------------------------------------------------------
 
 function channelEventTitle(event: ChannelEvent): string {
@@ -292,7 +386,7 @@ async function sendExpoPush(payloads: PushPayload[]): Promise<void> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
     try {
-      const res = await fetch(EXPO_PUSH_URL, {
+      const res = await fetch(pushUrl(), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payloads),

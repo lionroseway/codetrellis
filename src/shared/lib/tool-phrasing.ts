@@ -1,0 +1,422 @@
+import type { AgentEvent } from '../types';
+
+/**
+ * Plain-English phrasing for agent events — Phase 22, change B.
+ *
+ * See [docs/PHASE-22-AGENT-ACTIVITY-CLARITY.md](../../../docs/PHASE-22-AGENT-ACTIVITY-CLARITY.md).
+ *
+ * The timeline used to render an MCP tool call as its raw payload JSON,
+ * because `formatPayload` only knew the shapes the Claude Code JSONL
+ * watcher produces. So a row read:
+ *
+ *   {"tool":"update_item","args":"{\"uid\":\"itm_4f…\",\"status\":\"in_p…
+ *
+ * from which a user is expected to infer what the agent is doing. Nobody
+ * does that inference. A row should read as a sentence about the work:
+ *
+ *   Started "Add refresh-token rotation"
+ *
+ * Unknown tools degrade to a readable fallback rather than throwing or
+ * dumping JSON — a tool shipping without a phrasing should look plain,
+ * not broken.
+ */
+
+export interface PhrasedEvent {
+  /** One sentence describing what happened. */
+  text: string;
+  /** `read`, `write`, `ask`, `session`, `error` — drives the icon. */
+  intent: EventIntent;
+  /** The raw tool name, for the disclosure. Null for non-MCP events. */
+  tool: string | null;
+  /** True when the event changed something rather than observing it. */
+  mutating: boolean;
+}
+
+export type EventIntent = 'read' | 'write' | 'ask' | 'session' | 'error';
+
+interface ToolPhrasing {
+  intent: EventIntent;
+  mutating: boolean;
+  /**
+   * Build the sentence. `args` is already parsed and never null; `summary`
+   * is what the tool itself said it did, when its args cannot name it
+   * (`read_material` is given a uid, and says which file it read).
+   */
+  phrase: (args: Record<string, unknown>, summary: string | null) => string;
+}
+
+/** `itm_4f3a…` is noise in a sentence; a title is not. */
+function subject(args: Record<string, unknown>, ...keys: string[]): string {
+  for (const key of keys) {
+    const v = args[key];
+    // A uid is not a title — `itm_…`, or the uuids plans, items and
+    // criteria now carry.
+    if (typeof v === 'string' && v.trim() && !/^(itm|pln|doc|evt)_/.test(v) && !/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(v)) {
+      return `"${v.length > 60 ? `${v.slice(0, 57)}…` : v}"`;
+    }
+  }
+  // Fall back to a short uid so the row still identifies something.
+  for (const key of keys) {
+    const v = args[key];
+    if (typeof v === 'string' && v.trim()) return `${v.slice(0, 12)}…`;
+  }
+  return 'an item';
+}
+
+const STATUS_VERB: Record<string, string> = {
+  in_progress: 'Started',
+  done: 'Finished',
+  blocked: 'Blocked',
+  pending: 'Reset',
+  cancelled: 'Cancelled',
+};
+
+/**
+ * Tool → sentence. Mutating tools describe intent; reading tools
+ * describe a lookup. Both matter, but only the first kind explains what
+ * an agent is *doing*.
+ */
+const TOOL_PHRASINGS: Record<string, ToolPhrasing> = {
+  // ── Plan items: the ones that describe intent ──────────────────────
+  update_item: {
+    intent: 'write',
+    mutating: true,
+    phrase: (a) => {
+      const status = typeof a.status === 'string' ? a.status : null;
+      const verb = status ? (STATUS_VERB[status] ?? `Set ${status} on`) : 'Updated';
+      return `${verb} ${subject(a, 'title', 'uid', 'item_uid')}`;
+    },
+  },
+  add_item: {
+    intent: 'write',
+    mutating: true,
+    phrase: (a) => `Added ${subject(a, 'title', 'uid')}`,
+  },
+  bulk_add_items: {
+    intent: 'write',
+    mutating: true,
+    phrase: (a) => {
+      const items = Array.isArray(a.items) ? a.items.length : null;
+      return items ? `Added ${items} items` : 'Added several items';
+    },
+  },
+  delete_item: { intent: 'write', mutating: true, phrase: (a) => `Deleted ${subject(a, 'title', 'uid')}` },
+  move_item: { intent: 'write', mutating: true, phrase: (a) => `Moved ${subject(a, 'title', 'uid')}` },
+  claim_item: { intent: 'write', mutating: true, phrase: (a) => `Claimed ${subject(a, 'title', 'uid')}` },
+  set_item_blocked: { intent: 'write', mutating: true, phrase: (a) => `Blocked ${subject(a, 'title', 'uid')}` },
+  update_item_progress: {
+    intent: 'write',
+    mutating: true,
+    phrase: (a) => {
+      const pct = typeof a.progress === 'number' ? ` to ${a.progress}%` : '';
+      return `Moved ${subject(a, 'title', 'uid')}${pct}`;
+    },
+  },
+  add_item_comment: { intent: 'write', mutating: true, phrase: (a) => `Commented on ${subject(a, 'title', 'uid')}` },
+
+  // ── Plans ─────────────────────────────────────────────────────────
+  create_plan: { intent: 'write', mutating: true, phrase: (a) => `Created plan ${subject(a, 'title')}` },
+  create_plan_from_template: {
+    intent: 'write',
+    mutating: true,
+    phrase: (a) => `Created plan ${subject(a, 'title')} from the ${String(a.template_id ?? 'a')} template`,
+  },
+  update_plan: { intent: 'write', mutating: true, phrase: (a) => `Updated plan ${subject(a, 'title', 'plan_uid')}` },
+  set_active_plan: { intent: 'session', mutating: false, phrase: (a) => `Switched to plan ${subject(a, 'title', 'plan_uid')}` },
+  export_plan_to_files: { intent: 'write', mutating: true, phrase: (a) => `Exported plan ${subject(a, 'plan_uid')} to disk` },
+
+  // ── Asking the human ──────────────────────────────────────────────
+  request_plan_deletion: {
+    intent: 'ask',
+    mutating: false,
+    phrase: (a) => {
+      const n = Array.isArray(a.plan_uids) ? a.plan_uids.length : 1;
+      return n === 1 ? 'Asked you to confirm deleting a plan' : `Asked you to confirm deleting ${n} plans`;
+    },
+  },
+  post_channel_event: {
+    intent: 'ask',
+    mutating: true,
+    phrase: (a) => {
+      const type = typeof a.event_type === 'string' ? a.event_type : 'note';
+      const what: Record<string, string> = {
+        stuck: 'Reported being stuck',
+        'need-decision': 'Asked for a decision',
+        'need-context': 'Asked for context',
+        'handing-off': 'Handed off',
+        steer: 'Gave direction',
+        'weigh-in': 'Asked for a second opinion',
+      };
+      const msg = typeof a.message === 'string' && a.message ? `: ${a.message.slice(0, 60)}` : '';
+      return `${what[type] ?? 'Posted a note'}${msg}`;
+    },
+  },
+  await_user_input: { intent: 'ask', mutating: false, phrase: () => 'Waiting for your answer' },
+  await_ack: { intent: 'ask', mutating: false, phrase: () => 'Waiting for acknowledgement' },
+  await_decision: { intent: 'ask', mutating: false, phrase: () => 'Waiting for a decision at a breakpoint' },
+  check_breakpoint: { intent: 'read', mutating: false, phrase: (a) => (typeof a.path === 'string' ? `Checked for a breakpoint on \`${a.path}\`` : 'Checked for a breakpoint') },
+  approve_gate: { intent: 'error', mutating: false, phrase: (a) => `Tried to clear the approval gate on ${subject(a, 'uid')} — refused, sign-off is yours` },
+  record_artefact: { intent: 'write', mutating: true, phrase: (a) => `Recorded ${({ material: 'a material', output: 'an output', evidence: 'evidence' } as Record<string, string>)[String(a.role)] ?? 'a file'}: ${subject(a, 'path')}` },
+  list_criteria: { intent: 'read', mutating: false, phrase: (a) => `Read the criteria for ${subject(a, 'item_uid')}` },
+  add_criterion: { intent: 'write', mutating: true, phrase: (a) => `Added a criterion: ${subject(a, 'text')}` },
+  submit_criterion: { intent: 'ask', mutating: true, phrase: (a, summary) => summary ?? `Submitted evidence for ${subject(a, 'criterion_uid')}` },
+  check_criterion: { intent: 'read', mutating: false, phrase: (a, summary) => summary ?? `Checked evidence for ${subject(a, 'criterion_uid')}` },
+  get_worklist: { intent: 'read', mutating: false, phrase: () => 'Read the worklist' },
+  run_checks: { intent: 'read', mutating: false, phrase: () => 'Re-ran every check on the plan' },
+  get_brief: { intent: 'read', mutating: false, phrase: (a) => `Read the brief for ${subject(a, 'item_uid')}` },
+  list_materials: { intent: 'read', mutating: false, phrase: () => 'Listed the materials' },
+  read_material: { intent: 'read', mutating: false, phrase: (a, summary) => summary ?? `Read material ${subject(a, 'attachment_uid')}` },
+
+  // ── Reading ───────────────────────────────────────────────────────
+  search_symbols: { intent: 'read', mutating: false, phrase: (a) => `Looked for \`${String(a.query ?? '')}\`` },
+  search_items: { intent: 'read', mutating: false, phrase: (a) => `Searched the plan for \`${String(a.query ?? '')}\`` },
+  get_dependencies: { intent: 'read', mutating: false, phrase: (a) => `Checked what depends on ${String(a.file_path ?? a.path ?? 'a file')}` },
+  check_architecture: { intent: 'read', mutating: false, phrase: () => 'Checked the architecture' },
+  check_conformity: { intent: 'read', mutating: false, phrase: () => 'Checked conformity' },
+  get_drift_report: { intent: 'read', mutating: false, phrase: () => 'Checked for drift' },
+  get_next_item: { intent: 'read', mutating: false, phrase: () => 'Asked what to work on next' },
+  get_item: { intent: 'read', mutating: false, phrase: (a) => `Read ${subject(a, 'title', 'uid')}` },
+  resolve_reference: { intent: 'read', mutating: false, phrase: (a) => `Looked up ${subject(a, 'ref')}` },
+  read_item_full: { intent: 'read', mutating: false, phrase: (a) => `Read ${subject(a, 'title', 'uid')} in full` },
+  get_plan: { intent: 'read', mutating: false, phrase: (a) => `Read plan ${subject(a, 'title', 'plan_uid')}` },
+  list_items: { intent: 'read', mutating: false, phrase: () => 'Listed plan items' },
+  list_plans: { intent: 'read', mutating: false, phrase: () => 'Listed plans' },
+  read_system_doc: { intent: 'read', mutating: false, phrase: (a) => `Read the ${String(a.doc_type ?? 'system')} doc` },
+  list_cross_system_edges: { intent: 'read', mutating: false, phrase: () => 'Checked cross-system links' },
+
+  // ── Session ───────────────────────────────────────────────────────
+  register_session: { intent: 'session', mutating: false, phrase: (a) => `${String(a.agent_type ?? 'An agent')} connected` },
+  open_project: { intent: 'session', mutating: false, phrase: (a) => `Opened ${String(a.path ?? 'a project')}` },
+  rescan_project: { intent: 'session', mutating: false, phrase: () => 'Rescanned the project' },
+
+  // ── System docs + git ─────────────────────────────────────────────
+  write_system_doc: { intent: 'write', mutating: true, phrase: (a) => `Wrote the ${String(a.doc_type ?? 'system')} doc` },
+  commit_manifest_changes: { intent: 'write', mutating: true, phrase: () => 'Committed plan changes' },
+  set_freeze: {
+    intent: 'write',
+    mutating: true,
+    phrase: (a) => (a.active === false ? 'Lifted the freeze' : 'Started a freeze'),
+  },
+};
+
+/** The last path segment — "Q3-summary.docx", not "Reports/Q3/Q3-summary.docx". */
+function fileName(args: Record<string, unknown>, key: string): string {
+  const v = args[key];
+  return typeof v === 'string' && v.trim() ? v.split(/[\\/]/).pop()! : 'a file';
+}
+
+/**
+ * Phase 31 §10.5 — the same tools, said in the Brief's words (§10.3):
+ * tasks not items, "what good looks like" not criteria, and a file by its
+ * name. Keyed by the same tool names as TOOL_PHRASINGS, in the same file, so
+ * a tool phrased in one and not the other shows in one diff. A tool missing
+ * here falls back to the table above.
+ */
+const BRIEF_PHRASINGS: Record<string, ToolPhrasing> = {
+  get_brief: { intent: 'read', mutating: false, phrase: () => 'Read the brief' },
+  list_materials: { intent: 'read', mutating: false, phrase: () => 'Looked through the materials' },
+  read_material: { intent: 'read', mutating: false, phrase: (_a, summary) => summary ?? 'Read a material' },
+  record_artefact: {
+    intent: 'write',
+    mutating: true,
+    phrase: (a) => {
+      const name = fileName(a, 'path');
+      if (a.role === 'output') return `Wrote ${name}`;
+      if (a.role === 'evidence') return `Saved ${name} as evidence`;
+      return `Added ${name} to the materials`;
+    },
+  },
+  list_criteria: { intent: 'read', mutating: false, phrase: () => 'Read what good looks like' },
+  add_criterion: { intent: 'write', mutating: true, phrase: (a) => `Suggested what good looks like: ${subject(a, 'text')}` },
+  check_criterion: { intent: 'read', mutating: false, phrase: (_a, summary) => summary ?? 'Checked its work before offering it' },
+  submit_criterion: { intent: 'ask', mutating: true, phrase: (a, summary) => summary ?? `Offered evidence for ${subject(a, 'criterion_uid')}` },
+  get_worklist: { intent: 'read', mutating: false, phrase: () => 'Checked what it still owes you' },
+  run_checks: { intent: 'read', mutating: false, phrase: () => 'Re-checked the whole brief' },
+  get_next_item: { intent: 'read', mutating: false, phrase: () => 'Asked which task is next' },
+  claim_item: { intent: 'write', mutating: true, phrase: (a) => `Took on ${subject(a, 'title', 'uid')}` },
+  add_item_comment: { intent: 'write', mutating: true, phrase: (a) => `Left a note on ${subject(a, 'title', 'uid')}` },
+};
+
+export type PhraseVocabulary = 'code' | 'brief';
+
+function parseArgs(raw: unknown): Record<string, unknown> {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw as Record<string, unknown>;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed as Record<string, unknown>;
+    } catch {
+      /* a truncated or unserialisable arg string is not worth failing over */
+    }
+  }
+  return {};
+}
+
+/** `update_item` → `Update item`. The last-resort readable form. */
+function humaniseToolName(tool: string): string {
+  const words = tool.replace(/_/g, ' ').trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
+ * Turn one agent event into a sentence.
+ *
+ * Handles both event families: MCP `tool_call` / `tool_error` (any
+ * agent), and the Claude Code session-JSONL events, which carry
+ * read/write/edit/bash actions instead of tool names.
+ */
+export function phraseEvent(event: AgentEvent, vocabulary: PhraseVocabulary = 'code'): PhrasedEvent {
+  const payload = event.payload ?? {};
+
+  // ── MCP tool events ───────────────────────────────────────────────
+  const tool = typeof payload.tool === 'string' ? payload.tool : null;
+  if (tool && (event.type === 'tool_call' || event.type === 'tool_error')) {
+    const args = parseArgs(payload.args);
+    const phrasing = (vocabulary === 'brief' ? BRIEF_PHRASINGS[tool] : undefined) ?? TOOL_PHRASINGS[tool];
+    const summary = typeof payload.summary === 'string' && payload.summary.trim() ? payload.summary : null;
+
+    if (event.type === 'tool_error') {
+      const err = typeof payload.error === 'string' ? `: ${payload.error.slice(0, 80)}` : '';
+      return {
+        text: `${humaniseToolName(tool)} failed${err}`,
+        intent: 'error',
+        tool,
+        mutating: false,
+      };
+    }
+
+    if (phrasing) {
+      return { text: phrasing.phrase(args, summary), intent: phrasing.intent, tool, mutating: phrasing.mutating };
+    }
+
+    // No phrasing for this tool. Readable, not raw JSON — and obvious
+    // enough that a newly added tool gets noticed.
+    return { text: humaniseToolName(tool), intent: 'read', tool, mutating: false };
+  }
+
+  // ── A spec or item body edited (B1.2) ─────────────────────────────
+  if (event.type === 'spec_edited') {
+    const title = typeof payload.title === 'string' && payload.title.trim() ? payload.title : 'untitled';
+    const what = payload.kind === 'item' ? `the description of “${title}”` : `the spec “${title}”`;
+    const version = typeof payload.version === 'number' ? ` (v${payload.version})` : '';
+    const from = payload.authorType === 'file' ? ', from the plan file' : '';
+    return { text: `Edited ${what}${version}${from}`, intent: 'write', tool: null, mutating: true };
+  }
+
+  // ── A skill loaded (C1.3) ─────────────────────────────────────────
+  if (event.type === 'skill_used') {
+    const skill = typeof payload.skill === 'string' && payload.skill ? payload.skill.slice(0, 80) : null;
+    return { text: skill ? `Used the ${skill} skill` : 'Used a skill', intent: 'read', tool: null, mutating: false };
+  }
+
+  // ── Breakpoints (B4) ──────────────────────────────────────────────
+  if (event.type === 'breakpoint_hit' || event.type === 'breakpoint_answered') {
+    const title = typeof payload.path === 'string' && payload.path ? payload.path.slice(0, 120)
+      : typeof payload.itemTitle === 'string' && payload.itemTitle.trim() ? payload.itemTitle.slice(0, 80) : 'an item';
+    const doing: Record<string, string> = { claim: 'claiming', done: 'marking done', edit: 'changing', delete: 'deleting', edit_code: 'changing', breach: 'changing' };
+    const what = `${doing[String(payload.action)] ?? 'acting on'} “${title}”`;
+    if (event.type === 'breakpoint_hit') {
+      // B4.2: a change seen only after it was made is a breach, never called a pause.
+      if (payload.breach === true) return { text: `Changed “${title}” past a breakpoint: a breach, it could not be paused`, intent: 'error', tool: null, mutating: true };
+      // B4.2b: held by a rule on a kind of serious signal.
+      if (typeof payload.signalKind === 'string') return { text: `Paused at a breakpoint on a serious ${payload.signalKind} signal, before ${what}`, intent: 'ask', tool: null, mutating: false };
+      return { text: `Paused at a breakpoint before ${what}`, intent: 'ask', tool: null, mutating: false };
+    }
+    if (payload.byType === 'system') {
+      const why = typeof payload.note === 'string' && payload.note ? `: ${payload.note.slice(0, 120)}` : '';
+      return { text: `CodeTrellis let ${what} through${why}`, intent: 'write', tool: null, mutating: false };
+    }
+    const who = payload.byType === 'human' ? 'You' : payload.byType === 'phone' ? 'You, from the phone,' : 'Someone';
+    const note = typeof payload.note === 'string' && payload.note ? `: “${payload.note.slice(0, 120)}”` : '';
+    const words = payload.decision === 'stop' ? `said stop to ${what}${note}`
+      : payload.decision === 'steer' ? `said continue ${what}, with a steer${note}`
+        : `said continue ${what}`;
+    return { text: `${who} ${words}`, intent: payload.decision === 'stop' ? 'error' : 'write', tool: null, mutating: false };
+  }
+
+  // ── Criteria decided and checked (B2.2) ───────────────────────────
+  if (event.type === 'criterion_decided') {
+    const text = typeof payload.text === 'string' ? payload.text : 'a criterion';
+    const approved = payload.decision === 'approved';
+    return { text: `${approved ? 'Approved' : 'Sent back'} “${text.slice(0, 80)}”`, intent: approved ? 'write' : 'error', tool: null, mutating: true };
+  }
+  if (event.type === 'check_run') {
+    const passed = Number(payload.passed) || 0;
+    const failed = Number(payload.failed) || 0;
+    const words = failed ? `${failed} failing, ${passed} passing` : `all ${passed} passing`;
+    return { text: `Checked criteria: ${words}`, intent: failed ? 'error' : 'read', tool: null, mutating: false };
+  }
+
+  // ── A person's decisions, kept in the record (B10.1) ──────────────
+  const whoDid = (t: unknown) => (t === 'human' ? 'You' : t === 'unverified' ? 'Someone over the local API' : 'Someone');
+  if (event.type === 'signal_answered') {
+    const kind = typeof payload.kind === 'string' ? payload.kind.replace(/-/g, ' ') : 'a';
+    const signal = `a ${kind} signal`;
+    const said: Record<string, string> = { acknowledged: `acknowledged ${signal}`, intended: `marked ${signal} intended`, dismissed: `dismissed ${signal}`, open: `reopened ${signal}` };
+    const from = payload.channel === 'phone' ? ', from the phone' : '';
+    return { text: `${whoDid(payload.actorType)} ${said[String(payload.state)] ?? `answered ${signal}`}${from}`, intent: 'write', tool: null, mutating: false };
+  }
+  if (event.type === 'spec_decided') {
+    const said: Record<string, string> = { accept: 'accepted', amend: 'accepted', reject: 'rejected' };
+    const section = typeof payload.section === 'string' && payload.section ? ` to “${payload.section.slice(0, 80)}”` : '';
+    const amended = payload.decision === 'amend' ? ', with changes' : '';
+    return { text: `${whoDid(payload.authorType)} ${said[String(payload.decision)] ?? 'decided'} a proposed spec change${section}${amended}`, intent: payload.decision === 'reject' ? 'error' : 'write', tool: null, mutating: true };
+  }
+  if (event.type === 'retention_changed') {
+    const words = (v: unknown) => (typeof v === 'string' && v ? v : 'another window');
+    const shorter = typeof payload.to === 'number' && (payload.from === null || (typeof payload.from === 'number' && payload.to < payload.from));
+    return { text: `${whoDid(payload.authorType)} changed how long the record is kept, from ${words(payload.fromWords)} to ${words(payload.toWords)}`, intent: shorter ? 'error' : 'write', tool: null, mutating: true };
+  }
+  if (event.type === 'rule_changed') {
+    const rule = typeof payload.from === 'string' && typeof payload.mayNotImport === 'string' ? ` “${payload.from} may not import ${payload.mayNotImport}”` : ` ${String(payload.ruleId ?? '')}`;
+    return { text: `${whoDid(payload.authorType)} ${payload.change === 'stopped' ? 'stopped' : 'set'} the architecture rule${rule}`, intent: 'write', tool: null, mutating: true };
+  }
+
+  // ── Claude Code session-JSONL events ──────────────────────────────
+  const file = typeof payload.file === 'string' ? payload.file.split('/').pop() : null;
+  switch (payload.action) {
+    case 'read':
+      return { text: `Read ${file ?? 'a file'}`, intent: 'read', tool: null, mutating: false };
+    case 'write':
+      return { text: `Wrote ${file ?? 'a file'}`, intent: 'write', tool: null, mutating: true };
+    case 'edit':
+      return { text: `Edited ${file ?? 'a file'}`, intent: 'write', tool: null, mutating: true };
+    case 'bash':
+      return {
+        text: `Ran \`${String(payload.command ?? '').slice(0, 60)}\``,
+        intent: 'write',
+        tool: null,
+        mutating: true,
+      };
+    default:
+      break;
+  }
+
+  if (typeof payload.tool === 'string' && payload.pattern) {
+    return {
+      text: `${payload.tool === 'Grep' ? 'Searched for' : 'Looked for files matching'} \`${String(payload.pattern)}\``,
+      intent: 'read',
+      tool: null,
+      mutating: false,
+    };
+  }
+
+  if (event.type === 'session_start') return { text: 'Session started', intent: 'session', tool: null, mutating: false };
+  if (event.type === 'session_end') return { text: 'Session ended', intent: 'session', tool: null, mutating: false };
+
+  const message = payload.message ?? payload.text;
+  if (typeof message === 'string' && message.trim()) {
+    return { text: message.slice(0, 120), intent: 'read', tool: null, mutating: false };
+  }
+
+  return { text: humaniseToolName(event.type), intent: 'read', tool: null, mutating: false };
+}
+
+/** The raw payload, for the row's disclosure. Never throws. */
+export function rawPayloadText(event: AgentEvent): string {
+  try {
+    return JSON.stringify(event.payload, null, 2);
+  } catch {
+    return String(event.payload);
+  }
+}

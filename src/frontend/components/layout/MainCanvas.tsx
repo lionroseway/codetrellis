@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { GraphPairBanner, useGraphPair } from './GraphPair';
+import { getAPI } from '../../bridge';
+import { fetchGraphAnswer } from '../../lib/graph-answer';
+import { preserveNodePositions } from '../../lib/preserve-node-positions';
 import {
   ReactFlow,
   Background,
@@ -20,12 +24,18 @@ import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, 
 import '@xyflow/react/dist/style.css';
 
 import { useProjectStore } from '../../stores/project-store';
+import { useReplayStore } from '../../stores/replay-store';
+import { usePlayForwardStore } from '../../stores/play-forward-store';
+import { overlapsByFile, filePlannedMark, clusterPlannedMark } from '../../lib/play-forward';
+import { hhmm } from '../../lib/replay';
 import { useGraphStore } from '../../stores/graph-store';
 import { useAgentStore } from '../../stores/agent-store';
 import { usePlanStore } from '../../stores/plan-store';
 import { usePlanItemsStore } from '../../stores/plan-items-store';
 import { useUiStore } from '../../stores/ui-store';
 import { useToastStore } from '../../stores/toast-store';
+import { useBreakpointsStore } from '../../stores/breakpoints-store';
+import { nodeBreakpoints, nodeBreakpointTitle, symbolNodeTarget, BREAKABLE_SYMBOLS } from '../../lib/breakpoint-view';
 import { buildDependencyGraph, buildFromSnapshot, uniqueGraph, type DependencyEdge, type FileSymbol } from '../../lib/graph-builder';
 import { PackageNode } from '../graph/nodes/PackageNode';
 import { DirectoryNode } from '../graph/nodes/DirectoryNode';
@@ -36,6 +46,10 @@ import { SelectionActionBar } from '../graph/SelectionActionBar';
 import { WelcomeScreen } from '../WelcomeScreen';
 import { useTerminalStore } from '../../stores/terminal-store';
 import type { GraphNode, GraphEdge } from '@shared/types';
+import { useAwarenessStore } from '../../stores/awareness-store';
+import { OverlaysMenu } from '../graph/OverlaysMenu';
+import { openFileAt } from '../../lib/open-file-at';
+import { workCountsByFile, workCountLabel, collisionFiles, projectPrefix, fileGrounding, clusterGrounding, type GroundingMapView } from '../../lib/graph-overlays';
 
 const nodeTypes = {
   packageNode: PackageNode,
@@ -74,12 +88,21 @@ export function MainCanvas() {
   const setSelectedNode = useUiStore((s) => s.setSelectedNode);
   const selectedNodeId = useUiStore((s) => s.selectedNodeId);
   const graphStyle = useUiStore((s) => s.graphStyle);
+  // Phase 32 B3.3 — the overlays a person has on.
+  const graphOverlays = useUiStore((s) => s.graphOverlays);
+  const planOverlay = graphOverlays.includes('plan');
   const setGraphStyle = useUiStore((s) => s.setGraphStyle);
   const recentlyChanged = useAgentStore((s) => s.recentlyChangedFiles);
   const layoutMode = useGraphStore((s) => s.layoutMode);
   const setGraphData = useGraphStore((s) => s.setGraphData);
   const setLayoutMode = useGraphStore((s) => s.setLayoutMode);
   const trellisMode = useGraphStore((s) => s.trellisMode);
+  // B5.3: while replaying, the graph as it was at the cursor's frame, frozen.
+  const replayGraph = useReplayStore((s) => (s.active ? s.graph : null));
+  const replayAt = useReplayStore((s) => (s.active && s.state ? s.state.at : null));
+  // B9.2: while playing forward, what every active plan says it will change.
+  const forward = usePlayForwardStore((s) => (s.active ? s.data : null));
+  const playingForward = usePlayForwardStore((s) => s.active);
   const setTrellisMode = useGraphStore((s) => s.setTrellisMode);
   const scopePath = useGraphStore((s) => s.scopePath);
   const setScopePath = useGraphStore((s) => s.setScopePath);
@@ -114,6 +137,9 @@ export function MainCanvas() {
     setDepEdgesRaw((prev) => (sameJson(prev, next) ? prev : next));
   }, []);
   const [loadingGraph, setLoadingGraph] = useState(false);
+  // Whether a graph is on screen, for loaders that must not blank it.
+  const hasGraphRef = useRef(false);
+  hasGraphRef.current = depEdges.length > 0;
   const [symbolsMap, setSymbolsMap] = useState<Map<string, FileSymbol[]>>(new Map());
   const [diffData, setDiffDataRaw] = useState<{
     addedFiles: string[];
@@ -356,35 +382,68 @@ export function MainCanvas() {
 
   const loadDepEdges = useCallback((forRoot: string) => {
     let cancelled = false;
-    setLoadingGraph(true);
+    let retry: ReturnType<typeof setTimeout> | null = null;
+    let tries = 0;
     setGraphLoadError(null);
+    // Only a canvas with nothing to show says it is loading: one showing a
+    // graph keeps it on screen while it asks again.
+    setLoadingGraph(!hasGraphRef.current);
 
-    fetch('/api/dependencies?include=cross_system')
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`the server answered ${r.status}`);
-        const body = await r.json();
-        // Only an array is a graph. Anything else is an error shape that
-        // happens to parse.
-        if (!Array.isArray(body)) throw new Error('the response was not a list of edges');
-        return body as DependencyEdge[];
-      })
-      .then((edges) => {
+    const attempt = () => {
+      void fetchGraphAnswer(forRoot).then((answer) => {
         // A late answer for a project we have already left is not ours.
         if (cancelled || useProjectStore.getState().root !== forRoot) return;
-        setDepEdges(edges);
-        hasFetchedRef.current = forRoot;   // only a SUCCESS counts as fetched
-        setLoadingGraph(false);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        const message = err instanceof Error ? err.message : String(err);
+        if (answer.kind === 'edges') {
+          setDepEdges(answer.edges as DependencyEdge[]);
+          hasFetchedRef.current = forRoot;   // only a SUCCESS counts as fetched
+          setLoadingGraph(false);
+          return;
+        }
+        if (answer.kind === 'scanning' && tries++ < 120) {
+          // A scan is running (this project's or another window's): ask
+          // again shortly, keeping what is on screen.
+          retry = setTimeout(attempt, 1000);
+          return;
+        }
+        if (answer.kind === 'other-project') {
+          // The backend holds another project's graph (another window opened
+          // it). One showing this project's graph keeps it: nothing to do.
+          if (hasGraphRef.current) { hasFetchedRef.current = null; setLoadingGraph(false); return; }
+          // With nothing on screen, scan this project again, which is what
+          // opening it did, and ask once that lands. Only an empty canvas
+          // does this, so two windows never take the scanner from each other
+          // over and over. A scan of the other project still running refuses
+          // ours: wait a second and try again.
+          // The refusal is an answer, not an error: the scan route says 200
+          // with `astError` "already in progress". Asked again at once, a
+          // fresh canvas spent all its tries in a few seconds while the other
+          // scan ran, and stayed empty (#226, multi-select and
+          // graph-breakpoints). So a refusal waits too.
+          if (tries++ < 120) {
+            void getAPI().scanProject(forRoot)
+              .then((scan) => {
+                if (cancelled) return;
+                if (/already in progress/i.test(scan?.astError ?? '')) retry = setTimeout(attempt, 1000);
+                else attempt();
+              })
+              .catch(() => { if (!cancelled) retry = setTimeout(attempt, 1000); });
+            return;
+          }
+          hasFetchedRef.current = null;
+          setLoadingGraph(false);
+          setGraphLoadError(`the app is holding another project's graph (${answer.project}); rescan this project to see its own`);
+          return;
+        }
+        const message = answer.kind === 'error' ? answer.message : 'a scan did not finish in two minutes';
         console.error('[Graph] Could not load dependency edges:', message);
         setGraphLoadError(message);
         hasFetchedRef.current = null;      // so a retry is allowed
         setLoadingGraph(false);
       });
+    };
+    attempt();
 
-    return () => { cancelled = true; };
+    return () => { cancelled = true; if (retry) clearTimeout(retry); };
   }, [setDepEdges, setLoadingGraph]);
 
   // Bumped whenever the backend says the graph data changed, so the
@@ -550,14 +609,12 @@ export function MainCanvas() {
           nextDiffHasChanges ||
           nextGitHasChanges
         ) {
-          fetch('/api/dependencies?include=cross_system')
-            .then((r) => r.json())
-            .then((edges) => {
-              if (Array.isArray(edges) && edges.length > 0) {
-                setDepEdges(edges);
-              }
-            })
-            .catch(() => {});
+          const forRoot = root;
+          void fetchGraphAnswer(forRoot).then((answer) => {
+            if (answer.kind === 'edges' && answer.edges.length > 0 && useProjectStore.getState().root === forRoot) {
+              setDepEdges(answer.edges as DependencyEdge[]);
+            }
+          });
         }
 
         if (
@@ -578,14 +635,12 @@ export function MainCanvas() {
                   git: previous?.git || null,
                 }));
 
-                fetch('/api/dependencies?include=cross_system')
-                  .then((r) => r.json())
-                  .then((edges) => {
-                    if (Array.isArray(edges)) {
-                      setDepEdges(edges);
-                    }
-                  })
-                  .catch(() => {});
+                const forRoot = root;
+                void fetchGraphAnswer(forRoot).then((answer) => {
+                  if (answer.kind === 'edges' && useProjectStore.getState().root === forRoot) {
+                    setDepEdges(answer.edges as DependencyEdge[]);
+                  }
+                });
 
                 // Force subscribers (sidebar, etc.) to re-poll immediately so
                 // they pick up the post-commit clean state instead of waiting
@@ -732,11 +787,25 @@ export function MainCanvas() {
     return () => { cancelled = true; };
   }, [viewDepth, expandedNodes, depEdges]);
 
+  // Phase 32 E2b: two points chosen in the Changes tab, drawn on the graph.
+  const graphPair = useGraphPair(root);
+  const pairDiff = graphPair.diff;
+
   // Build the graph
   const workingTreeDiff = useMemo(() => mergeLiveDiff(null, diffData), [diffData]);
   const liveWorkingTreeDiff = useMemo(() => mergeLiveDiff(snapshotDiff, diffData), [snapshotDiff, diffData]);
 
   const rawGraphData = useMemo(() => {
+    // Replay (B5.3): the frame's graph, as it was, whatever the mode.
+    if (replayGraph) return buildFromSnapshot(replayGraph.edges, viewDepth, layoutMode, null, true, null, scopePath);
+    // Play-forward (B9.2): the live graph with every active plan's planned changes, dashed.
+    if (forward && depEdges.length > 0) {
+      return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, null, recentlyChanged, forward.projection, layoutMode, 'planned', scopePath);
+    }
+    // Two points chosen in the Changes tab (E2b): the live graph, marked with what differs between them.
+    if (pairDiff && depEdges.length > 0) {
+      return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, pairDiff, recentlyChanged, null, layoutMode, 'diff', scopePath);
+    }
     // Current/Planned mode: render from frozen snapshot
     if ((trellisMode === 'current' || trellisMode === 'planned') && currentSnapshot) {
       return buildFromSnapshot(
@@ -764,18 +833,22 @@ export function MainCanvas() {
 
     // Live mode (default)
     if (depEdges.length === 0) return { nodes: [], edges: [] };
-    return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, recentlyChanged, trellisMode === 'planned' || projectionEnabled ? projectionData : null, layoutMode, trellisMode, scopePath);
-  }, [depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, liveWorkingTreeDiff, recentlyChanged, projectionData, projectionEnabled, layoutMode, trellisMode, currentSnapshot, scopePath]);
+    // Plan intent on the live graph is an overlay (B3.3); the Planned view asks for it outright.
+    return buildDependencyGraph(depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, recentlyChanged, trellisMode === 'planned' || (projectionEnabled && planOverlay) ? projectionData : null, layoutMode, trellisMode, scopePath);
+  }, [replayGraph, forward, pairDiff, depEdges, viewDepth, expandedNodes, symbolsMap, toggleExpand, workingTreeDiff, liveWorkingTreeDiff, recentlyChanged, projectionData, projectionEnabled, planOverlay, layoutMode, trellisMode, currentSnapshot, scopePath]);
 
   // One element per id, whichever builder ran. Duplicate ids leak DOM on
   // every render; see `uniqueGraph` for how much.
   const graphData = useMemo(() => uniqueGraph(rawGraphData), [rawGraphData]);
 
-  const activeDiff = trellisMode === 'diff' ? liveWorkingTreeDiff : workingTreeDiff;
+  const activeDiff = pairDiff ?? (trellisMode === 'diff' ? liveWorkingTreeDiff : workingTreeDiff);
 
   // Phase 16.E — collect all file paths referenced by the active plan's items
   const planItemsByUid = usePlanItemsStore((s) => s.itemsByUid);
+  // Phase 32 B6.4 — a plan chosen in the Stack tab takes the highlight.
+  const stackFocus = useGraphStore((s) => s.stackFocus);
   const planHighlightPaths = useMemo(() => {
+    if (stackFocus) return new Set(stackFocus.paths);
     const paths = new Set<string>();
     for (const item of Object.values(planItemsByUid)) {
       if (item.fileSpecs) {
@@ -785,10 +858,52 @@ export function MainCanvas() {
       }
     }
     return paths;
-  }, [planItemsByUid]);
+  }, [planItemsByUid, stackFocus]);
+
+  const breakpoints = useBreakpointsStore((s) => s.breakpoints);
+
+  // Phase 32 B3.3 — the workstream and collision overlays read the awareness
+  // store; the Awareness tab keeps it fed, and this loads it once for a
+  // project it has not seen, so the graph does not wait for the tab.
+  const awarenessRoot = useAwarenessStore((s) => s.root);
+  const workstreams = useAwarenessStore((s) => s.workstreams);
+  const signals = useAwarenessStore((s) => s.signals);
+  useEffect(() => {
+    if (root && awarenessRoot !== root) void useAwarenessStore.getState().refresh(root);
+  }, [root, awarenessRoot]);
+  const workCounts = useMemo(
+    () => (graphOverlays.includes('workstreams') ? workCountsByFile(workstreams, root) : new Map()),
+    [graphOverlays, workstreams, root],
+  );
+  const collisions = useMemo(
+    () => (graphOverlays.includes('collisions') ? collisionFiles(signals, projectPrefix(root, workstreams)) : new Map<string, string[]>()),
+    [graphOverlays, signals, workstreams, root],
+  );
+  // B8.3a — every file's tests, from the reports agents handed over; read
+  // again when a report arrives. Nothing is fetched while the overlay is off.
+  // B8.4b — while replaying, as they were at the cursor's moment.
+  const testsOverlay = graphOverlays.includes('tests');
+  const [groundingMap, setGroundingMap] = useState<GroundingMapView | null>(null);
+  useEffect(() => {
+    if (!testsOverlay || !root) { setGroundingMap(null); return; }
+    let live = true;
+    const load = () => {
+      fetch(`/api/tests/grounding/map?project=${encodeURIComponent(root)}${replayAt !== null ? `&at=${replayAt}` : ''}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((m) => { if (live) setGroundingMap(m as GroundingMapView | null); })
+        .catch(() => { /* keeps what is shown */ });
+    };
+    load();
+    window.addEventListener('tests-reported', load);
+    return () => { live = false; window.removeEventListener('tests-reported', load); };
+  }, [testsOverlay, root, replayAt]);
+
+  // B9.2 — each file's planned overlaps while playing forward.
+  const plannedByFile = useMemo(() => overlapsByFile(forward), [forward]);
 
   const displayGraphData = useMemo(() => {
-    const hasPlanHighlights = planHighlightPaths.size > 0;
+    const hasPlanHighlights = (planOverlay || !!stackFocus) && planHighlightPaths.size > 0;
+    const codeBreakpoints = graphOverlays.includes('breakpoints') ? breakpoints.filter((b) => b.kind === 'code') : [];
     // Deduplicate nodes by id — the graph builder should produce
     // unique ids, but projection / ghost / cross-system passes can
     // occasionally produce a duplicate that crashes ReactFlow.
@@ -800,7 +915,27 @@ export function MainCanvas() {
     }
     const safeEdges = graphData?.edges ?? [];
 
-    if (!selectedNodeId && !hasPlanHighlights) return { nodes: safeNodes, edges: safeEdges };
+    if (!selectedNodeId && !hasPlanHighlights && codeBreakpoints.length === 0 && workCounts.size === 0 && collisions.size === 0 && !groundingMap?.hasResults && plannedByFile.size === 0) {
+      return { nodes: safeNodes, edges: safeEdges };
+    }
+    const isFile = (data: Record<string, unknown>) => data.nodeType === 'file' || data.nodeType === undefined;
+
+    // ⏸ on a node a breakpoint holds (B4.3b): a file, a symbol, or a cluster
+    // with any file under one.
+    const breakpointTitle = (node: (typeof safeNodes)[number], data: Record<string, unknown>, nodePath: string): string | undefined => {
+      if (codeBreakpoints.length === 0) return undefined;
+      const nodeType = typeof data.nodeType === 'string' ? data.nodeType : undefined;
+      let held;
+      if (nodeType === 'package') {
+        const files = Array.isArray(data.files) ? (data.files as unknown[]).filter((f): f is string => typeof f === 'string') : [];
+        const byId = new Map<string, (typeof codeBreakpoints)[number]>();
+        for (const f of files) for (const b of nodeBreakpoints(codeBreakpoints, { nodeType: 'file', path: f })) byId.set(b.id, b);
+        held = [...byId.values()];
+      } else {
+        held = nodeBreakpoints(codeBreakpoints, { nodeType, path: nodeType === 'symbol' ? node.id : nodePath });
+      }
+      return held.length ? nodeBreakpointTitle(held) : undefined;
+    };
 
     return {
       nodes: safeNodes.map((node) => {
@@ -813,7 +948,29 @@ export function MainCanvas() {
             relatedToSelection: selectedNodeId
               ? node.id === selectedNodeId || safeEdges.some((edge) => (edge.source === selectedNodeId && edge.target === node.id) || (edge.target === selectedNodeId && edge.source === node.id))
               : false,
-            planHighlighted: hasPlanHighlights && planHighlightPaths.has(nodePath),
+            // A cluster lights up when any file under it is in the plan's
+            // footprint: the graph opens on clusters, where no file node is
+            // drawn to light (B6.4).
+            planHighlighted: hasPlanHighlights && (planHighlightPaths.has(nodePath)
+              || (data.nodeType === 'package' && Array.isArray(data.files) && (data.files as unknown[]).some((f) => typeof f === 'string' && planHighlightPaths.has(f)))),
+            breakpointTitle: breakpointTitle(node, data, nodePath),
+            // B3.3 — each other workstream's lines in this file, and whether it is in an open overlap.
+            workCount: isFile(data) && workCounts.has(nodePath) ? workCountLabel(workCounts.get(nodePath)!) : undefined,
+            collisionTitle: isFile(data) && collisions.has(nodePath) ? collisions.get(nodePath)!.join('\n') : undefined,
+            // B8.3a — what the file's tests last said, or a cluster's files summed.
+            grounding: isFile(data)
+              ? fileGrounding(groundingMap, nodePath)
+              : data.nodeType === 'package' && Array.isArray(data.files)
+                ? clusterGrounding(groundingMap, (data.files as unknown[]).filter((f): f is string => typeof f === 'string'))
+                : undefined,
+            // B9.2 — a dashed "◇ planned overlap" zone on a file, or on a cluster holding one.
+            plannedOverlap: plannedByFile.size === 0
+              ? undefined
+              : isFile(data)
+                ? filePlannedMark(plannedByFile, nodePath)
+                : data.nodeType === 'package' && Array.isArray(data.files)
+                  ? clusterPlannedMark(plannedByFile, (data.files as unknown[]).filter((f): f is string => typeof f === 'string'))
+                  : undefined,
           },
         };
       }),
@@ -826,7 +983,7 @@ export function MainCanvas() {
         },
       })),
     };
-  }, [graphData, selectedNodeId, planHighlightPaths]);
+  }, [graphData, selectedNodeId, planHighlightPaths, planOverlay, stackFocus, breakpoints, graphOverlays, workCounts, collisions, groundingMap, plannedByFile]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(displayGraphData?.nodes ?? []);
   const [edges, setEdges, onEdgesChange] = useEdgesState(displayGraphData?.edges ?? []);
@@ -1031,6 +1188,22 @@ export function MainCanvas() {
 
   return (
     <div className="w-full h-full relative overflow-hidden bg-gradient-to-br from-[#0a0b10] via-[#0d1020] to-[#0a0b10]">
+      {replayAt !== null && (
+        <div data-testid="replay-canvas" className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-10 rounded-full border border-accent/40 bg-background/80 px-3 py-1 text-[11px] text-accent shadow">
+          As it was at {hhmm(replayAt)}
+          {replayGraph ? ` · ${replayGraph.files.length} ${replayGraph.files.length === 1 ? 'file' : 'files'}` : ''}
+          {/* B8.4b — the tests overlay is of that moment too; with nothing reported by then it draws nothing, and says nothing. */}
+          {testsOverlay && groundingMap?.hasResults ? ' · tests as reported by then' : ''} · replaying
+        </div>
+      )}
+      {replayAt === null && !playingForward && <GraphPairBanner state={graphPair} />}
+      {playingForward && replayAt === null && (
+        <div data-testid="play-forward-canvas" className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-10 rounded-full border border-violet-400/40 bg-background/80 px-3 py-1 text-[11px] text-violet-200 shadow">
+          ◇ Playing forward · now → all plans done
+          {forward ? ` · planned by ${forward.plans.length} active ${forward.plans.length === 1 ? 'plan' : 'plans'}` : ''}
+          {forward && forward.overlaps.length > 0 ? ` · ${forward.overlaps.length} planned ${forward.overlaps.length === 1 ? 'overlap' : 'overlaps'}` : ''} · nothing dashed exists yet
+        </div>
+      )}
       <div className="pointer-events-none absolute inset-0 opacity-45 [background-image:radial-gradient(circle_at_center,rgba(59,130,246,0.08)_0,transparent_46%),linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:100%_100%,28px_28px,28px_28px]" />
       <ReactFlow
         nodes={nodes}
@@ -1060,7 +1233,7 @@ export function MainCanvas() {
         onlyRenderVisibleElements
         className={`!bg-transparent ${graphStyle === 'performance' ? 'graph-perf' : ''}`}
       >
-        <AutoFitView nodes={nodes} />
+        <AutoFitView nodes={nodes} layout={layoutMode} />
         <Background color="rgba(59,130,246,0.06)" gap={24} size={1} />
         <Controls className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)] [&>button]:!bg-transparent [&>button]:!border-white/[0.06] [&>button]:!text-zinc-400 [&>button:hover]:!bg-white/[0.06] [&>button:hover]:!text-zinc-200" />
         <MiniMap className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)]" nodeColor="rgba(59,130,246,0.6)" maskColor="rgba(0,0,0,0.8)" />
@@ -1109,13 +1282,15 @@ export function MainCanvas() {
                   <button
                     key={mode}
                     onClick={() => setTrellisMode(mode)}
-                    aria-pressed={trellisMode === mode}
-                    className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all ${
-                      trellisMode === mode
+                    // While replaying (B5.3), the canvas is none of these: it is the frame's graph.
+                    disabled={replayAt !== null || playingForward}
+                    aria-pressed={replayAt === null && !playingForward && trellisMode === mode}
+                    className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-md transition-all disabled:opacity-40 ${
+                      replayAt === null && !playingForward && trellisMode === mode
                         ? `bg-white/[0.08] ${color} shadow-[0_0_6px_currentColor]`
                         : 'text-zinc-500 hover:text-zinc-300'
                     }`}
-                    title={`${label} view`}
+                    title={replayAt !== null ? 'Replaying: go back to live to change the view' : playingForward ? 'Playing forward: go back to now to change the view' : `${label} view`}
                   >
                     <Icon size={11} />
                     {label}
@@ -1326,6 +1501,9 @@ export function MainCanvas() {
                 </select>
               </div>
               <div className="shrink-0">
+                <OverlaysMenu />
+              </div>
+              <div className="shrink-0">
                 <ExportButton />
               </div>
             </div>
@@ -1451,6 +1629,40 @@ function NodeContextMenu({
   const updateItem = usePlanItemsStore((s) => s.updateItem);
   const addToast = useToastStore((s) => s.addToast);
   const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
+  const breakpoints = useBreakpointsStore((s) => s.breakpoints);
+  const setBreakpoint = useBreakpointsStore((s) => s.set);
+  const clearBreakpoint = useBreakpointsStore((s) => s.clear);
+
+  // Phase 32 B4.3b — "Ask me before this changes": a code breakpoint on this
+  // file, folder or function. Null for a node that cannot carry one.
+  const breakTarget = ((): { path: string; symbol?: string; target: string; name: string } | null => {
+    if (nodeType === 'symbol') {
+      const sym = symbolNodeTarget(nodePath);
+      if (!sym || !BREAKABLE_SYMBOLS.has(sym.kind)) return null;
+      return { path: sym.file, symbol: sym.name, target: `${sym.file}#${sym.name}`, name: sym.name };
+    }
+    if (nodeType === 'directory') {
+      const dir = nodePath.replace(/\/+$/, '');
+      return dir ? { path: `${dir}/`, target: `${dir}/`, name: nodeLabel } : null;
+    }
+    if (nodeType === 'file' && nodePath && !nodePath.startsWith('/')) return { path: nodePath, target: nodePath, name: nodeLabel };
+    return null;
+  })();
+  const existingBreakpoint = breakTarget ? breakpoints.find((b) => b.kind === 'code' && b.target === breakTarget.target) ?? null : null;
+
+  const handleToggleBreakpoint = async () => {
+    onClose();
+    if (!breakTarget) return;
+    if (existingBreakpoint) {
+      const err = await clearBreakpoint(existingBreakpoint.id);
+      if (err) addToast({ type: 'error', title: 'Breakpoint not cleared', message: err, duration: 4000 });
+      else addToast({ type: 'success', title: 'Breakpoint cleared', message: `Agents no longer wait for you before ${breakTarget.name} changes.`, duration: 3000 });
+      return;
+    }
+    const err = await setBreakpoint({ kind: 'code', path: breakTarget.path, ...(breakTarget.symbol ? { symbol: breakTarget.symbol } : {}) });
+    if (err) addToast({ type: 'error', title: 'Breakpoint not set', message: err, duration: 4000 });
+    else addToast({ type: 'success', title: 'Breakpoint set', message: `An agent about to change ${breakTarget.name} will wait for you. You answer in Awareness.`, duration: 4000 });
+  };
 
   const addFileSpecToItem = async (itemUid: string) => {
     const item = itemsByUid[itemUid];
@@ -1639,6 +1851,30 @@ function NodeContextMenu({
           Scope plan to this
         </button>
       )}
+      {breakTarget && (
+        <button
+          onClick={handleToggleBreakpoint}
+          data-testid="node-menu-breakpoint"
+          className="w-full flex items-center gap-2 px-2.5 py-2 text-left rounded-md hover:bg-warning/10 text-foreground-muted hover:text-foreground transition-colors"
+        >
+          {existingBreakpoint ? <Play size={13} className="text-warning" /> : <Pause size={13} className="text-warning" />}
+          {existingBreakpoint
+            ? `Stop asking before ${breakTarget.symbol ?? 'this'} changes`
+            : `Ask me before ${breakTarget.symbol ?? 'this'} changes`}
+        </button>
+      )}
+      {/* Phase 32 B3.3b — the file's lines, and who else changes them, in the code view (B3.2). */}
+      {nodeType === 'file' && (
+        <button
+          onClick={() => { void openFileAt(nodePath); onClose(); }}
+          data-testid="node-menu-show-changes"
+          className="w-full flex items-center gap-2 px-2.5 py-2 text-left rounded-md hover:bg-sky-500/10 text-foreground-muted hover:text-foreground transition-colors"
+          title="Open the file with each workstream's changed lines marked"
+        >
+          <GitCompare size={13} className="text-sky-400" />
+          Show line changes
+        </button>
+      )}
       <div className="h-px bg-white/[0.06] mx-1.5 my-1" />
       <button
         onClick={handleExplainWithAgent}
@@ -1679,17 +1915,18 @@ function buildExplainPrompt(filePath: string, label: string, nodeType?: string):
   ].join('\n');
 }
 
-function preserveNodePositions(previousNodes: Node[], nextNodes: Node[]): Node[] {
-  const previousPositions = new Map(previousNodes.map((node) => [node.id, node.position]));
-  return nextNodes.map((node) => {
-    const previousPosition = previousPositions.get(node.id);
-    return previousPosition ? { ...node, position: previousPosition } : node;
-  });
-}
-
-function AutoFitView({ nodes }: { nodes: Node[] }) {
+/**
+ * Fit the view when the number of nodes changes, and when the layout changes
+ * (`layout`). A Tree ↔ Map switch keeps the count and moves every node, so
+ * refitting on the count alone left the viewport where the previous layout
+ * had put them, and with `onlyRenderVisibleElements` on nothing was drawn:
+ * an empty canvas. The layout refit is its own effect so nothing else about
+ * when the view fits changes.
+ */
+function AutoFitView({ nodes, layout }: { nodes: Node[]; layout: string }) {
   const { fitView } = useReactFlow();
   const prevCountRef = useRef(0);
+  const prevLayoutRef = useRef(layout);
 
   useEffect(() => {
     if (nodes.length > 0 && nodes.length !== prevCountRef.current) {
@@ -1697,6 +1934,14 @@ function AutoFitView({ nodes }: { nodes: Node[] }) {
       setTimeout(() => fitView({ padding: 0.15, duration: 300 }), 50);
     }
   }, [nodes, fitView]);
+
+  useEffect(() => {
+    if (layout === prevLayoutRef.current) return;
+    prevLayoutRef.current = layout;
+    if (nodes.length > 0) setTimeout(() => fitView({ padding: 0.15, duration: 300 }), 50);
+    // Only a layout change refits here; node changes are the effect above's.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layout, fitView]);
 
   return null;
 }

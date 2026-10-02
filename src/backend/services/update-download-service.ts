@@ -61,6 +61,8 @@ import { verifyManifestSignature, parseManifest, digestFor } from './release-sig
 
 export type DownloadPhase =
   | 'idle'
+  /** Fetching and checking the signed manifest, before any installer bytes. */
+  | 'preparing'
   | 'downloading'
   | 'verifying'
   | 'ready'
@@ -76,6 +78,10 @@ export interface UpdateDownloadState {
   /** Absolute path, only once verified. */
   filePath: string | null;
   error: string | null;
+  /** The digest the file was verified against, once it was. */
+  sha256: string | null;
+  /** Where the person saved a copy, if they have. */
+  savedPath: string | null;
 }
 
 /**
@@ -103,7 +109,7 @@ const MAX_BYTES = 600 * 1024 * 1024;
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
-let state: UpdateDownloadState = {
+const IDLE: UpdateDownloadState = {
   phase: 'idle',
   version: null,
   filename: null,
@@ -111,7 +117,11 @@ let state: UpdateDownloadState = {
   totalBytes: null,
   filePath: null,
   error: null,
+  sha256: null,
+  savedPath: null,
 };
+
+let state: UpdateDownloadState = { ...IDLE };
 
 /**
  * The artifact must be the one the offer named.
@@ -286,6 +296,13 @@ export function startUpdateDownload(
       const filename = safeFilename(info.filename || path.basename(url.pathname));
       assertArtifactMatchesOffer(url, filename, version);
 
+      // In flight from here, before the first await. The panel polls from the
+      // moment the button is pressed, and a status of "idle" while the
+      // manifest was being fetched read as finished: it stopped polling, and
+      // the whole download ran with no progress on screen (owner's report on
+      // 0.1.16 → 0.1.17).
+      state = { ...IDLE, phase: 'preparing', version, filename, totalBytes: info.size ?? null };
+
       // THE DIGEST COMES FROM THE SIGNED MANIFEST, NOT THE UPDATE API.
       //
       // Fetched from the same release, next to the installer, and signed with
@@ -294,21 +311,14 @@ export function startUpdateDownload(
       // where nothing implies verification, rather than getting an in-app
       // download that only looks checked.
       const expectedSha256 = await fetchSignedDigest(url, filename);
+      if (cancelled) throw new Error('Cancelled');
 
       const dir = downloadDir();
       fs.mkdirSync(dir, { recursive: true });
       const dest = path.join(dir, filename);
       const partial = `${dest}.part`;
 
-      state = {
-        phase: 'downloading',
-        version,
-        filename,
-        bytesDownloaded: 0,
-        totalBytes: info.size ?? null,
-        filePath: null,
-        error: null,
-      };
+      state = { ...state, phase: 'downloading', bytesDownloaded: 0 };
 
       // Write to `.part` and rename only once verified, so a half-written or
       // wrong-hash file is never sitting there looking like an installer.
@@ -325,16 +335,19 @@ export function startUpdateDownload(
       }
 
       fs.renameSync(partial, dest);
-      state = { ...state, phase: 'ready', filePath: dest };
+      state = { ...state, phase: 'ready', filePath: dest, sha256: expectedSha256 };
       console.log(`[Update] Verified ${filename} — sha256 matches the published digest`);
       return state;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      if (message !== 'Cancelled') console.warn(`[Update] Download failed: ${message}`);
+      // Cancelled while the manifest was still being fetched counts as
+      // cancelled, whatever that fetch then did.
+      const wasCancelled = message === 'Cancelled' || cancelled;
+      if (!wasCancelled) console.warn(`[Update] Download failed: ${message}`);
       state = {
         ...state,
-        phase: message === 'Cancelled' ? 'idle' : 'error',
-        error: message === 'Cancelled' ? null : message,
+        phase: wasCancelled ? 'idle' : 'error',
+        error: wasCancelled ? null : message,
         filePath: null,
       };
       return state;
@@ -435,6 +448,46 @@ function fetchSmall(url: URL, hops = 0): Promise<Buffer> {
   });
 }
 
+/**
+ * Copy the verified installer to where the person chose to save it.
+ *
+ * `dest` comes from the app window's native save dialog (Electron main), never
+ * from an HTTP request. The copy is hashed as it is written and checked
+ * against the digest the download was verified with, so a file changed on
+ * disk since then is refused rather than handed over under the "verified"
+ * label. Written to `.part` and renamed only once it matches.
+ */
+export async function saveVerifiedUpdateCopy(dest: string): Promise<string> {
+  const { phase, filePath, sha256 } = state;
+  if (phase !== 'ready' || !filePath || !sha256) throw new Error('No verified download to save');
+  if (!path.isAbsolute(dest)) throw new Error('The save location must be an absolute path');
+  const target = path.resolve(dest);
+  if (target === path.resolve(filePath)) return target;
+
+  const partial = `${target}.part`;
+  const hash = createHash('sha256');
+  await new Promise<void>((resolve, reject) => {
+    const input = fs.createReadStream(filePath);
+    const out = fs.createWriteStream(partial);
+    input.on('data', (c) => hash.update(c));
+    input.on('error', reject);
+    out.on('error', reject);
+    out.on('finish', () => resolve());
+    input.pipe(out);
+  }).catch((err) => {
+    try { fs.rmSync(partial, { force: true }); } catch { /* */ }
+    throw err;
+  });
+
+  if (!digestsEqual(hash.digest('hex'), sha256)) {
+    try { fs.rmSync(partial, { force: true }); } catch { /* */ }
+    throw new Error('The downloaded file changed on disk since it was verified. Download it again.');
+  }
+  fs.renameSync(partial, target);
+  state = { ...state, savedPath: target };
+  return target;
+}
+
 export function cancelUpdateDownload(): UpdateDownloadState {
   if (inFlight) cancelled = true;
   return state;
@@ -442,12 +495,14 @@ export function cancelUpdateDownload(): UpdateDownloadState {
 
 /** Test seam. */
 export function _resetUpdateDownloadState(): void {
-  state = {
-    phase: 'idle', version: null, filename: null,
-    bytesDownloaded: 0, totalBytes: null, filePath: null, error: null,
-  };
+  state = { ...IDLE };
   inFlight = null;
   cancelled = false;
+}
+
+/** Test seam: a verified download sitting in `filePath`. */
+export function _setVerifiedForTest(v: { version: string; filename: string; filePath: string; sha256: string }): void {
+  state = { ...IDLE, phase: 'ready', ...v };
 }
 
 export const _internals = { assertAllowedUrl, safeFilename, digestsEqual, ALLOWED_HOSTS, MAX_BYTES };

@@ -31,8 +31,10 @@ interface SymbolInfo {
 }
 
 interface FileDeps {
-  imports: Array<{ path: string; relativePath: string; specifiers: string[] }>;
-  importedBy: Array<{ path: string; relativePath: string; specifiers: string[] }>;
+  imports: Array<{ path: string; relativePath: string; specifiers: string[]; reexport?: boolean }>;
+  importedBy: Array<{ path: string; relativePath: string; specifiers: string[]; reexport?: boolean }>;
+  /** Files that reach this one through a barrel's `export … from` (Phase 32 A2.2). */
+  throughReexports?: Array<{ path: string; relativePath: string; specifiers: string[]; via: string[]; possibly?: boolean }>;
 }
 
 const KIND_ICON_MAP: Record<string, typeof Braces> = {
@@ -218,6 +220,7 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
   const [content, setContent] = useState<FileContent | null>(null);
   const [codeMode, setCodeMode] = useState<'read' | 'diff'>('read');
   const [overlay, setOverlay] = useState<FileOverlay | null>(null);
+  const [grounding, setGrounding] = useState<FileGrounding | null>(null);
   // Compared against the last commit by default: `scanProject` re-pins
   // the baseline on every run, so baseline → live is empty right after a
   // scan (see PHASE-26 §4).
@@ -232,7 +235,7 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
   }, [nodeId, root]);
 
   useEffect(() => {
-    if (!absPath) { setSymbols([]); setDeps(null); setContent(null); setOverlay(null); return; }
+    if (!absPath) { setSymbols([]); setDeps(null); setContent(null); setOverlay(null); setGrounding(null); return; }
     setShowCode(false);
     setContent(null);
     setContentError(null);
@@ -248,6 +251,15 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => setOverlay(data && !data.error ? data : null))
         .catch(() => setOverlay(null));
+    }
+
+    // Phase 32 B8.2 — the file's tests, from the reports agents handed over.
+    setGrounding(null);
+    if (root) {
+      fetch(`/api/tests/grounding?project=${encodeURIComponent(root)}&path=${encodeURIComponent(absPath)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((g) => setGrounding(g && !g.error ? g as FileGrounding : null))
+        .catch(() => setGrounding(null));
     }
 
     fetch(`/api/symbols/file?path=${encodeURIComponent(absPath)}`)
@@ -361,6 +373,8 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
         </>
       )}
 
+      {grounding && <TestsLine grounding={grounding} />}
+
       {symbols.length > 0 && (
         <Section label="Symbols" count={symbols.length} accentClass="text-accent">
           <div className="mt-1.5 space-y-0.5">
@@ -393,6 +407,7 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
               >
                 <ArrowRight size={10} className="text-accent shrink-0" />
                 <span className="text-[11px] text-foreground-muted font-mono truncate group-hover:text-foreground">{imp.relativePath}</span>
+                {imp.reexport && <ReexportTag />}
               </button>
             ))}
           </div>
@@ -410,12 +425,103 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
               >
                 <ArrowLeft size={10} className="text-warning shrink-0" />
                 <span className="text-[11px] text-foreground-muted font-mono truncate group-hover:text-foreground">{imp.relativePath}</span>
+                {imp.reexport && <ReexportTag />}
+              </button>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/* Who uses this file through a barrel (A2.2): a component importing
+          from a package's index.ts uses what the index re-exports, and was
+          invisible here until re-exports were recorded. */}
+      {deps && (deps.throughReexports?.length ?? 0) > 0 && (
+        <Section label="Used through re-exports" count={deps.throughReexports!.length} accentClass="text-warning">
+          <div className="mt-1.5 space-y-0.5" data-testid="inspector-through-reexports">
+            {deps.throughReexports!.map((imp) => (
+              <button
+                key={imp.relativePath}
+                onClick={() => onSelectFile(imp.relativePath)}
+                title={`${imp.possibly ? 'Imports everything (namespace), so may use any of it' : `Uses ${imp.specifiers.join(', ')}`} — via ${imp.via.join(' → ')}`}
+                className="w-full text-left py-1 px-2 rounded-md hover:bg-surface-hover transition-colors group"
+              >
+                <span className="flex items-center gap-1.5">
+                  <ArrowLeft size={10} className="text-warning shrink-0" />
+                  <span className="text-[11px] text-foreground-muted font-mono truncate group-hover:text-foreground">{imp.relativePath}</span>
+                </span>
+                <span className="block pl-[16px] text-[9px] text-foreground-subtle truncate">
+                  {imp.possibly ? 'may use any of it' : imp.specifiers.join(', ')} · via {imp.via.map((v) => v.split('/').pop()).join(' → ')}
+                </span>
               </button>
             ))}
           </div>
         </Section>
       )}
     </div>
+  );
+}
+
+/** What a file's tests say (Phase 32 B8.2): the reports agents handed over; CodeTrellis runs none. */
+interface FileGrounding {
+  path: string;
+  state: 'failing' | 'stale' | 'passing' | 'untested';
+  words: string;
+  testFiles: string[];
+  tests: Array<{ label: string; result: string; message: string | null; testFile: string }>;
+  isTest: boolean;
+}
+
+const GROUNDING_TONE: Record<FileGrounding['state'], string> = {
+  failing: 'border-red-500/25 bg-red-500/[0.06] text-red-200',
+  stale: 'border-amber-500/25 bg-amber-500/[0.06] text-amber-200',
+  passing: 'border-emerald-500/20 bg-emerald-500/[0.05] text-emerald-200',
+  untested: 'border-white/[0.06] bg-white/[0.02] text-foreground-muted',
+};
+
+function TestsLine({ grounding: g }: { grounding: FileGrounding }) {
+  const [open, setOpen] = useState(false);
+  const shown = g.tests.filter((t) => t.result === 'failed' || t.result === 'error');
+  const rest = g.tests.length - shown.length;
+  return (
+    <div data-testid="inspector-tests" data-state={g.state} className={`rounded-md border px-2.5 py-1.5 text-[11px] ${GROUNDING_TONE[g.state]}`}>
+      <div className="flex items-center gap-2">
+        <span data-testid="inspector-tests-words">{g.words}</span>
+        {g.tests.length > 0 && (
+          <button onClick={() => setOpen((v) => !v)} className="ml-auto text-[10px] text-foreground-subtle hover:text-foreground" aria-expanded={open}>
+            {open ? 'Hide' : 'Show'} tests
+          </button>
+        )}
+      </div>
+      {g.testFiles.length > 0 && !g.isTest && (
+        <div className="mt-0.5 text-[10px] text-foreground-subtle font-mono truncate" title={g.testFiles.join('\n')}>
+          from {g.testFiles.slice(0, 2).join(', ')}{g.testFiles.length > 2 ? ` and ${g.testFiles.length - 2} more` : ''}
+        </div>
+      )}
+      {shown.length > 0 && !open && (
+        <ul className="mt-1 space-y-0.5 text-foreground">
+          {shown.slice(0, 3).map((t) => (
+            <li key={t.label} data-testid="inspector-test-failing">✕ {t.label}{t.message ? <span className="text-foreground-subtle"> — {t.message}</span> : null}</li>
+          ))}
+        </ul>
+      )}
+      {open && (
+        <ul className="mt-1 space-y-0.5 text-foreground" data-testid="inspector-tests-list">
+          {g.tests.map((t) => (
+            <li key={t.label}>{t.result === 'passed' ? '✓' : t.result === 'skipped' ? '○' : '✕'} {t.label}{t.message ? <span className="text-foreground-subtle"> — {t.message}</span> : null}</li>
+          ))}
+        </ul>
+      )}
+      {!open && rest > 0 && shown.length > 0 && <div className="mt-0.5 text-[10px] text-foreground-subtle">and {rest} more</div>}
+    </div>
+  );
+}
+
+/** A barrel's `export … from`: it passes names on rather than using them. */
+function ReexportTag() {
+  return (
+    <span className="ml-auto text-[9px] text-foreground-subtle shrink-0" title="export … from: passes these names on rather than using them">
+      re-exports
+    </span>
   );
 }
 

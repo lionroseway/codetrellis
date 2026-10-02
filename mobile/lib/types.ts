@@ -293,6 +293,19 @@ export interface WorkspaceSnapshot {
   pendingInputRequests: InputRequestSummary[];
   walkthroughActive: boolean;
   deviationCounts: DeviationCountsSummary;
+  /**
+   * Phase 32 B4.4 — agent calls held at a breakpoint, waiting for the person.
+   * A count; the calls themselves come from `breakpoint.waiting`. Optional
+   * for back-compat with older desktops.
+   */
+  waitingBreakpoints?: number;
+
+  /**
+   * Phase 32 A4.2 — signals that need the person in the desktop's opened
+   * project (open, high or medium). Read them over `awareness.needsYou`.
+   * Optional for older desktops.
+   */
+  openSignals?: number;
 
   /**
    * Desktop's reachable IPv4 addresses (LAN + Tailscale/VPN), LAN-first.

@@ -19,15 +19,27 @@
  *    root taken from the plan, never from the pack — without following
  *    links (confined-fs).
  *
- * Signing the pack is not in this phase: the release-manifest key is for
- * releases and must not be reused, and a per-install key is its own design.
+ * Signed (Phase 32 B10.3, `pack-seal.ts`): the routes seal each pack with
+ * this computer's device key, never the release-manifest key, and the seal
+ * carries the record's head, so verifying says who signed it, whether it
+ * changed since, and whether the record it names still holds.
  */
 
 import { getPlan } from './plan-service';
 import { resolveTrustedProjectRoot } from './trusted-roots';
 import { sha256FileWithin } from '../lib/sha256-file';
 import { signoffRows } from './signoff-rows';
+import { listAllItems, resolveSkills } from './plan-item-service';
+import { skillProof, skillUseSources, sourceOf } from './skill-use-service';
+import type { SkillProof, SkillProofSource } from '../../shared/types';
 import { decisionWords, stateWords, type SignoffRow } from '../../shared/lib/signoff';
+import { loadSignals } from './awareness-service';
+import { taskWorkstreamId } from './task-workstreams';
+import { otherWorkInFlight, type OtherWorkOutcome } from '../../shared/lib/other-work';
+import { briefLine } from '../../shared/lib/signal-words';
+import type { AwarenessSignal } from '../../shared/types';
+import { locateStored } from './material-place';
+import type { PackSeal, SealedRecord } from './pack-seal';
 
 export const PACK_FORMAT = 'codetrellis-signoff-pack';
 export const PACK_VERSION = 1;
@@ -40,6 +52,43 @@ export interface PackFile {
   takenAt: 'approval' | 'submission';
 }
 
+/**
+ * Phase 32 C1.3 — a task's required or recommended skill, and whether it
+ * was used. Null proof: no agent worked the task. Optional in the pack, so a
+ * pack made before it still reads.
+ */
+export interface PackSkill {
+  itemUid: string;
+  itemTitle: string;
+  name: string;
+  use: 'required' | 'recommended';
+  proof: SkillProof | null;
+  /** A8.4 — how a use was seen: Claude Code's session log, or a read through get_skill. */
+  proofSource?: SkillProofSource | null;
+}
+
+/**
+ * Phase 32 A6.5 — a signal that touched a task (A6.3: a file it shares with
+ * other tasks changed, they read different versions, the same output), and
+ * how it ended, as a PR body's "Other work in flight" says (A5.2). Optional
+ * in the pack, so a pack made before it still reads.
+ */
+export interface PackSignal {
+  itemUid: string;
+  itemTitle: string;
+  signalId: string;
+  severity: AwarenessSignal['severity'];
+  /** "Changed material", "Different versions". */
+  heading: string;
+  /** What happened, from this task's side. */
+  says: string;
+  outcome: OtherWorkOutcome;
+  /** How it ended, in a sentence. */
+  outcomeWords: string;
+  /** The notes agents left for the person. */
+  notes: string[];
+}
+
 export interface SignoffPack {
   format: typeof PACK_FORMAT;
   version: typeof PACK_VERSION;
@@ -47,6 +96,59 @@ export interface SignoffPack {
   generatedAt: string;
   rows: SignoffRow[];
   files: PackFile[];
+  skills?: PackSkill[];
+  signals?: PackSignal[];
+  /** B10.3: the record's last entry when the pack was signed, and the signature over all of it. */
+  sealedRecord?: SealedRecord;
+  seal?: PackSeal;
+}
+
+/**
+ * Every material signal that named one of the plan's tasks, live or
+ * resolved, with its outcome. Signals are read as stored: building a pack
+ * records what was known, it does not recompute it.
+ */
+export function packSignals(planUid: string, projectPath: string | null): PackSignal[] {
+  if (!projectPath) return [];
+  let signals: AwarenessSignal[];
+  try { signals = loadSignals(projectPath).filter((s) => s.subject.material); } catch { return []; }
+  if (signals.length === 0) return [];
+  const out: PackSignal[] = [];
+  for (const item of listAllItems(planUid)) {
+    if (item.kind !== 'action') continue;
+    const root = taskWorkstreamId(item.uid);
+    const touched = signals.filter((s) => s.workstreams.includes(root));
+    if (touched.length === 0) continue;
+    const byId = new Map(touched.map((s) => [s.id, s]));
+    const label = (r: string) => touched.find((s) => s.subject.labels?.[r])?.subject.labels?.[r] ?? r;
+    for (const e of otherWorkInFlight({ root, name: item.title }, touched, label).entries) {
+      out.push({
+        itemUid: item.uid, itemTitle: item.title, signalId: e.signalId, severity: e.severity, heading: e.heading,
+        says: briefLine(byId.get(e.signalId)!, root), outcome: e.outcome, outcomeWords: e.outcomeWords, notes: e.notes,
+      });
+    }
+  }
+  return out;
+}
+
+/** Every task's required and recommended skills, with whether each was used. */
+export function packSkills(planUid: string): PackSkill[] {
+  const out: PackSkill[] = [];
+  for (const item of listAllItems(planUid)) {
+    if (item.kind !== 'action') continue;
+    const wanted = resolveSkills(item).filter((s) => s.required || s.use === 'recommended');
+    if (wanted.length === 0) continue;
+    const proof = skillProof(item, wanted);
+    const sources = skillUseSources(item.uid);
+    for (const s of wanted) {
+      const p = proof?.get(s.name) ?? null;
+      out.push({
+        itemUid: item.uid, itemTitle: item.title, name: s.name, use: s.required ? 'required' : 'recommended', proof: p,
+        proofSource: p === 'used' ? sourceOf(sources, s.name) : null,
+      });
+    }
+  }
+  return out;
 }
 
 export function buildSignoffPack(planUid: string, now: Date = new Date()): SignoffPack {
@@ -76,6 +178,8 @@ export function buildSignoffPack(planUid: string, now: Date = new Date()): Signo
     generatedAt: now.toISOString(),
     rows,
     files: [...files.values()].sort((a, b) => a.path.localeCompare(b.path)),
+    skills: packSkills(planUid),
+    signals: packSignals(planUid, plan.projectPath ?? null),
   };
 }
 
@@ -125,7 +229,9 @@ export async function verifyPack(planUid: string, raw: unknown, now: Date = new 
   for (const f of files) {
     let current: string | null = null;
     try {
-      current = (await sha256FileWithin(root, f.path)).sha256;
+      const at = locateStored(f.path, root);
+      if (!at) throw new Error('not placed on this device');
+      current = (await sha256FileWithin(at.root, at.rel)).sha256;
     } catch {
       current = null; // gone, outside the project, or a link — none of which is the file judged
     }
@@ -146,12 +252,12 @@ export async function verifyPack(planUid: string, raw: unknown, now: Date = new 
 
 // ── The page ──────────────────────────────────────────────────────────
 
-function esc(s: string): string {
+export function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /** JSON that is safe inside a `<script type="application/json">`: no `<` survives to close it. */
-function scriptJson(value: unknown): string {
+export function scriptJson(value: unknown): string {
   return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026')
     .replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 }
@@ -251,10 +357,13 @@ ${groupByItem(unverified).map((g) => `<h3 class="item">${esc(g.title)} <span cla
 <body>
 <h1>${esc(title)}</h1>
 <p class="muted">Generated ${esc(pack.generatedAt.replace('T', ' ').slice(0, 16))} UTC by CodeTrellis · plan ${esc(pack.plan.uid)}</p>
+${pack.seal ? `<p class="muted" id="seal">Signed by the computer with key <code>${esc(pack.seal.key)}</code>, with its record at entry #${esc(String(pack.sealedRecord?.seq ?? 0))} (<code>${esc((pack.sealedRecord?.hash ?? '').slice(0, 16))}…</code>). Verify it in CodeTrellis: a changed byte, or a changed record, shows.</p>` : ''}
 <p class="summary">${met} of ${pack.rows.length} criteria met${summaryApart(selfApproved.length, unverified.length)}.</p>
 ${sections || (pack.rows.length ? '' : '<p class="muted">This plan has no acceptance criteria.</p>')}
 ${unverifiedSection}
 ${self}
+${skillsSection(pack.skills ?? [])}
+${signalsSection(pack.signals ?? [])}
 <h2>Files and hashes</h2>
 <p class="muted">Every file this pack vouches for, with the sha256 it had when it was judged. "Verify a pack" in CodeTrellis re-hashes each one and says which still match.</p>
 <table><thead><tr><th>File</th><th>sha256</th><th>Taken</th></tr></thead><tbody>${fileRows || '<tr><td colspan="3" class="muted">No files.</td></tr>'}</tbody></table>
@@ -262,6 +371,28 @@ ${self}
 </body>
 </html>
 `;
+}
+
+/** A6.5 — the signals that touched each task, and how each ended. */
+function signalsSection(signals: PackSignal[]): string {
+  if (signals.length === 0) return '';
+  const rows = signals.map((s) => `<tr><td>${esc(s.itemTitle)}</td><td><b>${esc(s.heading)}</b> <span class="muted">${esc(s.severity)}</span><br>${esc(s.says)}${s.notes.map((n) => `<br><span class="muted">${esc(n)}</span>`).join('')}</td><td>${esc(s.outcomeWords)}</td></tr>`).join('');
+  return `
+<h2>Other work that touched these tasks</h2>
+<p class="muted">Files these tasks shared with other tasks that changed, versions they disagreed on, or outputs two tasks wrote, and how each ended.</p>
+<table><thead><tr><th>Task</th><th>What happened</th><th>How it ended</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function skillsSection(skills: PackSkill[]): string {
+  if (skills.length === 0) return '';
+  const words = (p: SkillProof | null, src?: SkillProofSource | null) => p === 'used'
+    ? `✓ used${src === 'mcp' ? ' (read through CodeTrellis)' : src === 'session_log' ? ' (Claude Code session log)' : ''}`
+    : p === 'not_used' ? '○ not used' : p === 'unknown' ? 'unknown (nothing seen: the agent may have read the file itself)' : 'not started';
+  const rows = skills.map((s) => `<tr><td>${esc(s.itemTitle)}</td><td>${esc(s.name)}</td><td>${s.use}</td><td>${esc(words(s.proof, s.proofSource))}</td></tr>`).join('');
+  return `
+<h2>Skills</h2>
+<p class="muted">The skills each task asked the agent to use, and whether the agent loaded them: from Claude Code's session log, or from the agent reading it through CodeTrellis (any client). Unknown means nothing was seen.</p>
+<table><thead><tr><th>Task</th><th>Skill</th><th>Asked as</th><th>Used</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 /** The pack's data back out of a saved page (or the JSON itself). */

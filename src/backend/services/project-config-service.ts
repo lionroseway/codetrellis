@@ -16,9 +16,13 @@ import {
   type DriftSensorConfig,
   type DocSensorConfig,
   type StuckSensorConfig,
+  type AwarenessSensorConfig,
   type FreezeConfig,
+  type PlansFolderRef,
 } from '../../shared/types';
 import { getSettings } from './settings-service';
+import { parseRecurrenceRule } from './recurrence-rule';
+import { parseArchitectureRule } from './architecture-rule';
 
 /**
  * Per-project config service — Phase 1.1 of the CDev target architecture.
@@ -90,6 +94,32 @@ export function getProjectConfig(projectRoot: string): ProjectConfig {
  * (would silently double an entry on re-save). Callers wanting to
  * append should read, push, write.
  */
+/**
+ * A plans folder as the committed config names it, or null. The file is
+ * anyone's text: a remote with credentials in it, a place that climbs out of
+ * the provider's root or is absolute, or a provider we do not know is not
+ * read (Phase 32 C3.4a).
+ */
+export function parsePlansFolderRef(raw: unknown): PlansFolderRef | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  if (r.kind === 'git') {
+    const remote = typeof r.remote === 'string' ? r.remote.trim() : '';
+    if (!remote || remote.length > 400 || /\s/.test(remote)) return null;
+    // https://user:secret@host/… or ssh with a password: never kept.
+    if (/^[a-z][a-z0-9+.-]*:\/\/[^/@]*:[^/@]*@/i.test(remote)) return null;
+    return { kind: 'git', remote };
+  }
+  if (r.kind === 'synced') {
+    const provider = r.provider === 'onedrive' || r.provider === 'sharepoint' || r.provider === 'folder' ? r.provider : null;
+    const place = typeof r.place === 'string' ? r.place.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : '';
+    if (!provider || !place || place.length > 512) return null;
+    if (/^[a-z]:/i.test(place) || place.split('/').some((seg) => seg === '' || seg === '.' || seg === '..')) return null;
+    return { kind: 'synced', provider, place };
+  }
+  return null;
+}
+
 export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): ProjectConfig {
   const key = normaliseProjectRoot(projectRoot);
   const current = getProjectConfig(key);
@@ -110,11 +140,21 @@ export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): 
     defaultSurface: patch.defaultSurface !== undefined ? patch.defaultSurface : current.defaultSurface,
     // Phase 6.5 — freeze periods: replace wholesale when present.
     freeze: patch.freeze !== undefined ? patch.freeze : current.freeze,
+    // Phase 32 C4 — recurring playbooks: replaced wholesale, like routing.
+    recurring: patch.recurring !== undefined ? patch.recurring : current.recurring,
+    // Phase 32 A7 — architecture rules: replaced wholesale, like recurring.
+    rules: patch.rules !== undefined ? patch.rules : current.rules,
     updatedAt: new Date().toISOString(),
   };
 
   // Strip empty groups so an empty config file isn't `{plans: {}}` —
   // it should just be `{}` until an override is set.
+  // A key patched to undefined is a cleared override (C3.4a's folder).
+  if (next.plans) {
+    for (const k of Object.keys(next.plans) as Array<keyof typeof next.plans>) {
+      if (next.plans[k] === undefined) delete next.plans[k];
+    }
+  }
   if (next.plans && Object.keys(next.plans).length === 0) {
     delete next.plans;
   }
@@ -134,6 +174,8 @@ export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): 
   if (next.repoRole === undefined || next.repoRole === 'mixed') {
     delete next.repoRole;
   }
+  if (!next.recurring || next.recurring.length === 0) delete next.recurring;
+  if (!next.rules || next.rules.length === 0) delete next.rules;
   // The graph is the default, so it is never written down either.
   if (next.defaultSurface === undefined || next.defaultSurface === 'graph') {
     delete next.defaultSurface;
@@ -240,10 +282,16 @@ function mergeSensorConfig(
   if (current.stuck || patch.stuck) {
     merged.stuck = { ...(current.stuck ?? {}), ...(patch.stuck ?? {}) };
   }
+  // Phase 32 A5.3: awareness was left out here, so any sensor update to a
+  // project that already had awareness settings dropped them.
+  if (current.awareness || patch.awareness) {
+    merged.awareness = { ...(current.awareness ?? {}), ...(patch.awareness ?? {}) };
+  }
   // Strip empty sub-groups
   if (merged.drift && Object.keys(merged.drift).length === 0) delete merged.drift;
   if (merged.docs && Object.keys(merged.docs).length === 0) delete merged.docs;
   if (merged.stuck && Object.keys(merged.stuck).length === 0) delete merged.stuck;
+  if (merged.awareness && Object.keys(merged.awareness).length === 0) delete merged.awareness;
   return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
@@ -258,6 +306,7 @@ export interface EffectiveSensorConfig {
   drift: EffectiveDriftSensor;
   docs: EffectiveDocSensor;
   stuck: EffectiveStuckSensor;
+  awareness: Required<AwarenessSensorConfig>;
 }
 
 /**
@@ -282,7 +331,19 @@ export function getEffectiveSensorConfig(projectRoot: string): EffectiveSensorCo
       errorLoopThreshold: cfg?.stuck?.errorLoopThreshold ?? SENSOR_DEFAULTS.stuck.errorLoopThreshold,
       idleMinutes: cfg?.stuck?.idleMinutes ?? SENSOR_DEFAULTS.stuck.idleMinutes,
     },
+    awareness: {
+      branchWindowDays: validDays(cfg?.awareness?.branchWindowDays) ?? SENSOR_DEFAULTS.awareness.branchWindowDays,
+      // Only an explicit false turns them off: a hand-edited value that is not a boolean keeps the default.
+      inlineNotices: cfg?.awareness?.inlineNotices === false ? false : SENSOR_DEFAULTS.awareness.inlineNotices,
+      // Opt-in: only an explicit true holds sign-off.
+      holdSignOffOnHighSignals: cfg?.awareness?.holdSignOffOnHighSignals === true,
+    },
   };
+}
+
+/** A hand-edited config can say anything: only a positive number of days counts. */
+function validDays(v: unknown): number | undefined {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined;
 }
 
 // --- File watcher -----------------------------------------------------------
@@ -387,6 +448,8 @@ function parseProjectConfig(raw: unknown): ProjectConfig {
     if (p.attachmentLocation === 'project' || p.attachmentLocation === 'user') {
       plansOut.attachmentLocation = p.attachmentLocation;
     }
+    const folder = parsePlansFolderRef(p.folder);
+    if (folder) plansOut.folder = folder;
     if (Object.keys(plansOut).length > 0) result.plans = plansOut;
   }
 
@@ -422,6 +485,20 @@ function parseProjectConfig(raw: unknown): ProjectConfig {
   // Phase 31 §10.1 — where opening the folder lands.
   if (r.defaultSurface === 'code' || r.defaultSurface === 'brief') {
     result.defaultSurface = r.defaultSurface;
+  }
+
+  // Phase 32 C4 — recurring playbooks. The file is anyone's text: a rule
+  // that does not read as one is left out, never guessed at.
+  if (Array.isArray(r.recurring)) {
+    const rules = r.recurring.map((x) => parseRecurrenceRule(x).rule).filter((x): x is NonNullable<typeof x> => !!x);
+    if (rules.length > 0) result.recurring = rules;
+  }
+
+  // Phase 32 A7 — architecture rules: likewise, a rule that does not read as
+  // one is left out, never guessed at.
+  if (Array.isArray(r.rules)) {
+    const rules = r.rules.map((x) => parseArchitectureRule(x).rule).filter((x): x is NonNullable<typeof x> => !!x);
+    if (rules.length > 0) result.rules = rules;
   }
 
   // Phase 6.5 — freeze periods.
@@ -549,6 +626,20 @@ function parseSensorConfig(raw: Record<string, unknown>): SensorConfig | undefin
       stuck.idleMinutes = s.idleMinutes;
     }
     if (Object.keys(stuck).length > 0) result.stuck = stuck;
+  }
+
+  // Phase 32. Until A2.6 this block was dropped here, so a project's
+  // `branchWindowDays` never took effect: the defaults always applied.
+  const awarenessRaw = raw.awareness;
+  if (awarenessRaw && typeof awarenessRaw === 'object') {
+    const a = awarenessRaw as Record<string, unknown>;
+    const awareness: AwarenessSensorConfig = {};
+    if (typeof a.branchWindowDays === 'number' && Number.isFinite(a.branchWindowDays) && a.branchWindowDays > 0) {
+      awareness.branchWindowDays = a.branchWindowDays;
+    }
+    if (typeof a.inlineNotices === 'boolean') awareness.inlineNotices = a.inlineNotices;
+    if (typeof a.holdSignOffOnHighSignals === 'boolean') awareness.holdSignOffOnHighSignals = a.holdSignOffOnHighSignals;
+    if (Object.keys(awareness).length > 0) result.awareness = awareness;
   }
 
   return Object.keys(result).length > 0 ? result : undefined;

@@ -3,11 +3,17 @@
  */
 
 import { z } from 'zod';
+import { planGitStatesFresh } from '../../services/item-git-state';
+import { planStatusFresh } from '../../services/plan-status';
+import { arrivalWords, getPlanArrival } from '../../services/plan-arrivals';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { resultWithMeta, authorFromExtra } from '../helpers';
 import { buildPlanPrompt, buildItemPrompt } from '../prompt-builders';
 import { getActiveProjectRoot, isTrustedProjectRoot } from '../../services/trusted-roots';
+import { buildStack } from '../../services/stack-service';
+import { buildPlayForward } from '../../services/play-forward';
+import { seriesFor } from '../../services/recurring-service';
 
 export function register(server: McpServer, deps: ToolDeps): void {
   // --- Plan CRUD ---
@@ -58,7 +64,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'get_plan',
     {
-      description: 'Read a plan by its UID. Returns plan metadata and a summary of its items (count by kind, status breakdown). Use list_items to browse the item tree.',
+      description: 'Read a plan by its UID. Returns plan metadata, a summary of its items (count by kind, status breakdown), state: ' +
+        'every item\'s state with its source (git or the review host for an item on a branch, "plan" for everything else, with who recorded it) ' +
+        'and the plan\'s progress, what waits on someone, what is under way and its lineage; and git_state: ' +
+        'for each item worked on a branch, what git proves (building, pushed, or merged and how), with the commit and source. ' +
+        'Where the person turned on a review host for the project, it also says in review (with checks and approvals) or closed, ' +
+        'with source github. Use list_items to browse the item tree.',
       inputSchema: { plan_uid: z.string().describe('Plan UID') },
     },
     async ({ plan_uid }) => {
@@ -76,6 +87,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
         status: plan.status, projectPath: plan.projectPath,
         createdAt: plan.createdAt, updatedAt: plan.updatedAt,
         items: { total: items.length, objects: objectCount, actions: actionCount, byStatus: statusCounts },
+        // Phase 32 C2.6a — how it reached this machine, when through its files.
+        ...(arrivalFor(plan_uid) ? { arrived_from: arrivalFor(plan_uid) } : {}),
+        // Phase 32 C2.4 — every item's state with its source, and the plan's status view.
+        state: await statusForAgent(plan_uid),
+        // Phase 32 C2.1 — what git proves about each item's branch.
+        git_state: await gitStateForAgent(plan_uid, items),
       }, null, 2) }] };
     },
   );
@@ -91,8 +108,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
         status: z.enum(['draft', 'review', 'approved', 'in_progress', 'completed', 'archived']).optional(),
       },
     },
-    async ({ plan_uid, title, description, status }) => {
-      deps.planService.updatePlan(plan_uid, { title, description, status }, 'agent');
+    async ({ plan_uid, title, description, status }, extra: unknown) => {
+      const by = authorFromExtra(deps, extra);
+      deps.planService.updatePlan(plan_uid, { title, description, status }, by.author, by.authorType);
       const n = deps.broadcast('plan-updated', { planUid: plan_uid });
       deps.saveNow(() => deps.exportDatabase());
       return resultWithMeta({ ok: true, planUid: plan_uid }, n);
@@ -123,6 +141,68 @@ export function register(server: McpServer, deps: ToolDeps): void {
       return { content: [{ type: 'text' as const, text: JSON.stringify({
         total: all.length, offset: start, limit: limit ?? 20, plans: summaries,
       }, null, 2) }] };
+    },
+  );
+
+  // --- get_stack (Phase 32 B6.2) ---
+
+  server.registerTool(
+    'get_stack',
+    {
+      description:
+        'The stack: every active plan in the project (not completed or archived) and its tasks, in one answer. ' +
+        'Each plan is called by its ticket key when it has one, with its progress and how many breakpoint hits wait ' +
+        'on a person. Each task says who is on it, the branch it is worked on, and its dependencies, including ones ' +
+        'in other plans, with what it waits on in words. Use it to see how plans fit together before picking up work.',
+      inputSchema: {
+        project_path: z.string().optional().describe('An opened project. Omit for the one open in the app.'),
+      },
+    },
+    async ({ project_path }) => {
+      const root = project_path ?? getActiveProjectRoot();
+      if (!root) return { isError: true, content: [{ type: 'text' as const, text: 'No project is open.' }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(buildStack(root), null, 2) }] };
+    },
+  );
+
+  // --- get_play_forward (Phase 32 B9.1) ---
+
+  server.registerTool(
+    'get_play_forward',
+    {
+      description:
+        'Play the plans forward: what every active plan in the project says it will change, from its unfinished tasks, ' +
+        'and where two plans will meet if they go ahead ("◇ planned overlap: JIRA-142 and JIRA-150 both plan to change ' +
+        'src/billing/invoice.ts"), including materials both rely on. The same function, or one plan deleting what another ' +
+        'changes, is serious; an overlap whose tasks already wait on one another is sequenced. Nothing here exists yet. ' +
+        'Use it before claiming work that a planned overlap names.',
+      inputSchema: {
+        project_path: z.string().optional().describe('An opened project. Omit for the one open in the app.'),
+      },
+    },
+    async ({ project_path }) => {
+      const root = project_path ?? getActiveProjectRoot();
+      if (!root) return { isError: true, content: [{ type: 'text' as const, text: 'No project is open.' }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(buildPlayForward(root), null, 2) }] };
+    },
+  );
+
+  server.registerTool(
+    'list_recurring',
+    {
+      description:
+        'The project\'s recurring playbooks (Phase 32 C4): each rule ("Weekly security review, every Mon 09:00 · skill: ' +
+        'security-review") with its runs by period, ✓ done, ◐ in progress, ✗ missed, the one due now if it is not started, ' +
+        'and the next. Each run is an ordinary plan (planUid). A person makes a playbook recur and starts a run in the app; ' +
+        'this only reads.',
+      inputSchema: {
+        project_path: z.string().optional().describe('An opened project. Omit for the one open in the app.'),
+      },
+    },
+    async ({ project_path }) => {
+      const root = project_path ?? getActiveProjectRoot();
+      if (!root) return { isError: true, content: [{ type: 'text' as const, text: 'No project is open.' }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ series: seriesFor(root) }, null, 2) }] };
     },
   );
 
@@ -329,19 +409,14 @@ export function register(server: McpServer, deps: ToolDeps): void {
         placeholder_values: z.record(z.string(), z.string()).optional().describe('Values for `{{key}}` placeholders declared by the template (Phase 13 §C). Missing keys fall back to the placeholder default.'),
       },
     },
-    async ({ template_id, project_path, title, description, placeholder_values }) => {
-      const sessions = deps.sessionService.getActiveSessions();
-      const session = sessions.find((s: any) => s.sessionId === deps.sessionId) ?? null;
-      const author = (session as any)?.agentType ?? 'agent';
-
+    async ({ template_id, project_path, title, description, placeholder_values }, extra: unknown) => {
       try {
         const result = deps.applyTemplate({
           templateId: template_id,
           projectPath: project_path,
           title,
           description,
-          author,
-          authorType: 'mcp',
+          ...authorFromExtra(deps, extra),
           placeholderValues: placeholder_values,
         });
 
@@ -633,4 +708,52 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
   );
 
+}
+
+/** A plan that arrived through its files: who added it and in which commit, in words. */
+function arrivalFor(planUid: string): { added_by: string | null; commit: string | null; says: string } | null {
+  const a = getPlanArrival(planUid);
+  return a ? { added_by: a.addedBy, commit: a.commit, says: arrivalWords(a) } : null;
+}
+
+/** The plan's status for an agent: the same answer as the window's and the phone's, in snake case. */
+async function statusForAgent(planUid: string) {
+  const s = await planStatusFresh(planUid);
+  if (!s) return null;
+  return {
+    progress: s.progress.words,
+    waiting: s.waiting.map((w) => ({ item_uid: w.itemUid, title: w.title, says: w.words, source: w.source })),
+    in_progress: s.inProgress.map((w) => ({ item_uid: w.itemUid, title: w.title, says: w.words, source: w.source })),
+    lineage: s.lineage,
+    items: s.items.map((i) => ({
+      item_uid: i.itemUid, title: i.title, kind: i.kind, state: i.state, says: i.words, source: i.source,
+      ...(i.recorded ? { recorded_by: i.recorded.by, recorded_at: i.recorded.at } : {}),
+      // C3.1: taken from a teammate's record in the project's files, which anyone could have written.
+      ...(i.recorded?.byType === 'record'
+        ? { recorded_in: i.recorded.check?.verified ? `the teammate's record, signed with ${i.recorded.check.how === 'git' ? 'their git key' : 'their trusted device key'}` : "the teammate's record, unverified" }
+        : {}),
+      ...(i.branch ? { branch: i.branch } : {}), ...(i.gitNote ? { git_note: i.gitNote } : {}),
+      // C3.2: set two ways at once by people who had not seen each other's change; nothing is picked.
+      ...(i.atOnce ? { set_at_once: i.atOnce.words } : {}),
+    })),
+    note: 'Read, never written: source says where each state came from — git or the review host for an item on a branch, the plan itself ("plan") for everything else.',
+  };
+}
+
+/** The plan's git states for an agent: each item by title, the words, and where they came from. */
+async function gitStateForAgent(planUid: string, items: Array<{ uid: string; title: string }>) {
+  const states = await planGitStatesFresh(planUid);
+  if (!states || states.items.length === 0) return { base: states?.base ?? null, items: [], note: 'No item is worked on a branch yet (assign_workstream sets one).' };
+  const title = new Map(items.map((i) => [i.uid, i.title]));
+  return {
+    base: states.base,
+    items: states.items.map((s) => ({
+      item_uid: s.itemUid, title: title.get(s.itemUid) ?? null, branch: s.branch, state: s.state, says: s.words,
+      ...(s.how ? { how: s.how } : {}), commit: s.commit, source: s.source,
+      ...(s.review ? { pull_request: s.review } : {}), ...(s.hostNote ? { host_note: s.hostNote } : {}),
+    })),
+    note: states.items.some((s) => s.source !== 'git' || s.hostNote)
+      ? 'From git, and from the review host the person turned on where it says more: source names which.'
+      : 'From git alone: building, pushed and merged. In review, checks and closed need a review host, which the person turns on in Settings → Review hosts; none is asked.',
+  };
 }

@@ -29,11 +29,16 @@
  * tool surface this service backs.
  */
 
+import { isStateOnly } from '../../shared/lib/item-status';
 import { randomUUID } from 'node:crypto';
+import { withdrawProposals } from './spec-proposal-withdraw';
 import { getDb } from './database';
 import { markDirty } from './persistence';
+import { recordBodyEdit } from './agent-event-log';
+import { normaliseSkills } from './skill-model';
 import { appendPlanEvent } from './plan-event-service';
 import { unmetHumanCriteria } from './criteria-service';
+import { dependencyState, waitSentence, type DependencyLookup, type DependencyState, type DependencyWait } from './plan-dependencies';
 import * as _lazy___plan_file_service from './plan-file-service';
 import type {
   PlanItem,
@@ -69,7 +74,7 @@ const ITEM_COLUMNS = `uid, plan_uid, parent_uid, sort_order, kind,
   skills, skills_mode, claim_policy, claim_policy_mode, execution_config, execution_config_mode,
   constraints, constraints_mode, requires_approval,
   author, author_type, created_at, updated_at, migrated_from,
-  visibility, visibility_override`;
+  visibility, visibility_override, assignee_session, workstream`;
 
 function rowToItem(r: any[]): PlanItem {
   return {
@@ -113,6 +118,8 @@ function rowToItem(r: any[]): PlanItem {
     // Phase 3.2 — per-item sharing
     visibility: ((r[34] as string | null) ?? 'shared') as 'shared' | 'local',
     overrideParentVisibility: !!(r[35] as number),
+    assigneeSession: (r[36] as string | null) ?? null,
+    workstream: (r[37] as string | null) ?? null,
   };
 }
 
@@ -173,6 +180,8 @@ function metaSnapshotOf(item: PlanItem): Record<string, unknown> {
     // Phase 3.2
     visibility: item.visibility,
     overrideParentVisibility: item.overrideParentVisibility,
+    // Phase 32 C5.1
+    workstream: item.workstream ?? null,
   };
 }
 
@@ -319,7 +328,7 @@ function createItemImpl(input: CreatePlanItemInput): PlanItem {
         skills, skills_mode, claim_policy, claim_policy_mode, execution_config, execution_config_mode,
         constraints, constraints_mode, requires_approval,
         author, author_type, created_at, updated_at, migrated_from,
-        visibility, visibility_override)
+        visibility, visibility_override, workstream)
      VALUES (?, ?, ?, ?, ?,
              ?, ?, ?,
              ?, ?, ?, ?,
@@ -328,7 +337,7 @@ function createItemImpl(input: CreatePlanItemInput): PlanItem {
              ?, ?, ?, ?, ?, ?,
              ?, ?, ?,
              ?, ?, ?, ?, ?,
-             ?, ?)`,
+             ?, ?, ?)`,
     [
       uid, input.planUid, input.parentUid ?? null, sortOrder, input.kind,
       input.title, input.body ?? '', input.template ?? null,
@@ -347,7 +356,8 @@ function createItemImpl(input: CreatePlanItemInput): PlanItem {
       JSON.stringify(isAction ? (input.removedConnections ?? []) : []),
       JSON.stringify(isAction ? (input.dependencies ?? []) : []),
       // Phase 17.N-Q
-      JSON.stringify(input.skills ?? []),
+      // Phase 32 C1: whatever the source (panel, plan file, template), stored normalised.
+      JSON.stringify(normaliseSkills(input.skills).skills),
       input.skillsMode ?? 'inherit',
       input.claimPolicy ? JSON.stringify(input.claimPolicy) : null,
       input.claimPolicyMode ?? 'inherit',
@@ -363,6 +373,8 @@ function createItemImpl(input: CreatePlanItemInput): PlanItem {
       // Phase 3.2 — per-item sharing
       input.visibility ?? 'shared',
       input.overrideParentVisibility ? 1 : 0,
+      // Phase 32 C5.1
+      input.workstream ?? null,
     ],
   );
 
@@ -425,6 +437,39 @@ export function assertValidParent(planUid: string, itemUid: string | null, paren
   }
 }
 
+/**
+ * Told when an action's status changes, from anywhere (REST, an MCP tool, a
+ * plan file re-read): replay takes a frame then (Phase 32 B5.1). Called in
+ * the caller's async context, so an MCP tool's session is still the acting one.
+ */
+export type StatusChangeListener = (change: { planUid: string; itemUid: string; status: string | null }) => void;
+let statusListener: StatusChangeListener | null = null;
+export function setStatusChangeListener(fn: StatusChangeListener | null): void { statusListener = fn; }
+
+/**
+ * Told when an item's state (status, claim, progress, blocker) changes on
+ * this machine, so it can be written as a task-state record (Phase 32 C3.1).
+ * Not told of a change that came from a record or from a plan file, which
+ * are someone else's.
+ */
+export type StateWriteListener = (item: PlanItem, by: { author: string; authorType: string }) => void;
+let stateWriteListener: StateWriteListener | null = null;
+let stateFromElsewhere = 0;
+export function setStateWriteListener(fn: StateWriteListener | null): void { stateWriteListener = fn; }
+
+/** Run `fn` with its state changes not written as this machine's records: they came from a file. */
+export function withoutStateRecords<T>(fn: () => T): T {
+  stateFromElsewhere++;
+  try { return fn(); } finally { stateFromElsewhere--; }
+}
+
+/** A teammate's recorded state, applied as theirs (C3.1). Writes no record and no file. */
+export function applyRecordedState(uid: string, state: Pick<UpdatePlanItemInput, 'status' | 'assignee' | 'assigneeType' | 'progressPercent' | 'blockedReason'>, author: { author: string; authorType: string }): PlanItem | null {
+  return withoutStateRecords(() => updateItemImpl(uid, { ...state, ...author, changeSummary: 'from a teammate\'s record' }));
+}
+
+const RECORDED_FIELDS = ['status', 'assignee', 'progressPercent', 'blockedReason'] as const;
+
 function updateItemImpl(uid: string, updates: UpdatePlanItemInput): PlanItem | null {
   const db = getDb();
   const before = getItem(uid);
@@ -462,7 +507,8 @@ function updateItemImpl(uid: string, updates: UpdatePlanItemInput): PlanItem | n
       kind: 'renamed',
     });
   }
-  if (updates.body !== undefined && updates.body !== before.body) {
+  const bodyChanged = updates.body !== undefined && updates.body !== before.body;
+  if (bodyChanged) {
     sets.push('body = ?'); params.push(updates.body);
     contentChanged = true;
   }
@@ -495,6 +541,13 @@ function updateItemImpl(uid: string, updates: UpdatePlanItemInput): PlanItem | n
     if (updates.assigneeModel !== undefined && updates.assigneeModel !== before.assigneeModel) {
       sets.push('assignee_model = ?'); params.push(updates.assigneeModel);
       contentChanged = true;
+    }
+    // The claiming session goes with the claim: set by a claim, and cleared
+    // whenever the assignee is. It is runtime state, not content.
+    if (updates.assigneeSession !== undefined && updates.assigneeSession !== (before.assigneeSession ?? null)) {
+      sets.push('assignee_session = ?'); params.push(updates.assigneeSession);
+    } else if (updates.assignee === null && before.assigneeSession) {
+      sets.push('assignee_session = NULL');
     }
     if (updates.progressPercent !== undefined && updates.progressPercent !== before.progressPercent) {
       sets.push('progress_percent = ?'); params.push(updates.progressPercent);
@@ -553,11 +606,16 @@ function updateItemImpl(uid: string, updates: UpdatePlanItemInput): PlanItem | n
 
   // Phase 17.N-Q — routing / execution fields (apply to both kinds)
   if (updates.skills !== undefined) {
-    sets.push('skills = ?'); params.push(JSON.stringify(updates.skills));
+    sets.push('skills = ?'); params.push(JSON.stringify(normaliseSkills(updates.skills).skills));
     contentChanged = true;
   }
   if (updates.skillsMode !== undefined && updates.skillsMode !== before.skillsMode) {
     sets.push('skills_mode = ?'); params.push(updates.skillsMode);
+    contentChanged = true;
+  }
+  // Phase 32 C5.1 — which worktree a section is worked in
+  if (updates.workstream !== undefined && (updates.workstream ?? null) !== (before.workstream ?? null)) {
+    sets.push('workstream = ?'); params.push(updates.workstream ?? null);
     contentChanged = true;
   }
   if (updates.claimPolicy !== undefined) {
@@ -644,7 +702,15 @@ function updateItemImpl(uid: string, updates: UpdatePlanItemInput): PlanItem | n
   // re-parent / reorder skips the version log (those are tracked
   // exclusively via plan_events).
   if (contentChanged) {
-    writeVersionRow(after, nextVersionFor(uid), updates.changeSummary ?? null, updates.author, updates.authorType, now);
+    const version = nextVersionFor(uid);
+    writeVersionRow(after, version, updates.changeSummary ?? null, updates.author, updates.authorType, now);
+    // A body edit makes no plan_events row (below); it is recorded as an event (B1.2).
+    if (bodyChanged) {
+      recordBodyEdit({
+        kind: 'item', planUid: after.planUid, uid: after.uid, title: after.title, version,
+        author: updates.author ?? null, authorType: updates.authorType ?? null, changeSummary: updates.changeSummary ?? null,
+      });
+    }
   }
 
   // Emit one plan_events row per structural change. A `body` edit
@@ -662,6 +728,13 @@ function updateItemImpl(uid: string, updates: UpdatePlanItemInput): PlanItem | n
       author: updates.author,
       authorType: updates.authorType,
     });
+  }
+  if (statusListener && structuralEvents.some((ev) => ev.kind === 'status_changed')) {
+    try { statusListener({ planUid: after.planUid, itemUid: after.uid, status: after.status ?? null }); } catch { /* never undoes the change */ }
+  }
+  if (stateWriteListener && !stateFromElsewhere && after.kind === 'action'
+    && RECORDED_FIELDS.some((k) => (after[k] ?? null) !== (before[k] ?? null))) {
+    try { stateWriteListener(after, { author: updates.author ?? 'someone', authorType: updates.authorType ?? 'unknown' }); } catch { /* never undoes the change */ }
   }
 
   return after;
@@ -928,10 +1001,27 @@ export function restoreItemVersion(
 // Action-only operations (claim)
 // =============================================================================
 
+/**
+ * Whether `other` was claimed by the same claimant as this claim. By session
+ * when both have one: the assignee is the agent's TYPE, so two Claude Code
+ * sessions looked like one claimant and never saw each other's overlap
+ * (Phase 32 bug 1). By assignee only when a session is missing (a REST claim,
+ * or a row from before sessions were recorded).
+ */
+function sameClaimant(other: PlanItem, agentId: string, sessionId: string | undefined): boolean {
+  if (sessionId && other.assigneeSession) return other.assigneeSession === sessionId;
+  return other.assignee === agentId;
+}
+
 export interface ClaimItemResult {
   ok: boolean;
   conflicts?: string[];
   reason?: string;
+  /**
+   * Phase 32 B6.1 — the claim still goes through (a person may start early
+   * on purpose), but the claimant is told what the task waits on.
+   */
+  waitsOn?: string[];
 }
 
 /**
@@ -993,6 +1083,30 @@ export function resolveSkills(item: PlanItem): Skill[] {
 }
 
 /**
+ * Phase 32 C1.2 — the skills in effect on an item, each with the item it
+ * comes from, for the routing panel. The panel's own tree holds summaries
+ * without skills, so it cannot resolve inheritance itself.
+ */
+export function resolveSkillsWithSource(item: PlanItem): Array<{ skill: Skill; fromUid: string; fromTitle: string }> {
+  const chain: PlanItem[] = [];
+  let cur: PlanItem | null = item;
+  while (cur) {
+    chain.unshift(cur);
+    cur = cur.parentUid ? getItem(cur.parentUid) : null;
+  }
+  let resolved = new Map<string, { skill: Skill; fromUid: string; fromTitle: string }>();
+  for (const ancestor of chain) {
+    const skills = ancestor.skills ?? [];
+    if (skills.length === 0 && ancestor.skillsMode === 'inherit') continue;
+    const here = skills.map((skill) => [skill.name, { skill, fromUid: ancestor.uid, fromTitle: ancestor.title }] as const);
+    if (ancestor.skillsMode === 'replace') resolved = new Map(here);
+    else if (ancestor.skillsMode === 'none') resolved = new Map();
+    else for (const [k, v] of here) resolved.set(k, v);
+  }
+  return [...resolved.values()];
+}
+
+/**
  * Phase 17.F — Resolve effective constraints by walking up the tree.
  * Constraints merge additively: child exclusions ADD to parent exclusions,
  * boolean flags are OR'd (any ancestor requiring tests = tests required).
@@ -1051,6 +1165,8 @@ function claimItemImpl(
   agentType: string,
   model?: string,
   capabilities?: Array<{ name: string; source: string }>,
+  sessionId?: string,
+  actor?: { author: string; authorType: string },
 ): ClaimItemResult {
   const item = getItem(uid);
   if (!item) return { ok: false, reason: 'Item not found' };
@@ -1121,7 +1237,7 @@ function claimItemImpl(
       o.uid !== uid &&
       o.kind === 'action' &&
       (o.status === 'in_progress' || o.status === 'assigned') &&
-      o.assignee !== agentId,
+      !sameClaimant(o, agentId, sessionId),
     );
     for (const other of others) {
       const overlap = (other.fileSpecs ?? []).flatMap((fs) => [fs.path, fs.moveTo].filter(Boolean) as string[])
@@ -1137,12 +1253,21 @@ function claimItemImpl(
     assignee: agentId,
     assigneeType: agentType,
     assigneeModel: model ?? null,
-    author: agentId,
-    authorType: 'agent',
+    assigneeSession: sessionId ?? null,
+    // Who made the claim, from how it arrived: the agent itself over MCP,
+    // the person (or `unverified`) over REST, which can claim on an agent's
+    // behalf. The claimant alone when no caller is given.
+    author: actor?.author ?? agentId,
+    authorType: actor?.authorType ?? 'agent',
     changeSummary: 'Claimed',
   });
 
-  return { ok: true, conflicts: conflicts.length > 0 ? conflicts : undefined };
+  const waiting = item.kind === 'action' ? dependencyStateOf(item) : null;
+  return {
+    ok: true,
+    conflicts: conflicts.length > 0 ? conflicts : undefined,
+    waitsOn: waiting && !waiting.met ? waiting.waits.map((w) => w.words) : undefined,
+  };
 }
 
 // =============================================================================
@@ -1157,6 +1282,55 @@ export interface NextItemResult {
     itemTitle: string;
     reason: string;
   };
+  /**
+   * Phase 32 B6.1 — nothing is ready, and the first pending task is held
+   * only by its dependencies: which, and where, in words.
+   */
+  waiting?: {
+    itemUid: string;
+    itemTitle: string;
+    reason: string;
+  };
+}
+
+/** Items from any plan, and plan titles, for resolving dependencies across plans. */
+export const dependencyLookup: DependencyLookup = {
+  getItem,
+  planTitle(planUid) {
+    const r = getDb().exec('SELECT title FROM plans WHERE uid = ?', [planUid]);
+    return (r[0]?.values[0]?.[0] as string | undefined) ?? null;
+  },
+};
+
+/** Whether `item`'s dependencies are met, looking in any plan (bug 11). */
+export function dependencyStateOf(item: PlanItem, local?: ReadonlyMap<string, PlanItem>): DependencyState {
+  return dependencyState(item, dependencyLookup, local);
+}
+
+export interface ItemWait {
+  itemUid: string;
+  itemTitle: string;
+  waits: DependencyWait[];
+  /** `"Deploy" waits on "Migrate" in plan "Billing v2".` */
+  sentence: string;
+}
+
+/**
+ * Phase 32 B6.1 — every pending task in a plan held by its dependencies,
+ * with what each waits on. The window's "blocked" count used to work this
+ * out from the one plan it had loaded, so a dependency in another plan
+ * counted as blocked for ever.
+ */
+export function planWaits(planUid: string): ItemWait[] {
+  const all = listAllItems(planUid);
+  const local = new Map(all.map((i) => [i.uid, i]));
+  const out: ItemWait[] = [];
+  for (const item of all) {
+    if (item.kind !== 'action' || item.status !== 'pending') continue;
+    const state = dependencyStateOf(item, local);
+    if (!state.met) out.push({ itemUid: item.uid, itemTitle: item.title, waits: state.waits, sentence: waitSentence(item.title, state) });
+  }
+  return out;
 }
 
 /**
@@ -1170,15 +1344,21 @@ export interface NextItemResult {
  * chain + sortOrder). Returns `gated` info when the next item
  * exists but can't be started due to an approval gate.
  */
-export function getNextItem(planUid: string, parentUid?: string | null): NextItemResult {
+export function getNextItem(
+  planUid: string,
+  parentUid?: string | null,
+  /** Phase 32 C5.1 — leave out what this caller may not be offered (a section worked in another worktree). */
+  accept?: (item: PlanItem) => boolean,
+): NextItemResult {
   const all = listAllItems(planUid);
-  const itemMap = Object.fromEntries(all.map((i) => [i.uid, i]));
+  const local = new Map(all.map((i) => [i.uid, i]));
 
   // Filter to pending Actions
   let candidates = all.filter((i) =>
     i.kind === 'action' &&
     i.status === 'pending' &&
-    !i.assignee,
+    !i.assignee &&
+    (!accept || accept(i)),
   );
 
   // Scope to a parent if provided
@@ -1186,21 +1366,23 @@ export function getNextItem(planUid: string, parentUid?: string | null): NextIte
     candidates = candidates.filter((i) => i.parentUid === parentUid);
   }
 
-  // Filter out those with unmet dependencies
+  // Filter out those with unmet dependencies, wherever the dependency
+  // lives (bug 11: one in another plan used to hold its dependant for ever).
+  const held: Array<{ item: PlanItem; state: DependencyState }> = [];
   candidates = candidates.filter((i) => {
-    const deps = i.dependencies ?? [];
-    if (deps.length === 0) return true;
-    return deps.every((d) => {
-      const dep = itemMap[d];
-      return dep && (dep.status === 'done' || dep.status === 'skipped');
-    });
+    const state = dependencyStateOf(i, local);
+    if (!state.met) held.push({ item: i, state });
+    return state.met;
   });
 
   // Sort by sortOrder (within same parent) — stable ordering
   candidates.sort((a, b) => a.sortOrder - b.sortOrder);
 
   if (candidates.length === 0) {
-    return { item: null };
+    const first = held.sort((a, b) => a.item.sortOrder - b.item.sortOrder)[0];
+    return first
+      ? { item: null, waiting: { itemUid: first.item.uid, itemTitle: first.item.title, reason: waitSentence(first.item.title, first.state) } }
+      : { item: null };
   }
 
   // Check approval gates: if the candidate has a prior sibling with
@@ -1395,7 +1577,8 @@ export function createItem(input: CreatePlanItemInput): PlanItem {
 
 export function updateItem(uid: string, updates: UpdatePlanItemInput): PlanItem | null {
   const item = updateItemImpl(uid, updates);
-  writeThrough(item?.planUid);
+  // C2.4b — state is in no file, so a change to it alone writes none.
+  if (!isStateOnly(updates)) writeThrough(item?.planUid);
   return item;
 }
 
@@ -1408,7 +1591,14 @@ export function moveItem(uid: string, input: MoveItemInput): PlanItem | null {
 export function deleteItem(uid: string, input: DeleteItemInput): string[] {
   const planUid = getItem(uid)?.planUid;
   const deleted = deleteItemImpl(uid, input);
-  if (deleted.length) writeThrough(planUid);
+  if (deleted.length) {
+    // Phase 32 B7.1 — a deleted task no longer relies on anything, and a
+    // deleted page is relied on by nothing (see spec-links-service).
+    const marks = deleted.map(() => '?').join(',');
+    getDb().run(`DELETE FROM spec_links WHERE item_uid IN (${marks}) OR page_uid IN (${marks})`, [...deleted, ...deleted]);
+    withdrawProposals({ pageUids: deleted }, 'The page was deleted.');
+    writeThrough(planUid);
+  }
   return deleted;
 }
 
@@ -1418,9 +1608,10 @@ export function claimItem(
   agentType: string,
   model?: string,
   capabilities?: Array<{ name: string; source: string }>,
+  sessionId?: string,
+  actor?: { author: string; authorType: string },
 ): ClaimItemResult {
-  const result = claimItemImpl(uid, agentId, agentType, model, capabilities);
-  if (result.ok) writeThrough(getItem(uid)?.planUid);
-  return result;
+  // A claim is state (C2.4b): it is in no file, so it writes none.
+  return claimItemImpl(uid, agentId, agentType, model, capabilities, sessionId, actor);
 }
 

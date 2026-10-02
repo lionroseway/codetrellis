@@ -37,6 +37,11 @@ import { getPairedDevice } from './paired-device-service';
 import { readFileWithin, isWithin } from './confined-fs';
 import { listTrustedRoots, resolveTrustedPlanDir, resolveTrustedProjectRoot } from './trusted-roots';
 import { reviewPlan } from './plan-review-service';
+import { reviewQueue } from './review-queue-service';
+import { buildStack } from './stack-service';
+import { buildPlayForward } from './play-forward';
+import { resequence, tellAgents, leaveOverlap, approvalNotices } from './planned-overlap-actions';
+import { planStatusFresh } from './plan-status';
 import { buildPrDraft } from './pr-draft-service';
 import { listComparands, compareSnapshots } from './snapshot-compare-service';
 import {
@@ -86,13 +91,20 @@ import {
   deletePlanAsPerson,
   postChannelEventAsPerson,
   setChannelEventStatusAsPerson,
+  replyToSignalAsPerson,
 } from '../server';
+import { handleBreakpointMethod } from './mobile-breakpoints';
+import { handleProposalMethod } from './mobile-proposals';
+import { handleAwarenessMethod } from './mobile-awareness';
+import { handleWorkstreamMethod } from './mobile-workstreams';
 import { isTaskStatus, TASK_STATUSES } from '../../shared/lib/plan-vocab';
 import { grantChange, grantRefusal } from './grant-guard';
 import { buildPlanPrompt } from '../mcp/prompt-builders';
 import { handleApprovalMethod } from './mobile-approvals';
 import { handleBudgetMethod } from './mobile-budget';
 import { handleFreezeMethod } from './mobile-freeze';
+import { seriesFor, startRun } from './recurring-service';
+import { startRunAgent } from './recurring-agent';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -140,6 +152,19 @@ export function stopMobileRpc(): void {
 }
 
 // --- Message handling --------------------------------------------------------
+
+/**
+ * Who a phone's write is by: the person on that device (Phase 32 §0.4d).
+ * Every phone write that records an author takes it from here, never a
+ * name from the request (`authorship.test.ts`).
+ */
+function phonePerson(): { author: string; authorType: 'human' } {
+  return { author: getAuthorKey('human'), authorType: 'human' };
+}
+
+function phoneActor(): { actor: string; actorType: 'human'; channel: 'phone' } {
+  return { actor: getAuthorKey('human'), actorType: 'human', channel: 'phone' };
+}
 
 function handleControlMessage(fingerprint: string, data: Buffer | string): void {
   try {
@@ -428,6 +453,45 @@ async function routeMethod(
         broadcast,
       });
 
+    // --- What is held for the person, answered from the phone (B4.4) --------
+    case 'breakpoint.waiting':
+    case 'breakpoint.answer':
+      return handleBreakpointMethod(method, params, {
+        fingerprint,
+        send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
+        broadcast,
+      }, { who: phonePerson(), projectRoot: getActiveProjectPath() });
+
+    // --- A proposed spec change, decided from the phone (B7.6) --------------
+    case 'proposal.list':
+    case 'proposal.get':
+    case 'proposal.decide':
+      return handleProposalMethod(method, params, {
+        fingerprint,
+        send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
+        broadcast,
+      }, { who: phonePerson(), projectRoot: getActiveProjectPath() });
+
+    // --- What overlaps, answered and replied to from the phone (A4.2) -------
+    case 'awareness.needsYou':
+    case 'awareness.signal':
+    case 'awareness.answer':
+    case 'awareness.reply':
+      return handleAwarenessMethod(method, params, {
+        fingerprint,
+        send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
+        broadcast,
+      }, { who: phoneActor(), projectRoot: getActiveProjectPath(), reply: replyToSignalAsPerson });
+
+    // --- The lines of work, as the strip shows them (A4.3) ------------------
+    case 'workstreams.list':
+    case 'workstreams.detail':
+      return handleWorkstreamMethod(method, params, {
+        fingerprint,
+        send: (message) => sendToPeer(fingerprint, DATA_CHANNELS.CONTROL, JSON.stringify(message)),
+        broadcast,
+      }, { projectRoot: getActiveProjectPath() });
+
     // --- Plans ---------------------------------------------------------------
     case 'plan.list': {
       // Optional filter. Confined all the same: an unopened path here
@@ -485,8 +549,9 @@ async function routeMethod(
       if (params.title !== undefined) updates.title = params.title;
       if (params.status !== undefined) updates.status = params.status;
       if (params.description !== undefined) updates.description = params.description;
-      updatePlanAsPerson(uid, updates as any, getAuthorKey('human'));
-      return { ok: true };
+      const done = updatePlanAsPerson(uid, updates as any, phonePerson());
+      // B9.3b: approving it on the phone says its planned overlaps, as on the desktop.
+      return { ok: true, ...(done.plannedOverlaps.length ? { plannedOverlaps: done.plannedOverlaps } : {}) };
     }
 
     case 'plan.create': {
@@ -494,8 +559,8 @@ async function routeMethod(
       const projectPath = peerProjectRoot(params, { required: true })!;
       const plan = planService.createPlan(
         { title, description: (params.description as string) || '', tasks: [] },
-        getAuthorKey('human'),
-        'human',
+        phonePerson().author,
+        phonePerson().authorType,
         projectPath,
       );
       const exported = planFileService.exportIfSharedByDefault(plan.uid, projectPath);
@@ -548,7 +613,7 @@ async function routeMethod(
       if (updates.status !== undefined && !isTaskStatus(updates.status)) {
         throw new Error(`status must be one of: ${TASK_STATUSES.join(', ')}`);
       }
-      const updated = planItemService.updateItem(uid, { ...updates, author: getAuthorKey('human'), authorType: 'human' } as any);
+      const updated = planItemService.updateItem(uid, { ...updates, ...phonePerson() } as any);
       if (!updated) throw new Error(`Item not found: ${uid}`);
       broadcast('plan-item-updated', { planUid: updated.planUid, itemUid: updated.uid, kind: updated.kind, changes: updates });
       return updated;
@@ -564,8 +629,7 @@ async function routeMethod(
         title,
         parentUid: (params.parentUid as string) || null,
         body: (params.body as string) || undefined,
-        author: getAuthorKey('human'),
-        authorType: 'human',
+        ...phonePerson(),
       });
       broadcast('plan-item-created', { planUid: created.planUid, item: created });
       return created;
@@ -587,8 +651,8 @@ async function routeMethod(
       const comment = commentService.addComment(
         targetType as 'plan' | 'item',
         targetUid,
-        getAuthorKey('human'),
-        'human',
+        phonePerson().author,
+        phonePerson().authorType,
         body,
         { kind: kind as any, parentUid },
       );
@@ -607,8 +671,7 @@ async function routeMethod(
         url,
         title: (params.title as string) || undefined,
         kind: (params.kind as any) || undefined,
-        author: getAuthorKey('human'),
-        authorType: 'human',
+        ...phonePerson(),
       });
       broadcast('external-ref-added', { ref });
       return ref;
@@ -636,7 +699,7 @@ async function routeMethod(
       // real resolution, recorded as the person on the paired phone.
       const planUid = deviationService.planOfDeviation(id);
       if (!planUid) throw new Error(`No deviation ${id}`);
-      deviationService.reconcileDeviations(planUid, [{ id, action: resolution }], { actor: getAuthorKey('human'), actorType: 'human' });
+      deviationService.reconcileDeviations(planUid, [{ id, action: resolution }], phoneActor());
       return { ok: true };
     }
 
@@ -778,8 +841,7 @@ async function routeMethod(
         body: (params.body as string) || '',
         owner: (params.owner as string) || null,
         tags: (params.tags as string[]) || [],
-        author: getAuthorKey('human'),
-        authorType: 'human',
+        ...phonePerson(),
       });
       // Every phone write to a system doc tells the desktop windows, as the
       // desktop's own routes do; none of these four did (0.4j).
@@ -789,7 +851,7 @@ async function routeMethod(
 
     case 'sysdoc.update': {
       const uid = requireString(params, 'uid');
-      const updates: Record<string, unknown> = { author: getAuthorKey('human'), authorType: 'human' };
+      const updates: Record<string, unknown> = { ...phonePerson() };
       if (params.title !== undefined) updates.title = params.title;
       if (params.body !== undefined) updates.body = params.body;
       if (params.owner !== undefined) updates.owner = params.owner;
@@ -830,8 +892,7 @@ async function routeMethod(
         title: (params.title as string) || undefined,
         description: (params.description as string) || undefined,
         placeholderValues: (params.placeholderValues as Record<string, string>) || undefined,
-        author: getAuthorKey('human'),
-        authorType: 'human',
+        ...phonePerson(),
       });
       // `{ plan }`, the shape every other sender uses: the window's handler
       // reads `payload.plan`, and `{ uid }` handed it undefined (0.4j).
@@ -984,6 +1045,7 @@ async function routeMethod(
         message: typeof params.message === 'string' ? params.message : '',
         itemUid: typeof params.itemUid === 'string' ? params.itemUid : null,
         respondsTo: (params.parentUid as string) || null,
+        by: phonePerson().authorType,
       });
     }
 
@@ -1011,7 +1073,7 @@ async function routeMethod(
       const response = requireString(params, 'response');
       // An answer that went nowhere is not "ok": the person would think the
       // agent had its reply (0.4j).
-      if (!remoteInteractionService.respondToInputRequest(requestId, response, { actor: getAuthorKey('human'), actorType: 'human', channel: 'phone' })) {
+      if (!remoteInteractionService.respondToInputRequest(requestId, response, phoneActor())) {
         throw new Error(`No pending input request ${requestId}`);
       }
       return { ok: true };
@@ -1211,6 +1273,90 @@ async function routeMethod(
       const result = compareSnapshots(before, after, projectPath);
       if (!result.ok) throw new Error(result.error);
       return result.result;
+    }
+
+    // The review queue (Phase 32 A5.6, over A5.4): every line of work with plan
+    // items, where it stands against the main checkout's branch, and the
+    // suggested merge order with its reasons. The same answer as
+    // `/api/review-queue`, for an opened project only.
+    case 'review.queue': {
+      const projectPath = peerProjectRoot(params, { required: true })!;
+      return reviewQueue(projectPath);
+    }
+
+    // The stack (Phase 32 B6.6, over B6.2): every plan under way, with who is
+    // on what, what waits on what across plans, and where plans meet. The same
+    // answer as `/api/stack`, for an opened project only; the phone summarises.
+    case 'stack.summary': {
+      const projectPath = peerProjectRoot(params, { required: true })!;
+      return buildStack(projectPath);
+    }
+
+    // Play-forward (Phase 32 B9.3b): what every active plan will change and
+    // where two will meet, as the desktop's bar says it, and a person on the
+    // phone deciding one: re-sequence, tell the agents, or leave it.
+    case 'playForward.summary': {
+      const projectPath = peerProjectRoot(params, { required: true })!;
+      return { ...buildPlayForward(projectPath), notices: approvalNotices(projectPath) };
+    }
+
+    case 'playForward.decide': {
+      const projectPath = peerProjectRoot(params, { required: true })!;
+      const overlapId = requireString(params, 'overlapId');
+      const action = requireString(params, 'action');
+      const who = phonePerson();
+      let result: Record<string, unknown> = {};
+      if (action === 'resequence') {
+        const r = resequence(projectPath, overlapId, requireString(params, 'first'), who);
+        for (const t of r.waiting) broadcast('plan-item-updated', { planUid: planItemService.getItem(t.uid)?.planUid, itemUid: t.uid, kind: 'action', changes: { dependencies: true } });
+        result = { waiting: r.waiting };
+      } else if (action === 'tell') {
+        result = tellAgents(projectPath, overlapId, who);
+      } else if (action === 'leave') {
+        leaveOverlap(projectPath, overlapId, who);
+      } else {
+        throw new Error('action must be resequence, tell or leave');
+      }
+      broadcast('play-forward-changed', { project: projectPath });
+      return { ...result, playForward: buildPlayForward(projectPath) };
+    }
+
+    // Recurring playbooks (Phase 32 C4.3a): the series as the plans list shows
+    // them, and starting the run due now. Starting is anyone's, as making a
+    // plan is, and twice is one run; setting a rule stays the app window's.
+    case 'recurring.list': {
+      const projectPath = peerProjectRoot(params, { required: true })!;
+      return { series: seriesFor(projectPath) };
+    }
+
+    case 'recurring.start': {
+      const projectPath = peerProjectRoot(params, { required: true })!;
+      const ruleId = requireString(params, 'ruleId');
+      // A RecurringError ("not due yet", an unknown rule) reaches the phone as its message.
+      const run = startRun(projectPath, ruleId, phonePerson());
+      // C4.3b — its agent, when the rule has one on this desktop: only for a
+      // phone the person allowed to open terminals.
+      const mayOpen = (getPairedDevice(fingerprint)?.capabilities ?? []).includes('terminal')
+        ? true as const
+        : 'this phone is not allowed to open terminals (Settings → Devices)';
+      const agent = run.created
+        ? startRunAgent(projectPath, ruleId, run.plan, mayOpen, (session) => broadcast('terminal-created', { session }))
+        : null;
+      if (run.created) {
+        broadcast('plan-created', { plan: run.plan });
+        broadcast('recurring-changed', { project: projectPath });
+      }
+      return { planUid: run.plan.uid, title: run.plan.title, created: run.created, recurrence: run.info, agent, series: seriesFor(projectPath) };
+    }
+
+    // The plan's status (Phase 32 C2.4): every item's state with its source,
+    // and the one view — progress, waiting, in progress, lineage. The same
+    // answer as `/api/plans/:uid/status` and get_plan's `status`.
+    case 'plan.status': {
+      const planUid = requirePlan(params, 'planUid');
+      const status = await planStatusFresh(planUid);
+      if (!status) throw new Error(`Plan not found: ${planUid}`);
+      return status;
     }
 
     // What to work on next. `getNextTask` reads plan_items for a V2 plan

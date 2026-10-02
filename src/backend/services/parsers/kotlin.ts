@@ -1,5 +1,8 @@
 import type { ParserPlugin, SyntaxNode } from './base';
-import { flattenSymbols } from './base';
+import { flattenSymbols, headerSignature } from './base';
+/** Only a symbol that has a signature carries the key (A2.7). */
+const sig = (node: SyntaxNode, skip: string[] = []) => { const signature = headerSignature(node, skip); return signature ? { signature } : {}; };
+
 import type { ParsedSymbol, ImportDeclaration } from '../../../shared/types';
 
 /**
@@ -86,6 +89,7 @@ function functionSymbol(node: SyntaxNode, owner: string | null): ParsedSymbol | 
     ...lineOf(node),
     children: [],
     modifiers: modifiersOf(node, ...(receiver ? ['extension'] : [])),
+    ...sig(node),
   };
 }
 

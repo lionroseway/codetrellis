@@ -22,7 +22,8 @@ export type CriterionState = 'open' | 'submitted' | 'met' | 'sent_back' | 'stale
 
 export type SignoffDecision = 'approved' | 'sent_back';
 /** `local-api`: plain HTTP with the token — a person or a script, it cannot tell. */
-export type SignoffChannel = 'desktop' | 'phone' | 'mcp' | 'local-api';
+/** `file`: a signed approval read from a plan's approvals/ folder and verified (C2.5b). */
+export type SignoffChannel = 'desktop' | 'phone' | 'mcp' | 'local-api' | 'file';
 
 export interface CriterionEvidence {
   uid: string;
@@ -93,6 +94,12 @@ export interface CheckFinding {
   message: string;
   /** The attachment the finding is about, when there is one. */
   attachmentUid?: string | null;
+  /**
+   * What kind of failure, when something else acts on it: `tests_older` is
+   * a test report older than the item's code (B8.4a), which stops an
+   * agent's "done" and reads "⚠ tests older than the code" on the task.
+   */
+  reason?: 'tests_older';
 }
 
 export interface CriterionCheck {
@@ -148,4 +155,24 @@ export interface WorklistEntry {
   anchors: Array<{ attachmentUid: string | null; path: string | null; locator: unknown }>;
   /** For stale: which files changed. For failing: what the check said. */
   details: string[];
+}
+
+/**
+ * Phase 32 C2.5b — an approval as a signed statement: one this machine
+ * signed (or kept local, and why), or one read from a plan's approvals/
+ * folder and checked against git's allowed signers.
+ */
+export interface SignedApproval {
+  uid: string;
+  planUid: string;
+  itemUid: string;
+  criterionUid: string;
+  /** Who signed it, as the record says (verified or not). */
+  signer: string | null;
+  origin: 'here' | 'file';
+  /** here: `signed` or `local`; file: `verified` or `unverified`. */
+  state: 'signed' | 'local' | 'verified' | 'unverified';
+  /** Why it is local, or why it could not be verified. */
+  reason: string | null;
+  at: number;
 }

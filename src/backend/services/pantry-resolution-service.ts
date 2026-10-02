@@ -17,6 +17,7 @@ import { isWithin } from './confined-fs';
 import { listTrustedRoots } from './trusted-roots';
 import os from 'node:os';
 import path from 'node:path';
+import { plansHome } from './plans-home';
 
 // --- Types -------------------------------------------------------------------
 
@@ -147,6 +148,8 @@ export function scanPlanReferences(
   projectRoot: string,
   planSlug: string,
 ): PantryScanResult {
+  // The project's plans may live in a linked plans folder (Phase 32 C3.4a).
+  projectRoot = plansHome(projectRoot) ?? projectRoot;
   const planDir = path.join(projectRoot, '.codetrellis', 'plans', planSlug);
 
   if (!fs.existsSync(planDir)) {

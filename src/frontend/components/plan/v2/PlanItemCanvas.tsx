@@ -15,6 +15,7 @@ import { useSlashMenu } from './SlashMenu';
 import { useMentionPicker } from './MentionPicker';
 import { BodyRenderer } from './BodyRenderer';
 import { PlanGitContextChip } from './PlanGitContextChip';
+import { RecurringRunLine } from './RecurringRunLine';
 import { PlanBudgetChip } from './PlanBudgetChip';
 import { PlanTicketSyncChip } from './PlanTicketSyncChip';
 import { PlanSyncChip } from './PlanSyncChip';
@@ -27,8 +28,10 @@ import { ContextRail } from './ContextRail';
 import { CopyRef } from './CopyRef';
 import { TargetsStrip } from './TargetsStrip';
 import { ItemRoutingPanel } from './ItemRoutingPanel';
+import { ItemStateLine } from './ItemStateLine';
 import { DriftIndicator } from './DriftIndicator';
 import { ExternalRefsPanel } from './ExternalRefsPanel';
+import { SpecLinksPanel } from './SpecLinksPanel';
 import { CriteriaBlock } from './CriteriaBlock';
 import { PlanTemplateChooser } from './PlanTemplateChooser';
 import { PlanImportModal } from './PlanImportModal';
@@ -39,6 +42,8 @@ import { PlanLevelNudge, ItemLevelNudge } from './PlanQualityNudge';
 import type {
   PlanItem, TaskStatus, Comment,
 } from '@shared/types';
+import { authorKind } from '../../../lib/author-words';
+import { UnverifiedIf } from '../../UnverifiedTag';
 
 const STATUS_META: Record<TaskStatus, { label: string; tint: string; Icon: typeof Circle }> = {
   pending: { label: 'Pending', tint: 'text-zinc-400', Icon: Circle },
@@ -140,8 +145,13 @@ export function PlanItemCanvas() {
             (attachments, comments, children) below. Reads like a
             research page rather than a metadata-stuffed admin panel. */}
         <div className="max-w-[42rem] mx-auto px-10 py-10 space-y-10">
-          <ItemHeaderProperties item={item} />
+          <div className="space-y-2">
+            <ItemHeaderProperties item={item} />
+            {/* Phase 32 C2.4 — its state with its source: git, a review host, or the plan itself. */}
+            <ItemStateLine item={item} />
+          </div>
           <ItemChannelBand itemUid={item.uid} />
+          <SpecLinksPanel item={item} />
           <BodyEditor key={item.uid} item={item} />
           <TargetsStrip item={item} />
           <CriteriaBlock itemUid={item.uid} criteria={ctx?.criteria ?? []} attachments={ctx?.attachments ?? []} />
@@ -344,7 +354,7 @@ function ItemHeaderProperties({ item }: { item: PlanItem }) {
 
           {item.assignee && (
             <span className="px-2.5 py-1 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-300 text-[12px]">
-              👤 {item.assignee}
+              👤 {item.assignee}<UnverifiedIf type={item.assigneeType} />
             </span>
           )}
 
@@ -541,6 +551,8 @@ function PlanHomePage() {
               placeholder="Untitled plan"
               className="w-full bg-transparent border-0 text-[40px] font-bold text-foreground placeholder:text-foreground-subtle focus:outline-none focus:ring-0 px-0 leading-tight"
             />
+            {/* Phase 32 C4.2b — a recurring playbook's run says which, for when, and what it carried. */}
+            <RecurringRunLine planUid={plan.uid} />
             <div className="flex items-center gap-2 flex-wrap text-[13px] text-foreground-subtle">
               <span className="px-2.5 py-1 rounded-full border border-white/[0.08] bg-white/[0.02] uppercase tracking-wider text-[11.5px] font-medium">
                 Plan
@@ -1170,14 +1182,14 @@ function CommentsBlock({
         <div className="space-y-2.5 mb-3">
           {sorted.map((c) => {
             const meta = COMMENT_KIND_META[c.kind ?? 'note'] ?? COMMENT_KIND_META.note;
-            const isAgent = (c.source ?? '') === 'agent' || c.authorType !== 'human';
+            const isAgent = (c.source ?? '') === 'agent' || authorKind(c.authorType) === 'agent';
             return (
               <div key={c.uid} className="group rounded-lg border border-white/[0.05] bg-white/[0.015] px-3.5 py-2.5">
                 <div className="flex items-center gap-2 text-[11.5px] text-foreground-subtle">
                   <meta.Icon size={12} className={meta.tint} />
                   <span className={`font-medium ${meta.tint}`}>{meta.label}</span>
                   <span>·</span>
-                  <span className={isAgent ? 'text-cyan-300' : 'text-foreground-muted'}>{c.author}</span>
+                  <span className={isAgent ? 'text-cyan-300' : 'text-foreground-muted'}>{c.author}<UnverifiedIf type={c.authorType} /></span>
                   <span className="ml-auto opacity-60">{new Date(c.createdAt).toLocaleTimeString()}</span>
                   <CopyRef kind="comment" uid={c.uid} within={{ kind: isAction ? 'task' : 'page', uid: itemUid }} />
                   <button

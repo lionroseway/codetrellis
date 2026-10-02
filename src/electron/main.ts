@@ -22,10 +22,12 @@ import {
 } from '../backend/server';
 import { setElectronScreenshotCapture, getMcpSetup } from '../backend/mcp/server';
 import { applyClaudeDesktop, previewClaudeDesktop, thisMachine } from '../backend/services/claude-desktop-config';
+import { applyClaudeCode, previewClaudeCode, thisMachine as claudeCodeMachine } from '../backend/services/claude-code-parallel';
+import { applyGeminiHook, previewGeminiHook, thisMachine as geminiMachine } from '../backend/services/gemini-cli-hook';
 import { dispatchAuthorised, type IpcRequest } from '../backend/services/ipc-dispatcher';
 import * as terminalService from '../backend/services/terminal-service';
 import { installFileLogger, getCurrentLogPath } from '../backend/services/logger';
-import { getUpdateDownloadState } from '../backend/services/update-download-service';
+import { getUpdateDownloadState, saveVerifiedUpdateCopy } from '../backend/services/update-download-service';
 import {
   startPowerService,
   setAcState,
@@ -46,6 +48,7 @@ import {
 import { renditionOf, stopEngine } from '../backend/services/rendition/rendition-service';
 import { setPreviewImageScaler } from '../backend/services/mobile-approvals';
 import { buildSignoffPack, renderPackHtml } from '../backend/services/signoff-pack';
+import { sealPack } from '../backend/services/pack-seal';
 import { htmlToPdf } from './signoff-pdf';
 import { installHtmlView, closeHtmlView, pngWithReport } from './html-view';
 import { ARTEFACT_SCHEME, installArtefactTransport } from './artefact-transport';
@@ -662,6 +665,43 @@ ipcMain.handle('claude-desktop:apply', (e, shownHash: unknown) => {
   return applyClaudeDesktop(thisMachine(), claudeDesktopEntry(), shownHash);
 });
 
+/**
+ * Phase 32 A3.4 — the parallel skill and the optional PreToolUse hook, for
+ * Claude Code. The same rules as Claude Desktop above: this window only, the
+ * content decided in the main process (the skill from the guide, the hook
+ * from the connector this app resolved), and only the files the person chose,
+ * each still the one they were shown. See claude-code-parallel.ts.
+ */
+const HASH = /^[0-9a-f]{64}$/;
+ipcMain.handle('claude-code:preview', (e) => {
+  if (!mainWindow || e.sender !== mainWindow.webContents) return { ok: false, reason: 'Not available here.' };
+  return previewClaudeCode(claudeCodeMachine(), getMcpSetup().connector ?? null);
+});
+ipcMain.handle('claude-code:apply', (e, choice: unknown) => {
+  if (!mainWindow || e.sender !== mainWindow.webContents) return { ok: false, reason: 'Not available here.' };
+  const c = (choice && typeof choice === 'object' ? choice : {}) as { skill?: unknown; hook?: unknown };
+  const skill = typeof c.skill === 'string' && HASH.test(c.skill) ? c.skill : undefined;
+  const hook = typeof c.hook === 'string' && HASH.test(c.hook) ? c.hook : undefined;
+  if (!skill && !hook) return { ok: false, reason: 'Preview the change first.' };
+  return applyClaudeCode(claudeCodeMachine(), getMcpSetup().connector ?? null, { skill, hook });
+});
+
+/**
+ * Phase 32 A8.3 — the breakpoint hook for Gemini CLI. The same rules: this
+ * window only, the entry decided here from the connector this app resolved,
+ * and written only if the settings file is still the one shown. See
+ * gemini-cli-hook.ts.
+ */
+ipcMain.handle('gemini-cli:preview', (e) => {
+  if (!mainWindow || e.sender !== mainWindow.webContents) return { ok: false, reason: 'Not available here.' };
+  return previewGeminiHook(geminiMachine(), getMcpSetup().connector ?? null);
+});
+ipcMain.handle('gemini-cli:apply', (e, shownHash: unknown) => {
+  if (!mainWindow || e.sender !== mainWindow.webContents) return { ok: false, reason: 'Not available here.' };
+  if (typeof shownHash !== 'string' || !HASH.test(shownHash)) return { ok: false, reason: 'Preview the change first.' };
+  return applyGeminiHook(geminiMachine(), getMcpSetup().connector ?? null, shownHash);
+});
+
 ipcMain.handle('artefacts:reveal', async (_e, uid: unknown) => {
   if (!isAttachmentUid(uid)) return false;
   const file = await resolveServable(uid);
@@ -683,7 +723,7 @@ ipcMain.handle('signoff:export-pdf', async (event, planUid: unknown) => {
   if (!mainWindow || event.sender !== mainWindow.webContents) return { ok: false, reason: 'Not allowed' };
   if (typeof planUid !== 'string' || !/^[A-Za-z0-9_-]{3,64}$/.test(planUid)) return { ok: false, reason: 'No plan' };
   try {
-    const pack = buildSignoffPack(planUid);
+    const pack = sealPack(buildSignoffPack(planUid));
     const pdf = await htmlToPdf(renderPackHtml(pack));
     const safe = pack.plan.title.replace(/[^A-Za-z0-9 _-]+/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'plan';
     const choice = await dialog.showSaveDialog(mainWindow, {
@@ -702,8 +742,33 @@ ipcMain.handle('signoff:export-pdf', async (event, planUid: unknown) => {
 ipcMain.handle('updates:reveal', async () => {
   const state = getUpdateDownloadState();
   if (state.phase !== 'ready' || !state.filePath) return null;
-  shell.showItemInFolder(state.filePath);
-  return state.filePath;
+  // The copy the person saved, once there is one; the staged file before.
+  const target = state.savedPath ?? state.filePath;
+  shell.showItemInFolder(target);
+  return target;
+});
+
+/**
+ * Save the verified installer where the person chooses. The destination comes
+ * from the native save dialog, never from the renderer, and the source is the
+ * service's own verified file.
+ */
+ipcMain.handle('updates:save', async (event) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) return { ok: false, reason: 'Not allowed' };
+  const state = getUpdateDownloadState();
+  if (state.phase !== 'ready' || !state.filePath || !state.filename) return { ok: false, reason: 'No verified download to save' };
+  const ext = path.extname(state.filename).replace(/^\./, '');
+  const choice = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save the CodeTrellis update',
+    defaultPath: path.join(app.getPath('downloads'), state.filename),
+    filters: ext ? [{ name: 'Installer', extensions: [ext] }] : undefined,
+  });
+  if (choice.canceled || !choice.filePath) return { ok: false, reason: 'cancelled' };
+  try {
+    return { ok: true, path: await saveVerifiedUpdateCopy(choice.filePath) };
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+  }
 });
 
 // =============================================================

@@ -63,6 +63,19 @@ interface PlanReview {
   items: ReviewedItem[];
   unclaimedChanges: string[];
   unplannedEdges: Array<{ source: string; target: string }>;
+  /** Other lines of work overlapping this one (Phase 32 A5.2). */
+  otherWork?: {
+    workstream: { root: string; name: string };
+    entries: Array<{
+      signalId: string;
+      severity: 'high' | 'medium' | 'low';
+      heading: string;
+      sides: Array<{ name: string; words: string }>;
+      outcomeWords: string;
+      notes: string[];
+      merge?: string;
+    }>;
+  } | null;
   summary: {
     itemsLanded: number;
     itemsPartial: number;
@@ -91,6 +104,8 @@ const VERDICT = {
   untouched: { color: '#71717a', label: 'Untouched' },
   'no-targets': { color: '#52525b', label: 'No targets' },
 } as const;
+
+const SEVERITY = { high: '#ef4444', medium: '#f59e0b', low: '#71717a' } as const;
 
 /** The label a next-item row shows. A V1 task carries `description`. */
 export function nextItemLabel(next: NextItem): string {
@@ -138,8 +153,10 @@ function ComparePicker({
 
 export default function PlanReviewScreen() {
   const router = useRouter();
-  const { planUid, planTitle } = useLocalSearchParams<{
-    planUid: string; planTitle?: string;
+  // `before` / `after` come from the review queue (Phase 32 A5.6), which
+  // opens a line compared commit to commit: main's branch against the line's.
+  const { planUid, planTitle, before: beforeParam, after: afterParam } = useLocalSearchParams<{
+    planUid: string; planTitle?: string; before?: string; after?: string;
   }>();
 
   const [review, setReview] = useState<PlanReview | null>(null);
@@ -150,8 +167,8 @@ export default function PlanReviewScreen() {
   // any project without one, and the error state replaces the very switcher
   // that could have changed it. The desktop panel defaults to commit:HEAD,
   // which always resolves; match it.
-  const [before, setBefore] = useState('commit:HEAD');
-  const [after, setAfter] = useState('live');
+  const [before, setBefore] = useState(beforeParam || 'commit:HEAD');
+  const [after, setAfter] = useState(afterParam || 'live');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -287,6 +304,23 @@ export default function PlanReviewScreen() {
         )}
       </View>
 
+      {/* What else is in flight: other lines of work overlapping this one,
+          and what became of each overlap. */}
+      {review?.otherWork && review.otherWork.entries.length > 0 && (
+        <View style={styles.otherSection}>
+          <Text style={styles.sectionLabel}>OTHER WORK IN FLIGHT</Text>
+          {review.otherWork.entries.map((e) => (
+            <View key={e.signalId} style={[styles.otherCard, { borderLeftColor: SEVERITY[e.severity] }]} testID="review-other-work">
+              <Text style={styles.otherHeading}>{e.severity.toUpperCase()} · {e.heading}</Text>
+              <Text style={styles.otherWords}>{e.sides.map((side) => side.words).join(' ')}</Text>
+              {e.merge && <Text style={styles.otherMerge}>{e.merge}</Text>}
+              <Text style={styles.otherOutcome}>{e.outcomeWords}</Text>
+              {e.notes.map((n) => <Text key={n} style={styles.otherNote}>“{n}”</Text>)}
+            </View>
+          ))}
+        </View>
+      )}
+
       {/* 2 — what to pick up */}
       {next && !next.none && (
         <TouchableOpacity
@@ -369,6 +403,13 @@ export default function PlanReviewScreen() {
 }
 
 const styles = StyleSheet.create({
+  otherSection: { marginBottom: 12 },
+  otherCard: { backgroundColor: '#141416', borderRadius: 10, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#1f1f23', borderLeftWidth: 3 },
+  otherHeading: { color: '#fafafa', fontSize: 13, fontWeight: '700' },
+  otherWords: { color: '#d4d4d8', fontSize: 13, lineHeight: 19, marginTop: 4 },
+  otherMerge: { color: '#fbbf24', fontSize: 12, lineHeight: 17, marginTop: 4 },
+  otherOutcome: { color: '#a1a1aa', fontSize: 12, marginTop: 4 },
+  otherNote: { color: '#a1a1aa', fontSize: 12, fontStyle: 'italic', marginTop: 2 },
   container: { flex: 1, backgroundColor: 'transparent' },
   content: { padding: 16, paddingBottom: 40 },
   center: {

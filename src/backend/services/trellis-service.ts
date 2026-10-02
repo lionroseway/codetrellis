@@ -5,7 +5,7 @@ import { currentBranch } from './git-checkout';
 export interface TrellisSnapshot {
   id: number;
   name: string;
-  snapshotType: 'current' | 'planned' | 'checkpoint';
+  snapshotType: 'current' | 'planned' | 'checkpoint' | 'frame';
   planUid: string | null;
   gitBranch: string | null;
   filesJson: string;
@@ -37,6 +37,41 @@ export interface TrellisDiff {
 }
 
 /**
+ * The graph the server holds now: every file with its hash, language and
+ * top-level symbol count, and every resolved import edge. Symbol counts in
+ * one query (it was one query per file, too slow to run at every turn end
+ * for replay frames, B5.1).
+ */
+export function readLiveGraph(): TrellisSnapshotData {
+  const db = getDb();
+  let edges: Array<{ sourceRelative: string; targetRelative: string; specifiers: string[] }> = [];
+  try {
+    edges = getDependencyEdges();
+  } catch { /* no resolved imports yet */ }
+
+  const counts = new Map<string, number>();
+  const countRows = db.exec(
+    `SELECT f.relative_path, COUNT(s.id) FROM files f
+     LEFT JOIN symbols s ON s.file_id = f.id AND s.parent_symbol_id IS NULL
+     GROUP BY f.id`
+  );
+  for (const r of countRows[0]?.values ?? []) counts.set(r[0] as string, Number(r[1]) || 0);
+
+  const filesResult = db.exec(`SELECT relative_path, content_hash, language FROM files`);
+  const files = (filesResult[0]?.values || []).map((r: any[]) => ({
+    path: r[0] as string,
+    contentHash: r[1] as string,
+    language: r[2] as string,
+    symbolCount: counts.get(r[0] as string) ?? 0,
+  }));
+
+  return {
+    files,
+    edges: edges.map((e) => ({ source: e.sourceRelative, target: e.targetRelative, specifiers: e.specifiers })),
+  };
+}
+
+/**
  * Capture the current codebase state as an immutable trellis snapshot.
  */
 export function captureCurrentTrellis(
@@ -45,38 +80,7 @@ export function captureCurrentTrellis(
   name?: string,
 ): TrellisSnapshot {
   const db = getDb();
-
-  // Get current dependency edges
-  let edges: Array<{ sourceRelative: string; targetRelative: string; specifiers: string[] }> = [];
-  try {
-    edges = getDependencyEdges();
-  } catch { /* no resolved imports yet */ }
-
-  // Get file data from the files table
-  const filesResult = db.exec(
-    `SELECT relative_path, content_hash, language FROM files`
-  );
-  const files = (filesResult[0]?.values || []).map((r: any[]) => ({
-    path: r[0] as string,
-    contentHash: r[1] as string,
-    language: r[2] as string,
-    symbolCount: 0,
-  }));
-
-  // Get symbol counts
-  for (const file of files) {
-    const countResult = db.exec(
-      `SELECT COUNT(*) FROM symbols s JOIN files f ON s.file_id = f.id WHERE f.relative_path = ? AND s.parent_symbol_id IS NULL`,
-      [file.path]
-    );
-    file.symbolCount = (countResult[0]?.values[0]?.[0] as number) || 0;
-  }
-
-  const edgesData = edges.map((e) => ({
-    source: e.sourceRelative,
-    target: e.targetRelative,
-    specifiers: e.specifiers,
-  }));
+  const { files, edges: edgesData } = readLiveGraph();
 
   // Get git branch
   const gitBranch = currentBranch(projectPath);
@@ -120,9 +124,13 @@ export function captureCurrentTrellis(
  * Get a snapshot by ID.
  */
 export function getSnapshot(id: number): (TrellisSnapshot & { data: TrellisSnapshotData }) | null {
+  // A replay frame whose graph matched the one before stores no copy and
+  // points at the frame that does (B5.1); its data is that frame's.
   const result = getDb().exec(
-    `SELECT id, name, snapshot_type, plan_uid, git_branch, files_json, edges_json, created_at
-     FROM trellis_snapshots WHERE id = ?`,
+    `SELECT t.id, t.name, t.snapshot_type, t.plan_uid, t.git_branch,
+            COALESCE(o.files_json, t.files_json), COALESCE(o.edges_json, t.edges_json), t.created_at
+     FROM trellis_snapshots t LEFT JOIN trellis_snapshots o ON o.id = t.same_as
+     WHERE t.id = ?`,
     [id]
   );
   if (!result[0]?.values[0]) return null;
@@ -148,11 +156,14 @@ export function getSnapshot(id: number): (TrellisSnapshot & { data: TrellisSnaps
  * List snapshots, optionally filtered by plan.
  */
 export function listSnapshots(planUid?: string): Array<Omit<TrellisSnapshot, 'filesJson' | 'edgesJson'> & { fileCount: number; edgeCount: number }> {
-  let query = `SELECT id, name, snapshot_type, plan_uid, git_branch, files_json, edges_json, created_at FROM trellis_snapshots`;
+  // Replay frames (B5.1) are listed by /api/replay/frames, not among the
+  // checkpoints a person took: there can be hundreds a day.
+  let query = `SELECT id, name, snapshot_type, plan_uid, git_branch, files_json, edges_json, created_at FROM trellis_snapshots
+    WHERE snapshot_type != 'frame'`;
   const params: string[] = [];
 
   if (planUid) {
-    query += ` WHERE plan_uid = ?`;
+    query += ` AND plan_uid = ?`;
     params.push(planUid);
   }
   query += ` ORDER BY created_at DESC`;

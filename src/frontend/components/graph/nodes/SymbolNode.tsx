@@ -4,6 +4,7 @@ import { Box, Braces, Hash, Layers, LetterText, List, type LucideIcon } from 'lu
 
 import { LOD_ZOOM, statusOutline, type GraphNodeVisualData } from '../../../lib/graph-visuals';
 import { useUiStore } from '../../../stores/ui-store';
+import { BreakpointBadge } from './BreakpointBadge';
 
 interface SymbolNodeData extends GraphNodeVisualData {
   label: string;
@@ -44,6 +45,7 @@ function SymbolNodeComponent({ data }: NodeProps) {
           }}
     >
       <Handle type="target" position={Position.Top} className="!h-2 !w-2 !border-0 !bg-white/70" />
+      <BreakpointBadge title={(data as Record<string, unknown>).breakpointTitle} />
       {perf && zoomedOut ? (
         <div className="flex min-h-[36px] items-center gap-2">
           <Icon size={20} style={{ color: config.color }} />

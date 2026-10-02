@@ -1,4 +1,4 @@
-import type { ParserPlugin, SyntaxNode } from './base';
+import { shapeOf, type ParserPlugin, type SyntaxNode } from './base';
 import type { ParsedSymbol, ImportDeclaration } from '../../../shared/types';
 
 /**
@@ -30,6 +30,15 @@ import type { ParsedSymbol, ImportDeclaration } from '../../../shared/types';
  * classes, so flat names would collide constantly — the same problem Go
  * had with `Handle` and `String`, and the same fix.
  */
+
+
+/**
+ * A method's signature (A2.7): its parameters, with or without brackets;
+ * `()` for none, so a method that takes nothing still has a shape to
+ * compare. Ruby declares no types, so names, defaults, splats and keywords
+ * are the whole of it.
+ */
+const sig = (node: SyntaxNode) => ({ signature: shapeOf(node.childForFieldName('parameters'))?.replace(/^(?!\()(.*)$/, '($1)') ?? '()' });
 
 function lineOf(node: SyntaxNode): { startLine: number; endLine: number } {
   return { startLine: node.startPosition.row + 1, endLine: node.endPosition.row + 1 };
@@ -85,6 +94,7 @@ function symbolsInBody(
           ...lineOf(child),
           children: [],
           modifiers: [singleton ? 'class_method' : 'instance_method'],
+          ...sig(child),
         });
         break;
       }
@@ -99,6 +109,7 @@ function symbolsInBody(
           ...lineOf(child),
           children: [],
           modifiers: ['class_method'],
+          ...sig(child),
         });
         break;
       }
@@ -206,7 +217,7 @@ function extractSymbols(root: SyntaxNode): ParsedSymbol[] {
       case 'method': {
         const name = nameOf(child);
         if (name) {
-          out.push({ name, kind: 'function', ...lineOf(child), children: [], modifiers: [] });
+          out.push({ name, kind: 'function', ...lineOf(child), children: [], modifiers: [], ...sig(child) });
         }
         break;
       }

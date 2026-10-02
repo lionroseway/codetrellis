@@ -38,6 +38,7 @@ import { markDirty } from './persistence';
 import { getSettings } from './settings-service';
 import { getEffectiveAttachmentLocation } from './project-config-service';
 import type { TaskAttachment, AttachmentKind, PlanDocAttachment } from '../../shared/types';
+import { isPlacePath, locateStored } from './material-place';
 
 /**
  * Phase 15 §15.D — resolve where image/video bytes land based on the
@@ -108,6 +109,8 @@ export function resolveAttachmentLocation(
     const userDataDir = process.env.CODETRELLIS_DATA_DIR ?? path.join(os.homedir(), '.codetrellis');
     return { root: path.join(userDataDir, 'attachments', targetUid), rel: value.slice(prefix.length) };
   }
+  // In the project's linked plans folder (C3.4c), on this device.
+  if (isPlacePath(value)) return trustedProjectRoot ? locateStored(value, trustedProjectRoot) : null;
   if (path.isAbsolute(value) || /^[a-z][a-z0-9+.-]*:/i.test(value)) return null;
   if (!trustedProjectRoot) return null;
   return { root: trustedProjectRoot, rel: value };
@@ -363,6 +366,11 @@ export function validateImportedAttachment(
       if (!value.startsWith(`userdata://attachments/${targetUid}/`) || value.includes('..')) {
         return { refused: 'points into the data directory outside this item\'s uploads' };
       }
+    } else if (isPlacePath(value)) {
+      // A place in the plans folder (C3.4c): never one that climbs out of it.
+      if (value.slice('plans://'.length).split(/[\\/]/).some((seg) => seg === '..' || seg === '')) {
+        return { refused: 'path leaves the plans folder' };
+      }
     } else if (path.isAbsolute(value) || /^[a-z][a-z0-9+.-]*:/i.test(value)) {
       return { refused: 'absolute paths and URLs are not file references; use a path inside the project' };
     } else if (path.normalize(value).split(/[\\/]/).includes('..')) {
@@ -385,8 +393,15 @@ export function upsertAttachment(input: {
   author: string;
   authorType: string;
   createdAt: number;
+  /**
+   * A file reference's role (material, output, evidence), from a plan file
+   * (C3.4c), so a material a teammate recorded is one here too. Its hash,
+   * size and time are never taken from the file: this device takes them.
+   */
+  role?: 'material' | 'output' | 'evidence' | null;
 }): boolean {
   const db = getDb();
+  const role = input.kind === 'file_ref' && input.role && ['material', 'output', 'evidence'].includes(input.role) ? input.role : null;
   const exists = db.exec(`SELECT target_type, target_uid FROM attachments WHERE uid = ?`, [input.uid])[0]?.values[0];
   if (exists) {
     // An upsert never moves an attachment between items: a uid in one
@@ -398,13 +413,14 @@ export function upsertAttachment(input: {
        input.label ?? null, input.contentType ?? null,
        input.author, input.authorType, input.createdAt, input.uid],
     );
+    if (role) db.run(`UPDATE attachments SET role = ? WHERE uid = ?`, [role, input.uid]);
   } else {
     db.run(
-      `INSERT INTO attachments (uid, target_type, target_uid, kind, value, label, content_type, author, author_type, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO attachments (uid, target_type, target_uid, kind, value, label, content_type, author, author_type, created_at, role)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [input.uid, input.targetType, input.targetUid, input.kind, input.value,
        input.label ?? null, input.contentType ?? null,
-       input.author, input.authorType, input.createdAt],
+       input.author, input.authorType, input.createdAt, role],
     );
   }
   markDirty();

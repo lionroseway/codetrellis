@@ -59,13 +59,13 @@ test.describe('Body editor', () => {
     // Now fill the title — clicking it triggers blur on the textarea (saves body)
     await page.fill('input[placeholder="Untitled plan"]', PLAN_TITLE);
     await page.keyboard.press('Tab');
-    await page.waitForTimeout(1500);
 
-    // Verify plan was created via API
-    const res = await page.request.get(`${API}/plans`);
-    const plans = await res.json();
-    const plan = plans.find((p: any) => p.title === PLAN_TITLE && p.status !== 'archived');
-    expect(plan).toBeTruthy();
+    // The title saves 500ms after the last keystroke, then a PUT: poll the
+    // API for it rather than sleeping a fixed time a busy runner overruns.
+    await expect.poll(async () => {
+      const plans = await (await page.request.get(`${API}/plans`)).json();
+      return plans.some((p: any) => p.title === PLAN_TITLE && p.status !== 'archived');
+    }, { timeout: 10_000 }).toBe(true);
   });
 
   test('item body shows after clicking action in tree', async ({ page, request }) => {

@@ -31,6 +31,7 @@ import { resolveTrustedProjectRoot } from './trusted-roots';
 import { resolveAttachmentLocation } from './task-attachments-service';
 import { refreshArtefactHashes } from './artefact-service';
 import { serveReportFile } from './html-view-policy';
+import { isPlaceholder, NotOnDeviceError } from './cloud-files';
 
 /**
  * What the viewer can be sent (§7.2), by extension. Formats parsed in the
@@ -101,6 +102,8 @@ export async function resolveServable(uid: unknown): Promise<ServableFile | null
  * readers that need every byte: the conversion engine, the material reader.
  */
 export function readServableCapped(file: ServableFile, cap: number): Promise<Buffer | null> {
+  // Still only in the cloud (C3.4b): reading it would download it.
+  if (isPlaceholder(resolveWithin(file.root, file.rel, 'attachment'))) return Promise.reject(new NotOnDeviceError(file.rel));
   const { stream, size } = openReadStreamWithin(file.root, file.rel, {}, 'attachment');
   if (size > cap) { stream.destroy(); return Promise.resolve(null); }
   return new Promise((resolve, reject) => {
@@ -142,6 +145,10 @@ export function serveFile(file: ServableFile, rangeHeader?: string | null): Serv
 
   let opened: ReturnType<typeof openReadStreamWithin>;
   try {
+    // Still only in the cloud (C3.4b): never opened, so viewing never downloads it.
+    if (isPlaceholder(resolveWithin(file.root, file.rel, 'attachment'))) {
+      return { status: 409, headers: {}, stream: null, error: 'The file is not on this device yet: it is still only in the cloud' };
+    }
     opened = openReadStreamWithin(file.root, file.rel, range ?? {}, 'attachment');
   } catch {
     return { status: 404, headers: {}, stream: null, error: 'The file is not there, or is not a regular file in the project' };

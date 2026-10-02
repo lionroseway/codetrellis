@@ -687,6 +687,23 @@ it's out of scope here, like `duplicate` on the code side.
 - **Sign-off packs** (31.7b) list signals that touched the task and how
   each was resolved, the same way PR bodies do (§9.2).
 
+### 10.4 After A6: the same footing everywhere
+
+Built as A6 (#251–#258). The owner's questions after it (2026-09-30) found
+four places that still saw only code; each is scheduled where it already
+lives, on what the app already records (EXECUTION §2):
+
+- **The stack** counts a material clash between two plans as an overlap,
+  live and at a past moment, and a task in the past says which version of
+  each material it had read (HD3).
+- **Status** is read for a task with no branch from the plan itself, with
+  that source named, never written to a summary file (C2.4).
+- **Play-forward** projects the materials tasks rely on (B9).
+- **Across people**: a team sharing a OneDrive or SharePoint folder can
+  carry plans and, if it chooses, each person's material reads, so these
+  signals name a teammate's task as well as your own (C3; shared-work
+  doc C-3).
+
 ## 11. Milestones
 
 Each milestone is usable by itself.

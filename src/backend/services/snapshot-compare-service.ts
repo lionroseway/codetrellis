@@ -1,11 +1,16 @@
 import { execFileSync } from 'node:child_process';
 import { assertSafeGitRef } from './git-safety';
-import { getDb, getDependencyEdges, getAllFileHashes } from './database';
+import { getDb, getDependencyEdges, getAllFileHashes, getImportResolutionContext } from './database';
 import { getBaseline, diffSnapshots, captureSnapshot, type GraphSnapshot, type ArchDiff } from './diff-engine';
 import { getSnapshot, listSnapshots } from './trellis-service';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { getParseableExtensions } from './ast-parser';
+import { getParseableExtensions, parseVirtualFile } from './ast-parser';
+import { getResolverForLanguage } from './resolvers';
+import { commitEdges, type CommitEdgeDeps } from './commit-edges';
+import { workstreamBranches } from './workstream-service';
+import { mergeBase, parseMergeBase, sideLabel, treeOf, worktreesForCompare } from './git-refs';
+import { isSafeGitRef } from './git-safety';
 import { projectRelative } from './trusted-roots';
 import { readTextWithin, resolveWithin, ConfinementError } from './confined-fs';
 import fs from 'node:fs';
@@ -41,14 +46,16 @@ export interface ResolvedComparand {
   /**
    * False when the comparand's edges could not be reconstructed.
    *
-   * A git commit is the case that matters: reading its file list is
-   * cheap (`git ls-tree`), but knowing its *edges* would mean checking
-   * the tree out and re-parsing every file in it. Rather than pretend,
-   * a commit comparand reports files only, and the diff says edges were
-   * not comparable instead of quietly reporting "no edges changed" —
-   * which would read as a finding rather than an absence.
+   * A git commit used to be this case always. Since Phase 32 A5.1 its edges
+   * are built from the opened graph and the files that differ at the commit
+   * (`commit-edges.ts`), and it is unknown only when too many files differ
+   * to parse; `edgesNote` says so. Rather than pretend, the diff then says
+   * edges were not comparable instead of quietly reporting "no edges
+   * changed", which would read as a finding rather than an absence.
    */
   edgesKnown: boolean;
+  /** Why the edges are not known, when they are not. */
+  edgesNote?: string;
 }
 
 export interface ComparisonResult {
@@ -146,7 +153,7 @@ function md5Blobs(projectPath: string, oids: string[]): void {
 }
 
 /**
- * A git commit, files only.
+ * A git commit's files, with their blob ids.
  *
  * Two things here exist because the obvious implementation is wrong in a way
  * that looks right, and did ship that way:
@@ -169,9 +176,9 @@ function md5Blobs(projectPath: string, oids: string[]): void {
  * working-tree bytes, so a file can report modified on line endings alone.
  * That is real history, not a bug here, but it will look like one.
  *
- * Edges are not available; see `edgesKnown`.
+ * Its edges are built afterwards, from these blob ids (`commit-edges.ts`).
  */
-function commitSnapshot(projectPath: string, ref: string): GraphSnapshot | null {
+function commitSnapshot(projectPath: string, ref: string): { snapshot: GraphSnapshot; oids: Map<string, string> } | null {
   assertSafeGitRef(ref, 'snapshot comparand');
   let out: string;
   try {
@@ -200,15 +207,78 @@ function commitSnapshot(projectPath: string, ref: string): GraphSnapshot | null 
   md5Blobs(projectPath, entries.map((e) => e.oid));
 
   const files = new Map<string, { hash: string; symbolCount: number }>();
+  const oids = new Map<string, string>();
   for (const { filePath, oid } of entries) {
     const hash = blobMd5.get(oid);
     // An unreadable blob is left out rather than given its OID as a hash:
     // a wrong-space hash is what caused the bug above.
-    if (hash) files.set(filePath, { hash, symbolCount: 0 });
+    if (hash) {
+      files.set(filePath, { hash, symbolCount: 0 });
+      oids.set(filePath, oid);
+    }
   }
   if (files.size === 0) return null;
 
-  return { timestamp: Date.now(), files, edges: new Set<string>() };
+  return { snapshot: { timestamp: Date.now(), files, edges: new Set<string>() }, oids };
+}
+
+/** The text of each blob, via one `git cat-file --batch` process. */
+function readBlobs(projectPath: string, oids: string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  if (oids.length === 0) return out;
+  let buf: Buffer;
+  try {
+    buf = execFileSync('git', ['cat-file', '--batch'], { cwd: projectPath, input: oids.join('\n') + '\n', maxBuffer: 256 * 1024 * 1024 });
+  } catch {
+    return out;
+  }
+  let i = 0;
+  while (i < buf.length) {
+    const nl = buf.indexOf(0x0a, i);
+    if (nl === -1) break;
+    const parts = buf.subarray(i, nl).toString('utf-8').split(' ');
+    i = nl + 1;
+    const size = parts.length >= 3 ? Number(parts[2]) : NaN;
+    if (!Number.isFinite(size)) continue;
+    out.set(parts[0], buf.subarray(i, i + size).toString('utf-8'));
+    i += size + 1;
+  }
+  return out;
+}
+
+/** How a commit's files are parsed and resolved: the scanner's own parser and resolvers. */
+function edgeDeps(projectPath: string): CommitEdgeDeps {
+  const { aliasMap, systems } = getImportResolutionContext(projectPath);
+  return {
+    readBlobs: (oids) => readBlobs(projectPath, oids),
+    parseImports: (abs, content) => {
+      try {
+        const parsed = parseVirtualFile(abs, content);
+        return parsed ? { language: parsed.language, imports: parsed.imports } : null;
+      } catch {
+        return null;
+      }
+    },
+    resolve: (language, importSource, importerPath, knownFiles, isRelative) =>
+      getResolverForLanguage(language)?.resolve({ importSource, importerPath, projectRoot: projectPath, knownFiles, aliasMap, systems, isRelative }) ?? null,
+    relative: (abs) => projectRelative(projectPath, abs),
+  };
+}
+
+/** A commit or tree as a comparand: its files from `git ls-tree`, its edges rebuilt from the opened graph. */
+function fromGitObject(spec: string, label: string, object: string, projectPath: string): ResolvedComparand | null {
+  let commit: ReturnType<typeof commitSnapshot>;
+  try {
+    commit = commitSnapshot(projectPath, object);
+  } catch {
+    return null;
+  }
+  if (!commit) return null;
+  const { snapshot, oids } = commit;
+  const edges = commitEdges({ projectPath, files: snapshot.files, oids, live: liveSnapshot(projectPath) }, edgeDeps(projectPath));
+  if (!edges.ok) return { spec, label, snapshot, edgesKnown: false, edgesNote: edges.reason };
+  snapshot.edges = edges.edges;
+  return { spec, label, snapshot, edgesKnown: true };
 }
 
 /**
@@ -245,14 +315,26 @@ export function resolveComparand(spec: string, projectPath: string): ResolvedCom
     // a ref like `--upload-pack=…` produced a 500 "Internal server error" where
     // the neighbouring `commit:deadbeef` produced a clean 404 with a reason.
     // Refusing input is not an internal error, and saying so is more useful.
-    let snapshot: GraphSnapshot | null;
-    try {
-      snapshot = commitSnapshot(projectPath, ref);
-    } catch {
-      return null;
-    }
-    if (!snapshot) return null;
-    return { spec, label: `Commit ${ref}`, snapshot, edgesKnown: false };
+    // A full ref name (E2: `refs/remotes/origin/x`) is said as git shows it.
+    const label = ref.startsWith('refs/') ? sideLabel(projectPath, spec, []) : `Commit ${ref}`;
+    return fromGitObject(spec, label, ref, projectPath);
+  }
+
+  // Phase 32 E2: where two refs split, and another worktree's working copy
+  // (a tree of its files now), so the graph compares what the code view does.
+  if (spec.startsWith('merge-base:')) {
+    const mb = parseMergeBase(spec);
+    const sha = mb ? mergeBase(projectPath, mb.a, mb.b) : null;
+    if (!sha) return null;
+    return fromGitObject(spec, sideLabel(projectPath, spec, []), sha, projectPath);
+  }
+  if (spec.startsWith('workstream:')) {
+    // The worktrees git lists, read only: `listWorkstreams` is the discovery
+    // pass and starts watchers, which a comparison must not.
+    const workstreams = worktreesForCompare(projectPath);
+    const tree = treeOf(projectPath, spec, workstreams);
+    if (!tree) return null;
+    return fromGitObject(spec, sideLabel(projectPath, spec, workstreams), tree, projectPath);
   }
 
   return null;
@@ -289,6 +371,17 @@ export function listComparands(
       kind: 'checkpoint',
       timestamp: snap.createdAt,
     });
+  }
+
+  // The lines of work, each at its branch's latest commit (Phase 32 A5.1), so
+  // a branch review is one pick rather than a sha to look up.
+  try {
+    for (const branch of workstreamBranches(projectPath)) {
+      if (!isSafeGitRef(branch)) continue;
+      out.push({ spec: `commit:${branch}`, label: `${branch} (line of work)`, kind: 'branch' });
+    }
+  } catch {
+    /* not a git repository, or nothing to list */
   }
 
   // Recent commits, so the common case needs no typing.
@@ -373,11 +466,8 @@ export function compareSnapshots(
     // Say it plainly. Reporting zero edge changes for a comparison that
     // never looked at edges would read as a finding rather than an
     // absence, which is worse than saying nothing.
-    notes.push(
-      'Edges were not compared: a git commit contributes its file list only. ' +
-        'Reconstructing its edges would mean checking the tree out and re-parsing it. ' +
-        'Compare against a checkpoint to include edges.',
-    );
+    const why = [before.edgesNote, after.edgesNote].filter(Boolean).join(' ');
+    notes.push(`Edges were not compared: ${why || 'one side\'s edges are not known.'} Compare against a checkpoint to include edges.`);
   }
   if (beforeSpec === afterSpec) {
     notes.push('Both sides are the same point, so the diff is empty by construction.');
@@ -471,11 +561,33 @@ export function readFileAt(
     }
   }
 
+  // Nothing on this side: the file is new (untracked, or in a repository with no commit yet).
+  if (spec === 'none') return { ok: true, content: null, label: 'Nothing' };
+
+  // What is staged (Phase 32 E1): the index, the "before" of unstaged changes.
+  if (spec === 'index') {
+    try {
+      const content = execFileSync('git', ['show', `:./${relativePath}`], {
+        cwd: projectPath,
+        encoding: 'utf-8',
+        maxBuffer: 16 * 1024 * 1024,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      return { ok: true, content, label: 'Staged' };
+    } catch {
+      return { ok: true, content: null, label: 'Staged' };
+    }
+  }
+
   if (spec.startsWith('commit:')) {
     const ref = spec.slice('commit:'.length);
     assertSafeGitRef(ref, 'file comparand');
     try {
-      const content = execFileSync('git', ['show', `${ref}:${relativePath}`], {
+      // `./` makes the path relative to the project, not to the repository's
+      // top: in a project that is a subfolder of its repository, `<ref>:path`
+      // named a file that is not there, and the whole file read as added
+      // (Phase 32 E1).
+      const content = execFileSync('git', ['show', `${ref}:./${relativePath}`], {
         cwd: projectPath,
         encoding: 'utf-8',
         maxBuffer: 16 * 1024 * 1024,
@@ -487,6 +599,15 @@ export function readFileAt(
       // reported as absent rather than as an error.
       return { ok: true, content: null, label: `Commit ${ref}` };
     }
+  }
+
+  // Where two refs split (E2): the file at their merge base.
+  if (spec.startsWith('merge-base:')) {
+    const mb = parseMergeBase(spec);
+    const sha = mb ? mergeBase(projectPath, mb.a, mb.b) : null;
+    if (!sha) return { ok: false, content: null, label: spec, unavailable: 'These two share no history, or one of them is not here.' };
+    const read = readFileAt(`commit:${sha}`, projectPath, relativePath);
+    return { ...read, label: sideLabel(projectPath, spec, []) };
   }
 
   if (spec === 'baseline' || spec.startsWith('checkpoint:')) {
@@ -505,5 +626,5 @@ export function readFileAt(
 
 /** Whether a comparand can supply file CONTENTS, as opposed to a file list. */
 export function canSupplyContent(spec: string): boolean {
-  return spec === 'live' || spec.startsWith('commit:');
+  return spec === 'live' || spec === 'index' || spec === 'none' || spec.startsWith('commit:') || spec.startsWith('merge-base:') || spec.startsWith('workstream:');
 }

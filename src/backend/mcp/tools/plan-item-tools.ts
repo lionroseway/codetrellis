@@ -7,6 +7,10 @@
  */
 
 import { z } from 'zod';
+import { dependencyProblem } from '../../services/plan-dependencies';
+import { specRefProblem, setReliesOn, reliesOn, reliedOnBy, reliedOnWords } from '../../services/spec-links-service';
+import { proposalProblem, proposeSpecChange, listProposals, getProposal, directEditNote, impactProblem, replyToProposal } from '../../services/spec-proposals-service';
+import { dispatchChannelEvent } from '../../services/channel-dispatcher-service';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { noteItemFocus } from '../../services/budget-service';
@@ -15,6 +19,23 @@ import { parseReference, formatReference } from '../../../shared/lib/references'
 import { resultWithMeta, authorFromExtra } from '../helpers';
 import { ABOUT_MATERIALS } from '../../services/brief-service';
 import { quoteMaterial } from '../../services/material-reader/quote';
+import { listWorkstreams } from '../../services/workstream-service';
+import { readProjectSkill, listProjectSkills } from '../../services/skills-service';
+import { recordSkillRead } from '../../services/skill-use-service';
+import { recordMaterialRead } from '../../services/material-footprints';
+import { shareMaterialRead } from '../../services/task-records/shared-state';
+import { resolveSection, branchOfRoot, claimRefusal, offeredTo, elsewhereLine, cleanBranch, workstreamOfBranch, whereWorked } from '../../services/section-workstreams';
+
+/**
+ * The task's skills for the agent on this connection (Phase 32 C1): the
+ * project root from the plan's record, the agent's folder from its bound
+ * session, never from arguments.
+ */
+function skillsFor(deps: ToolDeps, item: import('../../../shared/types').PlanItem) {
+  const projectRoot = deps.planService.getPlan(item.planUid)?.projectPath ?? null;
+  const workstreamRoot = deps.sessionService.getActiveSessions().find((s) => s.sessionId === deps.sessionId)?.workstreamRoot ?? null;
+  return deps.briefService.skillsBlock(item, projectRoot, workstreamRoot);
+}
 
 // ── Reusable schemas ──────────────────────────────────────────────────
 
@@ -58,7 +79,57 @@ const itemCommentKindEnum = z.enum(['note', 'blocker', 'progress', 'question']);
 const attachmentKindEnum = z.enum(['url', 'image', 'video', 'file_ref', 'code_block', 'transcript']);
 
 export function register(server: McpServer, deps: ToolDeps): void {
+  // Phase 32 A8.4 — any client loads a task's skill here, and reading it is
+  // the proof of use that Claude Code's session log gives for its own.
+  server.registerTool(
+    'get_skill',
+    {
+      description:
+        'Load one of the project\'s skills (a `.claude/skills/<name>/SKILL.md`) by name: its instructions, to follow for the ' +
+        'task. get_brief, claim_item and get_next_item name the skills a task wants; load each with this. Reading it here ' +
+        'records that you used it on the tasks you are working, so the person sees "✓ used" whatever your client. ' +
+        'It is read from your own worktree, so a skill added on your branch is found.',
+      inputSchema: {
+        name: z.string().min(1).max(80).describe('The skill\'s name, as the task names it.'),
+      },
+    },
+    async ({ name }) => {
+      const session = deps.sessionService.getActiveSessions().find((s) => s.sessionId === deps.sessionId);
+      const root = session?.workstreamRoot ?? deps.getActiveProjectPath();
+      if (!root) return { isError: true, content: [{ type: 'text' as const, text: 'No project is open.' }] };
+      const found = readProjectSkill(root, name);
+      if (!found) {
+        const known = listProjectSkills(root).map((s) => s.name);
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: `No skill named ${name} in ${root}.${known.length ? ` The project's skills: ${known.join(', ')}.` : ' The project has no skills in .claude/skills.'}` }],
+        };
+      }
+      const tasks = recordSkillRead({ skill: found.skill.name, sessionId: deps.sessionId, workstreamRoot: session?.workstreamRoot ?? null });
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            name: found.skill.name,
+            path: found.skill.path,
+            description: found.skill.description,
+            recorded_on: tasks,
+            instructions: found.text,
+          }, null, 2),
+        }],
+      };
+    },
+  );
+
   // --- add_item ---
+
+  // Phase 32 B7.1 — the spec pages (or one heading of a page) a task relies on.
+  const reliesOnSchema = z.array(z.object({
+    page: z.string().describe('The uid of a page (an Object) in any plan of this project.'),
+    section: z.string().optional().describe('A heading on that page, by its slug ("fields" for "## Fields"). Omit for the whole page.'),
+  })).optional().describe(
+    'The spec pages this task relies on, whole or one section each. Replaces the list. When a page changes, the tasks relying on it are the ones told.',
+  );
 
   server.registerTool(
     'add_item',
@@ -83,7 +154,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         file_specs: z.array(itemFileSpecSchema).optional(),
         new_connections: z.array(planItemEdgeSchema).optional(),
         removed_connections: z.array(planItemEdgeSchema).optional(),
-        dependencies: z.array(z.string()).optional().describe('Other Action uids that must complete first.'),
+        dependencies: z.array(z.string()).optional().describe('Uids of tasks (Actions) that must finish first — in this plan or any other. A page cannot be one.'),
+        relies_on: reliesOnSchema,
         visibility: z.enum(['shared', 'local']).optional().describe(
           'Per-item sharing. `shared` (default) exports this item via git. `local` keeps it in the DB only.',
         ),
@@ -94,6 +166,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
     async (args, extra: any) => {
       const id = authorFromExtra(deps, extra);
+      // Phase 32 B6.1 — any plan's task may be a dependency; a uid that names
+      // nothing, or a page, would hold this item for ever.
+      const depProblem = args.dependencies?.length ? dependencyProblem(null, args.dependencies, deps.planItemService.getItem) : null;
+      if (depProblem) return { isError: true, content: [{ type: 'text' as const, text: depProblem }] };
+      const refProblem = args.relies_on?.length ? specRefProblem(null, args.relies_on) : null;
+      if (refProblem) return { isError: true, content: [{ type: 'text' as const, text: refProblem }] };
       const item = deps.planItemService.createItem({
         planUid: args.plan_uid,
         kind: args.kind,
@@ -113,6 +191,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         author: id.author,
         authorType: id.authorType,
       });
+      if (args.relies_on) setReliesOn(item.uid, args.relies_on, id);
       const n = deps.broadcast('plan-item-created', { planUid: item.planUid, item });
       deps.saveNow(() => deps.exportDatabase());
       return resultWithMeta(item, n);
@@ -241,7 +320,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
       description:
         'Update any field on an Object or Action. Content edits (body, title, status, fileSpecs, …) write a row to plan_item_versions; ' +
         'structural edits (parent_uid, sort_order) emit plan_events but skip the version log. ' +
-        'Pass empty string for nullable fields (parent_uid, scope_path, blocked_reason) to clear.',
+        'Pass empty string for nullable fields (parent_uid, scope_path, blocked_reason) to clear. ' +
+        'status "done" is refused while a test criterion\'s report is older than the item\'s code: run the tests again first.',
       inputSchema: {
         uid: z.string(),
         title: z.string().optional(),
@@ -260,6 +340,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         new_connections: z.array(planItemEdgeSchema).optional(),
         removed_connections: z.array(planItemEdgeSchema).optional(),
         dependencies: z.array(z.string()).optional(),
+        relies_on: reliesOnSchema,
         parent_uid: z.string().optional().describe('Re-parent. Empty string detaches to top-level.'),
         sort_order: z.number().int().optional(),
         change_summary: z.string().optional(),
@@ -276,6 +357,25 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
     async (args, extra: any) => {
       const id = authorFromExtra(deps, extra);
+      const depProblem = args.dependencies?.length ? dependencyProblem(args.uid, args.dependencies, deps.planItemService.getItem) : null;
+      if (depProblem) return { isError: true, content: [{ type: 'text' as const, text: depProblem }] };
+      const refProblem = args.relies_on?.length ? specRefProblem(args.uid, args.relies_on) : null;
+      if (refProblem) return { isError: true, content: [{ type: 'text' as const, text: refProblem }] };
+      // Phase 32 B8.4a (JOURNEYS J1) — "done" on a test report older than
+      // the code is refused: its "passing" is about code no longer there.
+      if (args.status === 'done' && deps.planItemService.getItem(args.uid)?.status !== 'done') {
+        const older = await deps.criterionLoop.testsOlderThanCode(args.uid);
+        if (older.length) {
+          return {
+            isError: true,
+            content: [{
+              type: 'text' as const,
+              text: `Not done: ${older.map((o) => `"${o.text}" — ${o.why}`).join('; ')}. ` +
+                'Hand over the new report (submit_criterion, or report_tests), then mark it done. Nothing was changed.',
+            }],
+          };
+        }
+      }
       const item = deps.planItemService.updateItem(args.uid, {
         title: args.title,
         body: args.body,
@@ -299,6 +399,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         authorType: id.authorType,
       });
       if (!item) return { content: [{ type: 'text' as const, text: `Item ${args.uid} not found` }] };
+      if (args.relies_on) setReliesOn(item.uid, args.relies_on, id);
       // Phase 23 — moving an item to in_progress is the other way an
       // agent tells us what it is working on. Agents that set status
       // directly never call claim_item, and their time would otherwise
@@ -310,7 +411,147 @@ export function register(server: McpServer, deps: ToolDeps): void {
       }
       const n = deps.broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: args });
       deps.saveNow(() => deps.exportDatabase());
-      return resultWithMeta(item, n);
+      const result = resultWithMeta(item, n);
+      // Phase 32 B7.2 — a spec page others rely on, edited directly: saved,
+      // and the caller told who relies on it and that proposing exists.
+      const note = args.body !== undefined && item.kind === 'object' ? directEditNote(item.uid) : null;
+      if (note) result.content.push({ type: 'text' as const, text: note });
+      return result;
+    },
+  );
+
+  // --- propose_spec_change / list_spec_proposals (Phase 32 B7.2) ---
+
+  server.registerTool(
+    'propose_spec_change',
+    {
+      description:
+        'You found the spec is wrong: propose the change instead of editing the page. Give the new text of the page, or of ' +
+        'one section (a heading, by its slug, heading line included), why, and the evidence (a failing test, files, commits). ' +
+        'The page is not changed now. The answer lists every task relying on that page or section, in any plan; their ' +
+        'agents are asked for the impact, and a person decides.',
+      inputSchema: {
+        page_uid: z.string().describe('The spec page (an Object).'),
+        section: z.string().optional().describe('A heading on that page, by its slug ("fields" for "## Fields"). Omit to propose the whole page.'),
+        text: z.string().describe('The new text: the whole page, or the section including its heading line.'),
+        why: z.string().describe('What is wrong with the spec as it is, in a sentence or two.'),
+        evidence: z.object({
+          tests: z.array(z.string()).optional().describe('Failing tests, by name or path.'),
+          files: z.array(z.string()).optional(),
+          commits: z.array(z.string()).optional(),
+          note: z.string().optional(),
+        }).optional(),
+      },
+    },
+    async (args, extra: any) => {
+      const input = { page: args.page_uid, section: args.section || undefined, text: args.text, why: args.why, evidence: args.evidence };
+      const problem = proposalProblem(input);
+      if (problem) return { isError: true, content: [{ type: 'text' as const, text: problem }] };
+      const id = authorFromExtra(deps, extra);
+      const proposal = proposeSpecChange(input, { ...id, sessionId: deps.sessionId ?? null });
+      const n = deps.broadcast('spec-proposal-created', { proposal });
+      deps.saveNow(() => deps.exportDatabase());
+      return resultWithMeta({
+        proposal,
+        next: `${proposal.affected.length
+          ? `${proposal.affectedWords}. Their agents are asked for the impact; a person decides.`
+          : 'Nothing relies on this page yet. A person decides.'} The page is unchanged until then. ` +
+          `await_decision("${proposal.hitRef}") waits for the decision; you are also told it on a later call.` +
+          (proposal.pageBreakpoint
+            ? ` A person guards this page with a breakpoint${proposal.pageBreakpoint.note ? `, and said: ${proposal.pageBreakpoint.note}` : ''}. The proposal is not held by it; they see it with the proposal.`
+            : ''),
+      }, n);
+    },
+  );
+
+  // --- reply_to_spec_proposal (Phase 32 B7.3) ---
+
+  server.registerTool(
+    'reply_to_spec_proposal',
+    {
+      description:
+        'You were told a spec change is proposed to a page your task relies on: say what it would mean for your work. ' +
+        'impact "none", or "changes" with a sentence (and how many of your tasks it would change). It is kept with the ' +
+        'proposal for the person deciding, and posted as a weigh-in in the proposer\'s plan. It decides nothing.',
+      inputSchema: {
+        uid: z.string().describe('The proposal (from the notice, or list_spec_proposals).'),
+        impact: z.enum(['none', 'changes']),
+        words: z.string().optional().describe('What it would change for your work, in a sentence. Needed for "changes".'),
+        tasks: z.number().int().optional().describe('How many of your tasks it would change.'),
+      },
+    },
+    async (args, extra: any) => {
+      const input = { uid: args.uid, impact: args.impact, words: args.words, tasks: args.tasks };
+      const problem = impactProblem(input);
+      if (problem) return { isError: true, content: [{ type: 'text' as const, text: problem }] };
+      const { impact, event } = replyToProposal(input, { ...authorFromExtra(deps, extra), sessionId: deps.sessionId ?? null });
+      deps.broadcast('channel-event-posted', {
+        uid: event.uid, planUid: event.planUid, itemUid: event.itemUid, eventType: event.eventType, respondsTo: event.respondsTo,
+      });
+      dispatchChannelEvent(event).catch((err) => console.warn('[Channels] dispatch failed:', err));
+      const n = deps.broadcast('spec-proposal-replied', { uid: args.uid, impact });
+      deps.saveNow(() => deps.exportDatabase());
+      return resultWithMeta({
+        impact,
+        next: 'Kept with the proposal for the person deciding, and posted to the proposer\'s plan. Carry on; you are told if it is accepted.',
+      }, n);
+    },
+  );
+
+  server.registerTool(
+    'list_spec_proposals',
+    {
+      description:
+        'Proposed spec changes: one by uid, a page\'s, or the project\'s, newest first, optionally by status (open, accepted, ' +
+        'rejected, withdrawn). Each says who relied on it when proposed and whether the page has changed since. Read-only.',
+      inputSchema: {
+        uid: z.string().optional(),
+        page_uid: z.string().optional(),
+        status: z.enum(['open', 'accepted', 'rejected', 'withdrawn']).optional(),
+        project_path: z.string().optional().describe('Absolute path of an opened project. Defaults to the active project.'),
+      },
+    },
+    async ({ uid, page_uid, status, project_path }) => {
+      if (uid) {
+        const one = getProposal(uid);
+        if (!one) return { isError: true, content: [{ type: 'text' as const, text: `No proposal ${uid}` }] };
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ proposals: [one] }, null, 2) }] };
+      }
+      const projectPath = page_uid ? undefined : (project_path ?? deps.getActiveProjectPath() ?? undefined);
+      const proposals = listProposals({ pageUid: page_uid, status, projectPath });
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ proposals }, null, 2) }] };
+    },
+  );
+
+  // --- get_spec_links (Phase 32 B7.1) ---
+
+  server.registerTool(
+    'get_spec_links',
+    {
+      description:
+        'Spec links for an item. For a task: the pages (and sections) it relies on. For a page: every task relying on it, ' +
+        'in any plan of the project, optionally narrowed to one section (a heading slug; a task relying on the whole page ' +
+        'counts for every section). Those are the tasks a change to the page affects. Read-only.',
+      inputSchema: {
+        uid: z.string().describe('A task or a page.'),
+        section: z.string().optional().describe('For a page: one heading, by its slug.'),
+      },
+    },
+    async ({ uid, section }) => {
+      const item = deps.planItemService.getItem(uid);
+      if (!item) return { isError: true, content: [{ type: 'text' as const, text: `Item ${uid} not found` }] };
+      const by = item.kind === 'object' ? reliedOnBy(uid, section) : [];
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            uid, kind: item.kind, title: item.title,
+            relies_on: reliesOn(uid),
+            relied_on_by: by,
+            words: reliedOnWords(by),
+          }, null, 2),
+        }],
+      };
     },
   );
 
@@ -398,6 +639,15 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
     async (args, extra: any) => {
       const id = authorFromExtra(deps, extra);
+      // Phase 32 C5.1 — a section worked in another worktree is not this agent's to claim.
+      const target = deps.planItemService.getItem(args.uid);
+      if (target) {
+        const { workstreams, callerBranch } = sectionContext(deps);
+        const refusal = claimRefusal(target, resolveSection(target, deps.planItemService.getItem), callerBranch, workstreams);
+        if (refusal) {
+          return { content: [{ type: 'text' as const, text: JSON.stringify({ ok: false, reason: 'worked_elsewhere', message: refusal }, null, 2) }] };
+        }
+      }
       const capabilities = deps.sessionService.getSessionCapabilities(deps.sessionId);
       const result = deps.planItemService.claimItem(
         args.uid,
@@ -405,6 +655,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         args.agent_type ?? 'mcp',
         args.model,
         capabilities,
+        deps.sessionId,
+        id,
       );
       if (!result.ok) {
         return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
@@ -434,11 +686,16 @@ export function register(server: McpServer, deps: ToolDeps): void {
         }
       }
       deps.saveNow(() => deps.exportDatabase());
-      const message = result.conflicts
-        ? `Item claimed. WARNING: ${result.conflicts.join('; ')}`
+      const warnings = [
+        ...(result.conflicts ?? []),
+        ...(result.waitsOn ?? []).map((w) => `this task ${w}, which is not finished`),
+      ];
+      const message = warnings.length > 0
+        ? `Item claimed. WARNING: ${warnings.join('; ')}`
         : `Item ${args.uid} claimed.`;
       const criteria = item ? criteriaForAgent(deps, item.uid) : [];
-      return resultWithMeta({ ok: true, message, conflicts: result.conflicts ?? null, item, parent, children, attachments, comments, criteria }, n);
+      const skills = item ? skillsFor(deps, item) : { skills: [], skills_note: null };
+      return resultWithMeta({ ok: true, message, conflicts: result.conflicts ?? null, waits_on: result.waitsOn ?? null, item, parent, children, attachments, comments, criteria, ...skills }, n);
     },
   );
 
@@ -459,7 +716,20 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const parentFilter = args.parent_uid === undefined
         ? undefined
         : (args.parent_uid === '' ? null : args.parent_uid);
-      const result = deps.planItemService.getNextItem(args.plan_uid, parentFilter);
+      // Phase 32 C5.1 — only sections worked in this agent's worktree, or in none.
+      const { callerBranch } = sectionContext(deps);
+      const sectionOf = (i: Parameters<typeof resolveSection>[0]) => resolveSection(i, deps.planItemService.getItem);
+      const result = deps.planItemService.getNextItem(args.plan_uid, parentFilter, (i) => offeredTo(sectionOf(i), callerBranch));
+      const elsewhere = elsewhereLine(
+        deps.planItemService.listAllItems(args.plan_uid)
+          .filter((i) => i.kind === 'action' && i.status === 'pending' && !i.assignee && (parentFilter === undefined || i.parentUid === parentFilter))
+          .map((i) => sectionOf(i))
+          .filter((sec): sec is NonNullable<typeof sec> => !offeredTo(sec, callerBranch))
+          .map((sec) => sec.branch),
+      );
+      const elsewhereNote = elsewhere
+        ? `Tasks in sections worked in other worktrees are not offered to you: ${elsewhere}.${callerBranch ? '' : ' CodeTrellis cannot tell which worktree you are in, so it offers you only tasks no section is assigned for.'}`
+        : null;
       if (result.gated) {
         return {
           content: [{
@@ -469,19 +739,66 @@ export function register(server: McpServer, deps: ToolDeps): void {
               reason: result.gated.reason,
               gated_item_uid: result.gated.itemUid,
               gated_item_title: result.gated.itemTitle,
+              ...(elsewhereNote ? { elsewhere: elsewhereNote } : {}),
             }, null, 2),
           }],
         };
       }
       if (!result.item) {
+        // Phase 32 B6.1 — say what the first held task waits on, and where:
+        // a wait on another plan's task is otherwise invisible from here.
+        const waiting = result.waiting ? ` ${result.waiting.reason}` : '';
         return {
           content: [{
             type: 'text' as const,
-            text: 'No items available — all claimed, completed, or blocked by dependencies.',
+            text: `No items available — all claimed, completed, or blocked by dependencies.${waiting}${elsewhereNote ? ` ${elsewhereNote}` : ''}`,
           }],
         };
       }
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result.item, null, 2) }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ ...result.item, ...skillsFor(deps, result.item), ...(elsewhereNote ? { elsewhere: elsewhereNote } : {}) }, null, 2) }] };
+    },
+  );
+
+  // --- assign_workstream (Phase 32 C5.1) ---
+
+  server.registerTool(
+    'assign_workstream',
+    {
+      description:
+        'Say which worktree a section of a plan is worked in: its branch, inherited by everything under the item. ' +
+        'Agents in another worktree are then not offered its tasks by get_next_item and cannot claim them. ' +
+        'The branch must be one CodeTrellis knows (see list_workstreams). Pass null to clear, so any worktree may work it.',
+      inputSchema: {
+        item_uid: z.string(),
+        workstream: z.string().nullable().describe('A branch name from list_workstreams, or null to clear.'),
+      },
+    },
+    async ({ item_uid, workstream }, extra) => {
+      const item = deps.planItemService.getItem(item_uid);
+      if (!item) return { content: [{ type: 'text' as const, text: `Item ${item_uid} not found` }], isError: true };
+      const { workstreams } = sectionContext(deps);
+      let branch: string | null = null;
+      if (workstream !== null) {
+        branch = cleanBranch(workstream);
+        if (!branch || !workstreamOfBranch(branch, workstreams)) {
+          const known = [...new Set(workstreams.map((w) => w.branch).filter((b): b is string => Boolean(b)))];
+          return { content: [{ type: 'text' as const, text: `No workstream on a branch named ${JSON.stringify(workstream)}. Known: ${known.join(', ') || 'none'}.` }], isError: true };
+        }
+      }
+      const id = authorFromExtra(deps, extra);
+      const updated = deps.planItemService.updateItem(item_uid, {
+        workstream: branch,
+        changeSummary: branch ? `Worked on ${branch}` : 'Worked in any worktree',
+        author: id.author,
+        authorType: id.authorType,
+      });
+      if (!updated) return { content: [{ type: 'text' as const, text: `Item ${item_uid} not found` }], isError: true };
+      const n = deps.broadcast('plan-item-updated', { planUid: updated.planUid, itemUid: updated.uid, kind: updated.kind, changes: { workstream: branch } });
+      deps.saveNow(() => deps.exportDatabase());
+      const text = branch
+        ? `“${updated.title}” and everything under it are worked on ${whereWorked(branch, workstreams)}.`
+        : `“${updated.title}” can be worked in any worktree${resolveSection(updated, deps.planItemService.getItem) ? ', unless a section above it says otherwise' : ''}.`;
+      return resultWithMeta({ ok: true, message: text, item_uid, workstream: branch }, n);
     },
   );
 
@@ -516,13 +833,20 @@ export function register(server: McpServer, deps: ToolDeps): void {
       description:
         'Everything you need to work an item, in one call: its goal and body, the guide (the plan\'s pages, in order), ' +
         'the materials you were given (name, type, size, and what read_material returns for each), every acceptance ' +
-        'criterion with its kind, policy, state and what it still needs, and any note a person sent back. Start here, ' +
+        'criterion with its kind, policy, state and what it still needs, how far they rest on evidence (grounding: the line a person sees, and each criterion\'s grade and why), any note a person sent back, and what this ' +
+        'task has read so far (read_so_far: each material, the parts, by whom, and the file\'s hash then), and what other ' +
+        'tasks\' work did to this one (affected_by_other_work: a shared file changed, different versions read, the same ' +
+        'output written). Start here, ' +
         'and call it again after a person sends something back. Read materials with read_material.',
       inputSchema: { item_uid: z.string() },
     },
     async ({ item_uid }) => {
-      const brief = await deps.briefService.getBrief(item_uid);
+      const workstreamRoot = deps.sessionService.getActiveSessions().find((s) => s.sessionId === deps.sessionId)?.workstreamRoot ?? null;
+      const brief = await deps.briefService.getBrief(item_uid, { workstreamRoot, refreshSignals: true });
       if (!brief) return { content: [{ type: 'text' as const, text: `Item ${item_uid} not found` }], isError: true };
+      // The task is this session's workstream from now on (A6.1): a Claude
+      // Desktop session has no folder, and its brief names what it works on.
+      deps.sessionService.bindBrief(deps.sessionId, item_uid);
       return { content: [{ type: 'text' as const, text: JSON.stringify(brief, null, 2) }] };
     },
   );
@@ -567,6 +891,11 @@ export function register(server: McpServer, deps: ToolDeps): void {
     async ({ attachment_uid, locator }, extra: any) => {
       const read = await deps.readMaterial(attachment_uid, locator ?? null);
       if (!read.ok) return { content: [{ type: 'text' as const, text: read.reason }], isError: true };
+
+      // The task's footprint (A6.2): who read which material, and its hash then.
+      const readFor = recordMaterialRead({ attachmentUid: attachment_uid, sessionId: deps.sessionId, locator: locator ?? null });
+      // And, when the project shares them, for teammates (C3.5): which version this task read.
+      if (readFor) shareMaterialRead(readFor, attachment_uid, authorFromExtra(deps, extra));
 
       const where = read.kind === 'text' ? read.reply.where : null;
       const summary = `Read ${read.name}${where ? ` — ${where}` : ''}`;
@@ -1531,4 +1860,13 @@ function criterionError(deps: ToolDeps, err: unknown) {
     return { content: [{ type: 'text' as const, text: err.message }], isError: true };
   }
   throw err;
+}
+
+/** Phase 32 C5.1 — the project's workstreams, and the branch this agent works on. */
+function sectionContext(deps: ToolDeps) {
+  const root = deps.getActiveProjectPath();
+  let workstreams: ReturnType<typeof listWorkstreams> = [];
+  try { workstreams = root ? listWorkstreams(root, { includeIdle: true }) : []; } catch { /* no git: no workstreams */ }
+  const callerRoot = deps.sessionService.getActiveSessions().find((s) => s.sessionId === deps.sessionId)?.workstreamRoot ?? null;
+  return { workstreams, callerBranch: branchOfRoot(callerRoot, workstreams) };
 }

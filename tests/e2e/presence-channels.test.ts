@@ -142,7 +142,8 @@ test.describe.serial('Presence and channels', () => {
 
     const thread = (await req('GET', `/api/channels/${root.uid}/thread`)) as Array<{ uid: string; authorType: string }>;
     expect(thread.map((e) => e.uid)).toEqual([root.uid, byPerson.uid, byAgent.uid]);
-    expect(thread[1].authorType).toBe('human');
+    // The reply was posted over plain HTTP: the person, `unverified` (§0.4d).
+    expect(thread[1].authorType).toBe('unverified');
 
     const viaMcp = await json(agent, 'get_channel_thread', { root_event_uid: root.uid });
     expect((viaMcp.events ?? viaMcp).map((e: { uid: string }) => e.uid)).toEqual([root.uid, byPerson.uid, byAgent.uid]);

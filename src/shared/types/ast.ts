@@ -35,6 +35,14 @@ export interface ParsedSymbol {
   endLine: number;
   children: ParsedSymbol[];
   modifiers: string[];
+  /**
+   * The symbol's shape (Phase 32 A2.1): parameters, return type and type
+   * parameters for a function or method; the declared shape for a type,
+   * interface or enum. Comments and whitespace don't count, so a body edit
+   * keeps it and a parameter change does not. Absent where the language or
+   * the kind has none — and then no contract signal can come from it.
+   */
+  signature?: string;
 }
 
 export interface ImportDeclaration {
@@ -54,6 +62,13 @@ export interface ImportDeclaration {
    * only the extractor knows which was written.
    */
   isRelative?: boolean;
+  /**
+   * Phase 32 A2.2 — `export { a } from './x'` / `export * from './x'`: the
+   * file passes the names on instead of using them. A barrel's importers are
+   * the re-exported module's importers too, and an importer lookup follows
+   * it. Specifiers are the ORIGINAL names, as for every import.
+   */
+  isReexport?: boolean;
 }
 
 export interface ExportDeclaration {

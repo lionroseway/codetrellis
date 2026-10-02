@@ -24,6 +24,8 @@ export interface Plan {
   updatedAt: number;
   taskCount?: number;
   completedTaskCount?: number;
+  /** Phase 32 C2.6a — set by the plans list when the plan reached this machine through its files. */
+  arrival?: PlanArrival | null;
   /**
    * Phase 15 §15.D — git context for the plan. Captures the user's
    * intent ("we're working off `main` and landing on `feat/auth`")
@@ -232,6 +234,8 @@ export interface PlanVersion {
   snapshot: string; // JSON blob of full plan + tasks state
   changeSummary: string | null;
   author: string;
+  /** 'human', 'unverified' or an agent's type; null on versions saved before it was kept. */
+  authorType: string | null;
   createdAt: number;
 }
 
@@ -278,6 +282,20 @@ export interface AgentSessionInfo {
   status: 'active' | 'inactive';
   /** Phase 17.N — declared agent capabilities for skill matching. */
   capabilities?: AgentCapability[];
+  /**
+   * Phase 32 A1.1 — the workstream it works in: the opened project, one of
+   * its worktrees, or an included clone. Null when what it reported matched
+   * none of them.
+   */
+  workstreamRoot?: string | null;
+  /**
+   * Phase 32 A6.1 — the task it works on: the item it last called
+   * `get_brief` on. A task is a workstream of its own (`task:<uid>`), for a
+   * session with no folder (Claude Desktop) and beside one with a folder.
+   */
+  briefItemUid?: string | null;
+  /** The CodeTrellis terminal it runs in, when it said so and that terminal exists. */
+  hostTerminalId?: string | null;
 }
 
 // =============================================================================
@@ -294,13 +312,61 @@ export interface AgentCapability {
 }
 
 /**
- * 17.N — A required skill on a plan item. When `required` is true,
- * only agents with a matching capability can claim the item.
+ * Phase 32 C1 — where a skill lives. Agents are pointed only at `repo`,
+ * `plugin`, `mcp` and `playbook`; a `link` is shown to people, never in a
+ * brief or a prompt (shared-work doc C-1, Safety).
+ */
+export type SkillLocation =
+  | { kind: 'repo'; path: string }        // .claude/skills/<name>/SKILL.md in the opened project
+  | { kind: 'plugin'; name: string }      // an installed plugin
+  | { kind: 'mcp'; server: string }       // an MCP server's tools
+  | { kind: 'playbook'; uid: string }     // a CodeTrellis playbook
+  | { kind: 'link'; url: string };        // people only
+
+/**
+ * 17.N — A skill on a plan item. When `required` is true, only agents with
+ * a matching capability can claim the item. Phase 32 C1: `use:
+ * 'recommended'` tells the agent to use it for this task, `why` says why in
+ * one line, and `where` says where to find it. Old files without the new
+ * fields read exactly as before.
  */
 export interface Skill {
   name: string;
   source: 'mcp' | 'skill' | 'lang' | 'plugin';
   required: boolean;
+  use?: 'recommended';
+  why?: string;
+  where?: SkillLocation;
+}
+
+/**
+ * Phase 32 C1.3 — whether a task's skill was used: `used` when the agent
+ * loaded it, `not_used` when a Claude Code agent is working the task and has
+ * not, `unknown` for any other client (which records no such thing), never
+ * "not used" on a guess.
+ */
+export type SkillProof = 'used' | 'not_used' | 'unknown';
+/** Phase 32 A8.4 — how a use was seen: Claude Code's session log, or a read through get_skill (any client). */
+export type SkillProofSource = 'session_log' | 'mcp';
+
+/** Phase 32 C1 — a skill found in the opened project's `.claude/skills`. */
+export interface ProjectSkill {
+  name: string;
+  description: string;
+  /** Relative to the project root: `.claude/skills/<dir>/SKILL.md`. */
+  path: string;
+}
+
+/** Phase 32 C1 — a skill as an agent is told about it (brief, claim, next). */
+export interface AgentSkill {
+  name: string;
+  /** `required` gates the claim; `recommended` is "use this for this task". */
+  use: 'required' | 'recommended';
+  why: string | null;
+  /** Never a `link`. */
+  where: Exclude<SkillLocation, { kind: 'link' }> | null;
+  /** Set when it can't be found where the agent works, with how to get it. */
+  missing: string | null;
 }
 
 /** Override mode for cascadeable properties (17.P). */
@@ -488,12 +554,16 @@ export interface PlanDocumentVersion {
   body: string;
   changeSummary: string | null;
   author: string;
+  /** 'human', 'unverified' or an agent's type; null on versions saved before it was kept. */
+  authorType: string | null;
   createdAt: number;
 }
 
 export interface CreatePlanInput {
   title: string;
   description: string;
+  /** Phase 32 C4.1 — a uid the caller derived (a recurring run's, from its rule and period). */
+  uid?: string;
   tasks: Array<{
     description: string;
     affectedFiles?: string[];
@@ -605,6 +675,18 @@ export interface PlanItem {
   assignee?: string | null;
   assigneeType?: string | null;
   assigneeModel?: string | null;
+  /**
+   * The MCP session that claimed it. The assignee is the agent's type, which
+   * two sessions of one agent share (Phase 32 bug 1). Not in plan files.
+   */
+  assigneeSession?: string | null;
+  /**
+   * Phase 32 C5.1 — the branch this section is worked on, inherited by
+   * everything under it: agents in another worktree are not offered its
+   * tasks and cannot claim them. Null: any worktree. A branch rather than a
+   * folder, so it means the same in every checkout.
+   */
+  workstream?: string | null;
   progressPercent?: number | null;
   blockedReason?: string | null;
   /** Folder this Action is rooted at; relative paths in fileSpecs resolve here. */
@@ -706,7 +788,9 @@ export type PlanEventType =
   | 'kind_transmuted'
   | 'plan_status_changed'
   /** Phase 31 §5.1 — an agent read a material through read_material. */
-  | 'material_read';
+  | 'material_read'
+  /** Phase 32 B7.4 — a spec this task relies on changed, by an accepted proposal. */
+  | 'spec_changed';
 
 export interface PlanEvent {
   id: number;
@@ -809,6 +893,8 @@ export interface CreatePlanItemInput {
   skillsMode?: CascadeMode;
   claimPolicy?: ClaimPolicy | null;
   claimPolicyMode?: 'inherit' | 'replace';
+  /** Phase 32 C5.1 — the branch this section is worked on. */
+  workstream?: string | null;
   executionConfig?: ExecutionConfig | null;
   executionConfigMode?: 'inherit' | 'replace';
   // Phase 17.F — constraints
@@ -843,6 +929,9 @@ export interface UpdatePlanItemInput {
   assignee?: string | null;
   assigneeType?: string | null;
   assigneeModel?: string | null;
+  assigneeSession?: string | null;
+  /** Phase 32 C5.1 — validated against the known workstreams by the caller. */
+  workstream?: string | null;
   progressPercent?: number | null;
   blockedReason?: string | null;
   scopePath?: string | null;
@@ -873,4 +962,16 @@ export interface UpdatePlanItemInput {
   /** Required — the actor performing the update. */
   author: string;
   authorType: string;
+}
+
+/**
+ * Phase 32 C2.6a — how a plan first reached this machine through its files:
+ * who added it and in which commit, as git says. Null on a plan made here.
+ */
+export interface PlanArrival {
+  /** The commit's author; null when the plan's file was not committed yet. */
+  addedBy: string | null;
+  /** The short sha; null when not committed yet. */
+  commit: string | null;
+  arrivedAt: number;
 }
