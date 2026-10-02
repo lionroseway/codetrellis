@@ -6,7 +6,9 @@
  * chain it was written into: against the real backend, intact. Then the
  * answer for a database someone changed (answered on the page; the real
  * tampering is tests/e2e/record.test.ts): which entries, what happened to
- * each, and asking again.
+ * each, and asking again. Then how long it is kept (B10.2): Sam's team needs
+ * a year; he chooses it, and the words say what that covers and that the
+ * change itself is kept in the record.
  */
 
 import fs from 'node:fs';
@@ -63,5 +65,27 @@ test.describe('Settings → Data → The record', () => {
     const before = walks;
     await section.getByTestId('record-verify').click();
     await expect.poll(() => walks).toBe(before + 1);
+  });
+
+  test('how long it is kept: a year chosen, said in words, and saved; back to 14 days (B10.2)', async ({ page }) => {
+    const puts: Array<Record<string, unknown>> = [];
+    page.on('request', (r) => { if (r.method() === 'PUT' && r.url().endsWith('/api/settings')) puts.push(r.postDataJSON() as Record<string, unknown>); });
+    const section = await openData(page);
+    const dialog = page.getByRole('dialog', { name: 'Settings' });
+    const select = dialog.getByTestId('retention-select');
+    await expect(select).toHaveValue('14');
+    await expect(dialog.getByTestId('retention-words')).toContainText('are kept 14 days, then the oldest go');
+
+    await select.selectOption('365');
+    await expect(dialog.getByTestId('retention-words')).toContainText('are kept a year, then the oldest go. The record still verifies');
+    await expect(dialog.getByTestId('retention-words')).toContainText('the change itself is kept in the record');
+    await expect.poll(() => puts.map((p) => (p.data as { retentionDays?: unknown } | undefined)?.retentionDays)).toContain(365);
+    await expect(section.getByTestId('record-words')).toHaveAttribute('data-ok', 'true');
+    await select.locator('xpath=ancestor::div[1]').screenshot({ path: path.join(OUT, 'retention.png') });
+
+    await select.selectOption('all');
+    await expect(dialog.getByTestId('retention-words')).toContainText('Everything is kept');
+    await select.selectOption('14');
+    await expect.poll(() => puts.map((p) => (p.data as { retentionDays?: unknown } | undefined)?.retentionDays).at(-1)).toBe(14);
   });
 });

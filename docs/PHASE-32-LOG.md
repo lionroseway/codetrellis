@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track B — B10.1: the record as a hash chain |
-| **Status** | A7 done: A7.1 (#306), A7.2 (#307), A7.3 (#308) merged. B10 refined in five parts. B10.1 built: every kept agent event linked into a hash chain as it is written; signal answers, spec decisions and rule changes kept as events; verifyRecord names what changed, was removed, relinked or added around it; GET /api/record, verify_record, Settings → Data → The record. Unit record-chain 8, harness record 4, browser settings/record 2 (shots) |
-| **In flight** | B10.1 in review (#309) on `feat/phase-32-b10-1-chain` |
-| **Last merged** | A7.3 (#308, `ca54a32`) |
-| **Next action** | Merge B10.1 (#309) when green; then B10.2 (retention you can set) |
+| **Stage / step** | Track B — B10.2: retention you can set |
+| **Status** | B10.1 merged (#309). B10.2 built: Settings → Data → Keep the record for (14, 30, 90, 365 days, or everything), the person's only and kept in the record when changed; it governs agent events and the record (trimmed as a block, still verifying), replay frames and spans, test runs, log files and the device log. Unit retention 4 and peer-audit, harness retention 4, browser record spec (shot) |
+| **In flight** | B10.2 building on `feat/phase-32-b10-2-retention` |
+| **Last merged** | B10.1 (#309, `aec597e`) |
+| **Next action** | Open B10.2's PR and merge when green; then B10.3 (signed packs carrying the record's head) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `ca54a32`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `aec597e`, with open PRs from GitHub.
 
 ---
 
@@ -219,8 +219,8 @@
     - [x] B9.3b A new planned overlap said on approval; deciding one from the phone (#297)
   - [x] B9.4 The phone and the G3 done-when (#298)
 - [ ] B10 The record — building
-  - [ ] B10.1 The chain: every kept event linked, decisions as events, verified in words (#309) — in review
-  - [ ] B10.2 Retention you can set, and the chain still verifies
+  - [x] B10.1 The chain: every kept event linked, decisions as events, verified in words (#309)
+  - [ ] B10.2 Retention you can set, and the chain still verifies — building
   - [ ] B10.3 Signed packs, carrying the record's head
   - [ ] B10.4 The evidence export
   - [ ] B10.5 The G2 done-when and docs
@@ -440,6 +440,8 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | C4.2a: a scheduled start is authored `schedule` (a system author, as other app-made records are), and the run keeps who set the rule | No person or agent called; the rule a person set is the reason, and saying "schedule" never passes the app off as that person |
 | 2026-10-02 | C4.3b: an agent on each run is kept per rule on this device, never in the committed config, and set by the person only; it starts only when the run was made here by the person in the window, the schedule, or a phone granted `terminal` — from plain HTTP or a phone without it, the run is made and says why not | It starts a process on this machine, so it is the person's and this machine's, never the team's; loopback is not a person, and a phone may only cause a terminal the person allowed it. A found run starts nothing, so two laptops make one agent |
 | 2026-10-02 | A7 is refined into three parts (EXECUTION §4): the rules and the check, rule signals from each workstream's import delta, the gate and the done-when. A rule is a path boundary (`from`, `mayNotImport`, `except`, `because`) in the committed config | One file every laptop, agent and pipeline reads; a boundary between two sets of paths is what M7 asks for ("web/ may not import db/") and covers layers without a layer model |
+| 2026-10-02 | B10.2: one retention window, set in Settings → Data (14, 30, 90, 365 days, or everything), governs agent events and the record, replay frames and signal spans, test runs, log files and the device log; changing it is the person's only, and is itself kept in the record | Shortening the window is how evidence is removed, so it is a grant like LAN exposure, and an auditor sees who changed it from what to what. One window, because a record that outlives its replay or its tests would answer "what happened" without "what else was going on" |
+| 2026-10-02 | B10.2: keeping everything lifts the agent events' row cap too; the device log, rewritten whole on each change and fed by networked peers, keeps at most 10,000 entries whatever the window | "Everything" must mean everything for the record; the device log's cap is what stops a peer filling the disk, so it stays, said in the window's words |
 | 2026-10-02 | B10 is refined into five parts (EXECUTION §5): the chain, retention, signed packs, the evidence export, the G2 done-when. The agent event log itself becomes the record, by a hash chain over its rows, rather than a second log | It already carries the app's decisions (B1.2) and is what the Timeline and replay read; a second log would be a second truth to keep in step |
 | 2026-10-02 | B10.1: links are numbered as written and carry a time that never goes backwards; retention trims the oldest block and moves an anchor; the workstream (stamped later when a session binds) is not in the digest; an unlinked event after the record began is reported, never taken in | A late watcher event stamped earlier must not leave a hole when the window trims; adopting the workstream is derivation, not what was done; linking strays at each start would launder a forged row |
 | 2026-10-02 | B10.1: decisions kept only as a row's latest state (a signal answered, a spec proposal decided, a rule set or stopped) are now events, with who from the transport | The row is overwritten by the next answer; the record keeps each one, in order |
@@ -466,6 +468,26 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-02: B10.2 — retention you can set
+- **Journey.** Sam's team must keep a year of evidence. In Settings → Data
+  he sets "Keep the record for" to a year; the words say what that covers
+  (agent activity and the record, replay snapshots, test runs, log files,
+  the device log), that the record still verifies when old entries go, and
+  that only he can change it. The Timeline shows "You changed how long the
+  record is kept, from 14 days to a year"; an agent or a script trying the
+  same over plain HTTP is refused with where to do it.
+- **Built.** `data.retentionDays` (`RETENTION_CHOICES`), validated and a
+  grant (`grant-guard.ts`); `services/retention.ts` (`retentionCutoff`,
+  `retentionWords`, `DEVICE_LOG_CAP`); every pruner reads it (agent events
+  through the record, replay frames and signal spans, test cases, log
+  files via `setLogRetention`, the device log by time and cap); a change
+  applies at once and is recorded as `retention_changed`; Settings → Data
+  "Keep the record for".
+- **Tests.** Unit `retention.test.ts` (4), `peer-audit-service.test.ts`
+  (the cap, the window). Harness `retention.test.ts` (4, with grants off).
+  Browser `settings/record.spec.ts` (a year chosen and back; shot
+  `retention`).
 
 ### 2026-10-02: B10.1 — the record as a hash chain
 - **Journey.** Sam opens Settings → Data: "Intact: 1,204 entries since

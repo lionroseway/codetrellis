@@ -31,7 +31,7 @@ import { VerifiedUpdateDownload } from './VerifiedUpdateDownload';
 import { explainSaveError } from '../../lib/settings-words';
 import { useUiStore, type GraphStyle } from '../../stores/ui-store';
 import { configText, copyText, fetchMcpSetup, maskToken, recommendedConfigText, tokenOf, type McpSetup } from '../../lib/mcp-setup';
-import type { AppSettings, PowerStatus, PowerTriggers, PeerCapabilityName } from '@shared/types';
+import type { AppSettings, PowerStatus, PowerTriggers, PeerCapabilityName, RetentionDays } from '@shared/types';
 import { AddToClaudeDesktop } from './AddToClaudeDesktop';
 import { ReviewHostSection } from './ReviewHostSection';
 import { SharedTaskStateSection } from './SharedTaskStateSection';
@@ -1134,6 +1134,27 @@ function DataSection({
       <p className="text-[10px] text-foreground-subtle">
         Takes effect when CodeTrellis restarts; until then it keeps using the current directory.
       </p>
+
+      <Field label="Keep the record for">
+        <select
+          data-testid="retention-select"
+          value={settings.data.retentionDays === null ? 'all' : String(settings.data.retentionDays)}
+          onChange={(e) => onChange({ data: { ...settings.data, retentionDays: e.target.value === 'all' ? null : Number(e.target.value) as RetentionDays } })}
+          className="bg-white/[0.02] border border-white/[0.08] rounded-md px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-accent/40"
+        >
+          <option value="14">14 days</option>
+          <option value="30">30 days</option>
+          <option value="90">90 days</option>
+          <option value="365">A year</option>
+          <option value="all">Everything</option>
+        </select>
+        <p data-testid="retention-words" className="mt-1 text-[10px] text-foreground-subtle leading-relaxed">
+          {settings.data.retentionDays === null
+            ? 'Everything is kept: agent activity and the record, replay snapshots, test runs and log files, and the database grows with them. The device log keeps its last 10,000 entries.'
+            : `Agent activity and the record, replay snapshots, test runs, log files and the device log are kept ${settings.data.retentionDays === 365 ? 'a year' : `${settings.data.retentionDays} days`}, then the oldest go. The record still verifies: where old entries were removed, it keeps the last one's hash.`}
+          {' '}Only you can change this, in this window: shortening it removes evidence, so the change itself is kept in the record.
+        </p>
+      </Field>
 
       <RecordSection />
     </>

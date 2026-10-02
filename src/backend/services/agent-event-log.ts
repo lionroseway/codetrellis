@@ -20,8 +20,9 @@
  *    characters before they are broadcast; values under key names that mean
  *    secrets, well-known token formats and this launch's capability token
  *    are also masked before anything is written.
- *  - **Kept 14 days**, like the log files, and at most `MAX_ROWS` rows.
- *    Setting retention is the record's job (B10.2).
+ *  - **Kept as long as Settings → Data says** (B10.2; 14 days unless the
+ *    person chose otherwise), and at most `MAX_ROWS` rows unless they keep
+ *    everything.
  *  - **The record** (B10.1): every event kept is linked into a hash chain
  *    as it is written (`record-chain.ts`), and pruned only as the chain's
  *    oldest block, so a change or a removal is found by walking it.
@@ -33,7 +34,9 @@ import type { AgentEvent, AgentEventSource, AgentEventType } from '../../shared/
 import { getDb } from './database';
 import { markDirty } from './persistence';
 import { beginRecord, linkEvent, trimRecord } from './record-chain';
+import { retentionCutoff } from './retention';
 
+/** The default window (B10.2 lets the person set it: `retention.ts`). */
 export const RETENTION_DAYS = 14;
 export const MAX_ROWS = 100_000;
 /** A stored payload is a summary; anything longer is cut. */
@@ -91,7 +94,7 @@ export interface BodyEdit {
 }
 
 /** Publish an event the app records itself. Inside an MCP tool it joins that session's turn. Never throws. */
-type AppEventType = 'spec_edited' | 'criterion_decided' | 'check_run' | 'breakpoint_hit' | 'breakpoint_answered' | 'signal_answered' | 'spec_decided' | 'rule_changed';
+type AppEventType = 'spec_edited' | 'criterion_decided' | 'check_run' | 'breakpoint_hit' | 'breakpoint_answered' | 'signal_answered' | 'spec_decided' | 'rule_changed' | 'retention_changed';
 
 function publishApp(type: AppEventType, payload: Record<string, unknown>, label: string | null): void {
   if (!publisher) return;
@@ -202,10 +205,10 @@ export function recordBreakpointEvent(type: 'breakpoint_hit' | 'breakpoint_answe
 /**
  * A person's decision that is otherwise kept only as a row's latest state
  * (B10.1): a signal answered, a spec proposal decided, an architecture rule
- * set or stopped. Kept as an event, so the record has each one, in order,
+ * set or stopped, how long the record is kept (B10.2). Kept as an event, so the record has each one, in order,
  * with who: the row is overwritten by the next answer, the record is not.
  */
-export function recordDecision(type: 'signal_answered' | 'spec_decided' | 'rule_changed', payload: Record<string, unknown>, label: string | null): void {
+export function recordDecision(type: 'signal_answered' | 'spec_decided' | 'rule_changed' | 'retention_changed', payload: Record<string, unknown>, label: string | null): void {
   publishApp(type, payload, label);
 }
 
@@ -350,7 +353,10 @@ export function listAgentEvents(q: AgentEventQuery = {}): StoredAgentEvent[] {
  * what is kept still verifies. Returns rows removed.
  */
 export function pruneAgentEvents(now = Date.now(), maxRows = MAX_ROWS): number {
-  return trimRecord(now - RETENTION_DAYS * 24 * 60 * 60 * 1000, maxRows, now);
+  const cutoff = retentionCutoff(now);
+  // Keeping everything (B10.2): no window and no row cap.
+  if (cutoff === null) return 0;
+  return trimRecord(cutoff, maxRows, now);
 }
 
 type Tap = (listener: (message: { type: string; payload: unknown }) => void) => () => void;

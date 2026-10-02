@@ -35,6 +35,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getSettingsDir } from './persistence';
+import { DEVICE_LOG_CAP, retentionCutoff } from './retention';
 
 /** Kinds of event worth keeping. */
 export type PeerAuditKind =
@@ -58,14 +59,25 @@ export interface PeerAuditEntry {
 }
 
 /**
- * How many entries are kept.
+ * How many entries are kept, at most.
  *
  * A bounded file rather than an unbounded one: this is written from a path a
- * networked peer can drive, so it must not be a way to fill the disk. 2000 is
- * weeks of ordinary use and a few minutes of someone hammering it — and when
- * someone IS hammering it, the recent entries are the interesting ones anyway.
+ * networked peer can drive, so it must not be a way to fill the disk. Within
+ * the cap, entries last as long as the person's retention window (B10.2) —
+ * and when someone IS hammering it, the recent entries are the interesting
+ * ones anyway.
  */
-const MAX_ENTRIES = 2000;
+const MAX_ENTRIES = DEVICE_LOG_CAP;
+
+/** Entries older than the person's window (B10.2) go too; keeping everything keeps them, up to the cap. */
+function trimOld(all: PeerAuditEntry[], now = Date.now()): void {
+  const cutoff = retentionCutoff(now);
+  if (cutoff !== null) {
+    const keepFrom = all.findIndex((e) => Date.parse(e.at) >= cutoff);
+    all.splice(0, keepFrom === -1 ? all.length : keepFrom);
+  }
+  if (all.length > MAX_ENTRIES) all.splice(0, all.length - MAX_ENTRIES);
+}
 
 let entries: PeerAuditEntry[] | null = null;
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -79,6 +91,7 @@ function ensureLoaded(): PeerAuditEntry[] {
   try {
     const raw = JSON.parse(fs.readFileSync(auditPath(), 'utf-8'));
     entries = Array.isArray(raw) ? (raw as PeerAuditEntry[]).slice(-MAX_ENTRIES) : [];
+    trimOld(entries);
   } catch {
     // Missing or corrupt: an unreadable audit log must not stop the app, but
     // it also must not be silently treated as "nothing happened" — so start
@@ -124,7 +137,7 @@ export function flushAudit(): void {
 export function recordPeerAudit(entry: Omit<PeerAuditEntry, 'at'>): void {
   const all = ensureLoaded();
   all.push({ at: new Date().toISOString(), ...entry });
-  if (all.length > MAX_ENTRIES) all.splice(0, all.length - MAX_ENTRIES);
+  trimOld(all);
   scheduleFlush();
 }
 

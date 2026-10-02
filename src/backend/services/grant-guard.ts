@@ -34,6 +34,9 @@ const GRANT_FIELDS: Array<[keyof AppSettings, string, string]> = [
   ['device', 'shareAudio', 'Settings → Devices'],
   ['webhooks', 'allowedHosts', 'Settings → Plans'],
   ['webhooks', 'allowLoopback', 'Settings → Plans'],
+  // How long the record is kept (B10.2): shortening it erases evidence, so
+  // no agent or script may, only the person.
+  ['data', 'retentionDays', 'Settings → Data'],
 ];
 
 /** A test backend that lets the harnesses grant over HTTP. */

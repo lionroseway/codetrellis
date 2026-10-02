@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
-import { DEFAULT_SETTINGS, type AppSettings, type PowerTriggers } from '../../shared/types';
+import { DEFAULT_SETTINGS, RETENTION_CHOICES, type AppSettings, type PowerTriggers } from '../../shared/types';
 import { getSettingsDir } from './persistence';
 import { ALL_CAPABILITIES } from './peer-capabilities';
 import type { PeerCapabilityName } from '../../shared/types/peer';
@@ -100,6 +100,7 @@ export function settingsPatchProblem(patch: unknown): string | null {
     ['webhooks.allowedHosts', (v) => Array.isArray(v) && v.every((h: unknown) => typeof h === 'string'), 'a list of host names'],
     ['webhooks.allowLoopback', (v) => typeof v === 'boolean', 'true or false'],
     ['updates.autoCheck', (v) => typeof v === 'boolean', 'true or false'],
+    ['data.retentionDays', (v) => (RETENTION_CHOICES as readonly unknown[]).includes(v), '14, 30, 90 or 365 days, or null to keep everything'],
   ];
   for (const name of ['identity', 'mcp', 'plans', 'data', 'device', 'power', 'webhooks', 'updates']) {
     const sec = section(name);
@@ -327,6 +328,7 @@ export function mergeWithDefaults(raw: any): AppSettings {
       dataDirOverride: typeof raw?.data?.dataDirOverride === 'string' ? raw.data.dataDirOverride : DEFAULT_SETTINGS.data.dataDirOverride,
       personalSyncPath: typeof raw?.data?.personalSyncPath === 'string' ? raw.data.personalSyncPath : DEFAULT_SETTINGS.data.personalSyncPath,
       personalSyncMode: ['none', 'selective', 'full'].includes(raw?.data?.personalSyncMode) ? raw.data.personalSyncMode : DEFAULT_SETTINGS.data.personalSyncMode,
+      retentionDays: (RETENTION_CHOICES as readonly unknown[]).includes(raw?.data?.retentionDays) ? raw.data.retentionDays : DEFAULT_SETTINGS.data.retentionDays,
     },
     device: {
       deviceName: typeof raw?.device?.deviceName === 'string' ? raw.device.deviceName : DEFAULT_SETTINGS.device.deviceName,
