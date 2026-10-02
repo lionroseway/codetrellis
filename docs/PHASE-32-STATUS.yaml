@@ -14,8 +14,8 @@
 # and prs (PRs whose merge commit does not name the id).
 now:
   step: "Track B — B10.5: the G2 done-when and docs"
-  status: "B10.2 (#310), B10.3 (#311) and B10.4 (#312) in review, stacked. B10.5 built: replay a chosen week (Timeline: \"or a week from [day]\"; the bar names the days; its evidence exports for that week); record-g2.test.ts walks G2 with the backend's clock 120 days ahead (frames, the code, the stack and the waiting call then, the Timeline's decisions with who, the record intact since that week, the week's evidence verifies, the approval edited in the database named by the record and by the evidence exported before); docs/claude/record.md. Unit test-clock 2, replay words; harness record-g2 4; browser replay-week (shots)"
-  next: "Merge #310, #311, #312 and B10.5 in order by the stacked flow; B10 is then done. Then the review"
+  status: "B10.2 (#310), B10.3 (#311) and B10.4 (#312) merged. B10.5 in review (#313): replay a chosen week (Timeline: \"or a week from [day]\"; the bar names the days; its evidence exports for that week); record-g2.test.ts walks G2 with the backend's clock 120 days ahead (frames, the code, the stack and the waiting call then, the Timeline's decisions with who, the record intact since that week, the week's evidence verifies, the approval edited in the database named by the record and by the evidence exported before); docs/claude/record.md. Unit test-clock 2, replay words; harness record-g2 4; browser replay-week (shots)"
+  next: "Merge B10.5 (#313) when green; B10 is then done. Then Track E: E1 (#314) is in review, then E2"
   blockers: "None"
   updated: 2026-10-02
 sections:

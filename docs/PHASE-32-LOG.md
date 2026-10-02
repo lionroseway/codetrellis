@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Track B — B10.5: the G2 done-when and docs |
-| **Status** | B10.2 (#310), B10.3 (#311) and B10.4 (#312) in review, stacked. B10.5 built: replay a chosen week (Timeline: "or a week from [day]"; the bar names the days; its evidence exports for that week); record-g2.test.ts walks G2 with the backend's clock 120 days ahead (frames, the code, the stack and the waiting call then, the Timeline's decisions with who, the record intact since that week, the week's evidence verifies, the approval edited in the database named by the record and by the evidence exported before); docs/claude/record.md. Unit test-clock 2, replay words; harness record-g2 4; browser replay-week (shots) |
-| **In flight** | B10.2 in review (#310) on `feat/phase-32-b10-2-retention`; B10.3 in review (#311) on `feat/phase-32-b10-3-signed-packs`; B10.4 in review (#312) on `feat/phase-32-b10-4-evidence`; B10.5 building on `feat/phase-32-b10-5-g2` |
-| **Last merged** | B10.1 (#309, `aec597e`) |
-| **Next action** | Merge #310, #311, #312 and B10.5 in order by the stacked flow; B10 is then done. Then the review |
+| **Status** | B10.2 (#310), B10.3 (#311) and B10.4 (#312) merged. B10.5 in review (#313): replay a chosen week (Timeline: "or a week from [day]"; the bar names the days; its evidence exports for that week); record-g2.test.ts walks G2 with the backend's clock 120 days ahead (frames, the code, the stack and the waiting call then, the Timeline's decisions with who, the record intact since that week, the week's evidence verifies, the approval edited in the database named by the record and by the evidence exported before); docs/claude/record.md. Unit test-clock 2, replay words; harness record-g2 4; browser replay-week (shots) |
+| **In flight** | B10.5 in review (#313) on `feat/phase-32-b10-5-g2`; #314 in review on `feat/phase-32-e1-source-control` |
+| **Last merged** | B10.4 (#312, `42c8e3e`) |
+| **Next action** | Merge B10.5 (#313) when green; B10 is then done. Then Track E: E1 (#314) is in review, then E2 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `aec597e`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `42c8e3e`, with open PRs from GitHub.
 
 ---
 
@@ -220,10 +220,10 @@
   - [x] B9.4 The phone and the G3 done-when (#298)
 - [ ] B10 The record — building
   - [x] B10.1 The chain: every kept event linked, decisions as events, verified in words (#309)
-  - [ ] B10.2 Retention you can set, and the chain still verifies (#310) — in review
-  - [ ] B10.3 Signed packs, carrying the record's head (#311) — in review
-  - [ ] B10.4 The evidence export (#312) — in review
-  - [ ] B10.5 The G2 done-when and docs — building
+  - [x] B10.2 Retention you can set, and the chain still verifies (#310)
+  - [x] B10.3 Signed packs, carrying the record's head (#311)
+  - [x] B10.4 The evidence export (#312)
+  - [ ] B10.5 The G2 done-when and docs (#313) — in review
 
 ### Track C: shared ways of working
 - [x] C1 Skills on tasks
