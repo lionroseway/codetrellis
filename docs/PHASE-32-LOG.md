@@ -17,15 +17,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track A — A7.1: architecture rules, and check_conformity made true |
-| **Status** | C4 done (#299–#303; base fixes #304, #305). A7 refined in three parts. A7.1 built: rules in the committed config (from, may not import, except, because), each with the imports that break it today; GET/PUT/DELETE /api/rules (the person's); check_conformity checks them and says the rule and why; list_rules (read); Settings → Architecture rules. Unit architecture-rule 4, harness architecture-rules 5, browser settings/rules.spec 2 (shots) |
-| **In flight** | A7.1 building on `feat/phase-32-a7-1-rules` |
-| **Last merged** | C4.3b (#303, `b6ed8fe`) |
-| **Next action** | Merge A7.1 when green; then A7.2 (rule signals from each workstream's import delta) |
+| **Stage / step** | Track A — A7.2: rule signals from each workstream's import delta |
+| **Status** | A7.1 merged (#306). A7.2 built: each workstream's added imports (now against its merge base, resolved with the project's resolver) checked against the rules; a high `rule` signal per workstream and rule, in the tab, digest, push, inline notices and phone; `rule` as a signal breakpoint; the card says the rule and why, each import across it, and links to Settings → Architecture rules. Unit tests, harness rule-signals 3, browser awareness-tab rule card (shot) |
+| **In flight** | A7.2 in review (#307) on `feat/phase-32-a7-2-rule-signals`; A7.3 in review (#308) on `feat/phase-32-a7-3-rule-gate` |
+| **Last merged** | A7.1 (#306, `8aa5820`) |
+| **Next action** | Merge A7.2 (#307) when green; then A7.3 (#308: check_changes and `codetrellis check` on rules, the M7 done-when) |
 | **Blockers** | None |
-| **Last updated** | 2026-10-01 |
+| **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `b6ed8fe`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `8aa5820`, with open PRs from GitHub.
 
 ---
 
@@ -121,9 +121,9 @@
   - [x] A6.5 Sign-off packs list the signals that touched the task (#257)
   - [x] A6.6 M6 done-when and docs (#258)
 - [ ] A7 Rules — building
-  - [ ] A7.1 The rules in the committed config, what breaks them today, and `check_conformity` made true — building
-  - [ ] A7.2 `rule` signals from each workstream's import delta
-  - [ ] A7.3 The gate (`check_changes`, `codetrellis check`) and the M7 done-when
+  - [x] A7.1 The rules in the committed config, what breaks them today, and `check_conformity` made true (#306)
+  - [ ] A7.2 `rule` signals from each workstream's import delta (#307) — in review
+  - [ ] A7.3 The gate (`check_changes`, `codetrellis check`) and the M7 done-when (#308) — in review
 - [ ] Follow-up: `plan-by-hand` failed once in CI when its plan workspace dropped back to the plan list while `plan/list.spec.ts` created and deleted plans on the other worker (#147). It doesn't reproduce as a pair (5/5 on base and on the branch). Find which broadcast leaves the workspace, so a person's open plan survives someone else's plan changes.
 - [ ] Follow-up: two browser tests failed once on #167 and passed on re-run: `realtime/plan-events.spec.ts:18` (a reset connection mid-POST; also 2/3 locally on the base branch) and `external-refs/refs-panel.spec.ts:77` (a fixed 3 s `isVisible`). Both are queued as separate fixes; neither touches A3.4's code.
 - [x] Follow-up: two browser tests failed once on the docs-only #184 and passed on re-run: `graph/layout-controls.spec.ts:38` (0 nodes after Tree → Map; the spec already names a rescan on the other worker as the cause of an empty graph, and polls 20 s) and `review-regressions/pr55-ui.spec.ts:431` (the linked-ticket chip never appeared, on the sample-app fixture). Neither touches a Phase 32 file; each needs its root cause found, not a longer wait. **Fixed at the source by #195 and #196:** a scan answers "scanning" and every graph answer names its project; a canvas keeps its graph through another project's scan, and an empty one rescans its own.
@@ -435,6 +435,8 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | C4.2a: a scheduled start is authored `schedule` (a system author, as other app-made records are), and the run keeps who set the rule | No person or agent called; the rule a person set is the reason, and saying "schedule" never passes the app off as that person |
 | 2026-10-02 | C4.3b: an agent on each run is kept per rule on this device, never in the committed config, and set by the person only; it starts only when the run was made here by the person in the window, the schedule, or a phone granted `terminal` — from plain HTTP or a phone without it, the run is made and says why not | It starts a process on this machine, so it is the person's and this machine's, never the team's; loopback is not a person, and a phone may only cause a terminal the person allowed it. A found run starts nothing, so two laptops make one agent |
 | 2026-10-02 | A7 is refined into three parts (EXECUTION §4): the rules and the check, rule signals from each workstream's import delta, the gate and the done-when. A rule is a path boundary (`from`, `mayNotImport`, `except`, `because`) in the committed config | One file every laptop, agent and pipeline reads; a boundary between two sets of paths is what M7 asks for ("web/ may not import db/") and covers layers without a layer model |
+| 2026-10-02 | A7.2: a rule signal is high, and holding an agent on one stays an opt-in signal breakpoint on "rule" | Breakpoints hold only on high signals; a rule is the team's written decision, so an import across it needs a person as much as two agents on one function. The person chooses whether it also holds the agent |
+| 2026-10-02 | A7.2: only the imports a workstream adds are checked (the merge base's imports of the same file are subtracted), and only for the project whose import context is held; a rule's set or removal re-checks work in flight at once | A rule already broken on main is A7.1's "N imports break this today", not news about this work; resolving needs that project's aliases and systems, and checking another project with none would invent breaches |
 | 2026-10-02 | A7.1: a rule written over code that already breaks it lists those imports ("1 import breaks this today"); signals (A7.2) are raised only for imports a workstream adds | A rule that went red on every existing import would be switched off the day it was written; saying what is there keeps it honest and useful at once |
 | 2026-10-02 | A7.1: a file already inside the forbidden set is not "from" outside it, and a rule's breaches are said only when the graph loaded is that project's | `src/` may not import `src/db/` must not flag db importing itself; the backend holds one project's graph, so another project's breaches are "open this project to see", never zero |
 | 2026-10-02 | C4.3b: the agent is asked in one shell argument to work the run's plan by its id through the MCP tools, not handed the plan's text; the harness makes the program `echo` (`CODETRELLIS_RUN_AGENT_COMMAND`) | One line with the title's quotes and `$` removed cannot break out of its argument, and the tools give the agent the current tasks, criteria and skills. The first run of the done-when started the container's real Claude Code: no test may start a real agent |
@@ -454,6 +456,26 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-02: A7.2 — rule signals from each workstream's import delta
+- **Journey.** The team has "web/ may not import db/, because web talks to
+  db through the API". An agent in `billing-v2` adds `import { query } from
+  '../db/client'` to web/reports.ts. Within a refresh the TopBar chip turns
+  high and the Awareness tab says "Breaks a rule": `billing-v2` adds 1 import
+  the rule forbids (web talks to db through the API): web/reports.ts →
+  db/client.ts. The digest asks "route it through what the rule allows, or
+  change the rule?"; the agent gets the same notice inline. Sam marks it
+  Intended for now, or follows "Change the rule in Settings".
+- **Built.** `services/workstream-imports.ts` (`importsAdded`: each changed
+  file's imports now against the merge base, resolved with the project's
+  resolver, cached per file stamp), `ruleEntry` in `footprintsOf`, the `rule`
+  signal kind in `awareness-signals.ts` (one per workstream and rule, high),
+  its words everywhere a kind is said (push, digest, signal words, phone),
+  `rule` as a signal breakpoint kind, re-check on rule PUT/DELETE, the
+  card's rule detail and its link to Settings → Architecture rules.
+- **Tests.** Unit awareness-signals (rule describe), signal-words,
+  awareness-digest, signal-breakpoints. Harness `rule-signals.test.ts` (3).
+  Browser `agent/awareness-tab.spec.ts` (rule card, shot `awareness-rule`).
 
 ### 2026-10-02: A7.1 — architecture rules, and check_conformity made true
 - **Journey.** Sam opens Settings → Architecture rules and writes "web/ may

@@ -10,7 +10,7 @@ import type { ViewDepth, PowerStatus } from '../../../shared/types';
 import { ConnectedAgents } from './ConnectedAgents';
 import { WorkstreamStrip } from './WorkstreamStrip';
 import { DeviceIndicator } from '../pairing/DeviceIndicator';
-import { SettingsModal } from '../settings/SettingsModal';
+import { SettingsModal, type SettingsSection } from '../settings/SettingsModal';
 
 async function captureBaselineFromBranch(projectPath: string, branch: string): Promise<boolean> {
   try {
@@ -409,12 +409,16 @@ export function TopBar() {
   const viewDepth = useGraphStore((s) => s.viewDepth);
   const setViewDepth = useGraphStore((s) => s.setViewDepth);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<'identity' | 'devices'>('identity');
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>('identity');
   const updateAvailable = useUpdateAvailable(settingsOpen);
 
-  // Allow MCP to open settings via CustomEvent
+  // Allow MCP to open settings via CustomEvent, and a card to open one section (A7.2).
   useEffect(() => {
-    const handler = () => setSettingsOpen(true);
+    const handler = (e: Event) => {
+      const section = (e as CustomEvent<{ section?: SettingsSection } | undefined>).detail?.section;
+      if (section) setSettingsSection(section);
+      setSettingsOpen(true);
+    };
     window.addEventListener('open-settings', handler);
     return () => window.removeEventListener('open-settings', handler);
   }, []);

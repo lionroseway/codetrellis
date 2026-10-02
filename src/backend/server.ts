@@ -2691,6 +2691,8 @@ app.put('/api/rules/:id', (req, res) => {
     const b = (req.body ?? {}) as Record<string, unknown>;
     const rule = setArchitectureRule(projectRoot, { id: req.params.id, from: b.from, mayNotImport: b.mayNotImport, except: b.except, because: b.because }, changedBy(req));
     broadcast('rules-changed', { project: projectRoot });
+    // A7.2 — work in flight is checked against the new rule at once.
+    try { refreshSignals(projectRoot); } catch (err) { console.warn('[Awareness] refresh failed:', err); }
     res.json({ rule, view: rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)).find((v) => v.rule.id === rule.id) });
   } catch (err) {
     if (err instanceof RuleError) { res.status(err.status).json({ error: err.message }); return; }
@@ -2705,6 +2707,7 @@ app.delete('/api/rules/:id', (req, res) => {
   try {
     removeArchitectureRule(projectRoot, req.params.id);
     broadcast('rules-changed', { project: projectRoot });
+    try { refreshSignals(projectRoot); } catch (err) { console.warn('[Awareness] refresh failed:', err); }
     res.json({ removed: req.params.id });
   } catch (err) {
     if (err instanceof RuleError) { res.status(err.status).json({ error: err.message }); return; }

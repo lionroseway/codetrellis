@@ -22,7 +22,7 @@ records that — but "✗ none" is proof of a gap.
 | Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
 | Frontend components | 130 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 38 | n/a | n/a | n/a | 0 | 0 |
-| Settings sections | 17 | n/a | n/a | n/a | 11 | 13 |
+| Settings sections | 0 | n/a | n/a | n/a | 0 | 0 |
 
 ## By domain
 
@@ -38,7 +38,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4h Drift, governance, review | 11 | 25 | 9 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 38 | 0 |
-| 0.4k Settings, updates, privacy | 22 | 0 | 3 | 11 | 0 | 17 |
+| 0.4k Settings, updates, privacy | 22 | 0 | 3 | 11 | 0 | 0 |
 | 0.4l System docs and intake | 7 | 11 | 6 | 1 | 0 | 0 |
 
 ## MCP tools: registry vs capability matrix
@@ -69,7 +69,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 193 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 194 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `DELETE /api/rules/:id` |  | ✗ none | 1 |  |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
@@ -92,7 +92,7 @@ records that — but "✗ none" is proof of a gap.
 | b | `GET /api/trellis/:id/diff` |  | ✗ none | 2 | ✓ 0.4b: empty at capture; then the new file and its edge, live; 404 unknown (baselines) |  |  |
 | b | `GET /api/trellis/snapshots` |  | ✗ none | 1 | ✓ 0.4b: lists the capture (baselines) |  |  |
 | b | `POST /api/trellis/capture` |  | ✗ none | 3 | ✓ 0.4b: (baselines) |  |  |
-| b | `PUT /api/rules/:id` |  | ✗ none | 1 |  |  |  |
+| b | `PUT /api/rules/:id` |  | ✗ none | 2 |  |  |  |
 | c | `DELETE /api/attachments/:uid` |  | ✗ none | 1 | ✓ 0.4c-2: removes; unknown 404 (item-surface) |  |  |
 | c | `DELETE /api/comments/:uid` |  | ✗ none | 1 | ✓ 0.4c-2: removes a reply from the thread (item-surface) |  |  |
 | c | `DELETE /api/items/:uid` |  | ✗ none | 2 | ✓ 0.4c: exercised by agent-loop, criteria-signoff, drift-review-tools, full-loop, +5 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -238,7 +238,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `DELETE /api/breakpoints/:id` |  | ✗ none | 4 |  |  |  |
 | g | `GET /api/agent-events` |  | ✗ none | 7 |  |  |  |
 | g | `GET /api/agent/status` |  | ✗ none | 3 | ✓ 0.4g: the session watcher's state, nothing more (misc-endpoints) |  |  |
-| g | `GET /api/awareness` |  | ✗ none | 26 |  |  |  |
+| g | `GET /api/awareness` |  | ✗ none | 27 |  |  |  |
 | g | `GET /api/breakpoint-hits` |  | ✗ none | 4 |  |  |  |
 | g | `GET /api/breakpoints` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/mcp/config` |  | ✗ none | 1 | ✓ 0.4g: a copied config carries the token and connects (misc-endpoints) |  |  |
@@ -248,7 +248,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `GET /api/plans/:uid/budget/check` |  | ✗ none | 1 | ✓ 0.4g: agrees with check_budget; unknown plan 404 (agent-ui-tools); bug 27 |  |  |
 | g | `GET /api/sensors/doc-check` |  | ✗ none | 1 | ✓ 0.4g: needs an opened project (400 / 403); nothing stale without docs (agent-ui-tools) — stale docs in 0.4l |  |  |
 | g | `GET /api/sessions` |  | ✗ none | 8 | ✓ 0.4g: a connected agent appears with its type and plan (sessions, agent-ui-tools) |  |  |
-| g | `GET /api/workstreams` |  | ✗ none | 22 |  |  |  |
+| g | `GET /api/workstreams` |  | ✗ none | 23 |  |  |  |
 | g | `GET /api/workstreams/changes` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/workstreams/commits` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/workstreams/folder-requests` |  | ✗ none | 1 |  |  |  |
@@ -403,7 +403,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `list_items` | plan-item · read | ✗ none | 3 | ✓ 0.4c: exercised by cdev-phase5, intake, plan-items (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `list_plan_pointers` | plan · read | ✗ none | 1 | ✓ 0.4c: exercised by cdev-cross-repo (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `list_plan_templates` | plan · read | ✗ none | 1 | ✓ 0.4c-1: built-ins; project templates with project_root (plan-tools) |  |  |
-| c | `list_plans` | plan · read | ✗ none | 16 | ✓ 0.4c: exercised by plan-tools, transport-auth (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `list_plans` | plan · read | ✗ none | 17 | ✓ 0.4c: exercised by plan-tools, transport-auth (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `list_plans_by_repo` | plan · read | ✗ none | 1 | ✓ 0.4c: exercised by cdev-cross-repo (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `list_recurring` | plan · read | ✗ none | 1 |  |  |  |
 | c | `list_rules` | plan · read | ✗ none | 1 |  |  |  |
@@ -462,7 +462,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `clipboard_write` | ui · write | ✗ none | 1 | ✓ 0.4g: sends the text to the window (agent-ui-tools) |  |  |
 | g | `declare_intent` | awareness · write | ✗ none | 2 |  |  |  |
 | g | `get_app_guide` | ui · read | ✗ none | 3 | ✓ 0.4g: every flavour distinct; summary names this project's plans; unknown flavour refused (agent-ui-tools) |  |  |
-| g | `get_awareness` | awareness · read | ✗ none | 10 |  |  |  |
+| g | `get_awareness` | awareness · read | ✗ none | 11 |  |  |  |
 | g | `get_budget` | budget · read | ✗ none | 1 | ✓ 0.4g: ceiling, spent, forecast, notes; unknown plan refused (agent-ui-tools) |  |  |
 | g | `get_log_path` | ui · read | ✗ none | 1 | ✓ 0.4g: today's file in the data dir; naming it creates nothing (agent-ui-tools), logger-path unit; bug 28 |  |  |
 | g | `get_logs` | ui · read | ✗ none | 1 | ✓ 0.4g: says when there is no log file; tail and filter of the desktop log (agent-ui-tools); bug 28 |  |  |
@@ -477,7 +477,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `open_plan` | session · write | ✗ none | 1 | ✓ 0.4g: plan opens; unknown plan refused with no toast (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `open_settings` | session · write | ✗ none | 1 | ✓ 0.4g: settings dialog opens (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `refresh_ui` | session · write | ✗ none | 1 | ✓ 0.4g: sends ui-refresh (agent-ui-tools) |  |  |
-| g | `register_session` | session · read | ✗ none | 42 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
+| g | `register_session` | session · read | ✗ none | 43 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
 | g | `screenshot` | ui · capture | ✗ none | 1 | ✓ 0.4g: refused without capture; image from the window's answer; empty answer an error (agent-ui-tools) |  |  |
 | g | `select_item` | ui · write | ✗ none | 1 | ✓ 0.4g: item selected; unknown item or wrong plan refused (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `set_active_plan` | session · write | ✗ none | 1 | ✓ 0.4g: shown and recorded as the agent's plan; unknown refused, unchanged (agent-ui-tools); bug 27 |  |  |
@@ -827,24 +827,7 @@ records that — but "✗ none" is proof of a gap.
 | j | `workstream-detail.tsx` |  | n/a | 1 |  |  |  |
 | j | `workstreams.tsx` |  | n/a | 1 |  |  |  |
 
-## Settings sections (17)
+## Settings sections (0)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
-| k | `about` |  | n/a | n/a | ✓ 0.4k: name, version, copy build info, jump to Updates (e2e about) | ✓ 0.5a — macOS note only on macOS, no longer amber |  |
-| k | `appearance` |  | n/a | n/a |  | ✓ 0.5 — dark native controls (0.5b) |  |
-| k | `data` |  | n/a | n/a | ✓ 0.4k: override box and the restart note (e2e data) — saving not checked | ✓ 0.5 — note is advice, not a warning (0.5b); saving the override still unverified |  |
-| k | `devices` |  | n/a | n/a | ✓ 0.4k: share-audio saves (e2e sections-save); per-device grants incl. capture (phone-grants, peer-device-access) | ✓ 0.5a — major fixed: "no ports exposed" contradicted the port it opens; placeholder no longer a real name |  |
-| k | `identity` |  | n/a | n/a | ✓ 0.4k: display name saves on leaving the box (e2e sections-save); pull from git config (e2e identity) | ✓ 0.5a |  |
-| k | `logs` |  | n/a | n/a | ✓ 0.4k: output area, refresh, reveal (e2e logs); tail and path (settings-surface) | ✓ 0.5 — says when this run writes no log file (0.5b) |  |
-| k | `mcp` |  | n/a | n/a | ✓ 0.4k: a refused port says why and nothing changes (e2e sections-save); port, autodetect, config snippet (e2e mcp-server); agent grants (agent-ui-tools) | ✓ 0.5 — a refused value is named as a person reads it (0.5b) |  |
-| k | `plans` |  | n/a | n/a | ✓ 0.4k: default visibility saves (e2e sections-save, e2e plans) | ✓ 0.5a — stale "coming" note and raw markdown link fixed |  |
-| k | `plans-folder` |  | n/a | n/a |  |  |  |
-| k | `power` |  | n/a | n/a | ✓ 0.4k: a keep-awake trigger saves, siblings kept (e2e sections-save, settings-surface) | ✓ 0.5 — plain words, status says what is happening (0.5b) |  |
-| k | `recurring` |  | n/a | n/a |  |  |  |
-| k | `review-hosts` |  | n/a | n/a | ✓ C2.2a: off until turned on per project; turning on and saving a token only from the app window; token never echoed, kept in the OS keychain or memory only; the switch no longer applies when the remote names another repository; nothing requested (harness review-host-switch) | ✓ C2.2a: names the host and what it would read before anything is; says where the token is kept (e2e review-host-settings) |  |
-| k | `rules` |  | n/a | n/a |  |  |  |
-| k | `shared-state` |  | n/a | n/a |  |  |  |
-| k | `sync` |  | n/a | n/a |  | ✓ 0.5a |  |
-| k | `telemetry` |  | n/a | n/a | ✓ 0.4k: says what leaves the machine: update checks only; dictionaries ship with the app (e2e updates; spellcheck-check in CI) | ✓ 0.5 — no hard-coded database path (0.5b) |  |
-| k | `updates` |  | n/a | n/a | ✓ 0.4k: automatic checks off is saved (e2e updates); off means no request, a person's check still works (updates) | ✓ 0.5 — error says why with retry; footer describes the verified download (0.5b) |  |

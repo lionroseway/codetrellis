@@ -178,7 +178,7 @@ export function diffSymbols(before: FlatSymbol[] | null, after: FlatSymbol[] | n
 const SHA = /^[0-9a-f]{40}$/;
 
 /** The file's content at `base`, or null when it did not exist there. */
-function baseContent(folder: string, base: string, relPath: string): string | null {
+export function baseContent(folder: string, base: string, relPath: string): string | null {
   if (!SHA.test(base)) return null;
   assertSafeGitPathArg(relPath, 'workstream base file');
   try {
@@ -194,7 +194,7 @@ function baseContent(folder: string, base: string, relPath: string): string | nu
 }
 
 /** The file's content in the folder, or null (gone, too big, or outside it). */
-function currentContent(folder: string, relPath: string): string | null {
+export function currentContent(folder: string, relPath: string): string | null {
   try {
     const abs = path.join(folder, relPath);
     if (fs.statSync(abs).size > MAX_PARSE_BYTES) return null;

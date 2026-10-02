@@ -612,7 +612,7 @@ All sensor-emitted events have \`authorType: 'sensor'\` and a \`payload.source\`
 | \`register_session(agent_type, model?, capabilities?, host_terminal_id?)\` | Identify yourself; declare skills for task routing. Pass host_terminal_id from \`$CODETRELLIS_HOST_TERMINAL\` env var if running inside a CodeTrellis terminal |
 | \`set_active_plan(plan_uid)\` | Declare which plan you're working on |
 | \`list_workstreams(project_path?, include_idle?)\` | Every worktree of the repo, and recent branches with no checkout here, with the agents in it and the files it has changed; \`yours\` marks your own, \`shared\` means two or more agents in one folder |
-| \`get_awareness(project_path?)\` | Open signals affecting your workstream: \`collision\` (same file: medium, same function: high), \`contract\` (an exported signature changed or removed that code you change imports: high), \`drift\` (you change files outside your claimed items and declared intent: medium) and \`stale-base\` (main changed files you change: low) |
+| \`get_awareness(project_path?)\` | Open signals affecting your workstream: \`collision\` (same file: medium, same function: high), \`contract\` (an exported signature changed or removed that code you change imports: high), \`drift\` (you change files outside your claimed items and declared intent: medium) \`stale-base\` (main changed files you change: low) and \`rule\` (you add an import a team architecture rule forbids: high) |
 | \`acknowledge_signal(id, note?)\` | Say you have seen a signal and what you will do. Shown to the person beside their answer; stops it being repeated to you |
 | \`get_state_at(at)\` | The project as it was at a past moment (ISO 8601 or milliseconds): tasks' statuses and who was on them then, what was waiting on the person, the signals open, the stack then, and how the graph has changed since. For "what was going on when…" or what changed while you were away |
 | \`declare_intent(summary, paths?, symbols?, clear?)\` | After planning: what you are about to change. Joins your workstream's footprint so overlaps show before any edit; lasts until you declare again, clear it, or disconnect |
@@ -1395,6 +1395,7 @@ work alongside them.
 | \`contract\` | A workstream changed the signature of an exported function or type, or removed it, and the other's changed files import it | high (medium for a namespace import only) |
 | \`drift\` | A workstream changes files outside what its claimed items and declared intent name | medium |
 | \`stale-base\` | Main changed files you are changing since you branched | low |
+| \`rule\` | A workstream adds an import one of the team's architecture rules forbids; it names the rule, why, and each import. Route the import through what the rule allows (\`list_rules\`, \`check_conformity\` before you write one) | high |
 
 A signal the person marked intended, or acknowledged, stays quiet while
 what it is about keeps its shape. When the shape changes (a new

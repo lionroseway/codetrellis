@@ -271,6 +271,39 @@ test.describe('Awareness tab', () => {
     await expect.poll(() => sent).toEqual([{ id: 'd1', state: 'intended', project: expect.any(String) }]);
   });
 
+  test('a rule: the imports that break it, the rule and why, and the way to change it (A7.2)', async ({ page }) => {
+    const rule = signal('r1', {
+      kind: 'rule', severity: 'high', workstreams: ['/work/acme-billing'],
+      subject: {
+        files: ['web/reports.ts'],
+        rule: { id: 'web-not-db', words: 'web/ may not import db/', because: 'web talks to db through the API' },
+        edges: [{ from: 'web/reports.ts', to: 'db/client.ts' }],
+      },
+      summary: '`billing-v2` now imports db/ from web/ (web/reports.ts → db/client.ts), which the rule “web/ may not import db/” forbids: web talks to db through the API',
+    });
+    const sent = await serve(page, ROOM, [rule]);
+    await gotoWithProject(page);
+    await tabButton(page).click();
+
+    const r = card(page, 'which the rule');
+    await expect(r).toHaveAttribute('data-severity', 'high');
+    await expect(r).toContainText('Breaks a rule');
+    await expect(r.getByTestId('awareness-sides')).toHaveText('billing-v2');
+    await expect(r.getByTestId('awareness-rule-words')).toHaveText('The rule “web/ may not import db/”, because web talks to db through the API:');
+    await expect(r.getByTestId('awareness-rule-edge')).toHaveText(['web/reports.ts db/client.ts']);
+    await expect(r.getByTestId('awareness-actions').getByRole('button')).toHaveText(['Acknowledge', 'Intended', 'Dismiss']);
+    await expandPanel(page);
+    await shot(page, 'awareness-rule');
+
+    // If the import is right, the rule is what changes: the card opens it in Settings.
+    await r.getByTestId('awareness-rule-change').click();
+    await expect(page.getByTestId('rules-section')).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    await r.getByRole('button', { name: 'Intended' }).click();
+    await expect.poll(() => sent).toEqual([{ id: 'r1', state: 'intended', project: expect.any(String) }]);
+  });
+
   test('who was told, and what each agent said, sit beside the person\'s answer (A2.6)', async ({ page }) => {
     const told = signal('t1', {
       kind: 'contract', severity: 'high', workstreams: ['/work/acme-auth', '/work/acme-billing'],
