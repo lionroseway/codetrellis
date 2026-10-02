@@ -325,7 +325,7 @@ export function Sidebar() {
               view === v ? 'bg-accent-muted text-accent' : 'text-foreground-subtle hover:text-foreground'
             }`}
           >
-            {v === 'files' ? 'Files' : 'Changes'}
+            {v === 'files' ? 'Explorer' : 'Changes'}
             {v === 'changes' && changed > 0 && (
               <span className="normal-case tracking-normal px-1.5 rounded-full bg-white/[0.08] text-[9.5px] tabular-nums" data-testid="sidebar-changes-count">{changed}</span>
             )}
