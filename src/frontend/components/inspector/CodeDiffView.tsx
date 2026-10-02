@@ -44,6 +44,9 @@ interface Props {
   after: string;
   /** Names for the sides in place of the comparands' own, e.g. "this copy (billing-v2)". */
   labels?: { before?: string; after?: string };
+  /** Each side's own path, when the file was renamed between them (Phase 32 E3); `relativePath` otherwise. */
+  beforePath?: string;
+  afterPath?: string;
   /** Language tag; inferred from the path when omitted. */
   language?: string | null;
   authHeaders?: Record<string, string>;
@@ -95,6 +98,8 @@ export function CodeDiffView({
   language,
   authHeaders,
   labels,
+  beforePath,
+  afterPath,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const mergeRef = useRef<MergeView | null>(null);
@@ -113,8 +118,8 @@ export function CodeDiffView({
     let cancelled = false;
     setLoading(true);
     Promise.all([
-      fetchFileAt(projectPath, relativePath, before, authHeaders),
-      fetchFileAt(projectPath, relativePath, after, authHeaders),
+      fetchFileAt(projectPath, beforePath ?? relativePath, before, authHeaders),
+      fetchFileAt(projectPath, afterPath ?? relativePath, after, authHeaders),
     ])
       .then(([b, a]) => {
         if (cancelled) return;
@@ -130,7 +135,7 @@ export function CodeDiffView({
     return () => {
       cancelled = true;
     };
-  }, [projectPath, relativePath, before, after, authHeaders, labels?.before, labels?.after]);
+  }, [projectPath, relativePath, beforePath, afterPath, before, after, authHeaders, labels?.before, labels?.after]);
 
   useEffect(() => {
     if (!host.current || !sides) return;

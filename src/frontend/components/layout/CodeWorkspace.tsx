@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { FileCode, GitCompare, Code2, History, X } from 'lucide-react';
+import { FileCode, GitBranch, GitCompare, Code2, History, X } from 'lucide-react';
+import { EvolutionView } from './EvolutionView';
 import { useSourceControlStore, groupOfFile, changeWords } from '../../stores/source-control-store';
 import { GitCommand } from './SourceControlPanel';
 import { useProjectStore } from '../../stores/project-store';
@@ -35,7 +36,7 @@ const CodeDiffView = lazy(() =>
  * the diff editor, and the transport bar driving both.
  */
 
-type Mode = 'read' | 'diff';
+type Mode = 'read' | 'diff' | 'evolution';
 
 export function CodeWorkspace() {
   const root = useProjectStore((s) => s.root);
@@ -250,6 +251,17 @@ export function CodeWorkspace() {
         >
           <GitCompare size={10} /> Diff
         </button>
+        {/* Phase 32 E3: the file at two points, each scrubbing its own history. */}
+        <button
+          onClick={() => setMode('evolution')}
+          className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] transition-colors ${
+            mode === 'evolution' ? 'bg-accent/10 text-accent' : 'text-foreground-subtle hover:text-foreground'
+          }`}
+          title="This file at two points side by side, each scrubbing back through its commits"
+          data-testid="code-evolution"
+        >
+          <GitBranch size={10} /> Evolution
+        </button>
         <button
           onClick={() => setShowTimeline((v) => !v)}
           className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] transition-colors ${
@@ -311,6 +323,8 @@ export function CodeWorkspace() {
             Pick a file from the sidebar to read it, see what the plan wants from it, and diff it
             against any point in the project's history.
           </div>
+        ) : mode === 'evolution' ? (
+          <EvolutionView root={root} relativePath={relativePath} />
         ) : mode === 'read' ? (
           <CodePreview
             content={content}
