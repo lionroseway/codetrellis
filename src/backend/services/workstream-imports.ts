@@ -15,10 +15,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { ChangedFile, Workstream } from '../../shared/types';
 import { parseVirtualFile } from './ast-parser';
-import { getAllFileHashes, getImportResolutionContext } from './database';
+import { getAllFileHashes, getImportResolutionContext, resolutionContextRoot } from './database';
 import { getResolverForLanguage } from './resolvers';
 import { showAt } from './branch-workstreams';
 import { baseContent, currentContent } from './workstream-symbols';
+import { checkEdges, rulesOf } from './architecture-rules';
+import type { RuleImport } from './conformity-gate';
 
 export interface ImportEdge { from: string; to: string }
 
@@ -84,4 +86,36 @@ export function importsAdded(projectRoot: string, w: Pick<Workstream, 'root' | '
     edges.push(...added);
   }
   return edges;
+}
+
+const real = (p: string) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
+
+/**
+ * Whether this project's imports can be resolved here: its aliases and
+ * systems are held only for the project whose graph was last scanned.
+ * Resolving another with none would invent breaches, or miss them.
+ */
+export function importsReadableFor(projectRoot: string): boolean {
+  const held = resolutionContextRoot();
+  return !!held && real(held) === real(projectRoot);
+}
+
+/**
+ * The gate's question (A7.3): which imports do these changed files, in the
+ * project's own folder, add across its rules since `base` (a commit)? Null
+ * when the project's imports cannot be read here; empty when it has no rules.
+ */
+export function ruleImports(projectRoot: string, files: readonly string[], base: string | null): RuleImport[] | null {
+  const rules = rulesOf(projectRoot);
+  if (rules.length === 0) return [];
+  if (!importsReadableFor(projectRoot)) return null;
+  const edges = importsAdded(projectRoot, {
+    root: projectRoot, shape: 'shared', head: null,
+    changes: { base, files: files.map((f) => ({ path: f, status: 'modified' as const })), truncated: false },
+  }, null);
+  const byId = new Map(rules.map((r) => [r.id, r]));
+  return checkEdges(rules, edges).map((b) => {
+    const rule = byId.get(b.rule)!;
+    return { path: b.from, imports: b.to, rule: rule.id, words: `${rule.from} may not import ${rule.mayNotImport}`, because: rule.because };
+  });
 }

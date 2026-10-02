@@ -1,4 +1,6 @@
 // [codemod] hoisted lazy requires → static namespace imports for bundling
+// Before anything runs git: CodeTrellis's git never holds the person's index lock.
+import './services/git-env';
 import * as _lazy___services_settings_service from './services/settings-service';
 import * as _lazy___services_project_config_service from './services/project-config-service';
 import * as _lazy___services_external_pointer_service from './services/external-pointer-service';

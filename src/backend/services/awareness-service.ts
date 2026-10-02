@@ -12,7 +12,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { AwarenessSignal, SettableSignalState, SignalState, SignalStateBy, Workstream } from '../../shared/types';
-import { getDb, resolutionContextRoot } from './database';
+import { getDb } from './database';
 import { markDirty } from './persistence';
 import { isSafeGitRef } from './git-safety';
 import { listWorkstreams } from './workstream-service';
@@ -24,7 +24,7 @@ import { computeMaterialSignals } from './material-signals';
 import { materialInputsOf } from './material-footprints';
 import { stateSplitDrafts } from './task-records/split-signals';
 import { checkEdges, rulesOf } from './architecture-rules';
-import { importsAdded } from './workstream-imports';
+import { importsAdded, importsReadableFor } from './workstream-imports';
 import type { FileSpec } from '../../shared/types';
 
 const SHA = /^[0-9a-f]{40}$/;
@@ -122,9 +122,7 @@ export function footprintsOf(all: readonly Workstream[], projectRoot?: string): 
 function ruleEntry(projectRoot: string, w: Workstream, mainRoot: string | null): Pick<FootprintInput, 'ruleBreaches'> {
   const rules = rulesOf(projectRoot);
   if (rules.length === 0 || w.changes.files.length === 0) return {};
-  const held = resolutionContextRoot();
-  const real = (p: string) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
-  if (!held || real(held) !== real(projectRoot)) return {};
+  if (!importsReadableFor(projectRoot)) return {};
   const breaches = checkEdges(rules, importsAdded(projectRoot, w, mainRoot));
   if (breaches.length === 0) return {};
   return {

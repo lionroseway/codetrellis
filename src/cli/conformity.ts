@@ -1,7 +1,8 @@
 /**
  * The conformity gate for a job or a hook (Phase 32 D1.4): which files this
  * work changed, and whether the change conforms to what the plan and the
- * docs say (`check_changes`). `codetrellis check` with no path, and
+ * docs say (`check_changes`), and whether it adds an import across one of
+ * the team's architecture rules (A7.3). `codetrellis check` with no path, and
  * `codetrellis status`, exit 3 when it does not, so a pipeline can fail on it.
  *
  * "This work" is the branch since it left its base, plus whatever is not
@@ -59,24 +60,30 @@ export interface Gate {
   tests: unknown[];
   criteria: unknown[];
   docs: unknown[];
+  rules: unknown[];
+  /** Set when the rules could not be checked, and why. */
+  rulesNote?: string;
 }
 
 /** `check_changes` over this work's files, as the agent. */
 export async function gate(agent: Agent, root: string, changed: Changed): Promise<Gate | { error: string }> {
-  if (changed.files.length === 0) return { ok: true, says: [], files: 0, base: changed.base, breakpoints: [], tests: [], criteria: [], docs: [] };
-  const a = await agent.call('check_changes', { paths: changed.files.slice(0, 500), project_path: root });
+  if (changed.files.length === 0) return { ok: true, says: [], files: 0, base: changed.base, breakpoints: [], tests: [], criteria: [], docs: [], rules: [] };
+  // The merge base, so an import that was already there is not this work's (A7.3).
+  const a = await agent.call('check_changes', { paths: changed.files.slice(0, 500), project_path: root, ...(changed.since ? { base: changed.since } : {}) });
   if (a.isError) return { error: a.text };
   const j = (a.json ?? {}) as Record<string, unknown>;
   const list = (k: string) => (Array.isArray(j[k]) ? j[k] as unknown[] : []);
   return {
     ok: j.ok === true, says: list('says') as string[], files: changed.files.length, base: changed.base,
-    breakpoints: list('breakpoints'), tests: list('tests'), criteria: list('criteria'), docs: list('docs'),
+    breakpoints: list('breakpoints'), tests: list('tests'), criteria: list('criteria'), docs: list('docs'), rules: list('rules'),
+    ...(typeof j.rules_note === 'string' ? { rulesNote: j.rules_note } : {}),
   };
 }
 
 /** The gate in words: one line saying what was checked, then one per finding. */
 export function gateWords(g: Gate): string {
   const what = `${g.files} changed file${g.files === 1 ? '' : 's'}${g.base ? ` since ${g.base}` : ''}`;
-  if (g.ok) return `Conforms: ${what}. No breakpoint holds them, none of their tests fail or are older than the code, no done task fails its checks, and no doc that describes them is stale.`;
-  return [`Does not conform (${what}):`, ...g.says.map((s) => `  ${s}`)].join('\n');
+  const note = g.rulesNote ? `\n${g.rulesNote}` : '';
+  if (g.ok) return `Conforms: ${what}. No breakpoint holds them, none of their tests fail or are older than the code, no done task fails its checks, no doc that describes them is stale, and they add no import an architecture rule forbids.${note}`;
+  return [`Does not conform (${what}):`, ...g.says.map((s) => `  ${s}`)].join('\n') + note;
 }
