@@ -19,8 +19,10 @@
  *    root taken from the plan, never from the pack — without following
  *    links (confined-fs).
  *
- * Signing the pack is not in this phase: the release-manifest key is for
- * releases and must not be reused, and a per-install key is its own design.
+ * Signed (Phase 32 B10.3, `pack-seal.ts`): the routes seal each pack with
+ * this computer's device key, never the release-manifest key, and the seal
+ * carries the record's head, so verifying says who signed it, whether it
+ * changed since, and whether the record it names still holds.
  */
 
 import { getPlan } from './plan-service';
@@ -37,6 +39,7 @@ import { otherWorkInFlight, type OtherWorkOutcome } from '../../shared/lib/other
 import { briefLine } from '../../shared/lib/signal-words';
 import type { AwarenessSignal } from '../../shared/types';
 import { locateStored } from './material-place';
+import type { PackSeal, SealedRecord } from './pack-seal';
 
 export const PACK_FORMAT = 'codetrellis-signoff-pack';
 export const PACK_VERSION = 1;
@@ -95,6 +98,9 @@ export interface SignoffPack {
   files: PackFile[];
   skills?: PackSkill[];
   signals?: PackSignal[];
+  /** B10.3: the record's last entry when the pack was signed, and the signature over all of it. */
+  sealedRecord?: SealedRecord;
+  seal?: PackSeal;
 }
 
 /**
@@ -351,6 +357,7 @@ ${groupByItem(unverified).map((g) => `<h3 class="item">${esc(g.title)} <span cla
 <body>
 <h1>${esc(title)}</h1>
 <p class="muted">Generated ${esc(pack.generatedAt.replace('T', ' ').slice(0, 16))} UTC by CodeTrellis · plan ${esc(pack.plan.uid)}</p>
+${pack.seal ? `<p class="muted" id="seal">Signed by the computer with key <code>${esc(pack.seal.key)}</code>, with its record at entry #${esc(String(pack.sealedRecord?.seq ?? 0))} (<code>${esc((pack.sealedRecord?.hash ?? '').slice(0, 16))}…</code>). Verify it in CodeTrellis: a changed byte, or a changed record, shows.</p>` : ''}
 <p class="summary">${met} of ${pack.rows.length} criteria met${summaryApart(selfApproved.length, unverified.length)}.</p>
 ${sections || (pack.rows.length ? '' : '<p class="muted">This plan has no acceptance criteria.</p>')}
 ${unverifiedSection}
