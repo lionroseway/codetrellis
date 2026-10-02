@@ -20,6 +20,7 @@ let evidence: typeof import('./evidence');
 let seal: typeof import('./pack-seal');
 let log: typeof import('./agent-event-log');
 let chain: typeof import('./record-chain');
+let signing: typeof import('./task-records/signing');
 
 const PROJECT = path.join(tmp, 'shop');
 const event = (n: number, at = Date.now()): AgentEvent => ({ id: log.eventId('t'), timestamp: at, source: 'mcp', type: 'tool_call', payload: { tool: 'list_plans', args: '{}', n } });
@@ -31,6 +32,7 @@ before(async () => {
   seal = await import('./pack-seal');
   log = await import('./agent-event-log');
   chain = await import('./record-chain');
+  signing = await import('./task-records/signing');
   // As the server wires it: a published app event is kept and linked.
   log.setEventPublisher((_type, payload) => { log.recordAgentEvent(payload as AgentEvent); });
 });
@@ -101,7 +103,6 @@ test('re-signed by someone else after an edit: the key is unknown and the chain 
   const e = roundTrip(evidence.buildEvidence({ projectPath: PROJECT, from, to }));
   e.record.entries[0].event!.payload = '{}';
   // Signed by this computer, then the key is swapped for a stranger's: a forger cannot sign as this computer.
-  const signing = require('./task-records/signing') as typeof import('./task-records/signing');
   const stranger = signing.makeDeviceKey();
   const bytes = seal.sealBytes({ ...e, sealedRecord: { seq: 7, hash: 'f'.repeat(64) } } as never, seal.EVIDENCE_NAMESPACE);
   const forged = { ...e, sealedRecord: { seq: 7, hash: 'f'.repeat(64) }, seal: { how: 'device', key: stranger.fingerprint, publicKey: stranger.publicKey, value: signing.signWithDevice(stranger, bytes).value } };
