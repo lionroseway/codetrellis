@@ -32,6 +32,7 @@ import { EvidenceControls } from './EvidenceControls';
 import type { ItemCriterion, PlanItem, TaskAttachment } from '@shared/types';
 import { authorKind } from '../../lib/author-words';
 import { UnverifiedIf } from '../UnverifiedTag';
+import { singleFlight } from '../../lib/single-flight';
 
 const OTHER_WORK_EDGE = { high: 'border-l-red-400', medium: 'border-l-amber-400', low: 'border-l-sky-400/50' } as const;
 const OTHER_WORK_STATE: Record<string, string> = { acknowledged: 'Seen', intended: 'Meant' };
@@ -49,8 +50,8 @@ function OtherWorkAffected({ taskUid }: { taskUid: string }) {
   const signals = useAwarenessStore((s) => s.signals);
   const refresh = useAwarenessStore((s) => s.refresh);
   useEffect(() => {
-    const run = () => { void refresh(root); };
-    run();
+    const run = singleFlight(() => refresh(root));
+    void run();
     window.addEventListener('awareness-changed', run);
     return () => window.removeEventListener('awareness-changed', run);
   }, [root, refresh]);

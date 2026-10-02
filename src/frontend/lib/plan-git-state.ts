@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from 'react';
 import type { ItemGitState } from '@shared/lib/git-state-words';
+import { singleFlight } from './single-flight';
 
 export interface PlanItemGitState extends ItemGitState {
   itemUid: string;
@@ -24,14 +25,14 @@ export function usePlanGitStates(planUid: string | null, nonce = ''): Record<str
   useEffect(() => {
     if (!planUid) { setByItem({}); return; }
     let live = true;
-    const load = async () => {
+    const load = singleFlight(async () => {
       try {
         const res = await fetch(`/api/plans/${encodeURIComponent(planUid)}/git-state`);
         if (!res.ok) return;
         const body = (await res.json()) as { items?: PlanItemGitState[] };
         if (live) setByItem(Object.fromEntries((body.items ?? []).map((s) => [s.itemUid, s])));
       } catch { /* the tree shows no state rather than a wrong one */ }
-    };
+    });
     void load();
     window.addEventListener('workstreams-changed', load);
     window.addEventListener('review-host-changed', load);

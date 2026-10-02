@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, GitMerge } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
 import type { ReviewQueue, ReviewQueueLine, ReviewQueueStatus } from '@shared/types';
 import type { OtherWorkInFlight } from '@shared/lib/other-work';
+import { singleFlight } from '../../lib/single-flight';
 
 /**
  * The Review tab (Phase 32 A5.5, awareness spec §9.4): the review queue, in
@@ -50,7 +51,7 @@ export function ReviewTab() {
 
   useEffect(() => {
     void load();
-    const run = () => { void load(); };
+    const run = singleFlight(load);
     window.addEventListener('awareness-changed', run);
     window.addEventListener('workstreams-changed', run);
     const id = setInterval(run, REFRESH_MS);

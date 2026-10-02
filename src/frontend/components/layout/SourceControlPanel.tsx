@@ -15,6 +15,7 @@ import { useProjectStore } from '../../stores/project-store';
 import { useSourceControlStore, type SourceChangeStatus, type SourceGroup } from '../../stores/source-control-store';
 import { ComparePair } from './RefPicker';
 import { BranchesPanel } from './BranchesPanel';
+import { singleFlight } from '../../lib/single-flight';
 
 const REFRESH_MS = 10_000;
 
@@ -36,8 +37,8 @@ export function useSourceControlFeed(root: string | null) {
   const refresh = useSourceControlStore((s) => s.refresh);
   const refreshVersion = useProjectStore((s) => s.refreshVersion);
   useEffect(() => {
-    const run = () => { void refresh(root); };
-    run();
+    const run = singleFlight(() => refresh(root));
+    void run();
     if (!root) return;
     window.addEventListener('workstreams-changed', run);
     window.addEventListener('awareness-changed', run);

@@ -430,9 +430,12 @@ installed here; `fnm exec --using=26 -- <cmd>` or putting
 - `npm run test:phone` — The phone's screens rendered through
   react-native-web and photographed to `test-results/phone/` (Phase 32
   A4.5a); see `docs/claude/mobile-companion.md`.
-- `npm run test:harness` — Full E2E harness (~650 tests). Budget ~28 min
-  in a 4-core container. CI runs it on every PR in four shards (~4 min)
-  and the browser suite in three (~12 min); both block (Phase 32).
+- `npm run test:harness` — Full E2E harness (~1240 tests). Budget ~28 min
+  in a 4-core container. CI runs it on every PR in four shards (~5–7 min)
+  and the browser suite in five, both blocking (Phase 32): `chromium` in
+  three and the `serial` project in two, split by `E2E_SPLIT=1` (HD4).
+  Without it, `serial` is setup's teardown and Playwright runs a teardown
+  in full in every shard, which is what took shards to 18–28 min.
 
 **Run `test:unit` as well as the harness.** It is not just faster
 coverage of the same things — two of its tests are *structural guards*

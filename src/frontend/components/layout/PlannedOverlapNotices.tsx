@@ -4,6 +4,7 @@ import { useProjectStore } from '../../stores/project-store';
 import { usePlayForwardStore } from '../../stores/play-forward-store';
 import { useReplayStore } from '../../stores/replay-store';
 import { hhmm } from '../../lib/replay';
+import { singleFlight } from '../../lib/single-flight';
 
 /**
  * Phase 32 B9.3b — a plan approved into planned overlaps, said once in the
@@ -28,7 +29,7 @@ export function PlannedOverlapNotices() {
 
   useEffect(() => {
     void load();
-    const run = () => { void load(); };
+    const run = singleFlight(load);
     window.addEventListener('stack-changed', run);
     return () => window.removeEventListener('stack-changed', run);
   }, [load]);

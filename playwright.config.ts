@@ -75,6 +75,16 @@ const MARKETING_IGNORE = process.env.E2E_MARKETING ? [] : ['**/marketing/**'];
 const TARGETED = process.argv.some((a) => /\.(spec|setup)\.ts(:\d+)*$/.test(a) || /(^|\/)e2e\/[^-]/.test(a));
 
 /**
+ * CI runs the two projects in separate jobs (Phase 32 HD4): `chromium`
+ * sharded three ways, `serial` sharded two ways, each job with its own
+ * backend. As setup's teardown, `serial` ran in full in every shard: 170
+ * tests, one at a time, three times over, most of each shard's 18–28 min,
+ * because Playwright never shards a teardown. Split, it depends on setup
+ * like everything else, and each serial spec still has its backend alone.
+ */
+const SPLIT = process.env.E2E_SPLIT === '1';
+
+/**
  * Specs that graph the sample app (tests/fixtures/sample-app) rather than
  * this repository (Phase 32 HD2). The backend holds one project at a time,
  * so a spec scanning the sample app beside one scanning the repository
@@ -221,7 +231,7 @@ export default defineConfig({
     // teardown ignores the file filter, so every targeted run also ran all
     // 39 agent specs, while running one of THOSE files alone skipped setup.
     // Targeted, serial depends on setup like everything else.
-    { name: 'setup', testMatch: /project\.setup\.ts$/, ...(TARGETED ? {} : { teardown: 'serial' }) },
+    { name: 'setup', testMatch: /project\.setup\.ts$/, ...(TARGETED || SPLIT ? {} : { teardown: 'serial' }) },
     {
       name: 'chromium',
       use: { browserName: 'chromium' },
@@ -244,7 +254,7 @@ export default defineConfig({
       name: 'serial',
       use: { browserName: 'chromium' },
       testMatch: SERIAL_SPECS,
-      ...(TARGETED ? { dependencies: ['setup'] } : {}),
+      ...(TARGETED || SPLIT ? { dependencies: ['setup'] } : {}),
       workers: 1,
     },
   ],

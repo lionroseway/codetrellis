@@ -23,6 +23,7 @@ import { UnverifiedIf } from '../UnverifiedTag';
 import { BreakpointsWaiting, BreakpointsSet } from './Breakpoints';
 import { PlannedOverlapNotices } from './PlannedOverlapNotices';
 import { RecurringDue } from './RecurringDue';
+import { singleFlight } from '../../lib/single-flight';
 
 /**
  * The Awareness tab (Phase 32 A1.8, awareness spec §7.2): what overlaps
@@ -49,8 +50,8 @@ export function useAwarenessFeed(): number {
   const signals = useAwarenessStore((s) => s.signals);
 
   useEffect(() => {
-    const run = () => { void refresh(root); };
-    run();
+    const run = singleFlight(() => refresh(root));
+    void run();
     window.addEventListener('awareness-changed', run);
     window.addEventListener('workstreams-changed', run);
     const id = setInterval(run, REFRESH_MS);
