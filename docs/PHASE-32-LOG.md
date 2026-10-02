@@ -18,10 +18,10 @@
 | | |
 |---|---|
 | **Stage / step** | Track C — C4.3b: an agent on each run, and the C4 done-when on two machines |
-| **Status** | C4.3a in review (#302). C4.3b built: per rule and device, Settings → Recurring playbooks starts Claude Code or Codex on each run made here (off by default, kept on this device); only the person, the schedule or a phone granted `terminal` starts one, otherwise the run says why. Runs go to the plans folder when the project shares new plans. Done-when: two laptops, one planning repository, one W40 and one agent. Unit recurring-service 14, harness recurring 10 and recurring-two-machines 5, browser 2 specs, phone recurring.spec 4 (shots) |
+| **Status** | C4.3a merged (#302), with base fixes #304 (a task says its agent was told as it happens) and #305 (a pairing no longer shuts the next pairing's window). C4.3b built: per rule and device, Settings → Recurring playbooks starts Claude Code or Codex on each run made here (off by default, kept on this device); only the person, the schedule or a phone granted `terminal` starts one, otherwise the run says why. Runs go to the plans folder when the project shares new plans. Done-when: two laptops, one planning repository, one W40 and one agent. Unit recurring-service 14, harness recurring 10 and recurring-two-machines 5, browser 2 specs, phone recurring.spec 4 (shots) |
 | **In flight** | C4.3b in review (#303) on `feat/phase-32-c4-3b-agent-and-done-when` |
 | **Last merged** | C4.3a (#302, `27094ae`) |
-| **Next action** | Merge C4.3a, then C4.3b when green — C4 done; then A7 |
+| **Next action** | Merge C4.3b when green — C4 done; then refine A7 (rules) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
