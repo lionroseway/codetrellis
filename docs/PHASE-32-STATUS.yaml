@@ -14,8 +14,8 @@
 # and prs (PRs whose merge commit does not name the id).
 now:
   step: "Track A — A7.3: the gate on rules, and the M7 done-when"
-  status: "A7.1 (#306) and A7.2 (#307) in review. A7.3 built: check_changes lists each import a change adds across a rule (since `base`, the merge base the CLI passes) and says when the rules could not be read; `codetrellis check` exits 3 on it. Harness awareness-m7 3 (two agents, one breach told once; one digest line; the CLI gate fails then passes), cli-gate wording; unit conformity"
-  next: "Merge #306, #307, then A7.3 (stacked flow); then B10"
+  status: "A7.1 merged (#306); A7.2 in review (#307). A7.3 built: check_changes lists each import a change adds across a rule (since `base`, the merge base the CLI passes) and says when the rules could not be read; `codetrellis check` exits 3 on it. Harness awareness-m7 3 (two agents, one breach told once; one digest line; the CLI gate fails then passes), cli-gate wording; unit conformity"
+  next: "Merge A7.2 (#307), then A7.3 (#308) by the stacked flow; then B10"
   blockers: "None"
   updated: 2026-10-02
 sections:
