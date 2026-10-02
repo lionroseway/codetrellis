@@ -100,7 +100,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'update_plan',
     {
-      description: 'Update a plan (title, description, or status). Creates a new version snapshot.',
+      description: 'Update a plan (title, description, or status). Creates a new version snapshot. '
+        + 'Approving a plan is the person\'s: set status "review" to ask for it, and they approve it in the window or on the phone. '
+        + 'Status "approved" is refused here.',
       inputSchema: {
         plan_uid: z.string(),
         title: z.string().optional(),
@@ -109,6 +111,13 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ plan_uid, title, description, status }, extra: unknown) => {
+      // An approval captures the plan's baseline and says the planned
+      // overlaps it is in (updatePlanAsPerson). It is the person's, as a
+      // criterion's is (approve_gate was retired for the same reason), so an
+      // agent asks for it instead. Nothing else in the call is applied.
+      if (status === 'approved') {
+        return { content: [{ type: 'text' as const, text: 'Not changed: approving a plan is the person\'s. Set status "review" to ask for it; they approve it in the window (Approve on the plan header) or on the phone.' }], isError: true };
+      }
       const by = authorFromExtra(deps, extra);
       deps.planService.updatePlan(plan_uid, { title, description, status }, by.author, by.authorType);
       const n = deps.broadcast('plan-updated', { planUid: plan_uid });

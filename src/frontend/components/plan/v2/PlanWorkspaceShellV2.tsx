@@ -21,6 +21,7 @@ import { ContributionPanel } from './ContributionPanel';
 import { PlanSwitcher } from './PlanSwitcher';
 import { CopyRef } from './CopyRef';
 import { PlanStatusChip } from './PlanStatusChip';
+import { ApprovePlanButton } from './ApprovePlanButton';
 import { usePlanStatus } from '../../../lib/plan-status';
 import { peekCodeReturn, returnToCode, type CodeReturn } from '../../../lib/open-file-at';
 
@@ -197,6 +198,7 @@ export function PlanWorkspaceShellV2() {
         <CopyRef kind="plan" uid={plan.uid} title={plan.title} />
         <PlanSwitcher />
         <StatusBadge status={plan.status} />
+        <ApprovePlanButton planUid={plan.uid} status={plan.status} />
         {/* Phase 32 C2.4 — how far the plan has got, read from git, a review host and the plan; opens its status view. */}
         <PlanStatusChip status={planStatus} fallback={{ done: doneActions, total: actions.length }} />
         {/* Phase 17.G — Plan readiness score */}

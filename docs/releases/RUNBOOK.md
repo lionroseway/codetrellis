@@ -77,7 +77,7 @@ and removes it. `docs/DEMO-JOURNEYS.md` says what to watch for in every scene.
       each item names what it expected and what it saw.
 - [ ] Some steps are yours, and the window asks for them with a card:
       marking an overlap Intended, setting a breakpoint and answering it,
-      approving a criterion, resequencing two plans, deciding the brief.
+      approving a criterion, approving two plans, resequencing them, deciding the brief.
       Do each when asked; the demo waits up to 3 minutes. (`--decide` only
       works on a dev build, which serves the HTTP route it uses.)
 - [ ] The demo moves the window itself: replay plays at 4× and returns to

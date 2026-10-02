@@ -446,7 +446,7 @@ edges.
 |------|-------------|
 | \`create_plan(title, description, project_path)\` | Create a new plan |
 | \`get_plan(plan_uid)\` | Read plan metadata + item summary |
-| \`update_plan(plan_uid, ...)\` | Update title / description / status |
+| \`update_plan(plan_uid, ...)\` | Update title / description / status. Approving is the person's: set status "review" to ask, and they approve it in the window or on the phone |
 | \`list_plans(project_path?, status?)\` | Browse plans with pagination |
 | \`request_plan_deletion(plan_uids, reason)\` | Ask the person to delete plans; they confirm in the app by typing the name. Deletes nothing itself |
 | \`get_plan_summary(plan_uid)\` | One-call health dashboard: completion %, blockers, deviations |

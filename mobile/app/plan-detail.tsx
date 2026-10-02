@@ -332,6 +332,23 @@ export default function PlanDetailScreen() {
     }
   }, [uid]);
 
+  // Approving is the person's (an agent's update_plan is refused): the
+  // desktop captures the baseline and says the planned overlaps it is in.
+  const [approving, setApproving] = useState(false);
+  const approvePlan = useCallback(async () => {
+    if (!uid) return;
+    setApproving(true);
+    try {
+      const r = (await rpc('plan.update', { uid, status: 'approved' })) as { plannedOverlaps?: string[] };
+      await fetchPlan();
+      if (r.plannedOverlaps?.length) Alert.alert('Plan approved', r.plannedOverlaps.join('\n'));
+    } catch (err: unknown) {
+      Alert.alert('Could not approve', err instanceof Error ? err.message : String(err));
+    } finally {
+      setApproving(false);
+    }
+  }, [uid, fetchPlan]);
+
   const saveTitle = useCallback(async () => {
     if (!uid || !titleDraft.trim()) { setEditingTitle(false); return; }
     setSavingTitle(true);
@@ -486,6 +503,17 @@ export default function PlanDetailScreen() {
         >
           <Text style={styles.statusText}>{plan.status}</Text>
         </View>
+        {(plan.status === 'draft' || plan.status === 'review') && (
+          <TouchableOpacity
+            testID="approve-plan"
+            accessibilityRole="button"
+            onPress={() => { void approvePlan(); }}
+            disabled={approving}
+            style={[styles.approveButton, approving && { opacity: 0.6 }]}
+          >
+            <Text style={styles.approveButtonText}>{approving ? 'Approving…' : 'Approve'}</Text>
+          </TouchableOpacity>
+        )}
         <Text style={styles.metaText}>
           {doneItems}/{totalItems} done
           {inProgress > 0 ? ` · ${inProgress} active` : ''}
@@ -1068,6 +1096,15 @@ const styles = StyleSheet.create({
     color: '#a1a1aa',
     textTransform: 'capitalize',
   },
+  approveButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#3b82f660',
+    backgroundColor: '#3b82f620',
+  },
+  approveButtonText: { color: '#93c5fd', fontSize: 12, fontWeight: '600' },
   metaText: {
     color: '#71717a',
     fontSize: 13,
