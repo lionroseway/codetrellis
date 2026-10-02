@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track A — A7.2: rule signals from each workstream's import delta"
-  status: "A7.1 in review (#306). A7.2 built: each workstream's added imports (now against its merge base, resolved with the project's resolver) checked against the rules; a high `rule` signal per workstream and rule, in the tab, digest, push, inline notices and phone; `rule` as a signal breakpoint; the card says the rule and why, each import across it, and links to Settings → Architecture rules. Unit tests, harness rule-signals 3, browser awareness-tab rule card (shot)"
-  next: "Merge A7.1 when green, bring it into A7.2, open A7.2's PR; then A7.3 (check_changes and `codetrellis check` on rules, the M7 done-when)"
+  step: "Track A — A7.3: the gate on rules, and the M7 done-when"
+  status: "A7.1 (#306) and A7.2 (#307) in review. A7.3 built: check_changes lists each import a change adds across a rule (since `base`, the merge base the CLI passes) and says when the rules could not be read; `codetrellis check` exits 3 on it. Harness awareness-m7 3 (two agents, one breach told once; one digest line; the CLI gate fails then passes), cli-gate wording; unit conformity"
+  next: "Merge #306, #307, then A7.3 (stacked flow); then B10"
   blockers: "None"
   updated: 2026-10-02
 sections:

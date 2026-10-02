@@ -147,8 +147,8 @@ blocked and why, and what waits on the person.
 in the background once per folder; `check` with no path and `status` gate
 on this work's changes through `check_changes` (a breakpoint on a changed
 file, its tests failing or older than the code, a done task whose criterion
-check fails, a stale system doc describing it) and exit 3 when it does not
-conform. The SessionStart hook, `.mcp.json` and GitHub Actions recipes are
+check fails, a stale system doc describing it, an import added across an
+architecture rule (A7.3)) and exit 3 when it does not conform. The SessionStart hook, `.mcp.json` and GitHub Actions recipes are
 in `docs/recipes/`; how they fit is [`cli.md`](cli.md).
 
 `getMcpSetup` (`/api/mcp/setup`) returns the connector's command, JSON and
