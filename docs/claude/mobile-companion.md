@@ -273,8 +273,15 @@ The harness checks the RPCs from a paired phone in
   plan), and what is due with Start. Starting opens the run's plan and says
   "Started …" or "… was already started; opening it".
 
-The harness checks the RPCs from a paired phone in `recurring.test.ts`;
-`tests/phone/recurring.spec.ts` photographs the screen.
+- **An agent on each run** (C4.3b): when the person has the desktop start
+  an agent on each run of a rule, the series carries `agent` and the card
+  says "On the computer, Claude Code starts on each run". `recurring.start`
+  answers `agent`: started (a phone granted `terminal`), or why not ("this
+  phone is not allowed to open terminals"). The phone never turns it on.
+
+The harness checks the RPCs from a paired phone in `recurring.test.ts` and
+`recurring-two-machines.test.ts`; `tests/phone/recurring.spec.ts`
+photographs the screen.
 
 ### A plan's status (Phase 32 C2.4)
 

@@ -54,7 +54,8 @@ async function serve(page: Page, runUid: string) {
     if (req.method() === 'POST' && pathname.endsWith('/start')) {
       state.calls.push('start');
       state.runUid = runUid;
-      return route.fulfill({ json: { planUid: runUid, title: `${TITLE} — 1 Oct`, created: true } });
+      // C4.3b — the rule starts Claude Code on this computer: the start says it did.
+      return route.fulfill({ json: { planUid: runUid, title: `${TITLE} — 1 Oct`, created: true, agent: { agent: 'claude', terminalId: 'term-9', words: 'Claude Code started in a terminal on the computer' } } });
     }
     return route.fallback();
   });
@@ -99,6 +100,7 @@ test.describe('Recurring playbooks in the window', () => {
     expect(state.calls).toEqual(['dismiss', 'start']);
     await expect(row.getByTestId('recurring-run')).toHaveText(['29 Sep ✗ missed', '30 Sep ✗ missed', '1 Oct ◐', '2 Oct next']);
     await expect(page.getByText(`${TITLE} — 1 Oct`).first()).toBeVisible();
+    await expect(page.getByText('Claude Code started in a terminal on the computer')).toBeVisible();
     // The run is open in the plan workspace.
     await page.screenshot({ path: path.join(OUT, 'recurring-run-opened.png') });
   });

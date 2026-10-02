@@ -29,7 +29,7 @@ export interface TerminalSession {
   alive: boolean;
 }
 
-interface TerminalSessionInfo {
+export interface TerminalSessionInfo {
   id: string;
   preset: AgentPreset;
   title: string;

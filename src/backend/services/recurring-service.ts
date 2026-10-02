@@ -24,6 +24,8 @@ import { getNormalisedOriginUrl } from './git-identity';
 import { normaliseRemote } from './plans-home';
 import { getDb } from './database';
 import { markDirty } from './persistence';
+import { runAgentsFor } from './recurring-agent';
+import { exportIfSharedByDefault } from './plan-file-service';
 
 /** How many past periods a series shows. */
 const SHOWN = 8;
@@ -122,6 +124,7 @@ export function seriesOf(projectRoot: string, rule: RecurrenceRule, now = Date.n
     due: open
       ? { period: open.period, label: open.label, since: open.dueAt, words: `${rule.title} is due ${sinceWords(rule, open.dueAt)}`, dismissed: isDismissed(projectRoot, rule.id, open.period) }
       : null,
+    agent: runAgentsFor(projectRoot)[rule.id] ?? null,
   };
 }
 
@@ -229,6 +232,9 @@ export function startRun(projectRoot: string, ruleId: string, by: { author: stri
     [uid, projectRoot, rule.id, period, label, previous?.uid ?? null, JSON.stringify(carried), now, by.author],
   );
   markDirty();
+  // To the plans folder when the project shares new plans: a teammate's app
+  // then finds this run by its id instead of making a second one (C4.3b).
+  exportIfSharedByDefault(uid, projectRoot);
   return { plan: getPlan(uid) ?? applied.plan, created: true, info: { rule: rule.id, period, label, previous: previous?.uid ?? null, carried, startedBy: by.author, startedAt: now } };
 }
 

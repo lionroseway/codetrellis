@@ -17,11 +17,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track C — C4.3a: recurring runs from the phone |
-| **Status** | C4.1 (#299), C4.2a (#300) and C4.2b (#301) merged. C4.3a built: the phone's Plans tab opens Recurring, each series in the desktop's words (W38 ✓ · W39 ✗ missed · W40 due · W41 next), the due run started as the person and opened; a run a teammate started is found, not made twice; a read-only phone cannot start one. `recurring.list` (read), `recurring.start` (write). Harness recurring 10, phone recurring.spec 3 (shots) |
-| **In flight** | C4.3a building on `feat/phase-32-c4-3a-phone-recurring` |
+| **Stage / step** | Track C — C4.3b: an agent on each run, and the C4 done-when on two machines |
+| **Status** | C4.3a in review (#302). C4.3b built: per rule and device, Settings → Recurring playbooks starts Claude Code or Codex on each run made here (off by default, kept on this device); only the person, the schedule or a phone granted `terminal` starts one, otherwise the run says why. Runs go to the plans folder when the project shares new plans. Done-when: two laptops, one planning repository, one W40 and one agent. Unit recurring-service 14, harness recurring 10 and recurring-two-machines 5, browser 2 specs, phone recurring.spec 4 (shots) |
+| **In flight** | C4.3a in review (#302) on `feat/phase-32-c4-3a-phone-recurring`; C4.3b building on `feat/phase-32-c4-3b-agent-and-done-when` |
 | **Last merged** | C4.2b (#301, `b9bf396`) |
-| **Next action** | Merge C4.3a when green; then C4.3b (an agent on each run by opt-in per device, and the C4 done-when on two machines) |
+| **Next action** | Merge C4.3a, then C4.3b when green — C4 done; then A7 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-01 |
 
@@ -254,8 +254,8 @@
     - [x] C4.2a Started as it comes; asked about when it fell due while the app was closed; the series row in the plans list (#300)
     - [x] C4.2b Settings → Recurring playbooks; a run's series, period and carried tasks on the run (#301)
   - [ ] C4.3 The phone, an agent only by opt-in, and the C4 done-when — building
-    - [ ] C4.3a The phone lists the series and starts the due run (`recurring.list`, `recurring.start`) — building
-    - [ ] C4.3b Start an agent on each run, per rule and device (off by default, needs `terminal`); the C4 done-when on two machines
+    - [ ] C4.3a The phone lists the series and starts the due run (`recurring.list`, `recurring.start`) (#302) — in review
+    - [ ] C4.3b Start an agent on each run, per rule and device (off by default, needs `terminal`); the C4 done-when on two machines — building
 - [x] C5 One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:
   - [x] C5.1 `workstream` on an item, inherited; `assign_workstream`; next and claim respect it (#186)
   - [x] C5.2 Start a worktree for a section; a start command for any agent (#187)
@@ -430,6 +430,9 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-01 | B9.3 is split into B9.3a (the three actions, in the window) and B9.3b (said on approval; the phone) | The actions are one service and one surface; the approval notice and the phone's RPCs each touch another door with its own tests |
 | 2026-10-01 | C4.2a: the app starts a run only when its moment falls while the app runs (between two ticks); one that fell due while it was closed is asked about, never started on launch | The doc's "the app only acts while running": a laptop opened at ten should not make a nine o'clock run on its own, since a teammate may have run it or the person may not want it; asking keeps the person in the decision |
 | 2026-10-01 | C4.2a: a scheduled start is authored `schedule` (a system author, as other app-made records are), and the run keeps who set the rule | No person or agent called; the rule a person set is the reason, and saying "schedule" never passes the app off as that person |
+| 2026-10-02 | C4.3b: an agent on each run is kept per rule on this device, never in the committed config, and set by the person only; it starts only when the run was made here by the person in the window, the schedule, or a phone granted `terminal` — from plain HTTP or a phone without it, the run is made and says why not | It starts a process on this machine, so it is the person's and this machine's, never the team's; loopback is not a person, and a phone may only cause a terminal the person allowed it. A found run starts nothing, so two laptops make one agent |
+| 2026-10-02 | C4.3b: the agent is asked in one shell argument to work the run's plan by its id through the MCP tools, not handed the plan's text; the harness makes the program `echo` (`CODETRELLIS_RUN_AGENT_COMMAND`) | One line with the title's quotes and `$` removed cannot break out of its argument, and the tools give the agent the current tasks, criteria and skills. The first run of the done-when started the container's real Claude Code: no test may start a real agent |
+| 2026-10-02 | C4.3b: a recurring run is written to the plans folder at once when the project shares new plans | Otherwise a teammate's laptop never sees it, and its start makes nothing new only because the id matches; written, the series shows the teammate's run in progress |
 | 2026-10-01 | C4.3 is split into C4.3a (the phone) and C4.3b (an agent on each run by opt-in, and the done-when on two machines). The phone starts a run but does not set a rule | The phone is one more door onto C4.1's service with its own RPC tests; starting an agent spawns a process and carries its own security case. Setting a rule is the person's in the app window, as a plans folder is |
 | 2026-10-01 | C4.2 is split into C4.2a (due runs and the series row) and C4.2b (Settings and the run's own line) | Each is a surface with its own browser journey; the first answers "what is due", the second "how is it set up" |
 | 2026-10-01 | C4 is refined into three parts (EXECUTION §6): the data, due in the window, the phone and the done-when. A recurrence rule lives in the committed config and a run's uid is derived from the series (the plans folder named, else the origin, else the folder's name), the rule and the period | The team sees the rule where it sees the plans folder; a derived id makes two starts, here or on two machines, one plan without either asking the other, and the series key never includes this device's path |
@@ -445,6 +448,26 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-02: C4.3b — an agent on each run, and the C4 done-when
+- **Journey.** Sam's team runs "Weekly security review" every Monday from the
+  committed config; its plans live in the team's planning repository. In
+  Settings → Recurring playbooks Sam chooses "On this computer, start an
+  agent on each run: Claude Code"; Dana's laptop is unchanged. On Thursday he
+  starts W40 from his phone: the run is made on his laptop, written to the
+  planning repository, and Claude Code opens in a terminal there, asked to
+  work the run's plan; the phone says "Claude Code started in a terminal on
+  the computer". Dana pulls; her laptop shows Sam's W40 in progress, and
+  starting it there opens his run with no second plan and no agent.
+- **Built.** `services/recurring-agent.ts` (`recurring_agents`,
+  `setRunAgent`, `runPrompt`, `runCommand`, `startRunAgent`), `PUT
+  /api/recurring/:id/agent`, the agent on REST, phone and scheduled starts,
+  the series' `agent`, the run exported when new plans are shared, the
+  Settings choice, the window's toast and the phone's lines.
+- **Tests.** Unit `recurring-service.test.ts` (14). Harness
+  `recurring-two-machines.test.ts` (5), `recurring.test.ts` (10). Browser
+  `settings/recurring.spec.ts`, `plan/recurring.spec.ts`. Phone
+  `recurring.spec.ts` (4, shots).
 
 ### 2026-10-01: C4.3a — recurring runs from the phone
 - **Journey.** Away from the desk, Sam opens Plans → Recurring on the phone.

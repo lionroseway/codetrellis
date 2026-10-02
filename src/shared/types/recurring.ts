@@ -64,6 +64,11 @@ export interface RecurringSeries {
     /** The person chose "Not this time" on this device (C4.2a): not asked again; missed when the period ends. */
     dismissed: boolean;
   } | null;
+  /**
+   * On this device, the agent each run made here starts (C4.3b): off (null)
+   * unless the person turned it on here. Never in the committed config.
+   */
+  agent: { agent: 'claude' | 'codex'; by: string; at: number } | null;
 }
 
 /** What a run knows about its series (kept where it was started; found by id elsewhere). */

@@ -17,7 +17,7 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 280 | 278 | 0 | 0 | 217 | 0 |
+| REST routes | 281 | 279 | 0 | 0 | 217 | 0 |
 | MCP tools | 207 | 207 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
 | Frontend components | 129 | n/a | n/a | n/a | 0 | 23 |
@@ -30,7 +30,7 @@ records that — but "✗ none" is proof of a gap.
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 19 | 12 | 10 | 0 | 0 | 0 |
 | 0.4b Graph | 19 | 15 | 8 | 15 | 0 | 0 |
-| 0.4c Plans and items | 118 | 60 | 29 | 63 | 0 | 0 |
+| 0.4c Plans and items | 119 | 60 | 29 | 63 | 0 | 0 |
 | 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 13 | 7 | 1 | 0 | 0 |
@@ -48,7 +48,7 @@ records that — but "✗ none" is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (280)
+## REST routes (281)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -69,7 +69,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 191 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 192 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
@@ -126,7 +126,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `GET /api/plans/:planUid/channels` |  | ✗ none | 6 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:planUid/items` |  | ✗ none | 13 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 | ✓ 0.4c: exercised by full-loop (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `GET /api/plans/:uid` |  | ✗ none | 17 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans/:uid` |  | ✗ none | 18 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:uid/budget` |  | ✗ none | 1 | ✓ 0.4g: report incl. flaggedChanges; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
 | c | `GET /api/plans/:uid/changes` |  | ✗ none | 2 | ✓ 0.4c: exercised by full-loop, plan-rest (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:uid/changes/:changeId` |  | ✗ none | 1 | ✓ 0.4c-1: one projected change; unknown 404 (plan-rest) |  |  |
@@ -207,6 +207,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `PUT /api/plans/:uid` |  | ✗ none | 8 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `PUT /api/plans/:uid/budget` |  | ✗ none | 1 | ✓ 0.4g: recorded with who and how (local-api / desktop), never flagged; invalid ceilings 400; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
 | c | `PUT /api/recurring/:id` |  | ✗ none | 1 |  |  |  |
+| c | `PUT /api/recurring/:id/agent` |  | ✗ none | 1 |  |  |  |
 | c | `PUT /api/refs/:uid` |  | ✗ none | 1 | ✓ 0.4c: exercised by references (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | d | `DELETE /api/criteria/:uid` |  | ✗ none | 1 | ✓ 0.4d: removes the line; its decisions stay in the record (criteria-signoff) |  |  |
 | d | `GET /api/criteria/:uid/signoffs` |  | ✗ none | 2 | ✓ 0.4d: append-only record, each tagged by how it arrived — local-api/unverified over HTTP (criteria-signoff, criteria-loops) |  |  |
@@ -271,8 +272,8 @@ records that — but "✗ none" is proof of a gap.
 | i | `DELETE /api/terminals/:id` |  | ✗ none | 5 | ✓ 0.4i: killed, broadcast, gone for inject and write; scrollback kept; unknown 404 (terminal-surface), terminals |  |  |
 | i | `GET /api/audio/recent` |  | ✗ none | 1 | ✓ 0.4i: chunks concatenated in order with duration and times; seconds narrows; 404 when empty (audio-rest) |  |  |
 | i | `GET /api/audio/status` |  | ✗ none | 1 | ✓ 0.4i: capturing, chunk count, buffered seconds, window (audio-rest) |  |  |
-| i | `GET /api/terminals` |  | ✗ none | 2 | ✓ 0.4i: lists live terminals; killed ones gone or not alive (terminals, terminal-surface) |  |  |
-| i | `GET /api/terminals/:id/history` |  | ✗ none | 3 | ✓ 0.4i: scrollback of what ran, paged backwards; unknown id empty and creates nothing (terminal-surface), input-validation |  |  |
+| i | `GET /api/terminals` |  | ✗ none | 4 | ✓ 0.4i: lists live terminals; killed ones gone or not alive (terminals, terminal-surface) |  |  |
+| i | `GET /api/terminals/:id/history` |  | ✗ none | 4 | ✓ 0.4i: scrollback of what ran, paged backwards; unknown id empty and creates nothing (terminal-surface), input-validation |  |  |
 | i | `POST /api/audio/chunk` |  | ✗ none | 1 | ✓ 0.4i: buffered in order; 409 when not capturing; bad length or data 400 (audio-rest); bug 35 |  |  |
 | i | `POST /api/audio/start` |  | ✗ none | 1 | ✓ 0.4i: capturing, clears the buffer, default size when none named; bad sizes 400 (audio-rest); bug 35 |  |  |
 | i | `POST /api/audio/stop` |  | ✗ none | 1 | ✓ 0.4i: stops, keeps the buffer, refuses more chunks (audio-rest) |  |  |
@@ -294,7 +295,7 @@ records that — but "✗ none" is proof of a gap.
 | j | `GET /api/peers/status` |  | ✗ none | 3 | ✓ 0.4j: running, mobile API port actually bound, counts (gate4-reconnect-identity, pairing-enables-lan, cdev-phase11) |  |  |
 | j | `GET /api/sync/peek` |  | ✗ none | 2 | ✓ 0.4j: what an import would bring, before it does (cdev-phase5, surfaced-rest) |  |  |
 | j | `GET /api/sync/status` |  | ✗ none | 1 | ✓ 0.4j: personal sync state (cdev-phase5) |  |  |
-| j | `PATCH /api/peers/devices/:fingerprint` |  | ✗ none | 13 | ✓ 0.4j: grant and revoke recorded; unknown capability dropped; unknown device 404 (peer-device-access, harness peer) |  |  |
+| j | `PATCH /api/peers/devices/:fingerprint` |  | ✗ none | 14 | ✓ 0.4j: grant and revoke recorded; unknown capability dropped; unknown device 404 (peer-device-access, harness peer) |  |  |
 | j | `POST /api/pairing/cancel` |  | ✗ none | 2 | ✓ 0.4j: window closed (pairing-transport, peer-reconnect-auth) |  |  |
 | j | `POST /api/pairing/confirm` |  | ✗ none | 3 | ✓ 0.4j: the code the phone derived is the code expected; no secret in the reply; turns the LAN listener on (gate4-reconnect-identity, pairing-enables-lan, harness peer) |  |  |
 | j | `POST /api/pairing/initiate` |  | ✗ none | 4 | ✓ 0.4j: v5 QR payload, scannable size; code only in the body (gate4-reconnect-identity, pairing-transport, harness peer) |  |  |
@@ -594,7 +595,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `proposal.get` | read | 1 | 2 |  |  |  |
 | c | `proposal.list` | read | 1 | 1 |  |  |  |
 | c | `recurring.list` | read | ✗ none | 1 |  |  |  |
-| c | `recurring.start` | write | ✗ none | 1 |  |  |  |
+| c | `recurring.start` | write | ✗ none | 2 |  |  |  |
 | c | `stack.summary` | read | ✗ none | 4 |  |  |  |
 | d | `criteria.awaiting` | read | 1 | 1 | ✓ 0.4j: empty until the agent submits, then the criterion; empty after deciding (phone-sync-and-tools), mobile-approvals unit |  |  |
 | d | `criteria.list` | read | ✗ none | 2 | ✓ 0.4j: the item's criteria (phone-sync-and-tools), mobile-approvals unit |  |  |
