@@ -144,6 +144,9 @@ interface SourceControlState {
   setPair: (root: string, pair: RefPair | null) => Promise<void>;
   /** Open the code view on one file between the chosen two. */
   openPairFile: (root: string, file: SourceFile) => void;
+  /** E2b: the graph draws its diff between the chosen two, instead of its own. */
+  pairOnGraph: boolean;
+  showPairOnGraph: (on: boolean) => void;
 }
 
 /** Every read is numbered; a slower earlier one never replaces a later one. */
@@ -162,7 +165,7 @@ export const useSourceControlStore = create<SourceControlState>((set, get) => ({
   refresh: async (root) => {
     const mine = ++generation;
     if (!root) { set({ root: null, data: null, loading: false, error: null, compare: null }); return; }
-    if (root !== get().root) set({ root, data: null, compare: null, refs: null, pair: null, pairResult: null, pairError: null });
+    if (root !== get().root) set({ root, data: null, compare: null, refs: null, pair: null, pairResult: null, pairError: null, pairOnGraph: false });
     set({ loading: true });
     try {
       const res = await fetch(`/api/source-control?project=${encodeURIComponent(root)}`);
@@ -199,13 +202,19 @@ export const useSourceControlStore = create<SourceControlState>((set, get) => ({
     } catch { /* the pickers keep what they had */ }
   },
 
+  pairOnGraph: false,
+  showPairOnGraph: (on) => {
+    set({ pairOnGraph: on && get().pair !== null });
+    if (on) useUiStore.getState().setWorkspaceMode('graph');
+  },
+
   pair: null,
   pairResult: null,
   pairLoading: false,
   pairError: null,
   setPair: async (root, pair) => {
     const mine = ++pairGeneration;
-    if (!pair) { set({ pair: null, pairResult: null, pairLoading: false, pairError: null }); return; }
+    if (!pair) { set({ pair: null, pairResult: null, pairLoading: false, pairError: null, pairOnGraph: false }); return; }
     set({ pair, pairLoading: true, pairError: null });
     const before = effectiveBefore(pair);
     try {
