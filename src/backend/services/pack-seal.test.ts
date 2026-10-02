@@ -124,3 +124,9 @@ test('the record it names, later: removed by retention, or changed since', () =>
   assert.match(c.words, /but the record it names has changed since/);
   assert.equal(seal.checkSeal(later).record?.state, 'matches', 'its entry is the anchor itself');
 });
+
+test('sealed while the record was empty: said plainly, not "entry #0" (B10.5)', () => {
+  const c = seal.checkSeal(JSON.parse(JSON.stringify(seal.sealPack(PACK))));
+  assert.equal(c.state, 'this-computer');
+  assert.match(c.words, /^Signed by this computer \(SHA256:.{12}…\), and unchanged since; the record was empty when it was signed\.$/);
+});

@@ -23,8 +23,10 @@ interface ReplayStore {
   /** On while the person is replaying. */
   active: boolean;
   root: string | null;
-  /** Where the window starts: replay runs from here to now (B10.4 exports it). */
+  /** Where the window starts (B10.4 exports it). */
   from: number | null;
+  /** Where it ends, for a week chosen in the past (B10.5); null runs to now. */
+  to: number | null;
   frames: ReplayFrameInfo[];
   index: number;
   /** The project at the cursor's moment; null until it is read. */
@@ -37,8 +39,8 @@ interface ReplayStore {
   error: string | null;
   /** Catch-up (B5.4): play at once at this speed, from where the person left off. */
   autoplay: 4 | null;
-  /** Start replaying the project's recorded moments since `from` (default: the last two hours). */
-  enter: (root: string, from?: number, opts?: { catchUp?: boolean }) => Promise<void>;
+  /** Start replaying the project's recorded moments since `from` (default: the last two hours), up to `to` (default: now). */
+  enter: (root: string, from?: number, opts?: { catchUp?: boolean; to?: number }) => Promise<void>;
   /** Move the cursor to a frame. */
   setIndex: (index: number) => Promise<void>;
   /** Back to live. */
@@ -47,6 +49,9 @@ interface ReplayStore {
 
 const EMPTY = { frames: [] as ReplayFrameInfo[], index: 0, state: null, graph: null, statuses: {} as Record<string, string | null>, loading: false, error: null, autoplay: null };
 
+/** The most moments a chosen week reads (the server's own limit). */
+const MAX_WEEK_FRAMES = 2000;
+
 /** Each cursor move numbers its reads; a slower earlier read never replaces a later one. */
 let generation = 0;
 
@@ -54,14 +59,18 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
   active: false,
   root: null,
   from: null,
+  to: null,
   ...EMPTY,
 
   enter: async (root, from, opts) => {
     const mine = ++generation;
     const since = from ?? Date.now() - REPLAY_WINDOW_MS;
-    set({ active: true, root, from: since, ...EMPTY, loading: true, autoplay: opts?.catchUp ? 4 : null });
+    const until = opts?.to ?? null;
+    set({ active: true, root, from: since, to: until, ...EMPTY, loading: true, autoplay: opts?.catchUp ? 4 : null });
     try {
-      const res = await fetch(`/api/replay/frames?project=${encodeURIComponent(root)}&from=${since}`);
+      // A chosen week may hold more moments than the last two hours: read them all.
+      const window = until === null ? '' : `&to=${until}&limit=${MAX_WEEK_FRAMES}`;
+      const res = await fetch(`/api/replay/frames?project=${encodeURIComponent(root)}&from=${since}${window}`);
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
       const frames = ((await res.json()) as { frames?: ReplayFrameInfo[] }).frames ?? [];
       if (mine !== generation) return;
@@ -103,7 +112,7 @@ export const useReplayStore = create<ReplayStore>((set, get) => ({
 
   exit: () => {
     ++generation;
-    set({ active: false, root: null, from: null, ...EMPTY });
+    set({ active: false, root: null, from: null, to: null, ...EMPTY });
   },
 }));
 

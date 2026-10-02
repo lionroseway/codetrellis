@@ -99,10 +99,33 @@ export function frameWords(frame: ReplayFrameInfo): string {
 }
 
 /** The chrome: which moments are being watched, between which two times. */
-export function replayRangeWords(frames: readonly ReplayFrameInfo[], index: number): string {
+export function replayRangeWords(frames: readonly ReplayFrameInfo[], index: number, now = Date.now()): string {
   if (frames.length === 0) return 'Replay: nothing recorded yet';
   const at = frames[Math.min(Math.max(index, 0), frames.length - 1)].at;
-  return `Replaying ${hhmm(frames[0].at)} → ${hhmm(frames[frames.length - 1].at)} · at ${hhmm(at)}`;
+  const when = (t: number) => whenWords(t, now);
+  return `Replaying ${when(frames[0].at)} → ${when(frames[frames.length - 1].at)} · at ${when(at)}`;
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** "2 Mar", in every locale the same, with the year when it is not this one (B10.5). */
+export function dayWords(t: number, now = Date.now()): string {
+  const d = new Date(t);
+  const year = d.getFullYear() === new Date(now).getFullYear() ? '' : ` ${d.getFullYear()}`;
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}${year}`;
+}
+/** A time today is HH:MM; any other day says which (B10.5: replaying a week months ago). */
+export function whenWords(t: number, now = Date.now()): string {
+  return new Date(t).toDateString() === new Date(now).toDateString() ? hhmm(t) : `${dayWords(t, now)} ${hhmm(t)}`;
+}
+
+/** The week a chosen day begins: from its local midnight, seven days (B10.5). */
+export function weekFrom(day: string): { from: number; to: number } | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (!m) return null;
+  const from = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
+  if (!Number.isFinite(from)) return null;
+  const to = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + 7).getTime() - 1;
+  return { from, to };
 }
 
 /** The frames as the transport bar steps them: time and words, no per-file delta. */

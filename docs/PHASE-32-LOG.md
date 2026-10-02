@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Track E — E2a: any ref on either side, from the Changes tab |
-| **Status** | E1 in review (#314); B10.5 in review (#313). E2 is split in two: E2a (the refs, any two compared file by file, from the Changes tab) and E2b (the graph compares the same two). E2a built on E1: GET /api/git/refs lists this checkout, branches, remote branches as last fetched, tags and other worktrees, each group with git's word and command; GET /api/git/refs/compare lists the files between any two, with "from where they split" (merge base) and the git command; a worktree's working copy is read as a tree through a copy of its own index (the checkout untouched); /api/compare and /api/file/at take the same sides. Unit git-refs 7; harness refs 6; browser compare-refs (shots) |
-| **In flight** | B10.5 in review (#313) on `feat/phase-32-b10-5-g2`; E1 in review (#314) on `feat/phase-32-e1-source-control`; E2a building on `feat/phase-32-e2a-refs` |
-| **Last merged** | B10.4 (#312, `42c8e3e`) |
-| **Next action** | Merge #313 and #314 when green; open E2a's PR stacked on E1; then E2b (the graph takes the same two) |
+| **Status** | B10 done (#313 merged). E1 in review (#314). E2 is split in two: E2a (the refs, any two compared file by file, from the Changes tab) and E2b (the graph compares the same two). E2a built on E1: GET /api/git/refs lists this checkout, branches, remote branches as last fetched, tags and other worktrees, each group with git's word and command; GET /api/git/refs/compare lists the files between any two, with "from where they split" (merge base) and the git command; a worktree's working copy is read as a tree through a copy of its own index (the checkout untouched); /api/compare and /api/file/at take the same sides. Unit git-refs 7; harness refs 6; browser compare-refs (shots) |
+| **In flight** | E1 in review (#314) on `feat/phase-32-e1-source-control`; E2a building on `feat/phase-32-e2a-refs` |
+| **Last merged** | B10.5 (#313, `7c0623a`) |
+| **Next action** | Merge E1 (#314) when green, then E2a by the stacked flow; then E2b (the graph takes the same two) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `42c8e3e`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `7c0623a`, with open PRs from GitHub.
 
 ---
 
@@ -218,12 +218,12 @@
     - [x] B9.3a Re-sequence, tell both agents, or leave it: by a person, kept with who and when (#296)
     - [x] B9.3b A new planned overlap said on approval; deciding one from the phone (#297)
   - [x] B9.4 The phone and the G3 done-when (#298)
-- [ ] B10 The record — building
+- [x] B10 The record
   - [x] B10.1 The chain: every kept event linked, decisions as events, verified in words (#309)
   - [x] B10.2 Retention you can set, and the chain still verifies (#310)
   - [x] B10.3 Signed packs, carrying the record's head (#311)
   - [x] B10.4 The evidence export (#312)
-  - [ ] B10.5 The G2 done-when and docs (#313) — in review
+  - [x] B10.5 The G2 done-when and docs (#313)
 
 ### Track C: shared ways of working
 - [x] C1 Skills on tasks
@@ -461,6 +461,8 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-02 | Track E joins Phase 32 before the review (owner): compare any two points with no plan, in the graph and the code view; a file at two refs side by side, each side scrubbing its own commits; each line's commit and author as GitLens shows them, with the agent, session, task and plan where CodeTrellis knows them | It surfaces the process behind the current state to someone outside the work, which is most of what CodeTrellis is for, and it starts from a defect the owner saw: the graph showed changes, the code view no diff, with no plan |
 | 2026-10-02 | Track E: git and gh run by the backend through the CLI, nothing sent anywhere; keeping remotes current is a setting, off by default; "Fetch now" is always there | The owner: "on the whole we still aren't doing any telemetry, what we do is powered by the CLI". A background fetch is the app reaching the network on its own, so it is the person's choice, and the app says when it last fetched |
 | 2026-10-02 | Track E: the git author is always shown; CodeTrellis's attribution (agent, session, task, plan) is added on top with how it knows (seen, trailer, timing) | GitLens is the widely adopted model (owner); the git author is what everyone else sees, and an attribution that cannot say how it knows reads as fact when it may be a guess |
+| 2026-10-02 | B10.5: "months later" is tested by moving the backend's clock (`CODETRELLIS_CLOCK_OFFSET_MS`, `Date.now()` and `new Date()` both), not by backdating rows | Backdating writes rows no code path writes, and skips what the months do: retention, pruning, the record's time. A moved clock runs the real code at the later date, so the year's retention is what keeps the week |
+| 2026-10-02 | B10.5: replay takes a chosen week, not only the last two hours or since the last visit | G2 starts with "sets the cursor to that week"; without a way to choose it, the journey had no first step. The week's evidence exports from the same bar |
 | 2026-10-02 | B10.4: an evidence export carries every record entry in its window, whichever project it was about, with the link before the window, rather than only the project's entries | The chain only recomputes over consecutive links; leaving out other projects' entries would leave gaps nobody outside could check. The record is the computer's, not one project's, and the docs say so; the frames, the stack and the signals are the project's |
 | 2026-10-02 | B10.4: verifying an export on the computer that made it compares every entry against that computer's record, and names any changed, removed or relinked since; entries retention removed since are said, and do not fail it | The G2 question is "has anything changed since we exported this?": the file alone shows the file is intact, only the record shows the database has not been edited since. Retention removing old entries is policy, not tampering |
 | 2026-10-02 | B10.3: the sign-off pack is signed with the device key task records already use (C3.1), in its own namespace (`codetrellis-signoff-pack`), never the release-manifest key; the signature covers the record's head at signing, and verifying names the signer against this computer's trust (its own key, a teammate's trusted key, or a key not known here) | One per-install key, already trusted between teammates by fingerprint, so no second trust model; a namespace keeps a task-record signature from passing as a pack's. Carrying the head ties the pack to the record: an edit to the record since shows when the pack is verified as well as in the record's own walk |
@@ -547,6 +549,25 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   (cache). Harness `source-control.test.ts` (6: the three causes; the
   groups; refusals). Browser `sidebar/changes.spec.ts` (shots
   `changes-panel`, `changes-diff-worktree`, `changes-chip`).
+
+### 2026-10-02: B10.5 — the G2 done-when, and the record's docs
+- **Journey.** Months later an auditor asks about the refunds change. On
+  the Timeline, Sam chooses "or a week from 2 Mar": the bar says
+  "Replaying 2 Mar 09:14 → 6 Mar 17:40", the moment shows the claim that
+  waited on a person, the graph is the code then, and the stack has both
+  plans under way. Settings → Data says the record is intact since that
+  week. "Export evidence" on the bar saves the week, and verifying it says
+  it holds. Someone edits the approval in the database: the record names
+  the entry, and so does the evidence exported before.
+- **Built.** Replay a chosen week (`ReplayStart`, the store's `to`,
+  `weekFrom`, `whenWords`/`dayWords`); the bar's evidence names the week;
+  the compact verdict on the bar; the seal says when the record was empty;
+  `services/test-clock.ts`; `docs/claude/record.md` (linked from
+  CLAUDE.md).
+- **Tests.** Unit `test-clock.test.ts` (2), `replay.test.ts` (days),
+  `pack-seal.test.ts` (empty record). Harness `record-g2.test.ts` (4).
+  Browser `agent/replay-week.spec.ts` (shots `replay-week-start`,
+  `replay-week`).
 
 ### 2026-10-02: B10.4 — the evidence export
 - **Journey.** The auditor asks what happened while the refunds plan was
