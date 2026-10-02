@@ -15,6 +15,9 @@ test('a changed grant is named, with where the person changes it', () => {
   assert.deepEqual(grantChange({ device: { exposeMobileApi: true } }, current), { field: 'device.exposeMobileApi', where: 'Settings → Devices' });
   assert.deepEqual(grantChange({ webhooks: { allowedHosts: ['hooks.example.com'] } }, current)?.field, 'webhooks.allowedHosts');
   assert.deepEqual(grantChange({ mcp: { projectScope: 'anywhere' } }, current)?.field, 'mcp.projectScope');
+  assert.deepEqual(grantChange({ git: { keepRemotesCurrent: true } }, current), { field: 'git.keepRemotesCurrent', where: 'Settings → Git' });
+  // Its interval alone reaches nothing new.
+  assert.equal(grantChange({ git: { keepRemotesCurrent: false, everyMinutes: 30 } }, current), null);
 });
 
 test('an unchanged grant riding along with another field is not a grant', () => {

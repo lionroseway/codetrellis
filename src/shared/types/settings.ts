@@ -233,6 +233,22 @@ export interface UpdateSettings {
   autoCheck: boolean;
 }
 
+/** How often keeping remotes current fetches, in minutes. */
+export const FETCH_INTERVAL_CHOICES = [5, 15, 30, 60] as const;
+
+/** Git (Phase 32 E5): whether remotes are kept current in the background. */
+export interface GitSettings {
+  /**
+   * Fetch the project open in the window (`git fetch --all --prune`, then
+   * its pull requests through gh) every `everyMinutes`. Off by default
+   * (owner's decision, 2026-10-02): CodeTrellis reaches a host only when
+   * asked, and Fetch now always works.
+   */
+  keepRemotesCurrent: boolean;
+  /** One of FETCH_INTERVAL_CHOICES. */
+  everyMinutes: number;
+}
+
 export interface AppSettings {
   identity: IdentitySettings;
   mcp: McpSettings;
@@ -256,6 +272,8 @@ export interface AppSettings {
   webhooks: WebhookSettings;
   /** Background update checks — the one request the app makes on its own. */
   updates: UpdateSettings;
+  /** Keeping remotes current (Phase 32 E5), off by default. */
+  git: GitSettings;
   /**
    * Phase 5.1 — true once the user completes the first-run wizard.
    * When false (or absent in older settings files), the frontend
@@ -335,6 +353,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // Settings should still hear about it.
   updates: {
     autoCheck: true,
+  },
+  // Off: a fetch reaches a host, and that is the person's to ask for.
+  git: {
+    keepRemotesCurrent: false,
+    everyMinutes: 15,
   },
   firstRunComplete: false,
   updatedAt: '',

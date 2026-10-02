@@ -14,6 +14,7 @@ import { Check, ChevronDown, ChevronRight, Copy, GitBranch, GitCommitHorizontal,
 import { useProjectStore } from '../../stores/project-store';
 import { useSourceControlStore, type SourceChangeStatus, type SourceGroup } from '../../stores/source-control-store';
 import { ComparePair } from './RefPicker';
+import { BranchesPanel } from './BranchesPanel';
 
 const REFRESH_MS = 10_000;
 
@@ -149,6 +150,7 @@ export function SourceControlPanel() {
   return (
     <div className="flex flex-col min-h-0" data-testid="source-control">
       {data?.git && <ComparePair />}
+      {data?.git && <BranchesPanel />}
       <div className="flex items-start gap-1.5 px-2.5 py-1.5">
         <span className="text-[10.5px] leading-snug text-foreground-muted" data-testid="sc-words">{data ? data.words : loading ? 'Reading git…' : ''}</span>
         <span className="flex-1" />

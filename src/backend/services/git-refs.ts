@@ -294,7 +294,8 @@ export function filesBetween(
   return { ok: true, files: files.slice(0, MAX_FILES), truncated: files.length > MAX_FILES };
 }
 
-function fetchedAt(projectRoot: string): number | null {
+/** When remotes were last fetched here (FETCH_HEAD's time, whoever fetched), ms; null when never. */
+export function fetchedAt(projectRoot: string): number | null {
   try {
     const p = path.resolve(projectRoot, git(projectRoot, ['rev-parse', '--git-path', 'FETCH_HEAD']).trim());
     return fs.existsSync(p) ? fs.statSync(p).mtimeMs : null;
@@ -303,7 +304,7 @@ function fetchedAt(projectRoot: string): number | null {
   }
 }
 
-function whenWords(ms: number | null, now: number): string {
+export function whenWords(ms: number | null, now: number): string {
   if (ms === null) return 'never';
   const mins = Math.round((now - ms) / 60_000);
   if (mins < 1) return 'just now';

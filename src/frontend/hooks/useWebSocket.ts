@@ -720,6 +720,11 @@ export function useWebSocket() {
             window.dispatchEvent(new CustomEvent('workstreams-changed', { detail: payload }));
             return;
           }
+          // A fetch reached the remotes (Phase 32 E5): Fetch now, or keeping them current.
+          if (type === 'git-remotes-changed') {
+            window.dispatchEvent(new CustomEvent('git-remotes-changed', { detail: payload }));
+            return;
+          }
           // An agent reported a folder that is not opened, or a request was answered (A1.7c).
           if (type === 'folder-requests-changed') {
             window.dispatchEvent(new CustomEvent('folder-requests-changed'));

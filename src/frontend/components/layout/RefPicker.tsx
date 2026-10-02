@@ -136,6 +136,8 @@ export function ComparePair() {
   const { refs, loadRefs, pair, pairResult, pairLoading, pairError, setPair, openPairFile, compare, pairOnGraph, showPairOnGraph } = useSourceControlStore();
   const [open, setOpen] = useState(pair !== null);
 
+  // A pair chosen elsewhere (a branch or a pull request, E5) opens the comparison.
+  useEffect(() => { if (pair) setOpen(true); }, [pair]);
   useEffect(() => { if (open && root) void loadRefs(root); }, [open, root, loadRefs]);
   useEffect(() => {
     if (open && root && !pair && refs) void setPair(root, defaultPair(refs));

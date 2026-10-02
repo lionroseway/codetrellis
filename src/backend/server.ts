@@ -78,6 +78,7 @@ import * as budgetService from './services/budget-service';
 import { compareSnapshots, listComparands, readFileAt } from './services/snapshot-compare-service';
 import { sourceControl, projectPrefix } from './services/source-control';
 import { diffCommand, filesBetween, listRefs, sideLabel, worktreesForCompare } from './services/git-refs';
+import { fetchRemotes, listBranches, startRemoteKeeper } from './services/git-branches';
 import { fileHistory, FileHistoryError } from './services/file-history';
 import { recordedKnowledge, isProjectRelativePath } from './services/commit-attribution';
 import { lineHistory, LineHistoryError } from './services/line-history';
@@ -4342,6 +4343,25 @@ app.get('/api/git/refs', (req, res) => {
   res.json(listRefs(projectPath, workstreams));
 });
 
+// Phase 32 E5 — branches here and on the remotes, as last fetched, with
+// upstream, ahead and behind; pull requests as gh last read them. Local only:
+// nothing here reaches a host.
+app.get('/api/git/branches', async (req, res) => {
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  res.json(await listBranches(projectPath, getSettings().git));
+});
+
+// Fetch now: `git fetch --all --prune`, then the pull requests through gh.
+// The person's action; the root is an opened project, never a body field.
+app.post('/api/git/fetch', async (req, res) => {
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  const result = await fetchRemotes(projectPath);
+  broadcast('git-remotes-changed', { project: projectPath });
+  res.json({ ...result, listing: await listBranches(projectPath, getSettings().git) });
+});
+
 app.get('/api/git/refs/compare', (req, res) => {
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
@@ -6456,6 +6476,14 @@ export async function initializeBackend(): Promise<void> {
     startRunAgent(projectRoot, run.info.rule, run.plan, true, (session) => broadcast('terminal-created', { session }));
     broadcast('plan-created', { plan: run.plan });
     broadcast('recurring-changed', { project: projectRoot });
+  });
+
+  // Phase 32 E5 — keep remotes current, only when Settings → Git says so
+  // (off by default), and only for the project open in the window.
+  startRemoteKeeper({
+    settings: () => getSettings().git,
+    activeRoot: () => getActiveProjectPath(),
+    onFetched: (projectRoot) => broadcast('git-remotes-changed', { project: projectRoot }),
   });
 
   // Restore the active project on boot. The frontend restores the project

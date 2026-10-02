@@ -37,13 +37,14 @@ test.describe.serial('Settings', () => {
   test('every section is there, and a partial save changes only what it names', async () => {
     const before = await req('GET', '/api/settings');
     expect(Object.keys(before).sort()).toEqual(
-      ['data', 'device', 'firstRunComplete', 'identity', 'mcp', 'plans', 'power', 'updatedAt', 'updates', 'webhooks'],
+      ['data', 'device', 'firstRunComplete', 'git', 'identity', 'mcp', 'plans', 'power', 'updatedAt', 'updates', 'webhooks'],
     );
     const saved = await req('PUT', '/api/settings', {
       identity: { displayName: 'Dana' },
       plans: { defaultVisibility: 'local' },
       power: { triggers: { whileAgentActive: true } },
       webhooks: { allowedHosts: ['Hooks.Example.COM ', '*.evil.test', 'hooks.example.com'] },
+      git: { everyMinutes: 30 },
     });
     expect(saved.identity).toEqual({ ...before.identity, displayName: 'Dana' });
     expect(saved.plans).toEqual({ ...before.plans, defaultVisibility: 'local' });
@@ -52,6 +53,8 @@ test.describe.serial('Settings', () => {
     // Hosts normalised; a wildcard is not a host.
     expect(saved.webhooks.allowedHosts).toEqual(['hooks.example.com']);
     expect(saved.mcp).toEqual(before.mcp);
+    // Keeping remotes current stays off when only its interval is named.
+    expect(saved.git).toEqual({ keepRemotesCurrent: false, everyMinutes: 30 });
     await events.waitFor('settings-changed', (p) => p.settings?.identity?.displayName === 'Dana');
   });
 
@@ -68,6 +71,8 @@ test.describe.serial('Settings', () => {
       [{ device: { mobileApiPort: -1 } }, /device\.mobileApiPort/],
       [{ power: { triggers: { always: 'on' } } }, /power\.triggers\.always/],
       [{ updates: { autoCheck: 'no' } }, /updates\.autoCheck/],
+      [{ git: { keepRemotesCurrent: 'yes' } }, /git\.keepRemotesCurrent must be true or false/],
+      [{ git: { everyMinutes: 1 } }, /git\.everyMinutes must be 5, 15, 30, 60 minutes/],
       [{ webhooks: { allowedHosts: 'hooks.example.com' } }, /webhooks\.allowedHosts/],
       [{ data: { personalSyncMode: 'sometimes' } }, /data\.personalSyncMode/],
       [{ firstRunComplete: 'true' }, /firstRunComplete/],
