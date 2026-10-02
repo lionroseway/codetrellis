@@ -18,7 +18,7 @@
 | | |
 |---|---|
 | **Stage / step** | Track E — E1: source control with no plan needed |
-| **Status** | B10.2 merged (#310); B10.3 (#311), B10.4 (#312), B10.5 (#313) in review, stacked. Track E planned with the owner (2026-10-02). E1 built: the defect reproduced three ways (a committed edit, an edit in another worktree, a project in a subfolder) and fixed; the sidebar's Changes tab (this checkout, committed since you opened it, each other worktree with its agents), each file opening its diff between its group's two points; the code view says what it compares. Found on the way and fixed: a request storm of commit reads that starved the browser. Unit source-control 7 + commits cache; harness source-control 6; browser sidebar/changes (shots) |
+| **Status** | B10.2 (#310) and B10.3 (#311) merged; B10.4 (#312) and B10.5 (#313) in review, stacked. Track E planned with the owner (2026-10-02). E1 built: the defect reproduced three ways (a committed edit, an edit in another worktree, a project in a subfolder) and fixed; the sidebar's Changes tab (this checkout, committed since you opened it, each other worktree with its agents), each file opening its diff between its group's two points; the code view says what it compares. Found on the way and fixed: a request storm of commit reads that starved the browser. Unit source-control 7 + commits cache; harness source-control 6; browser sidebar/changes (shots) |
 | **In flight** | B10.4 in review (#312) on `feat/phase-32-b10-4-evidence`; B10.5 in review (#313) on `feat/phase-32-b10-5-g2`; E1 in review (#314) on `feat/phase-32-e1-source-control` |
 | **Last merged** | B10.3 (#311, `e415975`) |
 | **Next action** | Open E1's PR; merge the B10 stack in order; then E2 (any ref on either side) |
@@ -455,6 +455,8 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-02 | Track E joins Phase 32 before the review (owner): compare any two points with no plan, in the graph and the code view; a file at two refs side by side, each side scrubbing its own commits; each line's commit and author as GitLens shows them, with the agent, session, task and plan where CodeTrellis knows them | It surfaces the process behind the current state to someone outside the work, which is most of what CodeTrellis is for, and it starts from a defect the owner saw: the graph showed changes, the code view no diff, with no plan |
 | 2026-10-02 | Track E: git and gh run by the backend through the CLI, nothing sent anywhere; keeping remotes current is a setting, off by default; "Fetch now" is always there | The owner: "on the whole we still aren't doing any telemetry, what we do is powered by the CLI". A background fetch is the app reaching the network on its own, so it is the person's choice, and the app says when it last fetched |
 | 2026-10-02 | Track E: the git author is always shown; CodeTrellis's attribution (agent, session, task, plan) is added on top with how it knows (seen, trailer, timing) | GitLens is the widely adopted model (owner); the git author is what everyone else sees, and an attribution that cannot say how it knows reads as fact when it may be a guess |
+| 2026-10-02 | B10.3: the sign-off pack is signed with the device key task records already use (C3.1), in its own namespace (`codetrellis-signoff-pack`), never the release-manifest key; the signature covers the record's head at signing, and verifying names the signer against this computer's trust (its own key, a teammate's trusted key, or a key not known here) | One per-install key, already trusted between teammates by fingerprint, so no second trust model; a namespace keeps a task-record signature from passing as a pack's. Carrying the head ties the pack to the record: an edit to the record since shows when the pack is verified as well as in the record's own walk |
+| 2026-10-02 | B10.3: a pack signed by an unknown key is said to be unchanged but its signer not proven, never "valid" | A signature from a key nobody vouched for proves integrity, not identity; the reviewer is told to check the fingerprint with whoever sent it |
 | 2026-10-02 | B10.2: one retention window, set in Settings → Data (14, 30, 90, 365 days, or everything), governs agent events and the record, replay frames and signal spans, test runs, log files and the device log; changing it is the person's only, and is itself kept in the record | Shortening the window is how evidence is removed, so it is a grant like LAN exposure, and an auditor sees who changed it from what to what. One window, because a record that outlives its replay or its tests would answer "what happened" without "what else was going on" |
 | 2026-10-02 | B10.2: keeping everything lifts the agent events' row cap too; the device log, rewritten whole on each change and fed by networked peers, keeps at most 10,000 entries whatever the window | "Everything" must mean everything for the record; the device log's cap is what stops a peer filling the disk, so it stays, said in the window's words |
 | 2026-10-02 | B10 is refined into five parts (EXECUTION §5): the chain, retention, signed packs, the evidence export, the G2 done-when. The agent event log itself becomes the record, by a hash chain over its rows, rather than a second log | It already carries the app's decisions (B1.2) and is what the Timeline and replay read; a second log would be a second truth to keep in step |
@@ -513,6 +515,24 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
   (cache). Harness `source-control.test.ts` (6: the three causes; the
   groups; refusals). Browser `sidebar/changes.spec.ts` (shots
   `changes-panel`, `changes-diff-worktree`, `changes-chip`).
+
+### 2026-10-02: B10.3 — signed packs, carrying the record's head
+- **Journey.** Sam saves the Q3 board pack as a page and sends it to the
+  auditor. Months later the auditor brings it back; "Verify a pack…" says
+  "Signed by this computer (SHA256:q690LpZ7sExo…), and unchanged since; the
+  record it names is still here and unchanged (entry #1204)", then which
+  files still match. A copy someone edited so the files would look right
+  says "Changed after it was signed". A pack from Dana's computer says it
+  is hers by name once her key is trusted, and "who signed it is not
+  proven" until then.
+- **Built.** `services/pack-seal.ts` (`sealPack`, `sealBytes`, `checkSeal`),
+  the pack's `seal` and `sealedRecord`, the routes and the PDF export
+  sealing each pack, verify answering `seal`, the page saying who signed
+  it, the Brief's verify line.
+- **Tests.** Unit `pack-seal.test.ts` (6). Harness `signoff-surface.test.ts`
+  (sealed; verified here; an edited page and an unsigned one). Browser
+  `plan/signoff-pack.spec.ts` (shots `signoff-pack-sealed`,
+  `signoff-pack-forged`).
 
 ### 2026-10-02: B10.2 — retention you can set
 - **Journey.** Sam's team must keep a year of evidence. In Settings → Data

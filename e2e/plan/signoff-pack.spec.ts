@@ -68,6 +68,20 @@ test.describe('Sign-off pack', () => {
     // Verify that file: everything it vouches for still matches.
     await pack.getByTestId('signoff-pack-verify-input').setInputFiles(saved);
     await expect(pack.getByTestId('signoff-pack-verification')).toContainText('1 of 1 file still match');
+    // B10.3: and the pack itself — signed here, unchanged, its record still holding.
+    const seal = pack.getByTestId('signoff-pack-seal');
+    await expect(seal).toHaveAttribute('data-state', 'this-computer');
+    await expect(seal).toContainText(/^Signed by this computer \(SHA256:.{12}…\), and unchanged since; the record it names is still here and unchanged \(entry #\d+\)\.$/);
+    fs.mkdirSync(path.join('test-results', 'ux-audit'), { recursive: true });
+    await pack.screenshot({ path: path.join('test-results', 'ux-audit', 'signoff-pack-sealed.png') });
+
+    // Someone edits the saved page itself, so the file would look right: the seal says so.
+    const forged = testInfo.outputPath('forged.html');
+    fs.writeFileSync(forged, html.replace(/"sha256":"[a-f0-9]{64}"/, `"sha256":"${'f'.repeat(64)}"`));
+    await pack.getByTestId('signoff-pack-verify-input').setInputFiles(forged);
+    await expect(pack.getByTestId('signoff-pack-seal')).toHaveAttribute('data-state', 'changed');
+    await expect(pack.getByTestId('signoff-pack-seal')).toContainText('Changed after it was signed');
+    await pack.screenshot({ path: path.join('test-results', 'ux-audit', 'signoff-pack-forged.png') });
 
     // Someone edits the file after it was signed; the same pack now says so.
     fs.writeFileSync(file, 'region,q3\nEMEA,126\n');

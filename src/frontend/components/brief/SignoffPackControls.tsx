@@ -5,7 +5,8 @@
  * as the page itself — which carries its own data, so it can be verified
  * later from the file alone. "Verify a pack" takes that saved page (or its
  * JSON), re-hashes every file it names inside this plan's project, and says
- * which still match.
+ * which still match — and, first, who signed the pack and whether it has
+ * changed since (B10.3).
  */
 
 import { useCallback, useRef, useState } from 'react';
@@ -16,7 +17,13 @@ interface Verification {
   changed: number;
   missing: number;
   checkedAt: string;
+  seal?: { state: 'this-computer' | 'teammate' | 'unknown-key' | 'changed' | 'unsigned'; words: string };
 }
+
+const SEAL_TONE = {
+  'this-computer': 'text-emerald-300', teammate: 'text-emerald-300',
+  'unknown-key': 'text-amber-300', unsigned: 'text-amber-300', changed: 'text-red-300',
+} as const;
 
 const VERDICT = {
   matches: { glyph: '✓', words: 'matches', tone: 'text-emerald-300' },
@@ -114,6 +121,11 @@ export function SignoffPackControls({ planUid, planTitle }: { planUid: string; p
       {message && <p className="mt-2 text-[11.5px] text-foreground-subtle break-words">{message}</p>}
       {result && (
         <div className="mt-2 text-[11.5px]" data-testid="signoff-pack-verification">
+          {result.seal && (
+            <p data-testid="signoff-pack-seal" data-state={result.seal.state} className={`mb-1 ${SEAL_TONE[result.seal.state]}`}>
+              {result.seal.words}
+            </p>
+          )}
           <p className="text-foreground-muted">
             {result.files.length === 0
               ? 'This pack names no files.'
