@@ -91,7 +91,8 @@ export const parallelGroup: Group = {
         const fp = JSON.parse((await codex.callTool('check_footprint', { paths: [V] })).answer) as { paths: Array<{ changed_in: Array<{ branch: string }> }> };
         const others = fp.paths[0]?.changed_in.map((x) => x.branch) ?? [];
         if (!others.includes('auth-refresh')) c.flag(`codex's check_footprint should name auth-refresh; it names ${others.join(', ') || 'nobody'}`);
-        await c.shot('p2-overlap');
+        if (hit) await c.call('navigate_to', { target: 'awareness', signal_id: hit.id });
+        await c.shot('p2-overlap', hit ? { highlighted: hit.id } : {});
 
         await c.say('One side reverts', 'auth-refresh puts the function back. The overlap goes on its own.');
         fx.reset('auth-refresh');
@@ -128,9 +129,9 @@ export const parallelGroup: Group = {
         c.state.contract = contract.id;
         const ack = await claude.callTool('acknowledge_signal', { id: contract.id, note: 'Seen. I will pass strict: false until billing-v2 merges.' });
         if (ack.isError) c.flag(`acknowledge_signal: ${ack.text.slice(0, 120)}`);
-        await c.call('navigate_to', { target: 'awareness' });
+        await c.call('navigate_to', { target: 'awareness', signal_id: contract.id });
         await c.say('The agent answers', 'Its note sits beside the overlap for you to read. It changes nothing you decide.');
-        await c.shot('p3-contract');
+        await c.shot('p3-contract', { highlighted: contract.id });
       },
     },
     {
@@ -140,7 +141,7 @@ export const parallelGroup: Group = {
       async run(c) {
         const id = c.state.contract;
         if (!id) { c.flag('no contract signal to mark'); return; }
-        await c.call('navigate_to', { target: 'awareness' });
+        await c.call('navigate_to', { target: 'awareness', signal_id: id });
         await c.person({
           ask: 'In Awareness, mark the validateCreateUser overlap "Intended".',
           decide: () => c.api(`/api/awareness/${id}/state?project=${encodeURIComponent(fx.path)}`, { state: 'intended' }),
@@ -166,8 +167,8 @@ export const parallelGroup: Group = {
           return (answer.signals ?? []).find((s) => s.kind === 'collision' && s.subject.symbol === 'isValidEmail');
         }, 20, 'the declared overlap with auth-refresh');
         if (r && !r.summary.includes('(declared)')) c.flag(`a declared overlap should say so; it reads "${r.summary}"`);
-        await c.call('navigate_to', { target: 'awareness' });
-        await c.shot('p4-intent');
+        await c.call('navigate_to', { target: 'awareness', ...(r ? { signal_id: r.id } : {}) });
+        await c.shot('p4-intent', r ? { highlighted: r.id } : {});
         await codex.callTool('declare_intent', { summary: 'done', clear: true });
         fx.reset('auth-refresh');
       },
@@ -192,6 +193,8 @@ export const parallelGroup: Group = {
         const held = await runHook(c.opts, fx.trees['billing-v2'], V);
         const ref = /ref "(bp-[0-9a-f]+)"/.exec(held?.permissionDecisionReason ?? '')?.[1];
         if (!ref || !held?.permissionDecisionReason?.includes('paused: waiting for a decision')) { c.flag(`the hook should pause the edit; it said ${JSON.stringify(held).slice(0, 160)}`); return; }
+        await c.call('navigate_to', { target: 'awareness', breakpoint_ref: ref });
+        await c.shot('p5-paused', { highlighted: ref });
 
         await c.person({
           ask: 'In Needs you, answer the paused edit with "Steer" and the note "Only the email rule".',
@@ -209,6 +212,7 @@ export const parallelGroup: Group = {
           return text.includes(BREAKPOINT_NOTICE) ? text : null;
         }, 20, 'the breach to be told');
         if (breach && !breach.includes('recorded as a breach')) c.flag('the breach notice should say it was recorded as a breach');
+        await c.call('navigate_to', { target: 'awareness' });
         await c.shot('p5-breakpoint');
         fx.reset('checkout-fix');
       },

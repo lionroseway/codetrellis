@@ -12,6 +12,7 @@
 import type { ScriptedMcp } from '../../../tests/harness/mcp-client';
 import { paymentsRepo } from '../../demo-fixtures';
 import type { Ctx, Group } from '../types';
+import { showSettings } from '../lib/settings';
 
 const PLAN = 'Payments: refunds to the cent';
 const TASK = 'Round refunds half-even';
@@ -116,6 +117,7 @@ export const recordGroup: Group = {
         await c.say('Still intact', 'The record grew by everything that just happened, and every entry still matches the chain.');
         const after = await verify(c, 'after the export');
         if (before && after && after.entries <= before.entries) c.flag(`the record should have grown; it had ${before.entries} entries and has ${after.entries}`);
+        await showSettings(c, 'data', 'r1-record-settings', 'Where the record is kept', 'Settings → Data: how long the record is kept, and the chain walked again on demand. The export itself is on the plan\'s Brief.');
       },
     },
     {

@@ -124,8 +124,10 @@ test.describe('UI tools against the window', () => {
     const settings = page.getByRole('dialog', { name: 'Settings' });
     await expect(settings.getByRole('heading', { name: 'Data' })).toBeVisible({ timeout: 10_000 });
     expect((await ready()).settingsSection).toBe('data');
-    await page.keyboard.press('Escape');
+    // And closed again by tool, so a demo can show a section and move on.
+    await client.callTool('close_settings', {});
     await expect(settings).toHaveCount(0);
+    expect((await ready()).settingsSection).toBeNull();
   });
 
   test('a wrong uid changes nothing on screen, and the agent is told', async ({ page, request }) => {

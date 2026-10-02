@@ -145,12 +145,16 @@ export const observeGroup: Group = {
     {
       id: 'replay',
       title: 'The state at a past moment',
-      watch: 'asked about the moment before Exports existed: Billing alone, nobody on its task, nothing overlapping',
+      watch: 'replay from the moment before Exports existed, at 4×: Billing alone, nobody on its task, nothing overlapping; then live',
       async run(c) {
         const at = Number(c.state.beforeExports);
         if (!at || !migrate) { c.flag('no earlier moment to ask about: run the stack scene first'); return; }
-        await c.call('navigate_to', { target: 'timeline', plan_uid: billing });
+        // The window plays the project from that moment at 4×, so a person
+        // watches Exports arrive; the checks below ask the same question by tool.
+        await c.call('navigate_to', { target: 'replay', from: at, speed: 4 });
+        c.defer('back to live', () => c.call('navigate_to', { target: 'live' }));
         await c.say('What was it like then?', `Asked about ${new Date(at).toLocaleTimeString()}, before Exports existed, the answer is what was true then, not now.`);
+        await c.shot('o2-replay', { view: 'replay' });
         const then = await c.json('get_state_at', { at, project_path: fx.path }) as StateAt | null;
         if (!then) return;
         const labels = then.stack.plans.map((p) => p.label);
@@ -170,8 +174,9 @@ export const observeGroup: Group = {
         if (!now.signals.some((x) => x.kind === 'contract' && x.closed_at === null)) c.flag(`now the contract should be open; signals now: ${now.signals.map((x) => x.kind).join(', ') || 'none'}`);
         const dNow = now.tasks.find((t) => t.uid === deploy);
         if (dNow?.assignee !== 'claude-code') c.flag(`now Export form should be claude-code's; it is ${dNow?.assignee}`);
+        await c.call('navigate_to', { target: 'live' });
         await c.call('navigate_to', { target: 'stack' });
-        await c.shot('o2-replay');
+        await c.shot('o2-now');
       },
     },
     {
@@ -225,7 +230,7 @@ export const observeGroup: Group = {
     {
       id: 'play-forward',
       title: 'Two plans that will meet, settled before either starts',
-      watch: 'Stack: "◇ planned overlap: JIRA-142 and JIRA-151 both plan to change validators.ts"; resequenced, JIRA-151 waits on JIRA-142',
+      watch: 'play-forward: "◇ planned overlap: JIRA-142 and JIRA-151 both plan to change validators.ts"; then in Stack, resequenced, JIRA-151 waits on JIRA-142',
       async run(c) {
         await c.say('Two new tickets', 'VAT rounding (JIRA-142) and Currency (JIRA-151) both plan to change validators.ts. Nothing is written yet.');
         const make = async (title: string, key: string, taskTitle: string) => {
@@ -246,7 +251,8 @@ export const observeGroup: Group = {
           const p = await c.json('get_plan', { plan_uid: uid });
           if (p?.status !== 'approved') c.flag(`"${p?.title}" should be approved; it is ${p?.status}`);
         }
-        await c.call('navigate_to', { target: 'stack' });
+        await c.call('navigate_to', { target: 'play-forward' });
+        c.defer('back to live', () => c.call('navigate_to', { target: 'live' }));
 
         await c.say('Played forward', 'Before either starts: one file both plan to change, and nothing yet says which goes first.');
         const before = await c.json('get_play_forward', { project_path: fx.path }) as PlayForward | null;
@@ -258,8 +264,11 @@ export const observeGroup: Group = {
         if (!/· 1 file to change · 1 planned overlap$/.test(before.words)) c.flag(`play-forward should sum up "… · 1 file to change · 1 planned overlap"; it says "${before.words}"`);
         else console.log(`    ${before.words}`);
         if (taskIn(await stack(c), currencyTask)?.waits !== null) c.flag('nothing should wait yet: the two tasks would meet at once');
-        await c.shot('o4-play-forward');
+        await c.shot('o4-play-forward', { view: 'play-forward' });
 
+        // The choice is made in Stack, so the person is shown it there.
+        await c.call('navigate_to', { target: 'live' });
+        await c.call('navigate_to', { target: 'stack' });
         await c.person({
           ask: 'In Stack, on the planned overlap, choose "Re-sequence these plans", then "JIRA-142 first".',
           decide: () => c.api(`/api/play-forward/overlaps/${encodeURIComponent(o.id)}/resequence?project=${encodeURIComponent(fx.path)}`, { first: vat }),

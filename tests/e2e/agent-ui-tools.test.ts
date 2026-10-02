@@ -84,6 +84,7 @@ test.describe.serial('Agent UI and diagnostics tools', () => {
       ['open_history_drawer', { item_uid: itemUid }, 'ui-open-history-drawer', { itemUid }],
       ['open_settings', {}, 'ui-open-settings', {}],
       ['open_settings', { section: 'data' }, 'ui-open-settings', { section: 'data' }],
+      ['close_settings', {}, 'ui-close-settings', {}],
       // Showing, never deciding: replay from a moment at 4×, the plans played
       // forward, back to now, the sidebar's Changes, one overlap pointed at.
       ['navigate_to', { target: 'replay', from: '2026-10-01T09:00:00Z', speed: 4 }, 'ui-navigate', { target: 'replay', from: Date.parse('2026-10-01T09:00:00Z'), speed: 4 }],

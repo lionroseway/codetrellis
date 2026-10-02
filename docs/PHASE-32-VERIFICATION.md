@@ -18,7 +18,7 @@ records that — but "✗ none" is proof of a gap.
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
 | REST routes | 295 | 293 | 0 | 0 | 217 | 0 |
-| MCP tools | 211 | 211 | 0 | 0 | 185 | 0 |
+| MCP tools | 212 | 212 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
 | Frontend components | 138 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 38 | n/a | n/a | n/a | 0 | 0 |
@@ -34,7 +34,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 4 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 13 | 7 | 1 | 0 | 0 |
-| 0.4g Agents and MCP | 31 | 32 | 10 | 37 | 0 | 0 |
+| 0.4g Agents and MCP | 31 | 33 | 10 | 37 | 0 | 0 |
 | 0.4h Drift, governance, review | 11 | 28 | 9 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 38 | 0 |
@@ -43,8 +43,8 @@ records that — but "✗ none" is proof of a gap.
 
 ## MCP tools: registry vs capability matrix
 
-- Registered by the server: **211**
-- Rows in `TOOL_CAPABILITIES`: **211**
+- Registered by the server: **212**
+- Rows in `TOOL_CAPABILITIES`: **212**
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
@@ -348,7 +348,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `POST /api/system-docs/:uid/verify` |  | ✗ none | 2 | ✓ 0.4l: re-stamped at HEAD after a commit, freshness clears, desktop told; unknown 404 (sysdocs-intake) |  |  |
 | l | `PUT /api/system-docs/:uid` |  | ✗ none | 2 | ✓ 0.4l: named fields only, author from how it arrived — the body cannot name one (sysdocs-intake); bug 47 |  |  |
 
-## MCP tools (211)
+## MCP tools (212)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -471,6 +471,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `check_footprint` | awareness · read | ✗ none | 2 |  |  |  |
 | g | `clipboard_read` | ui · capture | ✗ none | 1 | ✓ 0.4g: refused without capture; the window's answer returned (agent-ui-tools) |  |  |
 | g | `clipboard_write` | ui · write | ✗ none | 1 | ✓ 0.4g: sends the text to the window (agent-ui-tools) |  |  |
+| g | `close_settings` | session · write | ✗ none | 1 |  |  |  |
 | g | `declare_intent` | awareness · write | ✗ none | 2 |  |  |  |
 | g | `get_app_guide` | ui · read | ✗ none | 3 | ✓ 0.4g: every flavour distinct; summary names this project's plans; unknown flavour refused (agent-ui-tools) |  |  |
 | g | `get_awareness` | awareness · read | ✗ none | 12 |  |  |  |

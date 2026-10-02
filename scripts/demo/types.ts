@@ -15,6 +15,14 @@ export interface ShotExpect {
   criterion?: { text: string; state: 'open' | 'submitted' | 'met' | 'sent_back' | 'stale' };
   /** The recorded-file viewer is showing a file whose name ends with this. */
   artefact?: string;
+  /** Replay is on (true), or play-forward is (`'play-forward'`). */
+  view?: 'replay' | 'play-forward';
+  /** Settings is open at this section. */
+  settings?: string;
+  /** The sidebar is showing this view, e.g. `'changes'`. */
+  sidebar?: string;
+  /** This card is marked, as `navigate_to awareness` with a signal_id or breakpoint_ref leaves it. */
+  highlighted?: string;
 }
 
 /** An agent connected the way Claude Desktop is: through the stdio connector. */

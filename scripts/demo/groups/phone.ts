@@ -11,6 +11,7 @@
  * `phone`.
  */
 import type { Ctx, Group } from '../types';
+import { showSettings } from '../lib/settings';
 
 interface PeerStatus {
   running: boolean; discoveryActive: boolean; pairedDevices: number; connectedPeers: number;
@@ -46,6 +47,7 @@ export const phoneGroup: Group = {
           s.pairedDevices ? `${s.pairedDevices} phone${s.pairedDevices === 1 ? '' : 's'} paired` : 'No phone paired',
           s.connectedPeers ? 'One is connected now: the next scene shows something on it.' : 'Nothing is connected, so an agent cannot reach a phone. The next scene shows what it is told.',
         );
+        await showSettings(c, 'devices', 'ph0-devices', 'Settings → Devices', 'Discovery and the phone API are separate switches, both off until you turn them on. An agent can show you this; only you can change it.');
       },
     },
     {

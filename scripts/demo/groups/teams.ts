@@ -14,6 +14,7 @@ import path from 'node:path';
 import type { ScriptedMcp } from '../../../tests/harness/mcp-client';
 import { sampleAppRepo, type ParallelFixture } from '../../demo-fixtures';
 import type { Ctx, Group } from '../types';
+import { showSettings } from '../lib/settings';
 
 const DAY = 86_400_000;
 const NOTICE = '── CodeTrellis awareness ──';
@@ -129,6 +130,7 @@ export const teamsGroup: Group = {
         if (!view) { c.flag(`list_rules should list "${RULE_ID}" from the committed config; it listed ${JSON.stringify(listed).slice(0, 160)}`); return; }
         if (!view.words.includes(BECAUSE)) c.flag(`the rule should read with its reason; it reads "${view.words}"`);
         if (view.breachWords !== 'Nothing breaks this today') c.flag(`nothing breaks the rule on main; list_rules says "${view.breachWords}"`);
+        await showSettings(c, 'rules', 't1-rules-settings', 'Where a person sees it', 'Settings → Rules lists the committed rule with its reason, and what breaks it today: nothing.');
 
         await c.say('An agent can ask first', 'check_conformity says whether an import would cross the rule, before it is written.');
         const across = await c.json('check_conformity', { project_path: fx.path, proposed_imports: [{ from: USERS, importing: CONFIG }] });
@@ -200,9 +202,10 @@ export const teamsGroup: Group = {
         // A teammate's laptop starting the same week finds this run: one run, not two.
         const again = await c.api(`/api/recurring/${WEEKLY}/start${q}`, {});
         if (again && (again.created !== false || again.planUid !== uid)) c.flag(`starting the same week twice should find the run; it made ${again.planUid}`);
-        await c.say('One run per week', 'Started again, from here or a teammate\'s laptop, it finds this run. Whether an agent opens on each run is set per laptop, in Settings → Recurring playbooks.');
+        await c.say('One run per week', 'Started again, from here or a teammate\'s laptop, it finds this run.');
         await c.call('navigate_to', { target: 'plan', plan_uid: uid });
         await c.shot('t2-recurring');
+        await showSettings(c, 'recurring', 't2-recurring-settings', 'Per laptop', 'Whether an agent opens on each run is set on each laptop, in Settings → Recurring playbooks. The series itself is the team\'s.');
       },
     },
     {

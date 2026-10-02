@@ -524,6 +524,18 @@ export function register(server: McpServer, deps: ToolDeps): void {
   );
 
   server.registerTool(
+    'close_settings',
+    {
+      description: 'Close the settings modal, as Escape does, so what is behind it can be seen again. Changes nothing in settings.',
+      inputSchema: {},
+    },
+    async () => {
+      deps.broadcast('ui-close-settings', {});
+      return { content: [{ type: 'text' as const, text: 'Closed settings' }] };
+    },
+  );
+
+  server.registerTool(
     'open_mcp_guide',
     {
       description: 'Open the MCP connection guide modal. Shows how to connect agents to CodeTrellis.',

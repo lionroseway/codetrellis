@@ -297,6 +297,7 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   toggle_activity_drawer: 'write',
   open_history_drawer: 'write',
   open_settings: 'write',
+  close_settings: 'write',
   open_mcp_guide: 'write',
   setup_agent_permissions: 'settings',
 

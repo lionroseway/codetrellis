@@ -1076,6 +1076,9 @@ export function useWebSocket() {
             // At a section when the agent names one, as the app's own links do.
             window.dispatchEvent(new CustomEvent('open-settings', payload?.section ? { detail: { section: payload.section } } : undefined));
           }
+          if (type === 'ui-close-settings') {
+            window.dispatchEvent(new CustomEvent('close-settings'));
+          }
 
           // --- A plan's budget changed (set_budget, the chip, an acknowledgement) ---
           // The chip loaded once on mount and nothing told it, so an agent's

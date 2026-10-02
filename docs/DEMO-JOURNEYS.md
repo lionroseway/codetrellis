@@ -109,11 +109,11 @@ Intended, setting a breakpoint, answering it) are asked for in the window;
 | Scene | Watch for |
 |---|---|
 | `lines` | two chips in the top bar, each with its branch and its agent; each agent sees only its own line as `yours` |
-| `overlap` | one **high** overlap naming `isValidEmail`; `check_footprint` names the other side; it clears when one reverts |
-| `contract` | a body-only change tells nobody; a new parameter tells Claude Code on its next call, once, as information |
+| `overlap` | one **high** overlap naming `isValidEmail`; `check_footprint` names the other side; the card is marked in Awareness; it clears when one reverts |
+| `contract` | a body-only change tells nobody; a new parameter tells Claude Code on its next call, once, as information; its card is marked in Awareness |
 | `intended` | marked Intended, the overlap goes quiet and a body edit does not wake it |
 | `intent` | Codex declares what it will change, and the overlap with `auth-refresh` appears before any file changes |
-| `breakpoint` | the hook pauses Claude Code's edit; a steer lets it through with its note; an agent with no hook is told it breached |
+| `breakpoint` | the hook pauses Claude Code's edit, marked in Needs you; a steer lets it through with its note; an agent with no hook is told it breached |
 
 ## A3. How the work stacks up (`observe`) — *built*
 
@@ -124,9 +124,9 @@ a past moment, review and the merge order, and plans played forward.
 | Scene | Watch for |
 |---|---|
 | `stack` | "Billing v2" and "JIRA-150", codex on `billing-v2` and Claude Code on `exports`; "⚠ overlaps JIRA-150", and "Export form" waiting on "Strict validation" |
-| `replay` | the moment before Exports existed: Billing alone, its task pending with nobody on it, no signals; now, the contract is open |
+| `replay` | the window replays from the moment before Exports existed, at 4×: Billing alone, its task pending with nobody on it, no signals; back to live, the contract is open |
 | `review-queue` | "Other work in flight" says exports will need updating; the PR draft warns while the overlap is open; `billing-v2` merges first; once Billing's task is done, Export form waits on nothing |
-| `play-forward` | "◇ planned overlap: JIRA-142 and JIRA-151 both plan to change …validators.ts"; re-sequenced with JIRA-142 first, "Add a currency field" waits on "Round VAT per line" |
+| `play-forward` | play-forward on: "◇ planned overlap: JIRA-142 and JIRA-151 both plan to change …validators.ts"; then in Stack, re-sequenced with JIRA-142 first, "Add a currency field" waits on "Round VAT per line" |
 
 ## A4. The record (`record`) — *built*
 
@@ -135,7 +135,7 @@ What was asked, done, checked and decided, provably unchanged.
 
 | Scene | Watch for |
 |---|---|
-| `evidence` | "Intact: N entries…" before and after; codex claims, starts and submits; the criterion approved (met); the plan's signed evidence names the approval |
+| `evidence` | "Intact: N entries…" before and after; codex claims, starts and submits; the criterion approved (met); the plan's signed evidence names the approval; Settings → Data shown, then closed |
 | `then` | asked about the moment the task was under way: `in_progress` then, `done` now; the Timeline |
 
 ## A5. How the code got here (`code-history`) — *built*
@@ -146,7 +146,7 @@ hand (B8).
 
 | Scene | Watch for |
 |---|---|
-| `whose-line` | line 1 "codex, from the commit message"; line 2 "probably codex: committed while codex's session was open"; line 3 "not yet committed" |
+| `whose-line` | line 1 "codex, from the commit message"; line 2 "probably codex: committed while codex's session was open"; line 3 "not yet committed", and in the sidebar's Changes |
 | `branch-compare` | `billing-v2 (line of work)` offered; "1 modified, 0 added, 0 removed"; "billing-v2 changed 1–3, in refund and halfEven, not committed" |
 
 ## A6. Teams and shared rules (`teams`) — *built*
@@ -157,8 +157,8 @@ is the person's step.
 
 | Scene | Watch for |
 |---|---|
-| `rules` | one high rule signal naming `exports-v2`, the import and the reason; Claude Code told, Codex in `auth-fix` told nothing; it clears when the import comes out |
-| `recurring` | "Weekly security review is due since Monday. Start it?", with W38 and W39 missed; starting it twice finds the same run |
+| `rules` | one high rule signal naming `exports-v2`, the import and the reason; Claude Code told, Codex in `auth-fix` told nothing; Settings → Rules shown, then closed; it clears when the import comes out |
+| `recurring` | "Weekly security review is due since Monday. Start it?", with W38 and W39 missed; starting it twice finds the same run; Settings → Recurring playbooks shown, then closed |
 | `grounding` | "⚠ tests older than the code", and done refused with the reason; after a fresh report, done goes through |
 | `plan-status` | "building on exports-v2, not pushed" from git; "1 of 4 tasks done"; "FIN-88 → this plan → exports-v2 not pushed yet" |
 
@@ -169,7 +169,7 @@ What can be shown without a device; the phone itself stays B11, by hand.
 
 | Scene | Watch for |
 |---|---|
-| `devices` | paired and connected counts that agree between `get_peer_status` and `list_paired_devices` |
+| `devices` | paired and connected counts that agree between `get_peer_status` and `list_paired_devices`; Settings → Devices shown, then closed |
 | `reach` | with a phone: a card and the plans list on it; without one, `mobile_present` answers `mobile: false` and `mobile_navigate` is refused with why |
 
 ## B. The journeys, and where each one lives
