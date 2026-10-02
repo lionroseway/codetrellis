@@ -14,8 +14,8 @@
 # and prs (PRs whose merge commit does not name the id).
 now:
   step: "HD4b: workstreams off the request path"
-  status: "HD4a in review (#322). HD4b: the first listing of a repository with many recent branches blocked the server for seconds (6.1 s with 133 remote branches, measured): about six git calls per branch, one after another. Past INLINE_BRANCHES (8) uncached branches, the rest are worked out off the request path by non-blocking git, four at a time, and workstreams-changed says when they are ready: 540 ms for the first listing, the rest in about 4 s with the server answering throughout"
-  next: "HD4a and HD4b green and merged; then HD4c (CI installs, spec follow-ups); then the phase end (EXECUTION §7)"
+  status: "HD4a merged (#322). HD4b: the first listing of a repository with many recent branches blocked the server for seconds (6.1 s with 133 remote branches, measured): about six git calls per branch, one after another. Past INLINE_BRANCHES (8) uncached branches, the rest are worked out off the request path by non-blocking git, four at a time, and workstreams-changed says when they are ready: 540 ms for the first listing, the rest in about 4 s with the server answering throughout"
+  next: "HD4b green and merged; then HD4c (CI installs, spec follow-ups); then the phase end (EXECUTION §7)"
   blockers: "None"
   updated: 2026-10-02
 sections:

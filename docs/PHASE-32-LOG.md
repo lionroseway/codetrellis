@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | HD4b: workstreams off the request path |
-| **Status** | HD4a in review (#322). HD4b: the first listing of a repository with many recent branches blocked the server for seconds (6.1 s with 133 remote branches, measured): about six git calls per branch, one after another. Past INLINE_BRANCHES (8) uncached branches, the rest are worked out off the request path by non-blocking git, four at a time, and workstreams-changed says when they are ready: 540 ms for the first listing, the rest in about 4 s with the server answering throughout |
-| **In flight** | HD4a in review (#322) on `feat/phase-32-hd4a-shards-and-reads`; HD4b building on `feat/phase-32-hd4b-workstreams` |
+| **Status** | HD4a merged (#322). HD4b: the first listing of a repository with many recent branches blocked the server for seconds (6.1 s with 133 remote branches, measured): about six git calls per branch, one after another. Past INLINE_BRANCHES (8) uncached branches, the rest are worked out off the request path by non-blocking git, four at a time, and workstreams-changed says when they are ready: 540 ms for the first listing, the rest in about 4 s with the server answering throughout |
+| **In flight** | HD4b in review (#323) on `feat/phase-32-hd4b-workstreams`; HD4c in review (#324) on `feat/phase-32-hd4c-installs` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
-| **Next action** | HD4a and HD4b green and merged; then HD4c (CI installs, spec follow-ups); then the phase end (EXECUTION §7) |
+| **Next action** | HD4b green and merged; then HD4c (CI installs, spec follow-ups); then the phase end (EXECUTION §7) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `3690eb1`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `af704ca`, with open PRs from GitHub.
 
 ---
 
@@ -225,9 +225,9 @@
   - [x] B10.4 The evidence export (#312)
   - [x] B10.5 The G2 done-when and docs (#313)
 - [ ] HD4 Hardening after the Wave 2 review (owner's yes), in three parts: — building
-  - [ ] HD4a Browser shards under 20 minutes (chromium and the serial project sharded apart); every read a burst event starts runs one at a time, guarded (#322) — in review
-  - [ ] HD4b Listing workstreams off the request path: branch workstreams cached by ref SHA, so many remote branches never stall the window — building
-  - [ ] HD4c CI installs without running native build scripts (prebuilds, checked by loading them); the open spec follow-ups fixed at their cause
+  - [ ] HD4a Browser shards under 20 minutes (chromium and the serial project sharded apart); every read a burst event starts runs one at a time, guarded
+  - [ ] HD4b Listing workstreams off the request path: branch workstreams cached by ref SHA, so many remote branches never stall the window (#323) — in review
+  - [ ] HD4c CI installs without running native build scripts (prebuilds, checked by loading them); the open spec follow-ups fixed at their cause (#324) — in review
 
 ### Track C: shared ways of working
 - [x] C1 Skills on tasks
