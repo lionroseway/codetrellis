@@ -74,7 +74,6 @@ test.describe.serial('Agent UI and diagnostics tools', () => {
       ['navigate_to', { target: 'awareness' }, 'ui-navigate', { target: 'awareness' }],
       ['navigate_to', { target: 'stack' }, 'ui-navigate', { target: 'stack' }],
       ['navigate_to', { target: 'review' }, 'ui-navigate', { target: 'review' }],
-      ['navigate_to', { target: 'changes' }, 'ui-navigate', { target: 'changes' }],
       ['navigate_to', { target: 'code', file_path: path.join(h.fixture.projectPath, 'packages/web/src/api.ts'), line: 3 }, 'ui-navigate', { target: 'code', line: 3 }],
       ['toggle_panel', { panel: 'inspector' }, 'ui-toggle', { panel: 'inspector' }],
       ['refresh_ui', {}, 'ui-refresh', {}],

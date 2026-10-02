@@ -281,7 +281,7 @@ export function useWebSocket() {
                 }
                 useUiStore.getState().setWorkspaceMode('plan');
               })();
-            } else if (target === 'awareness' || target === 'stack' || target === 'review' || target === 'changes') {
+            } else if (target === 'awareness' || target === 'stack' || target === 'review') {
               // A tab of the side panel, opened as a person's click on it
               // would: the panel shows if it was hidden.
               useUiStore.getState().openPlanPanelTab(target);
