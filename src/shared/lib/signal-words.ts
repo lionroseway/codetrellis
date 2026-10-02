@@ -23,6 +23,8 @@ export function kindWords(s: Pick<AwarenessSignal, 'kind' | 'subject'>): string 
     if (s.kind === 'drift') return 'Outside its brief';
   }
   if (s.kind === 'stale-base') return 'Behind main';
+  // An architecture rule (A7.2).
+  if (s.kind === 'rule') return 'Breaks a rule';
   if (s.kind === 'drift') return 'Outside its scope';
   if (s.kind === 'contract') return s.subject.change === 'removed' ? 'Removed export' : 'Changed signature';
   // Declared, not yet edited, on at least one side (A2.4).
@@ -96,6 +98,12 @@ export function sideWords(s: Pick<AwarenessSignal, 'kind' | 'workstreams' | 'sub
     }
     if (s.kind === 'stale-base') {
       return { root, name, words: `main changed ${about(s)} since ${name} branched, and ${name} changes it too.` };
+    }
+    if (s.kind === 'rule') {
+      const edges = s.subject.edges ?? [];
+      const shown = edges.slice(0, 3).map((e) => `${e.from} → ${e.to}`).join(', ') + (edges.length > 3 ? ' and more' : '');
+      const rule = s.subject.rule;
+      return { root, name, words: `${name} adds ${count(edges.length, 'import')} the rule “${rule?.words ?? 'an architecture rule'}” forbids${rule?.because ? ` (${rule.because})` : ''}: ${shown}.` };
     }
     return { root, name, words: `${name} ${declared ? 'has said it will change' : 'changes'} ${about(s)}.` };
   });

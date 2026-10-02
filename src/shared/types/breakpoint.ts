@@ -11,7 +11,7 @@
 export const BREAKPOINT_KINDS = ['task', 'spec', 'code', 'signal', 'proposal'] as const;
 export type BreakpointKind = typeof BREAKPOINT_KINDS[number];
 /** The signal kinds a signal breakpoint can be on: the ones that can be serious. */
-export const SIGNAL_BREAK_KINDS = ['collision', 'contract', 'drift'] as const;
+export const SIGNAL_BREAK_KINDS = ['collision', 'contract', 'drift', 'rule'] as const;
 export const BREAKPOINT_DECISIONS = ['continue', 'steer', 'stop'] as const;
 export type BreakpointDecision = typeof BREAKPOINT_DECISIONS[number];
 /** What the held call would have done; `disk`, that a guarded plan document's file changed on disk (B7.5b). */

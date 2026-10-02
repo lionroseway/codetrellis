@@ -68,3 +68,20 @@ describe('a task set two ways at once (C3.2)', () => {
     assert.match(sideWords(s, label)[1].words, /^A record claiming to be Sam Lee's sets “Check the figures” to skipped; another record claims to be the same change\.$/);
   });
 });
+
+describe('a rule (A7.2)', () => {
+  test('one side: what it imports across which rule, and why', () => {
+    const s = sig({
+      kind: 'rule', workstreams: ['/w/billing'],
+      subject: {
+        files: ['web/reports.ts'],
+        rule: { id: 'web-not-db', words: 'web/ may not import db/', because: 'web talks to db through the API' },
+        edges: [{ from: 'web/reports.ts', to: 'db/client.ts' }],
+      },
+    });
+    assert.equal(kindWords(s), 'Breaks a rule');
+    assert.deepEqual(sideWords(s, label).map((x) => x.words), [
+      'billing-v2 adds 1 import the rule “web/ may not import db/” forbids (web talks to db through the API): web/reports.ts → db/client.ts.',
+    ]);
+  });
+});

@@ -289,6 +289,36 @@ function DriftDetail({ subject }: { subject: AwarenessSignal['subject'] }) {
 }
 
 /**
+ * The rule a workstream's new imports break (A7.2): the rule and why, each
+ * import across it, and the way to change the rule if the import is right.
+ */
+function RuleDetail({ subject }: { subject: AwarenessSignal['subject'] }) {
+  const edges = subject.edges ?? [];
+  return (
+    <div data-testid="awareness-rule" className="mt-1.5 text-[10px] text-foreground-subtle">
+      <div data-testid="awareness-rule-words">
+        The rule <span className="text-foreground-muted">“{subject.rule?.words ?? 'an architecture rule'}”</span>
+        {subject.rule?.because ? <>, because {subject.rule.because}</> : null}:
+      </div>
+      <ul className="mt-0.5 space-y-0.5">
+        {edges.map((e) => (
+          <li key={`${e.from}\0${e.to}`} data-testid="awareness-rule-edge" className="font-mono text-foreground-muted">
+            {e.from} <ArrowRight size={9} className="inline text-foreground-subtle" aria-label="imports" /> {e.to}
+          </li>
+        ))}
+      </ul>
+      <button
+        data-testid="awareness-rule-change"
+        onClick={() => window.dispatchEvent(new CustomEvent('open-settings', { detail: { section: 'rules' } }))}
+        className="mt-1 text-[10px] text-sky-300/90 hover:underline"
+      >
+        Change the rule in Settings
+      </button>
+    </div>
+  );
+}
+
+/**
  * The person's messages to the agents about a signal (A4.1), and who has
  * read each. The agents' answers are under "told", in their own words.
  */
@@ -514,6 +544,7 @@ function SignalCard({ signal: s, workstreams, now }: { signal: AwarenessSignal; 
           <>
             {s.kind === 'contract' && <ContractDetail subject={s.subject} />}
             {s.kind === 'drift' && <DriftDetail subject={s.subject} />}
+            {s.kind === 'rule' && <RuleDetail subject={s.subject} />}
           </>
         )}
 

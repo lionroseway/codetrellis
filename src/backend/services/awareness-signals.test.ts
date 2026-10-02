@@ -343,3 +343,28 @@ describe('intended and cooldown (A3.2)', () => {
     assert.deepEqual(reconcileSignals([before], computeSignals([ws('/r/w', 'w', [file('a.ts'), file('b.ts'), file('c.ts')], { scope: sc })]), 2).reopened, [before.id]);
   });
 });
+
+describe('rule (A7.2)', () => {
+  const RULE = { id: 'web-not-db', from: 'web/', mayNotImport: 'db/', because: 'web talks to db through the API' };
+
+  test('one high signal per workstream and rule, naming each import it adds and why', () => {
+    const d = computeSignals([
+      ws('/r/exports', 'exports-v2', [file('web/reports.ts'), file('web/admin.ts')], {
+        ruleBreaches: [{ rule: RULE, edges: [{ from: 'web/reports.ts', to: 'db/client.ts' }, { from: 'web/admin.ts', to: 'db/users.ts' }] }],
+      }),
+    ]);
+    assert.deepEqual(brief(d), ['high rule web/admin.ts+web/reports.ts']);
+    assert.deepEqual(d[0].workstreams, ['/r/exports']);
+    assert.deepEqual(d[0].subject.rule, { id: 'web-not-db', words: 'web/ may not import db/', because: 'web talks to db through the API' });
+    assert.deepEqual(d[0].subject.edges, [{ from: 'web/admin.ts', to: 'db/users.ts' }, { from: 'web/reports.ts', to: 'db/client.ts' }]);
+    assert.equal(d[0].summary, '`exports-v2` now imports db/ from web/ (web/admin.ts → db/users.ts, web/reports.ts → db/client.ts), which the rule “web/ may not import db/” forbids: web talks to db through the API');
+  });
+
+  test('its id is the workstream and rule, so a new import across it is the same signal with a new shape', () => {
+    const one = computeSignals([ws('/r/x', 'x', [file('web/a.ts')], { ruleBreaches: [{ rule: RULE, edges: [{ from: 'web/a.ts', to: 'db/a.ts' }] }] })]);
+    const two = computeSignals([ws('/r/x', 'x', [file('web/a.ts')], { ruleBreaches: [{ rule: RULE, edges: [{ from: 'web/a.ts', to: 'db/a.ts' }, { from: 'web/a.ts', to: 'db/b.ts' }] }] })]);
+    assert.equal(one[0].id, two[0].id);
+    assert.notEqual(one[0].shape, two[0].shape);
+    assert.deepEqual(computeSignals([ws('/r/x', 'x', [file('web/a.ts')], { ruleBreaches: [] })]), []);
+  });
+});

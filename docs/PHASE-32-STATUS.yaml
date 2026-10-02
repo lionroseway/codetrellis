@@ -13,11 +13,11 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track A — A7.1: architecture rules, and check_conformity made true"
-  status: "C4 done (#299–#303; base fixes #304, #305). A7 refined in three parts. A7.1 built: rules in the committed config (from, may not import, except, because), each with the imports that break it today; GET/PUT/DELETE /api/rules (the person's); check_conformity checks them and says the rule and why; list_rules (read); Settings → Architecture rules. Unit architecture-rule 4, harness architecture-rules 5, browser settings/rules.spec 2 (shots)"
-  next: "Merge A7.1 when green; then A7.2 (rule signals from each workstream's import delta)"
+  step: "Track A — A7.2: rule signals from each workstream's import delta"
+  status: "A7.1 in review (#306). A7.2 built: each workstream's added imports (now against its merge base, resolved with the project's resolver) checked against the rules; a high `rule` signal per workstream and rule, in the tab, digest, push, inline notices and phone; `rule` as a signal breakpoint; the card says the rule and why, each import across it, and links to Settings → Architecture rules. Unit tests, harness rule-signals 3, browser awareness-tab rule card (shot)"
+  next: "Merge A7.1 when green, bring it into A7.2, open A7.2's PR; then A7.3 (check_changes and `codetrellis check` on rules, the M7 done-when)"
   blockers: "None"
-  updated: 2026-10-01
+  updated: 2026-10-02
 sections:
   - title: Setup
     items:

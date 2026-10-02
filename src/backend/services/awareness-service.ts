@@ -12,7 +12,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { AwarenessSignal, SettableSignalState, SignalState, SignalStateBy, Workstream } from '../../shared/types';
-import { getDb } from './database';
+import { getDb, resolutionContextRoot } from './database';
 import { markDirty } from './persistence';
 import { isSafeGitRef } from './git-safety';
 import { listWorkstreams } from './workstream-service';
@@ -23,6 +23,8 @@ import { pushForSignal } from './push-notification-service';
 import { computeMaterialSignals } from './material-signals';
 import { materialInputsOf } from './material-footprints';
 import { stateSplitDrafts } from './task-records/split-signals';
+import { checkEdges, rulesOf } from './architecture-rules';
+import { importsAdded } from './workstream-imports';
 import type { FileSpec } from '../../shared/types';
 
 const SHA = /^[0-9a-f]{40}$/;
@@ -107,7 +109,29 @@ export function footprintsOf(all: readonly Workstream[], projectRoot?: string): 
     ...(projectRoot ? { contracts: contractsOf(projectRoot, w) } : {}),
     ...(w.intents?.length ? { intended: declaredFiles(w.intents) } : {}),
     ...scopeEntry(scopeOf(w)),
+    ...(projectRoot ? ruleEntry(projectRoot, w, main?.root ?? null) : {}),
   }));
+}
+
+/**
+ * The imports a workstream adds across the project's architecture rules
+ * (A7.2). Only for the project whose import context is held, since resolving
+ * needs its aliases and systems; and only when it has rules, so a project
+ * without any parses nothing more.
+ */
+function ruleEntry(projectRoot: string, w: Workstream, mainRoot: string | null): Pick<FootprintInput, 'ruleBreaches'> {
+  const rules = rulesOf(projectRoot);
+  if (rules.length === 0 || w.changes.files.length === 0) return {};
+  const held = resolutionContextRoot();
+  const real = (p: string) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
+  if (!held || real(held) !== real(projectRoot)) return {};
+  const breaches = checkEdges(rules, importsAdded(projectRoot, w, mainRoot));
+  if (breaches.length === 0) return {};
+  return {
+    ruleBreaches: rules
+      .map((rule) => ({ rule, edges: breaches.filter((b) => b.rule === rule.id).map((b) => ({ from: b.from, to: b.to })) }))
+      .filter((r) => r.edges.length > 0),
+  };
 }
 
 const scopeEntry = (scope: WorkstreamScope | null) => (scope ? { scope } : {});
