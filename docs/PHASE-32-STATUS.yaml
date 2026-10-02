@@ -14,8 +14,8 @@
 # and prs (PRs whose merge commit does not name the id).
 now:
   step: "Track E — E4: line history"
-  status: "E1 (#314) and E2a (#315) merged; E2b (#316) and E3 (#317) in review, stacked. E4 built on E3: GET /api/git/line-history and MCP line_history give each line's commit and git author (git blame), attributed from what CodeTrellis knows with how (commit-attribution: the commit message's agent line or an agent's Co-Authored-By trailer; seen when it landed; timing, while an agent's session was open in this checkout, said as probably), with the session, task and plan; the code view's Line history column and card (to Evolution at that commit, replay at that moment, the task). The evolution view uses the same attribution. Unit commit-attribution and line-history 6, line-history lib 2; harness line-history 4; browser line-history (shot)"
-  next: "Merge E2b (#316), E3 (#317), then E4 by the stacked flow; then E5 (branches and PRs)"
+  status: "E1 (#314), E2a (#315) and E2b (#316) merged; E3 (#317) in review. E4 built on E3: GET /api/git/line-history and MCP line_history give each line's commit and git author (git blame), attributed from what CodeTrellis knows with how (commit-attribution: the commit message's agent line or an agent's Co-Authored-By trailer; seen when it landed; timing, while an agent's session was open in this checkout, said as probably), with the session, task and plan; the code view's Line history column and card (to Evolution at that commit, replay at that moment, the task). The evolution view uses the same attribution. Unit commit-attribution and line-history 6, line-history lib 2; harness line-history 4; browser line-history (shot)"
+  next: "Merge E3 (#317) when green, then E4 (#318) by the stacked flow; then E5 (branches and pull requests)"
   blockers: "None"
   updated: 2026-10-02
 sections:

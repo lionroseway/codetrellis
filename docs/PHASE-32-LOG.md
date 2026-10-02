@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Track E — E4: line history |
-| **Status** | E1 (#314) and E2a (#315) merged; E2b (#316) and E3 (#317) in review, stacked. E4 built on E3: GET /api/git/line-history and MCP line_history give each line's commit and git author (git blame), attributed from what CodeTrellis knows with how (commit-attribution: the commit message's agent line or an agent's Co-Authored-By trailer; seen when it landed; timing, while an agent's session was open in this checkout, said as probably), with the session, task and plan; the code view's Line history column and card (to Evolution at that commit, replay at that moment, the task). The evolution view uses the same attribution. Unit commit-attribution and line-history 6, line-history lib 2; harness line-history 4; browser line-history (shot) |
-| **In flight** | E2b in review (#316) on `feat/phase-32-e2b-graph-pair`; E3 in review (#317) on `feat/phase-32-e3-evolution`; E4 building on `feat/phase-32-e4-line-history` |
+| **Status** | E1 (#314), E2a (#315) and E2b (#316) merged; E3 (#317) in review. E4 built on E3: GET /api/git/line-history and MCP line_history give each line's commit and git author (git blame), attributed from what CodeTrellis knows with how (commit-attribution: the commit message's agent line or an agent's Co-Authored-By trailer; seen when it landed; timing, while an agent's session was open in this checkout, said as probably), with the session, task and plan; the code view's Line history column and card (to Evolution at that commit, replay at that moment, the task). The evolution view uses the same attribution. Unit commit-attribution and line-history 6, line-history lib 2; harness line-history 4; browser line-history (shot) |
+| **In flight** | E3 in review (#317) on `feat/phase-32-e3-evolution`; E4 in review (#318) on `feat/phase-32-e4-line-history` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
-| **Next action** | Merge E2b (#316), E3 (#317), then E4 by the stacked flow; then E5 (branches and PRs) |
+| **Next action** | Merge E3 (#317) when green, then E4 (#318) by the stacked flow; then E5 (branches and pull requests) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `8498c84`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `bce3097`, with open PRs from GitHub.
 
 ---
 
@@ -285,11 +285,11 @@
 ### Track E: how the code got here
 - [ ] E Compare any two points, scrub each side's history, and each line's commit and agent, with no plan needed (owner's decision, 2026-10-02), refined in EXECUTION §6c: — building
   - [ ] E1 Source control with no plan: the Changes panel (staged, unstaged, untracked; each worktree's changes), and the defect that started it (the graph showed changes, the code view no diff)
-  - [ ] E2 Any ref on either side: branches local and remote, tags, a worktree's working copy, a merge base; one picker for the code view and the graph, in two: — building
+  - [ ] E2 Any ref on either side: branches local and remote, tags, a worktree's working copy, a merge base; one picker for the code view and the graph, in two:
     - [ ] E2a The refs, and any two compared file by file from the Changes tab, each side said plainly and as git's command; a file opens its diff
-    - [ ] E2b The graph compares the same two: its architecture diff between the pair chosen in the Changes tab (#316) — in review
+    - [ ] E2b The graph compares the same two: its architecture diff between the pair chosen in the Changes tab
   - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked (#317) — in review
-  - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history` — building
+  - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history` (#318) — in review
   - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default
   - [ ] E6 The done-when: a teammate's agent's work, traced line by line and side by side, with no plan
 
@@ -453,6 +453,7 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-02 | A7 is refined into three parts (EXECUTION §4): the rules and the check, rule signals from each workstream's import delta, the gate and the done-when. A rule is a path boundary (`from`, `mayNotImport`, `except`, `because`) in the committed config | One file every laptop, agent and pipeline reads; a boundary between two sets of paths is what M7 asks for ("web/ may not import db/") and covers layers without a layer model |
 | 2026-10-02 | Track E serves beginners and advanced users of git alike (owner): every surface reads two ways, a plain sentence first, then git's own word and the exact command (copyable) | The owner: "the whole idea behind this portion of work is making it so both beginners and advanced users of git can use it as their surfacing tool". Plain words alone hide what is compared from someone who knows git; git's words alone shut out someone who does not; both, together, teach the one and serve the other |
 | 2026-10-02 | E1: the defect had three causes, each fixed where it was: a committed edit (the code view compared the last commit with a clean working tree), an edit in another worktree (it read only this checkout), and a project in a subfolder of its repository (`git show <ref>:<path>` read from the repository's top, so the file "was added") | All three reproduced against a running backend before anything changed; the Changes panel names where each change is and diffs between that group's own two points, and the code view picks the same comparison for a file opened from the tree or the graph |
+| 2026-10-02 | E2b (found on CI): source-control reads run one at a time, as awareness reads do; and an awareness read that started before a person's answer never writes over it | `brief-other-work` failed once on CI: Acknowledge stayed busy for 5 s and the card read open. E1's Changes feed started a read of git for every workstreams-changed broadcast, unbounded, in every window with the sidebar shown; and a read already in flight when the person acknowledged could land after and turn the card back. Both reproduced in unit tests that fail without the change |
 | 2026-10-02 | E4: timing is a third way of knowing, said as "probably": a commit made while an agent's session was open in the same checkout, never for a commit read from a ref | It is how most agents' commits are made (by the agent, in its checkout) and nothing else says so when the message does not; a person in that checkout could have committed too, so the word and the gutter's "?" say it is a guess. A ref belongs to no checkout, so timing does not apply there. Commit times are whole seconds, so a commit in the second a session started counts as in it (found when the harness test failed only when the two fell in the same second) |
 | 2026-10-02 | E4: an agent's `Co-Authored-By:` trailer counts as the commit message naming it; a person as co-author does not | Claude Code and others write the trailer; matching agent names only keeps a pair-programming colleague from being called an agent |
 | 2026-10-02 | E4: one attribution module (`commit-attribution`) for the evolution view and line history | The two showed the same commit; two rules would have named different makers for it |

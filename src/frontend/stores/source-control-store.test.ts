@@ -52,3 +52,21 @@ test('the graph shows the pair only while there is one, and clearing the pair tu
   await s.setPair('/p', null);
   assert.equal(useSourceControlStore.getState().pairOnGraph, false);
 });
+
+test('source control: refreshes asked for while one runs become one more read, not one each', async () => {
+  let reads = 0;
+  let release!: () => void;
+  const held = new Promise<void>((r) => { release = r; });
+  globalThis.fetch = (async () => {
+    reads++;
+    if (reads === 1) await held;
+    return new Response(JSON.stringify({ project: '/p', git: true, branch: 'main', head: null, groups: [], words: `read ${reads}` }), { status: 200 });
+  }) as typeof fetch;
+  const s = useSourceControlStore.getState();
+  const first = s.refresh('/p');
+  const burst = [1, 2, 3, 4, 5].map(() => s.refresh('/p'));
+  release();
+  await Promise.all([first, ...burst]);
+  assert.equal(reads, 2);
+  assert.equal(useSourceControlStore.getState().data?.words, 'read 2');
+});
