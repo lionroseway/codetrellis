@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Track E — E2b: the graph compares the same two |
-| **Status** | E1 (#314) and E2a (#315) in review, stacked. E2b built on E2a: in the Changes tab, "Show on the graph" draws the graph's marks (files added, changed, removed; imports added, removed) from /api/compare between the chosen pair, instead of its own baseline against now; a banner beneath the canvas says which two, with the counts and git's command, and stops it; changing a side redraws it; clearing the pair turns it off. Unit source-control-store 3; browser compare-refs (graph, shot compare-graph) |
-| **In flight** | E1 in review (#314) on `feat/phase-32-e1-source-control`; E2a in review (#315) on `feat/phase-32-e2a-refs`; E2b building on `feat/phase-32-e2b-graph-pair` |
+| **Status** | E1 (#314) and E2a (#315) merged. E2b built on E2a: in the Changes tab, "Show on the graph" draws the graph's marks (files added, changed, removed; imports added, removed) from /api/compare between the chosen pair, instead of its own baseline against now; a banner beneath the canvas says which two, with the counts and git's command, and stops it; changing a side redraws it; clearing the pair turns it off. Unit source-control-store 3; browser compare-refs (graph, shot compare-graph) |
+| **In flight** | E2b in review (#316) on `feat/phase-32-e2b-graph-pair`; E3 in review (#317) on `feat/phase-32-e3-evolution` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
-| **Next action** | Merge E1 (#314), E2a (#315), then E2b by the stacked flow; then E3 (the evolution view) |
+| **Next action** | Merge E2b (#316) when green, then E3 (#317) by the stacked flow; then E4 (line history) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `7c0623a`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `8498c84`, with open PRs from GitHub.
 
 ---
 
@@ -284,11 +284,11 @@
 
 ### Track E: how the code got here
 - [ ] E Compare any two points, scrub each side's history, and each line's commit and agent, with no plan needed (owner's decision, 2026-10-02), refined in EXECUTION §6c: — building
-  - [ ] E1 Source control with no plan: the Changes panel (staged, unstaged, untracked; each worktree's changes), and the defect that started it (the graph showed changes, the code view no diff) (#314) — in review
+  - [ ] E1 Source control with no plan: the Changes panel (staged, unstaged, untracked; each worktree's changes), and the defect that started it (the graph showed changes, the code view no diff)
   - [ ] E2 Any ref on either side: branches local and remote, tags, a worktree's working copy, a merge base; one picker for the code view and the graph, in two: — building
-    - [ ] E2a The refs, and any two compared file by file from the Changes tab, each side said plainly and as git's command; a file opens its diff (#315) — in review
-    - [ ] E2b The graph compares the same two: its architecture diff between the pair chosen in the Changes tab — building
-  - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked
+    - [ ] E2a The refs, and any two compared file by file from the Changes tab, each side said plainly and as git's command; a file opens its diff
+    - [ ] E2b The graph compares the same two: its architecture diff between the pair chosen in the Changes tab (#316) — in review
+  - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked (#317) — in review
   - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history`
   - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default
   - [ ] E6 The done-when: a teammate's agent's work, traced line by line and side by side, with no plan
