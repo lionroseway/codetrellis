@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | Track E — E4: line history |
-| **Status** | E1 (#314), E2a (#315) and E2b (#316) merged; E3 (#317) in review. E4 built on E3: GET /api/git/line-history and MCP line_history give each line's commit and git author (git blame), attributed from what CodeTrellis knows with how (commit-attribution: the commit message's agent line or an agent's Co-Authored-By trailer; seen when it landed; timing, while an agent's session was open in this checkout, said as probably), with the session, task and plan; the code view's Line history column and card (to Evolution at that commit, replay at that moment, the task). The evolution view uses the same attribution. Unit commit-attribution and line-history 6, line-history lib 2; harness line-history 4; browser line-history (shot) |
-| **In flight** | E3 in review (#317) on `feat/phase-32-e3-evolution`; E4 in review (#318) on `feat/phase-32-e4-line-history` |
+| **Status** | E1 (#314), E2a (#315), E2b (#316) and E3 (#317) merged. E4 built on E3: GET /api/git/line-history and MCP line_history give each line's commit and git author (git blame), attributed from what CodeTrellis knows with how (commit-attribution: the commit message's agent line or an agent's Co-Authored-By trailer; seen when it landed; timing, while an agent's session was open in this checkout, said as probably), with the session, task and plan; the code view's Line history column and card (to Evolution at that commit, replay at that moment, the task). The evolution view uses the same attribution. Unit commit-attribution and line-history 6, line-history lib 2; harness line-history 4; browser line-history (shot) |
+| **In flight** | E4 in review (#318) on `feat/phase-32-e4-line-history`; E5 in review (#319) on `feat/phase-32-e5-branches`; E6 in review (#320) on `feat/phase-32-e6-done-when` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
-| **Next action** | Merge E3 (#317) when green, then E4 (#318) by the stacked flow; then E5 (branches and pull requests) |
+| **Next action** | Merge E4 (#318) when green, then E5 (#319) and E6 (#320) by the stacked flow; then the review |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `bce3097`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `6984df3`, with open PRs from GitHub.
 
 ---
 
@@ -288,10 +288,10 @@
   - [ ] E2 Any ref on either side: branches local and remote, tags, a worktree's working copy, a merge base; one picker for the code view and the graph, in two:
     - [ ] E2a The refs, and any two compared file by file from the Changes tab, each side said plainly and as git's command; a file opens its diff
     - [ ] E2b The graph compares the same two: its architecture diff between the pair chosen in the Changes tab
-  - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked (#317) — in review
+  - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked
   - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history` (#318) — in review
-  - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default
-  - [ ] E6 The done-when: a teammate's agent's work, traced line by line and side by side, with no plan
+  - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default (#319) — in review
+  - [ ] E6 The done-when: a teammate's agent's work, traced line by line and side by side, with no plan (#320) — in review
 
 ### Phase end
 - [ ] `main` merged in, full suite green on Node 26
