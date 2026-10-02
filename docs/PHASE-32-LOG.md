@@ -17,11 +17,11 @@
 
 | | |
 |---|---|
-| **Stage / step** | Track E — E3: the evolution view |
-| **Status** | E1 (#314) and E2a (#315) merged; E2b (#316) in review. E3 built on E2b: GET /api/git/file-history lists a file's positions on any side (its working copy, then each commit that changed it, following renames, at the path it had then), each with the git author and what CodeTrellis knows of who made it (from the commit message, or seen when it landed in a recorded session); GET /api/record/decisions lists the record's decisions between two moments. The code view's Evolution: two sides, each any point, each with a scrubber over its own commits and a card, a lock that moves the other side to the same moment, the decisions between the two, and the diff between the positions (renames read at each side's path). Unit file-history 6, evolution 3; harness file-history 5; browser evolution (shots) |
-| **In flight** | E2b in review (#316) on `feat/phase-32-e2b-graph-pair`; E3 in review (#317) on `feat/phase-32-e3-evolution` |
+| **Stage / step** | Track E — E4: line history |
+| **Status** | E1 (#314) and E2a (#315) merged; E2b (#316) and E3 (#317) in review, stacked. E4 built on E3: GET /api/git/line-history and MCP line_history give each line's commit and git author (git blame), attributed from what CodeTrellis knows with how (commit-attribution: the commit message's agent line or an agent's Co-Authored-By trailer; seen when it landed; timing, while an agent's session was open in this checkout, said as probably), with the session, task and plan; the code view's Line history column and card (to Evolution at that commit, replay at that moment, the task). The evolution view uses the same attribution. Unit commit-attribution and line-history 6, line-history lib 2; harness line-history 4; browser line-history (shot) |
+| **In flight** | E2b in review (#316) on `feat/phase-32-e2b-graph-pair`; E3 in review (#317) on `feat/phase-32-e3-evolution`; E4 building on `feat/phase-32-e4-line-history` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
-| **Next action** | Merge E2b (#316), then E3 (#317) by the stacked flow; then E4 (line history) |
+| **Next action** | Merge E2b (#316), E3 (#317), then E4 by the stacked flow; then E5 (branches and PRs) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
@@ -289,7 +289,7 @@
     - [ ] E2a The refs, and any two compared file by file from the Changes tab, each side said plainly and as git's command; a file opens its diff
     - [ ] E2b The graph compares the same two: its architecture diff between the pair chosen in the Changes tab (#316) — in review
   - [ ] E3 The evolution view: a file at two refs side by side, each side scrubbing its own commits, or both locked (#317) — in review
-  - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history`
+  - [ ] E4 Line history: the git author and commit on each line, and the agent, session, task and plan where CodeTrellis knows them; `line_history` — building
   - [ ] E5 Branches and pull requests through git and gh; Fetch now; keeping remotes current is a setting, off by default
   - [ ] E6 The done-when: a teammate's agent's work, traced line by line and side by side, with no plan
 
@@ -453,6 +453,9 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 | 2026-10-02 | A7 is refined into three parts (EXECUTION §4): the rules and the check, rule signals from each workstream's import delta, the gate and the done-when. A rule is a path boundary (`from`, `mayNotImport`, `except`, `because`) in the committed config | One file every laptop, agent and pipeline reads; a boundary between two sets of paths is what M7 asks for ("web/ may not import db/") and covers layers without a layer model |
 | 2026-10-02 | Track E serves beginners and advanced users of git alike (owner): every surface reads two ways, a plain sentence first, then git's own word and the exact command (copyable) | The owner: "the whole idea behind this portion of work is making it so both beginners and advanced users of git can use it as their surfacing tool". Plain words alone hide what is compared from someone who knows git; git's words alone shut out someone who does not; both, together, teach the one and serve the other |
 | 2026-10-02 | E1: the defect had three causes, each fixed where it was: a committed edit (the code view compared the last commit with a clean working tree), an edit in another worktree (it read only this checkout), and a project in a subfolder of its repository (`git show <ref>:<path>` read from the repository's top, so the file "was added") | All three reproduced against a running backend before anything changed; the Changes panel names where each change is and diffs between that group's own two points, and the code view picks the same comparison for a file opened from the tree or the graph |
+| 2026-10-02 | E4: timing is a third way of knowing, said as "probably": a commit made while an agent's session was open in the same checkout, never for a commit read from a ref | It is how most agents' commits are made (by the agent, in its checkout) and nothing else says so when the message does not; a person in that checkout could have committed too, so the word and the gutter's "?" say it is a guess. A ref belongs to no checkout, so timing does not apply there |
+| 2026-10-02 | E4: an agent's `Co-Authored-By:` trailer counts as the commit message naming it; a person as co-author does not | Claude Code and others write the trailer; matching agent names only keeps a pair-programming colleague from being called an agent |
+| 2026-10-02 | E4: one attribution module (`commit-attribution`) for the evolution view and line history | The two showed the same commit; two rules would have named different makers for it |
 | 2026-10-02 | E3: a commit's maker is CodeTrellis's only where it knows, and says how: the commit message's `agent:` line, or seen (a replay frame recorded the commit landing during that agent's session); the git author is always shown | GitLens's author line is what people trust, so it is never replaced; timing alone would guess, so a commit with neither stays the author's. E4 widens what is known (a session's own edits) |
 | 2026-10-02 | E3: the decisions between two positions are the computer's record in that window, not filtered to the project | The record carries no project column and its payloads differ by type; saying "recorded on this computer" is true, and each decision names what it was about |
 | 2026-10-02 | E3: locked scrubbing is by time, not by index | Two branches have different commits; the same moment is what makes the comparison mean something (where main stood when the agent committed) |
@@ -499,6 +502,31 @@ and unit re-run at `1c6dd3c` (`feat/phase-32` after #111).
 ---
 
 ## Entries
+
+### 2026-10-02: E4 — line history
+- **Journey.** A line in `README.md` looks wrong. Priya turns on Line
+  history: beside the line numbers, "codex · 3d · Round refunds to the
+  cent", "claude · 1d · Half-even, as approved", "Sam Lee · 40d · Start
+  the readme", "Not committed yet", with `$ git blame -- README.md`. She
+  chooses codex's run: the commit, "Sam Lee <sam@acme.test>" as git has
+  it, "codex, seen: it landed while CodeTrellis recorded codex's session
+  in acme-billing · session s-bill", how CodeTrellis knows, and the task
+  "Round refunds" in "Refunds to the cent". From the card she opens how
+  the file changed around it (Evolution at that commit), replays that
+  moment, or opens the task. An agent asks `line_history` and gets the
+  same in words.
+- **Built.** `services/commit-attribution.ts` (`agentFromMessage`,
+  `attributeCommits`, `recordedKnowledge`, `isProjectRelativePath`), used
+  by `file-history` too; `services/line-history.ts` (`lineHistory`,
+  `parseBlame`, `hunksOf`, `lineWords`); `GET /api/git/line-history`; MCP
+  `line_history` (`read`); the code view's Line history toggle, the
+  `CodePreview` column and `LineHistoryCard`; Evolution can start at a
+  commit.
+- **Tests.** Unit `line-history.test.ts` (6: message and trailer;
+  attribution order with task and plan; each line; not committed; porcelain;
+  refusals), `lib/line-history.test.ts` (2). Harness `line-history.test.ts`
+  (4: every way of knowing, timing with the task; `line_history`; a branch;
+  refusals). Browser `inspector/line-history.spec.ts` (shot `line-history`).
 
 ### 2026-10-02: E3 — the evolution view
 - **Journey.** Priya opens `README.md` in the code view and chooses
