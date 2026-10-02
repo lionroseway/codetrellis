@@ -38,7 +38,7 @@ before(async () => {
 });
 
 beforeEach(() => {
-  for (const t of ['agent_events', 'agent_sessions']) db.getDb().run(`DELETE FROM ${t}`);
+  for (const t of ['agent_events', 'agent_sessions', 'record_chain', 'record_anchor']) db.getDb().run(`DELETE FROM ${t}`);
 });
 
 describe('what is kept', () => {
@@ -142,13 +142,16 @@ describe('reading it back', () => {
 });
 
 describe('how long it lasts', () => {
-  test('older than the retention window goes; so do the oldest past the row cap', () => {
+  test('older than the retention window goes; so do the oldest past the row cap, oldest as written (B10.1)', () => {
     const now = 100 * 24 * 60 * 60 * 1000;
     const day = 24 * 60 * 60 * 1000;
     log.recordAgentEvent(event({ timestamp: now - (log.RETENTION_DAYS + 1) * day, payload: { n: 'old' } }));
     for (let i = 1; i <= 4; i++) log.recordAgentEvent(event({ timestamp: now - i * 1000, payload: { n: i } }));
     assert.equal(log.pruneAgentEvents(now, 3), 2);
-    assert.deepEqual(log.listAgentEvents().map((e) => e.payload.n), [3, 2, 1]);
+    // The record is trimmed as its oldest block, in the order it was written
+    // (1 was written before 4, though 4 says it happened earlier), so what is
+    // kept still verifies.
+    assert.deepEqual(log.listAgentEvents().map((e) => e.payload.n), [4, 3, 2]);
   });
 });
 

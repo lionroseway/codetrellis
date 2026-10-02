@@ -347,6 +347,26 @@ export function phraseEvent(event: AgentEvent, vocabulary: PhraseVocabulary = 'c
     return { text: `Checked criteria: ${words}`, intent: failed ? 'error' : 'read', tool: null, mutating: false };
   }
 
+  // ── A person's decisions, kept in the record (B10.1) ──────────────
+  const whoDid = (t: unknown) => (t === 'human' ? 'You' : t === 'unverified' ? 'Someone over the local API' : 'Someone');
+  if (event.type === 'signal_answered') {
+    const kind = typeof payload.kind === 'string' ? payload.kind.replace(/-/g, ' ') : 'a';
+    const signal = `a ${kind} signal`;
+    const said: Record<string, string> = { acknowledged: `acknowledged ${signal}`, intended: `marked ${signal} intended`, dismissed: `dismissed ${signal}`, open: `reopened ${signal}` };
+    const from = payload.channel === 'phone' ? ', from the phone' : '';
+    return { text: `${whoDid(payload.actorType)} ${said[String(payload.state)] ?? `answered ${signal}`}${from}`, intent: 'write', tool: null, mutating: false };
+  }
+  if (event.type === 'spec_decided') {
+    const said: Record<string, string> = { accept: 'accepted', amend: 'accepted', reject: 'rejected' };
+    const section = typeof payload.section === 'string' && payload.section ? ` to “${payload.section.slice(0, 80)}”` : '';
+    const amended = payload.decision === 'amend' ? ', with changes' : '';
+    return { text: `${whoDid(payload.authorType)} ${said[String(payload.decision)] ?? 'decided'} a proposed spec change${section}${amended}`, intent: payload.decision === 'reject' ? 'error' : 'write', tool: null, mutating: true };
+  }
+  if (event.type === 'rule_changed') {
+    const rule = typeof payload.from === 'string' && typeof payload.mayNotImport === 'string' ? ` “${payload.from} may not import ${payload.mayNotImport}”` : ` ${String(payload.ruleId ?? '')}`;
+    return { text: `${whoDid(payload.authorType)} ${payload.change === 'stopped' ? 'stopped' : 'set'} the architecture rule${rule}`, intent: 'write', tool: null, mutating: true };
+  }
+
   // ── Claude Code session-JSONL events ──────────────────────────────
   const file = typeof payload.file === 'string' ? payload.file.split('/').pop() : null;
   switch (payload.action) {

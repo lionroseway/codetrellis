@@ -19,8 +19,33 @@ import {
   isPlanAllowedDuringFreeze,
   exemptPlanFromFreeze,
 } from '../../services/freeze-service';
+import { verifyRecord } from '../../services/record-chain';
 
 export function register(server: McpServer, deps: ToolDeps): void {
+  // --- verify_record (Phase 32 B10.1) ---
+
+  server.registerTool(
+    'verify_record',
+    {
+      description:
+        'Is the record intact? Every agent event CodeTrellis keeps (tool calls, and the decisions people make: criteria, ' +
+        'breakpoints, signals, spec proposals, rules) is linked into a hash chain as it is written. This walks it and ' +
+        'says whether anything kept was changed, removed or added around it since, naming each by number, kind and ' +
+        'agent. Read only.',
+      inputSchema: {},
+    },
+    async () => {
+      const r = verifyRecord();
+      return {
+        _meta: { summary: r.ok ? `Record intact: ${r.entries} entries` : `Record changed: ${r.problems.length} problem${r.problems.length === 1 ? '' : 's'}` },
+        content: [{ type: 'text' as const, text: JSON.stringify({
+          ok: r.ok, words: r.words, entries: r.entries, since: r.since, trimmed_through: r.trimmedThrough,
+          head: r.head, problems: r.problems.map((p) => ({ seq: p.seq, event_id: p.eventId, kind: p.kind, at: p.at, type: p.type, agent_type: p.agentType })),
+        }, null, 2) }],
+      };
+    },
+  );
+
   // --- get_freeze_status ---
 
   server.registerTool(

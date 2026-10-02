@@ -21,7 +21,10 @@
  *    secrets, well-known token formats and this launch's capability token
  *    are also masked before anything is written.
  *  - **Kept 14 days**, like the log files, and at most `MAX_ROWS` rows.
- *    Setting retention is the record's job (B10).
+ *    Setting retention is the record's job (B10.2).
+ *  - **The record** (B10.1): every event kept is linked into a hash chain
+ *    as it is written (`record-chain.ts`), and pruned only as the chain's
+ *    oldest block, so a change or a removal is found by walking it.
  */
 
 import { randomBytes } from 'node:crypto';
@@ -29,6 +32,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { AgentEvent, AgentEventSource, AgentEventType } from '../../shared/types';
 import { getDb } from './database';
 import { markDirty } from './persistence';
+import { beginRecord, linkEvent, trimRecord } from './record-chain';
 
 export const RETENTION_DAYS = 14;
 export const MAX_ROWS = 100_000;
@@ -87,7 +91,9 @@ export interface BodyEdit {
 }
 
 /** Publish an event the app records itself. Inside an MCP tool it joins that session's turn. Never throws. */
-function publishApp(type: 'spec_edited' | 'criterion_decided' | 'check_run' | 'breakpoint_hit' | 'breakpoint_answered', payload: Record<string, unknown>, label: string | null): void {
+type AppEventType = 'spec_edited' | 'criterion_decided' | 'check_run' | 'breakpoint_hit' | 'breakpoint_answered' | 'signal_answered' | 'spec_decided' | 'rule_changed';
+
+function publishApp(type: AppEventType, payload: Record<string, unknown>, label: string | null): void {
   if (!publisher) return;
   try {
     const acting = context.getStore();
@@ -193,6 +199,16 @@ export function recordBreakpointEvent(type: 'breakpoint_hit' | 'breakpoint_answe
   publishApp(type, payload, label);
 }
 
+/**
+ * A person's decision that is otherwise kept only as a row's latest state
+ * (B10.1): a signal answered, a spec proposal decided, an architecture rule
+ * set or stopped. Kept as an event, so the record has each one, in order,
+ * with who: the row is overwritten by the next answer, the record is not.
+ */
+export function recordDecision(type: 'signal_answered' | 'spec_decided' | 'rule_changed', payload: Record<string, unknown>, label: string | null): void {
+  publishApp(type, payload, label);
+}
+
 /** Key names whose values are secrets, in JSON (`"apiKey": "…"`) or `key=value` form. */
 const SECRET_KEY = /(["']?)([A-Za-z0-9_-]*(?:token|secret|password|passwd|api[_-]?key|authorization|credential|private[_-]?key)[A-Za-z0-9_-]*)\1(\s*[:=]\s*)("(?:[^"\\]|\\.)*"?|'[^']*'?|[^\s,}&]+)/gi;
 /** Token formats that are secrets wherever they appear. */
@@ -276,6 +292,7 @@ export function recordAgentEvent(evt: AgentEvent, known: readonly string[] = [])
       [evt.id, at, evt.source, evt.type, sessionId, agentType, workstreamRoot, json],
     );
     markDirty();
+    linkEvent(evt.id);
     const stored: StoredAgentEvent = { ...evt, timestamp: at, payload: JSON.parse(json), sessionId, agentType, workstreamRoot };
     try { recordedListener?.(stored); } catch { /* a listener must not undo the record */ }
     return stored;
@@ -327,17 +344,13 @@ export function listAgentEvents(q: AgentEventQuery = {}): StoredAgentEvent[] {
   });
 }
 
-/** Drop what is older than the retention window, and the oldest past `MAX_ROWS`. Returns rows removed. */
+/**
+ * Drop what is older than the retention window, and the oldest past
+ * `MAX_ROWS`, as the record's oldest block (B10.1): oldest as written, so
+ * what is kept still verifies. Returns rows removed.
+ */
 export function pruneAgentEvents(now = Date.now(), maxRows = MAX_ROWS): number {
-  const db = getDb();
-  const count = () => Number(rowsOf<{ n: number }>('SELECT COUNT(*) AS n FROM agent_events')[0]?.n ?? 0);
-  const before = count();
-  db.run('DELETE FROM agent_events WHERE at < ?', [now - RETENTION_DAYS * 24 * 60 * 60 * 1000]);
-  const over = count() - maxRows;
-  if (over > 0) db.run('DELETE FROM agent_events WHERE rowid IN (SELECT rowid FROM agent_events ORDER BY at ASC, rowid ASC LIMIT ?)', [over]);
-  const removed = before - count();
-  if (removed > 0) markDirty();
-  return removed;
+  return trimRecord(now - RETENTION_DAYS * 24 * 60 * 60 * 1000, maxRows, now);
 }
 
 type Tap = (listener: (message: { type: string; payload: unknown }) => void) => () => void;
@@ -350,6 +363,8 @@ let stop: (() => void) | null = null;
  */
 export function startAgentEventLog(tap: Tap, known: () => readonly string[] = () => []): () => void {
   if (stop) return stop;
+  // The record begins with whatever was kept before it (once).
+  try { beginRecord(); } catch { /* the next start begins it */ }
   try { pruneAgentEvents(); } catch { /* the table may not exist yet in an odd boot; the next prune catches up */ }
   const untap = tap(({ type, payload }) => {
     if (type === 'agent-event') recordAgentEvent(payload as AgentEvent, known());

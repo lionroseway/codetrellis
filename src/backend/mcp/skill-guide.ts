@@ -778,6 +778,7 @@ the PR with your own credentials.
 | \`detect_conflicts(project_path)\` | Manifest files with conflict markers after a merge |
 | \`resolve_conflict(project_path, file_path, resolutions[])\` | Resolve field by field and stage the result |
 | \`get_freeze_status(project_path)\` / \`check_freeze(project_path)\` | Is the repo locked down for a release? |
+| \`verify_record()\` | Is the record intact? Every agent event and every person's decision is linked into a hash chain as it is written; this names anything changed, removed or added around it since |
 | \`set_freeze(project_path, active, reason?)\` | Lock or unlock it |
 | \`exempt_plan_from_freeze(plan_uid, project_path)\` | Let one plan through the freeze |
 

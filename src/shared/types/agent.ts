@@ -26,7 +26,13 @@ export type AgentEventType =
   /** An agent's call held at a breakpoint (Phase 32 B4): it waits for a person. */
   | 'breakpoint_hit'
   /** A person answered a breakpoint: continue, continue with a steer, or stop (Phase 32 B4). */
-  | 'breakpoint_answered';
+  | 'breakpoint_answered'
+  /** A person answered a signal: acknowledged, intended, dismissed or reopened (Phase 32 B10.1). */
+  | 'signal_answered'
+  /** A person decided a spec proposal: accepted, amended or rejected (Phase 32 B10.1). */
+  | 'spec_decided'
+  /** A person set or stopped an architecture rule (Phase 32 B10.1). */
+  | 'rule_changed';
 
 export interface AgentEvent {
   id: string;
