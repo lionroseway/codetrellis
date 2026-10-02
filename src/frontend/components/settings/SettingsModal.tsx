@@ -25,13 +25,16 @@ import {
   FolderGit2,
   Repeat,
   ShieldCheck,
+  GitBranch,
 } from 'lucide-react';
 import { generateQrSvg } from '../../lib/qr-svg';
 import { VerifiedUpdateDownload } from './VerifiedUpdateDownload';
 import { explainSaveError } from '../../lib/settings-words';
 import { useUiStore, type GraphStyle } from '../../stores/ui-store';
 import { configText, copyText, fetchMcpSetup, maskToken, recommendedConfigText, tokenOf, type McpSetup } from '../../lib/mcp-setup';
-import type { AppSettings, PowerStatus, PowerTriggers, PeerCapabilityName, RetentionDays } from '@shared/types';
+import { FETCH_INTERVAL_CHOICES, type AppSettings, type PowerStatus, type PowerTriggers, type PeerCapabilityName, type RetentionDays } from '@shared/types';
+import { useProjectStore } from '../../stores/project-store';
+import { useBranchesStore } from '../../stores/branches-store';
 import { AddToClaudeDesktop } from './AddToClaudeDesktop';
 import { ReviewHostSection } from './ReviewHostSection';
 import { SharedTaskStateSection } from './SharedTaskStateSection';
@@ -167,7 +170,7 @@ const MCP_CAPABILITIES: Array<{
  * `settings-changed` so other open instances stay in sync.
  */
 
-export type SettingsSection = 'identity' | 'appearance' | 'mcp' | 'plans' | 'review-hosts' | 'plans-folder' | 'recurring' | 'rules' | 'shared-state' | 'data' | 'devices' | 'power' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'about';
+export type SettingsSection = 'identity' | 'appearance' | 'mcp' | 'plans' | 'review-hosts' | 'plans-folder' | 'recurring' | 'rules' | 'shared-state' | 'data' | 'devices' | 'power' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'git' | 'about';
 
 type Section = SettingsSection;
 
@@ -188,6 +191,7 @@ const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'logs', label: 'Logs', Icon: Terminal },
   { key: 'telemetry', label: 'Telemetry', Icon: Eye },
   { key: 'updates', label: 'Updates', Icon: Download },
+  { key: 'git', label: 'Git', Icon: GitBranch },
   { key: 'about', label: 'About', Icon: Info },
 ];
 
@@ -321,6 +325,7 @@ export function SettingsModal({
             )}
             {section === 'telemetry' && <TelemetrySection />}
             {section === 'updates' && <UpdatesSection settings={settings} onChange={update} />}
+            {section === 'git' && <GitSection settings={settings} onChange={update} />}
             {section === 'about' && <AboutSection onJumpToSection={setSection} />}
           </div>
 
@@ -2370,6 +2375,80 @@ function PowerSection({
           </>
         ) : (
           <>Loading current status…</>
+        )}
+      </div>
+    </>
+  );
+}
+
+/**
+ * Settings → Git (Phase 32 E5): keeping remotes current.
+ *
+ * Off by default (owner's decision, 2026-10-02): CodeTrellis reaches a host
+ * only when asked. On, the project open in the window is fetched every
+ * interval (git fetch, then its pull requests through gh), with the person's
+ * own git and gh credentials. Fetch now works either way.
+ */
+function GitSection({
+  settings,
+  onChange,
+}: {
+  settings: AppSettings;
+  onChange: (patch: Partial<AppSettings>) => void;
+}) {
+  const root = useProjectStore((s) => s.root);
+  const { listing, fetching, fetchWords, fetchFailed, load, fetchNow } = useBranchesStore();
+  useEffect(() => { if (root) void load(root); }, [root, load]);
+  const git = settings.git;
+  return (
+    <>
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3" data-testid="git-settings">
+        <div data-testid="git-keep-current">
+          <Toggle
+            checked={git.keepRemotesCurrent}
+            onChange={(v) => onChange({ git: { ...git, keepRemotesCurrent: v } })}
+            label="Keep remotes current"
+            sub="Fetch the project open in this window in the background, then read its pull requests through gh. It uses your own git and gh sign-in, as a terminal would; CodeTrellis sends nothing itself. Off, remote branches are as last fetched, and Fetch now still works."
+          />
+        </div>
+        <Field label="Every">
+          <select
+            value={git.everyMinutes}
+            disabled={!git.keepRemotesCurrent}
+            onChange={(e) => onChange({ git: { ...git, everyMinutes: Number(e.target.value) } })}
+            className="bg-surface border border-border rounded-md px-2 py-1 text-[11.5px] text-foreground disabled:opacity-50"
+            data-testid="git-every"
+          >
+            {FETCH_INTERVAL_CHOICES.map((m) => <option key={m} value={m}>{m} minutes</option>)}
+          </select>
+        </Field>
+        <p className="text-[10px] text-foreground-subtle">
+          Runs <code className="font-mono">git fetch --all --prune</code> and <code className="font-mono">gh pr list</code>.
+          Pull requests need the gh CLI, installed and signed in (<code className="font-mono">gh auth login</code>).
+        </p>
+      </div>
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4" data-testid="git-project">
+        {root && listing ? (
+          <div className="flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] uppercase tracking-wider text-foreground-subtle">This project</div>
+              <div className="text-[12px] text-foreground mt-0.5 truncate" title={root}>{root.split(/[\\/]/).filter(Boolean).pop()}</div>
+              <div className="text-[11px] text-foreground-muted mt-0.5" data-testid="git-last-fetched">{listing.fetch.words}</div>
+              <div className="text-[10.5px] text-foreground-subtle mt-0.5" data-testid="git-pulls-words">{listing.pulls.words}</div>
+              {fetchWords && <div className={`text-[10.5px] mt-1 ${fetchFailed ? 'text-danger' : 'text-foreground-muted'}`}>{fetchWords}</div>}
+            </div>
+            <button
+              onClick={() => { void fetchNow(root); }}
+              disabled={fetching || listing.remotes.length === 0}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] rounded-lg border border-border text-foreground-muted hover:text-foreground disabled:opacity-50"
+              data-testid="git-fetch-now"
+            >
+              <RefreshCw size={12} className={fetching ? 'animate-spin' : ''} />
+              {fetching ? 'Fetching…' : 'Fetch now'}
+            </button>
+          </div>
+        ) : (
+          <div className="text-[11px] text-foreground-subtle">Open a project to see when it was last fetched.</div>
         )}
       </div>
     </>
