@@ -18,14 +18,14 @@
 | | |
 |---|---|
 | **Stage / step** | HD4c: installs with scripts off, and the patches they skipped |
-| **Status** | HD4a (#322) and HD4b (#323) in review. HD4c: npm 11.19 still runs dependency install scripts (it only warns), so every CI job rebuilt better-sqlite3 from source, the node-gyp step that crashed #224. Every root install in CI now runs with scripts off, which also skips the root postinstall: the installer builds already did, so the Windows and Linux installers CI built carried werift without patches/ (its SCTP message size). patch-package now runs by hand after each, and scripts/check-patches.cjs proves every hunk is in node_modules, in CI, in release.sh and in a unit test |
-| **In flight** | HD4a in review (#322) on `feat/phase-32-hd4a-shards-and-reads`; HD4b in review (#323) on `feat/phase-32-hd4b-workstreams`; HD4c building on `feat/phase-32-hd4c-installs` |
+| **Status** | HD4a (#322) and HD4b (#323) merged. HD4c: npm 11.19 still runs dependency install scripts (it only warns), so every CI job rebuilt better-sqlite3 from source, the node-gyp step that crashed #224. Every root install in CI now runs with scripts off, which also skips the root postinstall: the installer builds already did, so the Windows and Linux installers CI built carried werift without patches/ (its SCTP message size). patch-package now runs by hand after each, and scripts/check-patches.cjs proves every hunk is in node_modules, in CI, in release.sh and in a unit test |
+| **In flight** | HD4c in review (#324) on `feat/phase-32-hd4c-installs` |
 | **Last merged** | B10.5 (#313, `7c0623a`) |
-| **Next action** | HD4a, HD4b and HD4c green and merged, in order; then the phase end (EXECUTION §7) |
+| **Next action** | HD4c green and merged; then the phase end (EXECUTION §7) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
-> Read from git at `origin/feat/phase-32` `3690eb1`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-32` `40b96f7`, with open PRs from GitHub.
 
 ---
 
@@ -226,9 +226,9 @@
   - [x] B10.4 The evidence export (#312)
   - [x] B10.5 The G2 done-when and docs (#313)
 - [ ] HD4 Hardening after the Wave 2 review (owner's yes), in three parts: — building
-  - [ ] HD4a Browser shards under 20 minutes (chromium and the serial project sharded apart); every read a burst event starts runs one at a time, guarded (#322) — in review
-  - [ ] HD4b Listing workstreams off the request path: branch workstreams cached by ref SHA, so many remote branches never stall the window (#323) — in review
-  - [ ] HD4c CI installs without running native build scripts (prebuilds, checked by loading them); the open spec follow-ups fixed at their cause — building
+  - [ ] HD4a Browser shards under 20 minutes (chromium and the serial project sharded apart); every read a burst event starts runs one at a time, guarded
+  - [ ] HD4b Listing workstreams off the request path: branch workstreams cached by ref SHA, so many remote branches never stall the window
+  - [ ] HD4c CI installs without running native build scripts (prebuilds, checked by loading them); the open spec follow-ups fixed at their cause (#324) — in review
 
 ### Track C: shared ways of working
 - [x] C1 Skills on tasks

@@ -14,8 +14,8 @@
 # and prs (PRs whose merge commit does not name the id).
 now:
   step: "HD4c: installs with scripts off, and the patches they skipped"
-  status: "HD4a (#322) and HD4b (#323) in review. HD4c: npm 11.19 still runs dependency install scripts (it only warns), so every CI job rebuilt better-sqlite3 from source, the node-gyp step that crashed #224. Every root install in CI now runs with scripts off, which also skips the root postinstall: the installer builds already did, so the Windows and Linux installers CI built carried werift without patches/ (its SCTP message size). patch-package now runs by hand after each, and scripts/check-patches.cjs proves every hunk is in node_modules, in CI, in release.sh and in a unit test"
-  next: "HD4a, HD4b and HD4c green and merged, in order; then the phase end (EXECUTION §7)"
+  status: "HD4a (#322) and HD4b (#323) merged. HD4c: npm 11.19 still runs dependency install scripts (it only warns), so every CI job rebuilt better-sqlite3 from source, the node-gyp step that crashed #224. Every root install in CI now runs with scripts off, which also skips the root postinstall: the installer builds already did, so the Windows and Linux installers CI built carried werift without patches/ (its SCTP message size). patch-package now runs by hand after each, and scripts/check-patches.cjs proves every hunk is in node_modules, in CI, in release.sh and in a unit test"
+  next: "HD4c green and merged; then the phase end (EXECUTION §7)"
   blockers: "None"
   updated: 2026-10-02
 sections:
