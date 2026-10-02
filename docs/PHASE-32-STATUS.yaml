@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track C — C4.2b: Settings → Recurring playbooks, and a run's own line"
-  status: "C4.1 (#299) and C4.2a (#300) merged. C4.2b built: Settings → Recurring playbooks sets a rule for the team (playbook, every, on, at, zone, carry over, skills) and stops one; a run's page says which series and period it is, who started it, and names its carried tasks, recognised by its id when it came from a teammate. Unit recurring-service 11, harness recurring 7, browser settings/recurring.spec 2 (shots)"
-  next: "Merge C4.2b when green; then C4.3 (the phone, an agent only by opt-in, and the C4 done-when)"
+  step: "Track C — C4.3a: recurring runs from the phone"
+  status: "C4.1 (#299), C4.2a (#300) and C4.2b (#301) merged. C4.3a built: the phone's Plans tab opens Recurring, each series in the desktop's words (W38 ✓ · W39 ✗ missed · W40 due · W41 next), the due run started as the person and opened; a run a teammate started is found, not made twice; a read-only phone cannot start one. `recurring.list` (read), `recurring.start` (write). Harness recurring 10, phone recurring.spec 3 (shots)"
+  next: "Merge C4.3a when green; then C4.3b (an agent on each run by opt-in per device, and the C4 done-when on two machines)"
   blockers: "None"
   updated: 2026-10-01
 sections:
@@ -591,6 +591,11 @@ sections:
                 title: "Settings → Recurring playbooks; a run's series, period and carried tasks on the run"
           - id: C4.3
             title: "The phone, an agent only by opt-in, and the C4 done-when"
+            items:
+              - id: C4.3a
+                title: "The phone lists the series and starts the due run (`recurring.list`, `recurring.start`)"
+              - id: C4.3b
+                title: "Start an agent on each run, per rule and device (off by default, needs `terminal`); the C4 done-when on two machines"
       - id: C5
         title: "One plan across worktrees (owner's ask, 2026-09-28), refined in EXECUTION §6:"
         status: done

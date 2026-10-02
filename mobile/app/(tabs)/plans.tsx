@@ -119,6 +119,9 @@ export default function PlansTab() {
             <TouchableOpacity style={styles.newBtnGhost} onPress={() => router.push('/stack')} accessibilityLabel="Stack: every plan under way, who is on what and where they meet">
               <Text style={styles.newBtnGhostText}>Stack</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.newBtnGhost} onPress={() => router.push('/recurring')} accessibilityLabel="Recurring: playbooks that run every day, week or month">
+              <Text style={styles.newBtnGhostText}>Recurring</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.newBtnGhost} onPress={() => router.push('/review-queue')} accessibilityLabel="Review queue: what to merge first">
               <Text style={styles.newBtnGhostText}>Review queue</Text>
             </TouchableOpacity>

@@ -14,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { setupHarness, type Harness, type ScriptedAgent } from '../harness';
+import { setupHarness, pairPhone, type Harness, type Phone, type ScriptedAgent } from '../harness';
 import type { RecurringSeries } from '../../src/shared/types/recurring';
 import { periodLabel, periodOf } from '../../src/shared/lib/recurrence';
 
@@ -199,5 +199,58 @@ test.describe.serial('A run due while the app was closed', () => {
     expect(nothing.status).toBe(409);
     expect(((await nothing.json()) as { error: string }).error).toBe('Daily security check has no run due now');
     expect((await h.client.raw('POST', `/api/recurring/nope/dismiss?project=${encodeURIComponent(root)}`, {})).status).toBe(404);
+  });
+});
+
+/**
+ * C4.3a — from the phone. Away from the desk, the person sees the series as
+ * the window does and starts the run due now; it is theirs, and starting it
+ * again (or after a teammate) is the same run. A phone allowed only to read
+ * sees the series and cannot start one.
+ */
+test.describe.serial('Recurring runs from the phone', () => {
+  test.setTimeout(120_000);
+  let h: Harness;
+  let root: string;
+  let phone: Phone;
+  const series = async () => ((await (await h.client.raw('GET', `/api/recurring?project=${encodeURIComponent(root)}`)).json()) as { series: RecurringSeries[] }).series;
+
+  test.beforeAll(async () => {
+    h = await setupHarness('recurring-phone');
+    root = h.fixture.projectPath;
+    writeRule(root, Date.now() - 3 * DAY, 'bug-fix');
+    await h.client.scanProject(root);
+    phone = await pairPhone(h.client, { alias: 'Sam\'s phone' });
+  });
+  test.afterAll(async () => { await phone?.close?.(); await h?.teardown(); });
+
+  test('the phone lists the series as the window does, and starts the due run as the person; twice is one run', async () => {
+    expect(await phone.rpc('recurring.list', { projectPath: root })).toEqual({ series: await series() });
+
+    const run = (await phone.rpc('recurring.start', { projectPath: root, ruleId: 'daily-security-check' })) as {
+      planUid: string; title: string; created: boolean; recurrence: { startedBy: string }; series: RecurringSeries[];
+    };
+    expect(run).toMatchObject({ title: `Daily security check — ${label(Date.now())}`, created: true });
+    expect(run.series).toEqual(await series());
+    expect(run.series[0].runs.at(-2)).toMatchObject({ state: 'in_progress', planUid: run.planUid });
+    const plan = (await (await h.client.raw('GET', `/api/plans/${run.planUid}`)).json()) as { author: string; authorType: string };
+    expect(plan.authorType).toBe('human');
+    expect(run.recurrence.startedBy).toBe(plan.author);
+
+    const again = (await phone.rpc('recurring.start', { projectPath: root, ruleId: 'daily-security-check' })) as { planUid: string; created: boolean };
+    expect(again).toMatchObject({ planUid: run.planUid, created: false });
+    const viaWindow = (await (await h.client.raw('POST', `/api/recurring/daily-security-check/start?project=${encodeURIComponent(root)}`, {})).json()) as { planUid: string; created: boolean };
+    expect(viaWindow).toMatchObject({ planUid: run.planUid, created: false });
+  });
+
+  test('an unknown series and a project never opened are refused with why', async () => {
+    expect(await phone.rpcError('recurring.start', { projectPath: root, ruleId: 'nope' })).toMatch(/nope/);
+    expect(await phone.rpcError('recurring.list', { projectPath: '/tmp/never-opened' })).toBeTruthy();
+  });
+
+  test('a phone allowed only to read sees the series and cannot start a run', async () => {
+    await phone.grant(['read']);
+    expect(((await phone.rpc('recurring.list', { projectPath: root })) as { series: unknown[] }).series).toHaveLength(1);
+    expect(await phone.rpcError('recurring.start', { projectPath: root, ruleId: 'daily-security-check' })).toMatch(/write/);
   });
 });

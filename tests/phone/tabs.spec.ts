@@ -22,10 +22,13 @@ test('plans: each with its progress', async ({ page }) => {
   await shot(page, 'plans-list');
 
   // The ways into every plan at once (B6.6) and what to merge first (A5.6).
+  // ... and the playbooks that run on a schedule (C4.3a).
   await page.getByText('Stack', { exact: true }).click();
+  await page.getByText('Recurring', { exact: true }).click();
   await page.getByText('Review queue', { exact: true }).click();
   expect(await navigations(page)).toEqual([
     { action: 'push', to: '/stack' },
+    { action: 'push', to: '/recurring' },
     { action: 'push', to: '/review-queue' },
   ]);
 });

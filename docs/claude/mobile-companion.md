@@ -258,6 +258,24 @@ The harness checks the RPCs from a paired phone in
 `play-forward-approval.test.ts` and `play-forward-g3.test.ts`;
 `tests/phone/stack.spec.ts` photographs the screen.
 
+### Recurring playbooks (Phase 32 C4.3a)
+
+- **`recurring.list`** (read) returns what `GET /api/recurring` does (C4.1):
+  each series with its rule, its schedule in words, one mark per period and
+  what is due, for an opened project only.
+- **`recurring.start`** (write) starts the run due now, as `POST
+  /api/recurring/:id/start` does: `ruleId`. The run is the person's, from
+  `phonePerson()`; starting it again, or after a teammate, answers the same
+  plan with `created: false`. The answer carries the new `series`. Setting
+  or stopping a rule has no RPC: it is the person's, in the app window.
+- **`recurring`**, from the Plans tab's header, shows one card per series:
+  its words, "W38 ✓ · W39 ✗ missed · W40 due · W41 next" (a run opens its
+  plan), and what is due with Start. Starting opens the run's plan and says
+  "Started …" or "… was already started; opening it".
+
+The harness checks the RPCs from a paired phone in `recurring.test.ts`;
+`tests/phone/recurring.spec.ts` photographs the screen.
+
 ### A plan's status (Phase 32 C2.4)
 
 - **`plan.status`** (read) returns what `/api/plans/:uid/status` does: every

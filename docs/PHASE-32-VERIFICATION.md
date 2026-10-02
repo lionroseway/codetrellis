@@ -19,9 +19,9 @@ records that — but "✗ none" is proof of a gap.
 |---|---|---|---|---|---|---|
 | REST routes | 280 | 278 | 0 | 0 | 217 | 0 |
 | MCP tools | 207 | 207 | 0 | 0 | 185 | 0 |
-| Mobile RPC methods | 92 | 81 | 0 | 0 | 78 | 0 |
+| Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
 | Frontend components | 129 | n/a | n/a | n/a | 0 | 23 |
-| Mobile screens | 37 | n/a | n/a | n/a | 0 | 0 |
+| Mobile screens | 38 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 16 | n/a | n/a | n/a | 11 | 13 |
 
 ## By domain
@@ -30,14 +30,14 @@ records that — but "✗ none" is proof of a gap.
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 19 | 12 | 10 | 0 | 0 | 0 |
 | 0.4b Graph | 19 | 15 | 8 | 15 | 0 | 0 |
-| 0.4c Plans and items | 118 | 60 | 27 | 63 | 0 | 0 |
+| 0.4c Plans and items | 118 | 60 | 29 | 63 | 0 | 0 |
 | 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 3 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 13 | 7 | 1 | 0 | 0 |
 | 0.4g Agents and MCP | 26 | 32 | 10 | 31 | 0 | 0 |
 | 0.4h Drift, governance, review | 11 | 25 | 9 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
-| 0.4j Mobile surface | 25 | 14 | 0 | 2 | 37 | 0 |
+| 0.4j Mobile surface | 25 | 14 | 0 | 2 | 38 | 0 |
 | 0.4k Settings, updates, privacy | 22 | 0 | 3 | 10 | 0 | 16 |
 | 0.4l System docs and intake | 7 | 11 | 6 | 1 | 0 | 0 |
 
@@ -126,7 +126,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `GET /api/plans/:planUid/channels` |  | ✗ none | 6 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:planUid/items` |  | ✗ none | 13 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 | ✓ 0.4c: exercised by full-loop (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `GET /api/plans/:uid` |  | ✗ none | 16 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans/:uid` |  | ✗ none | 17 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:uid/budget` |  | ✗ none | 1 | ✓ 0.4g: report incl. flaggedChanges; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
 | c | `GET /api/plans/:uid/changes` |  | ✗ none | 2 | ✓ 0.4c: exercised by full-loop, plan-rest (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:uid/changes/:changeId` |  | ✗ none | 1 | ✓ 0.4c-1: one projected change; unknown 404 (plan-rest) |  |  |
@@ -294,7 +294,7 @@ records that — but "✗ none" is proof of a gap.
 | j | `GET /api/peers/status` |  | ✗ none | 3 | ✓ 0.4j: running, mobile API port actually bound, counts (gate4-reconnect-identity, pairing-enables-lan, cdev-phase11) |  |  |
 | j | `GET /api/sync/peek` |  | ✗ none | 2 | ✓ 0.4j: what an import would bring, before it does (cdev-phase5, surfaced-rest) |  |  |
 | j | `GET /api/sync/status` |  | ✗ none | 1 | ✓ 0.4j: personal sync state (cdev-phase5) |  |  |
-| j | `PATCH /api/peers/devices/:fingerprint` |  | ✗ none | 12 | ✓ 0.4j: grant and revoke recorded; unknown capability dropped; unknown device 404 (peer-device-access, harness peer) |  |  |
+| j | `PATCH /api/peers/devices/:fingerprint` |  | ✗ none | 13 | ✓ 0.4j: grant and revoke recorded; unknown capability dropped; unknown device 404 (peer-device-access, harness peer) |  |  |
 | j | `POST /api/pairing/cancel` |  | ✗ none | 2 | ✓ 0.4j: window closed (pairing-transport, peer-reconnect-auth) |  |  |
 | j | `POST /api/pairing/confirm` |  | ✗ none | 3 | ✓ 0.4j: the code the phone derived is the code expected; no secret in the reply; turns the LAN listener on (gate4-reconnect-identity, pairing-enables-lan, harness peer) |  |  |
 | j | `POST /api/pairing/initiate` |  | ✗ none | 4 | ✓ 0.4j: v5 QR payload, scannable size; code only in the body (gate4-reconnect-identity, pairing-transport, harness peer) |  |  |
@@ -545,7 +545,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `verify_system_doc` | system-docs · write | ✗ none | 3 | ✓ 0.4l: stamps HEAD (sysdocs-intake) |  |  |
 | l | `write_system_doc` | system-docs · write | ✗ none | 3 | ✓ 0.4l: creates in the agent's name (was recorded as a person's); update renames the file with the title; unknown uid refused (sysdocs-intake); bug 47 |  |  |
 
-## Mobile RPC methods (92)
+## Mobile RPC methods (94)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -593,6 +593,8 @@ records that — but "✗ none" is proof of a gap.
 | c | `proposal.decide` | write | 1 | 1 |  |  |  |
 | c | `proposal.get` | read | 1 | 2 |  |  |  |
 | c | `proposal.list` | read | 1 | 1 |  |  |  |
+| c | `recurring.list` | read | ✗ none | 1 |  |  |  |
+| c | `recurring.start` | write | ✗ none | 1 |  |  |  |
 | c | `stack.summary` | read | ✗ none | 4 |  |  |  |
 | d | `criteria.awaiting` | read | 1 | 1 | ✓ 0.4j: empty until the agent submits, then the criterion; empty after deciding (phone-sync-and-tools), mobile-approvals unit |  |  |
 | d | `criteria.list` | read | ✗ none | 2 | ✓ 0.4j: the item's criteria (phone-sync-and-tools), mobile-approvals unit |  |  |
@@ -776,7 +778,7 @@ records that — but "✗ none" is proof of a gap.
 | k | `settings/WebcamQrScanner.tsx` |  | n/a | n/a |  |  |  |
 | l | `system-docs/SystemDocsPanel.tsx` |  | n/a | n/a |  | ✓ 0.5a — empty state is content |  |
 
-## Mobile screens (37)
+## Mobile screens (38)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -807,6 +809,7 @@ records that — but "✗ none" is proof of a gap.
 | j | `plan-templates.tsx` |  | n/a | n/a |  |  |  |
 | j | `project-browser.tsx` |  | n/a | n/a |  |  |  |
 | j | `projects.tsx` |  | n/a | n/a |  |  |  |
+| j | `recurring.tsx` |  | n/a | 1 |  |  |  |
 | j | `review-queue.tsx` |  | n/a | 1 |  |  |  |
 | j | `settings.tsx` |  | n/a | n/a |  |  |  |
 | j | `signal-detail.tsx` |  | n/a | 1 |  |  |  |

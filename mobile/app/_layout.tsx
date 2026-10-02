@@ -203,6 +203,13 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="recurring"
+          options={{
+            title: 'Recurring',
+            headerStyle: { backgroundColor: '#0a0c18' },
+          }}
+        />
+        <Stack.Screen
           name="plan-review"
           options={{
             title: 'Review',
