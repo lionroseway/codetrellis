@@ -21,7 +21,7 @@
 | **Status** | A7.1 merged (#306). A7.2 built: each workstream's added imports (now against its merge base, resolved with the project's resolver) checked against the rules; a high `rule` signal per workstream and rule, in the tab, digest, push, inline notices and phone; `rule` as a signal breakpoint; the card says the rule and why, each import across it, and links to Settings → Architecture rules. Unit tests, harness rule-signals 3, browser awareness-tab rule card (shot) |
 | **In flight** | A7.2 in review (#307) on `feat/phase-32-a7-2-rule-signals`; A7.3 in review (#308) on `feat/phase-32-a7-3-rule-gate` |
 | **Last merged** | A7.1 (#306, `8aa5820`) |
-| **Next action** | Merge A7.2 (#307) when green; then A7.3 (#308, (check_changes and `codetrellis check` on rules, the M7 done-when) |
+| **Next action** | Merge A7.2 (#307) when green; then A7.3 (#308: check_changes and `codetrellis check` on rules, the M7 done-when) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-02 |
 
