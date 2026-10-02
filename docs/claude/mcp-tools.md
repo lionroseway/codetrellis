@@ -170,7 +170,7 @@ Tools are organised into 18 files under `src/backend/mcp/tools/`. Each file grou
 | `contribution-tools.ts` | Contributions | List proposed changes, accept contributions, promote to contribution, prepare contributor branch. |
 | `governance-tools.ts` | Governance | Set/check freeze, baseline management, exempt plans from freeze. |
 | `drift-tools.ts` | Drift | Detect deviations from baseline, get drift report, detect conflicts, resolve conflicts. |
-| `architecture-tools.ts` | Architecture | Check architecture conformity, list cross-system edges, search symbols, get dependencies. |
+| `architecture-tools.ts` | Architecture | Check architecture conformity, list cross-system edges, search symbols, get dependencies. `check_conformity(proposed_imports, project_path?)` checks proposed imports against the team's architecture rules (Phase 32 A7.1: path boundaries in `.codetrellis/config.json` such as "web/ may not import db/, except db/types.ts", each with why) and for a direct two-file cycle; `list_rules(project_path?)` (`read`) lists the rules with the imports that break each today. Setting a rule is the person's, over REST (`/api/rules`, Settings → Architecture rules). |
 | `graph-tools.ts` | Graph | Control the renderer: focus, set depth, set layout, set scope, set mode, toggle projection, snapshot, export. |
 | `git-tools.ts` | Git | Activity, commit metadata, change status, changes summary. |
 | `project-config-tools.ts` | Project & config | Open/close project, recent projects, project config, settings, repo identity, refresh origin, repo alias. |

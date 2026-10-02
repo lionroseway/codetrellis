@@ -6,6 +6,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
+import { breachWords, checkEdges, edgesIfLoaded, rulesOf, rulesView } from '../../services/architecture-rules';
 
 export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
@@ -75,30 +76,41 @@ export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
     'check_conformity',
     {
-      description: 'Check whether proposed imports would create a direct two-file cycle (the imported file already imports the importer). That is the only rule today — there are no layer or boundary rules yet, so a clean result does not mean an import respects your architecture.',
+      description:
+        'Check proposed imports before you write them: whether each would cross one of the team\'s architecture rules ' +
+        '("web/ may not import db/", kept in .codetrellis/config.json, with why), or create a direct two-file cycle. ' +
+        'A clean result means no rule is broken and no direct cycle made; list_rules shows the rules.',
       inputSchema: {
         proposed_imports: z.array(z.object({
           from: z.string().describe('File that would contain the import (absolute, or relative to the project root)'),
           importing: z.string().describe('File being imported (absolute, or relative to the project root)'),
         })).describe('List of proposed import relationships to check'),
+        project_path: z.string().optional().describe('An opened project. Omit for the one open in the app.'),
       },
     },
-    async ({ proposed_imports }) => {
+    async ({ proposed_imports, project_path }) => {
+      const root = project_path ?? deps.getActiveProjectPath();
       const edges = deps.getDependencyEdges();
       const edgeSet = new Set(edges.map((e) => `${e.sourceRelative}->${e.targetRelative}`));
-      const violations: Array<{ rule: string; message: string }> = [];
+      const violations: Array<{ rule: string; message: string; because?: string }> = [];
 
       // Edges are project-relative. An absolute path matched nothing, so
       // every proposal read as conformant — a false all-clear.
-      const root = deps.getActiveProjectPath();
       const rel = (p: string): string => {
         const r = root && path.isAbsolute(p) ? path.relative(root, p) : p;
         return r.split(path.sep).join('/').replace(/^\.\//, '');
       };
 
+      // Phase 32 A7.1 — the team's rules, checked first: they are the ones a person wrote down.
+      const rules = root ? rulesOf(root) : [];
       for (const imp of proposed_imports) {
-        const reverse = `${rel(imp.importing)}->${rel(imp.from)}`;
-        if (edgeSet.has(reverse)) {
+        const from = rel(imp.from);
+        const to = rel(imp.importing);
+        for (const b of checkEdges(rules, [{ from, to }])) {
+          const rule = rules.find((r) => r.id === b.rule)!;
+          violations.push({ rule: rule.id, message: breachWords(rule, b), ...(rule.because ? { because: rule.because } : {}) });
+        }
+        if (edgeSet.has(`${to}->${from}`)) {
           violations.push({
             rule: 'circular-dependency',
             message: `Adding ${imp.from} -> ${imp.importing} would create a circular dependency (${imp.importing} already imports ${imp.from})`,
@@ -113,9 +125,30 @@ export function register(server: McpServer, deps: ToolDeps): void {
             conformant: violations.length === 0,
             violations,
             checkedImports: proposed_imports.length,
+            rules: rules.length,
           }, null, 2),
         }],
       };
     },
   );
+
+  server.registerTool(
+    'list_rules',
+    {
+      description:
+        'The team\'s architecture rules (Phase 32 A7): path boundaries such as "web/ may not import db/ (except db/types.ts): ' +
+        'web talks to db through the API", kept in the committed config, each with the imports that break it today. ' +
+        'A person sets them in the app; this only reads. Check an import before writing it with check_conformity.',
+      inputSchema: {
+        project_path: z.string().optional().describe('An opened project. Omit for the one open in the app.'),
+      },
+    },
+    async ({ project_path }) => {
+      const root = project_path ?? deps.getActiveProjectPath();
+      if (!root) return { isError: true, content: [{ type: 'text' as const, text: 'No project is open.' }] };
+      const view = rulesView(root, edgesIfLoaded(root, deps.getActiveProjectPath(), deps.getDependencyEdges));
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ rules: view }, null, 2) }] };
+    },
+  );
+
 }

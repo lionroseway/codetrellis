@@ -1,4 +1,5 @@
 import type { RecurrenceRule } from './recurring';
+import type { ArchitectureRule } from './architecture-rules';
 /**
  * Per-project configuration — Phase 1.1 of the CDev target architecture
  * (see `docs/cdev/14-configuration-and-personal-continuity.md` and
@@ -243,6 +244,8 @@ export interface ProjectConfig {
   freeze?: FreezeConfig;
   /** Phase 32 C4 — recurring playbooks, kept here so the team sees them. */
   recurring?: RecurrenceRule[];
+  /** Phase 32 A7 — architecture rules: path boundaries the team keeps here. */
+  rules?: ArchitectureRule[];
   /** ISO timestamp of last save. Updated automatically. */
   updatedAt?: string;
 }

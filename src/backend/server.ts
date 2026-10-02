@@ -79,6 +79,7 @@ import { buildPlayForward } from './services/play-forward';
 import { resequence, tellAgents, leaveOverlap, OverlapActionError, noteApproval, approvalNotices, markNoticeSeen } from './services/planned-overlap-actions';
 import { seriesFor, setRule, removeRule, startRun, dismissDue, recurrenceOf, RecurringError } from './services/recurring-service';
 import { isRunAgent, setRunAgent, startRunAgent } from './services/recurring-agent';
+import { rulesView, setRule as setArchitectureRule, removeRule as removeArchitectureRule, edgesIfLoaded, RuleError } from './services/architecture-rules';
 import { startRecurringScheduler } from './services/recurring-scheduler';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
@@ -2666,6 +2667,47 @@ app.put('/api/recurring/:id', (req, res) => {
     res.json({ rule, series: seriesFor(projectRoot).find((s) => s.rule.id === rule.id) });
   } catch (err) {
     if (err instanceof RecurringError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+// Phase 32 A7.1 — architecture rules: path boundaries the team keeps in the
+// committed config. Reading them, with what breaks each today, is anyone's;
+// setting or stopping one is the person's, as a plans folder is.
+const RULES_WHERE = 'Settings → Architecture rules';
+
+app.get('/api/rules', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json({ rules: rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)) });
+});
+
+app.put('/api/rules/:id', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can set an architecture rule — in the CodeTrellis app, ${RULES_WHERE}.` }); return; }
+  try {
+    // The rule's own fields, by name: nothing else in the body reaches the config.
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const rule = setArchitectureRule(projectRoot, { id: req.params.id, from: b.from, mayNotImport: b.mayNotImport, except: b.except, because: b.because }, changedBy(req));
+    broadcast('rules-changed', { project: projectRoot });
+    res.json({ rule, view: rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)).find((v) => v.rule.id === rule.id) });
+  } catch (err) {
+    if (err instanceof RuleError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+app.delete('/api/rules/:id', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can stop an architecture rule — in the CodeTrellis app, ${RULES_WHERE}.` }); return; }
+  try {
+    removeArchitectureRule(projectRoot, req.params.id);
+    broadcast('rules-changed', { project: projectRoot });
+    res.json({ removed: req.params.id });
+  } catch (err) {
+    if (err instanceof RuleError) { res.status(err.status).json({ error: err.message }); return; }
     throw err;
   }
 });

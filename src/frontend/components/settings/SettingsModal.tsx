@@ -24,6 +24,7 @@ import {
   Users,
   FolderGit2,
   Repeat,
+  ShieldCheck,
 } from 'lucide-react';
 import { generateQrSvg } from '../../lib/qr-svg';
 import { VerifiedUpdateDownload } from './VerifiedUpdateDownload';
@@ -36,6 +37,7 @@ import { ReviewHostSection } from './ReviewHostSection';
 import { SharedTaskStateSection } from './SharedTaskStateSection';
 import { PlansFolderSection } from './PlansFolderSection';
 import { RecurringSection } from './RecurringSection';
+import { ArchitectureRulesSection } from './ArchitectureRulesSection';
 import { AddToClaudeCode } from './AddToClaudeCode';
 import { AddToGeminiCli } from './AddToGeminiCli';
 
@@ -164,7 +166,7 @@ const MCP_CAPABILITIES: Array<{
  * `settings-changed` so other open instances stay in sync.
  */
 
-type Section = 'identity' | 'appearance' | 'mcp' | 'plans' | 'review-hosts' | 'plans-folder' | 'recurring' | 'shared-state' | 'data' | 'devices' | 'power' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'about';
+type Section = 'identity' | 'appearance' | 'mcp' | 'plans' | 'review-hosts' | 'plans-folder' | 'recurring' | 'rules' | 'shared-state' | 'data' | 'devices' | 'power' | 'sync' | 'logs' | 'telemetry' | 'updates' | 'about';
 
 const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'identity', label: 'Identity', Icon: User },
@@ -174,6 +176,7 @@ const SECTIONS: { key: Section; label: string; Icon: typeof User }[] = [
   { key: 'review-hosts', label: 'Review hosts', Icon: GitPullRequest },
   { key: 'plans-folder', label: 'Plans folder', Icon: FolderGit2 },
   { key: 'recurring', label: 'Recurring playbooks', Icon: Repeat },
+  { key: 'rules', label: 'Architecture rules', Icon: ShieldCheck },
   { key: 'shared-state', label: 'Shared task state', Icon: Users },
   { key: 'data', label: 'Data', Icon: HardDrive },
   { key: 'devices', label: 'Devices', Icon: Smartphone },
@@ -298,6 +301,7 @@ export function SettingsModal({
             {section === 'review-hosts' && <ReviewHostSection />}
             {section === 'plans-folder' && <PlansFolderSection />}
             {section === 'recurring' && <RecurringSection />}
+            {section === 'rules' && <ArchitectureRulesSection />}
             {section === 'shared-state' && <SharedTaskStateSection />}
             {section === 'logs' && <LogsSection />}
             {section === 'sync' && (

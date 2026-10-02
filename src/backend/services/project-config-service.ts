@@ -22,6 +22,7 @@ import {
 } from '../../shared/types';
 import { getSettings } from './settings-service';
 import { parseRecurrenceRule } from './recurrence-rule';
+import { parseArchitectureRule } from './architecture-rule';
 
 /**
  * Per-project config service — Phase 1.1 of the CDev target architecture.
@@ -141,6 +142,8 @@ export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): 
     freeze: patch.freeze !== undefined ? patch.freeze : current.freeze,
     // Phase 32 C4 — recurring playbooks: replaced wholesale, like routing.
     recurring: patch.recurring !== undefined ? patch.recurring : current.recurring,
+    // Phase 32 A7 — architecture rules: replaced wholesale, like recurring.
+    rules: patch.rules !== undefined ? patch.rules : current.rules,
     updatedAt: new Date().toISOString(),
   };
 
@@ -172,6 +175,7 @@ export function updateProjectConfig(projectRoot: string, patch: ProjectConfig): 
     delete next.repoRole;
   }
   if (!next.recurring || next.recurring.length === 0) delete next.recurring;
+  if (!next.rules || next.rules.length === 0) delete next.rules;
   // The graph is the default, so it is never written down either.
   if (next.defaultSurface === undefined || next.defaultSurface === 'graph') {
     delete next.defaultSurface;
@@ -488,6 +492,13 @@ function parseProjectConfig(raw: unknown): ProjectConfig {
   if (Array.isArray(r.recurring)) {
     const rules = r.recurring.map((x) => parseRecurrenceRule(x).rule).filter((x): x is NonNullable<typeof x> => !!x);
     if (rules.length > 0) result.recurring = rules;
+  }
+
+  // Phase 32 A7 — architecture rules: likewise, a rule that does not read as
+  // one is left out, never guessed at.
+  if (Array.isArray(r.rules)) {
+    const rules = r.rules.map((x) => parseArchitectureRule(x).rule).filter((x): x is NonNullable<typeof x> => !!x);
+    if (rules.length > 0) result.rules = rules;
   }
 
   // Phase 6.5 — freeze periods.

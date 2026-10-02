@@ -13,9 +13,9 @@
 # planned), items (its parts). Only for what git cannot see: status (done)
 # and prs (PRs whose merge commit does not name the id).
 now:
-  step: "Track C — C4.3b: an agent on each run, and the C4 done-when on two machines"
-  status: "C4.3a merged (#302), with base fixes #304 (a task says its agent was told as it happens) and #305 (a pairing no longer shuts the next pairing's window). C4.3b built: per rule and device, Settings → Recurring playbooks starts Claude Code or Codex on each run made here (off by default, kept on this device); only the person, the schedule or a phone granted `terminal` starts one, otherwise the run says why. Runs go to the plans folder when the project shares new plans. Done-when: two laptops, one planning repository, one W40 and one agent. Unit recurring-service 14, harness recurring 10 and recurring-two-machines 5, browser 2 specs, phone recurring.spec 4 (shots)"
-  next: "Merge C4.3b when green — C4 done; then refine A7 (rules)"
+  step: "Track A — A7.1: architecture rules, and check_conformity made true"
+  status: "C4 done (#299–#303; base fixes #304, #305). A7 refined in three parts. A7.1 built: rules in the committed config (from, may not import, except, because), each with the imports that break it today; GET/PUT/DELETE /api/rules (the person's); check_conformity checks them and says the rule and why; list_rules (read); Settings → Architecture rules. Unit architecture-rule 4, harness architecture-rules 5, browser settings/rules.spec 2 (shots)"
+  next: "Merge A7.1 when green; then A7.2 (rule signals from each workstream's import delta)"
   blockers: "None"
   updated: 2026-10-01
 sections:
@@ -278,6 +278,13 @@ sections:
             title: M6 done-when and docs
       - id: A7
         title: Rules
+        items:
+          - id: A7.1
+            title: "The rules in the committed config, what breaks them today, and `check_conformity` made true"
+          - id: A7.2
+            title: "`rule` signals from each workstream's import delta"
+          - id: A7.3
+            title: "The gate (`check_changes`, `codetrellis check`) and the M7 done-when"
       - title: "`plan-by-hand` failed once in CI when its plan workspace dropped back to the plan list while `plan/list.spec.ts` created and deleted plans on the other worker (#147). It doesn't reproduce as a pair (5/5 on base and on the branch). Find which broadcast leaves the workspace, so a person's open plan survives someone else's plan changes."
         followUp: true
       - title: "two browser tests failed once on #167 and passed on re-run: `realtime/plan-events.spec.ts:18` (a reset connection mid-POST; also 2/3 locally on the base branch) and `external-refs/refs-panel.spec.ts:77` (a fixed 3 s `isVisible`). Both are queued as separate fixes; neither touches A3.4's code."

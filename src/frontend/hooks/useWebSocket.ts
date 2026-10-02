@@ -411,6 +411,10 @@ export function useWebSocket() {
           if (type === 'recurring-changed') {
             window.dispatchEvent(new CustomEvent('recurring-changed'));
           }
+          // Phase 32 A7.1 — the project's architecture rules were set or stopped.
+          if (type === 'rules-changed') {
+            window.dispatchEvent(new CustomEvent('rules-changed'));
+          }
           // Phase 32 C2.2a — a review host was turned on or off, or its token saved.
           if (type === 'review-host-changed') {
             window.dispatchEvent(new CustomEvent('review-host-changed', { detail: payload }));
