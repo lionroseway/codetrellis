@@ -115,9 +115,12 @@ export function ConnectedAgents() {
       >
         <Cpu size={12} className={count > 0 ? 'text-success drop-shadow-[0_0_4px_rgba(34,197,94,0.5)]' : 'text-foreground-subtle'} />
         <span className={`w-1.5 h-1.5 rounded-full ${count > 0 ? 'bg-success shadow-[0_0_6px_rgba(34,197,94,0.5)] animate-pulse' : 'bg-foreground-subtle'}`} />
-        <span>
+        {/* Words from 2xl up; below, the dot, a count and the title say it,
+            so a 900px window keeps Settings and 1280 keeps the lines of work. */}
+        <span className="hidden 2xl:inline">
           {count === 0 ? 'No agents' : count === 1 ? '1 agent' : `${count} agents`}
         </span>
+        {count > 0 && <span className="2xl:hidden tabular-nums">{count}</span>}
         {/* The one thing worth interrupting for: work landing outside
             what any in-flight item claims. */}
         {scope.verdict === 'out-of-scope' && (

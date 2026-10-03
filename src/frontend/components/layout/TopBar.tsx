@@ -432,19 +432,25 @@ export function TopBar() {
     <div className="glass-panel flex items-center h-11 px-3 border-b gap-2 shrink-0 overflow-visible relative z-40">
       <img src="./icon.png" alt="" className="w-5 h-5 shrink-0" />
 
-      <div className="flex items-center gap-1 min-w-0 overflow-x-auto flex-1">
+      {/* As wide as its tabs, shrinking (then scrolling) to a floor: flex-1
+          on a zero basis was the first thing to give way, so a crowded bar
+          squeezed the project tab, its branch chip and "+" to nothing. The
+          room left over is the lines of work's (WorkstreamStrip). */}
+      <div className="flex items-center gap-1 min-w-[6rem] overflow-x-auto flex-[0_1_auto]">
         {tabs.map((tab) => (
           <TabItem key={tab.id} tab={tab} isActive={tab.id === activeTabId} />
         ))}
-        <button
-          onClick={openProject}
-          className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-md text-foreground-subtle hover:text-foreground hover:bg-surface-hover transition-all shrink-0"
-          title="Open project"
-        >
-          <Plus size={12} />
-          {tabs.length === 0 && <span>Open Project</span>}
-        </button>
       </div>
+      {/* Beside the tabs, not among them: in the scrolling row it went out
+          of view whenever the tabs were wider than the room. */}
+      <button
+        onClick={openProject}
+        className="-ml-1 flex items-center gap-1 px-2 py-1 text-[11px] rounded-md text-foreground-subtle hover:text-foreground hover:bg-surface-hover transition-all shrink-0"
+        title="Open project"
+      >
+        <Plus size={12} />
+        {tabs.length === 0 && <span>Open Project</span>}
+      </button>
 
       {root && (
         <button
@@ -471,7 +477,7 @@ export function TopBar() {
             key={opt.value}
             onClick={() => setViewDepth(opt.value)}
             aria-pressed={viewDepth === opt.value}
-            className={`px-3 py-1 text-[11px] font-medium rounded-md transition-all ${
+            className={`px-2 2xl:px-3 py-1 text-[11px] font-medium rounded-md transition-all ${
               viewDepth === opt.value
                 ? 'bg-accent text-white shadow-[0_0_12px_rgba(59,130,246,0.3)]'
                 : 'text-foreground-muted hover:text-foreground hover:bg-surface-hover'
@@ -488,10 +494,12 @@ export function TopBar() {
 
       <button
         onClick={() => window.dispatchEvent(new CustomEvent('open-mcp-guide'))}
+        title="Connect Agent"
+        aria-label="Connect Agent"
         className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg border border-border text-foreground-muted hover:text-foreground hover:border-border-glow hover:shadow-[0_0_8px_rgba(59,130,246,0.1)] transition-all shrink-0"
       >
         <Plug size={12} />
-        Connect Agent
+        <span className="hidden 2xl:inline">Connect Agent</span>
       </button>
 
       <WorkstreamStrip />

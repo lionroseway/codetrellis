@@ -9,9 +9,13 @@ import { test, expect } from '@playwright/test';
 import { gotoWithProject, API } from '../helpers/setup';
 
 test.describe('Connected agents widget', () => {
-  test('"No agents" text visible by default', async ({ page }) => {
+  test('"No agents" said by default: in words on a wide window, by its title on a narrower one', async ({ page }) => {
+    // Below 2xl (1536px) the widget is its icon and title, so the top bar
+    // keeps room for the lines of work and, at 900px, for Settings.
     await gotoWithProject(page);
+    await expect(page.getByTitle('No agents connected')).toBeVisible({ timeout: 5000 });
 
+    await page.setViewportSize({ width: 1600, height: 900 });
     await expect(page.getByText('No agents').first()).toBeVisible({ timeout: 5000 });
   });
 

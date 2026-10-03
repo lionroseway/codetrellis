@@ -8,6 +8,30 @@ import type { AwarenessSignal, ChangedFile, SignalSeverity, SymbolChange, Workst
 /** Chips beyond this collapse into "+N", which opens the same list. */
 export const MAX_CHIPS = 5;
 
+/** A chip's narrowest (its label truncates down to this), and the gap between chips. */
+export const CHIP_MIN_PX = 64;
+export const CHIP_GAP_PX = 4;
+/** The "+N" button's room, with its gap. */
+export const OVERFLOW_PX = 40;
+
+/**
+ * How many chips to show in `width` pixels of top bar when there are `total`
+ * lines of work; the rest go behind "+N", which takes OVERFLOW_PX. At most
+ * MAX_CHIPS whatever the room. `width` null (not measured yet) is MAX_CHIPS.
+ *
+ * Fitted to the room rather than fixed: a repository with many recent
+ * branches filled a 1280px bar with five chips and pushed the project tab,
+ * its branch chip and "+" out of it; clipped instead, "+N" went with them
+ * and the rest of the lines of work could not be reached.
+ */
+export function chipsThatFit(width: number | null, total: number): number {
+  const fit = (room: number) => Math.max(0, Math.floor((room + CHIP_GAP_PX) / (CHIP_MIN_PX + CHIP_GAP_PX)));
+  if (width === null) return total <= MAX_CHIPS ? total : MAX_CHIPS - 1;
+  if (total <= Math.min(MAX_CHIPS, fit(width))) return total;
+  // Some go behind "+N": as many as fit beside it, and never MAX_CHIPS.
+  return Math.min(MAX_CHIPS - 1, fit(width - OVERFLOW_PX));
+}
+
 /**
  * The workstreams worth a chip, or none.
  *

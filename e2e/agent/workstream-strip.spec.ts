@@ -113,6 +113,31 @@ test.describe('Workstreams strip', () => {
     await expect(pop).toHaveCount(0);
   });
 
+  test('many lines of work never push the bar off a narrow window: the project tab, "+" and Settings stay, the rest go behind +N', async ({ page }) => {
+    // A repository with many recent branches filled the strip with five
+    // chips that never shrank: the project tab, its branch chip and "+" went
+    // to nothing at 1280px, and at the 900px minimum window Settings was off
+    // the right edge.
+    const many = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((b, i) => ws(`/work/acme-${b}`, `feature-${b}`, false, [agent(`s${i}`, 'claude-code')]));
+    await serve(page, many);
+    await gotoWithProject(page);
+    for (const width of [900, 1280, 1920]) {
+      await page.setViewportSize({ width, height: 800 });
+      await expect(page.getByTestId('workstream-overflow')).toBeVisible();
+      const off = await page.evaluate(() => {
+        const bar = document.querySelector('[data-testid="workstream-strip"]')!.parentElement!;
+        return [...bar.children]
+          .filter((c) => c.getBoundingClientRect().right > window.innerWidth + 0.5)
+          .map((c) => (c as HTMLElement).title || (c.textContent ?? '').trim().slice(0, 20));
+      });
+      expect(off, `past the right edge at ${width}px`).toEqual([]);
+      await expect(page.getByTitle('Open project')).toBeInViewport();
+      await expect(page.locator('button[title^="Settings"]')).toBeInViewport();
+      const overflow = await page.getByTestId('workstream-overflow').boundingBox();
+      expect(overflow!.x + overflow!.width, `"+N" clipped at ${width}px`).toBeLessThanOrEqual(width);
+    }
+  });
+
   test('more than five collapse into +N, which lists the rest', async ({ page }) => {
     const many = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((b, i) => ws(`/work/acme-${b}`, `feature-${b}`, false, [agent(`s${i}`, 'claude-code')]));
     await serve(page, many);
