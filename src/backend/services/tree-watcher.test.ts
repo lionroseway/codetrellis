@@ -70,8 +70,10 @@ test('change and unlink, a folder removed with its files, and nothing reported t
     fs.writeFileSync(path.join(root, 'src', 'a.ts'), '22');
     assert.ok(await until(() => events.includes(`change ${path.join('src', 'a.ts')}`)), events.join('\n'));
     fs.rmSync(path.join(root, 'src', 'deep'), { recursive: true });
+    // Either order: chokidar (Linux, Windows) reports the folder before its
+    // files, the native watcher the files first.
     assert.ok(await until(() => events.includes(`unlinkDir ${path.join('src', 'deep')}`)), events.join('\n'));
-    assert.ok(events.includes(`unlink ${path.join('src', 'deep', 'b.ts')}`), events.join('\n'));
+    assert.ok(await until(() => events.includes(`unlink ${path.join('src', 'deep', 'b.ts')}`)), events.join('\n'));
     await settle(300);
     assert.equal(events.filter((e) => e === `change ${path.join('src', 'a.ts')}`).length, 1);
   } finally {
