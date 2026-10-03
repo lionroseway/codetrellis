@@ -145,7 +145,7 @@ test.describe.serial('H1: the lead\'s morning view', () => {
     const lead = await h.spawnAgent({ agentType: 'cursor' });
     const r = await lead.callTool('get_state_at', { at: beforeExports, project_path: root });
     expect(r.isError, r.text).toBeFalsy();
-    const then = (JSON.parse(r.text) as { stack: Stack }).stack;
+    const then = (JSON.parse(r.answer) as { stack: Stack }).stack;
     expect(then.plans.map((p) => p.label)).toEqual(['Billing v2']);
     expect(taskIn(then, migrate)).toMatchObject({ assignee: null, workstream: 'billing-v2' });
   });

@@ -98,7 +98,7 @@ test.describe.serial('Other work in flight', () => {
 
     const pr = await agent.callTool('get_pr_draft', { plan_uid: planUid, project_path: root, before: `commit:${main}`, after: 'commit:billing-v2' });
     expect(pr.isError, pr.text).toBeFalsy();
-    const draft = JSON.parse(pr.text) as { body: string; warnings: string[] };
+    const draft = JSON.parse(pr.answer) as { body: string; warnings: string[] };
     expect(draft.body).toContain('### Other work in flight');
     expect(draft.body).toContain('checkout-fix imports it and will need updating');
     expect(draft.warnings).toContain('1 high overlap(s) with other work are still open; see "Other work in flight".');

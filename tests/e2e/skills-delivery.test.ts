@@ -103,21 +103,21 @@ test.describe.serial('Skills reach the agent', () => {
 
     const next = await agent.callTool('get_next_item', { plan_uid: planUid });
     expect(next.isError).toBeFalsy();
-    expect(JSON.parse(next.text).skills_note).toBe(note);
+    expect(JSON.parse(next.answer).skills_note).toBe(note);
 
     // The required skill still gates the claim (17.N): the agent declares it first.
     expect((await agent.callTool('claim_item', { uid: itemUid })).text).toContain('requires skills you don\'t have: typescript');
     await agent.callTool('register_session', { agent_type: 'claude-code', capabilities: [{ name: 'typescript', source: 'lang' }] });
     const claim = await agent.callTool('claim_item', { uid: itemUid });
     expect(claim.isError).toBeFalsy();
-    const claimed = JSON.parse(claim.text) as { ok: boolean; skills: AgentSkill[]; skills_note: string };
+    const claimed = JSON.parse(claim.answer) as { ok: boolean; skills: AgentSkill[]; skills_note: string };
     expect(claimed, claim.text).toMatchObject({ ok: true });
     expect(claimed.skills_note).toBe(note);
     expect(claimed.skills.map((s) => [s.name, s.use, s.missing])).toEqual([
       ['pr-review', 'recommended', null], ['house-style', 'recommended', null], ['typescript', 'required', null],
     ]);
 
-    const brief = JSON.parse((await agent.callTool('get_brief', { item_uid: itemUid })).text) as { skills: AgentSkill[]; skills_note: string };
+    const brief = JSON.parse((await agent.callTool('get_brief', { item_uid: itemUid })).answer) as { skills: AgentSkill[]; skills_note: string };
     expect(brief.skills_note).toBe(note);
     expect(brief.skills[0].where).toEqual({ kind: 'repo', path: '.claude/skills/pr-review/SKILL.md' });
 
@@ -128,7 +128,7 @@ test.describe.serial('Skills reach the agent', () => {
       expect(text).not.toContain('wiki.example.com');
     }
     // The skill is still there without its link, and the person still sees the link.
-    expect(JSON.stringify(JSON.parse(got.text))).toContain('house-style');
+    expect(JSON.stringify(JSON.parse(got.answer))).toContain('house-style');
     const person = (await (await h.client.raw('GET', `/api/items/${itemUid}`)).json()) as PlanItem;
     expect(person.skills?.find((s) => s.name === 'house-style')?.where).toEqual({ kind: 'link', url: LINK });
   });
@@ -150,7 +150,7 @@ test.describe.serial('Skills reach the agent', () => {
 
   test('an agent whose checkout lacks the skill is told so, and how to get it', async () => {
     await bound('codex', old);
-    const brief = JSON.parse((await behind.callTool('get_brief', { item_uid: itemUid })).text) as { skills: AgentSkill[]; skills_note: string };
+    const brief = JSON.parse((await behind.callTool('get_brief', { item_uid: itemUid })).answer) as { skills: AgentSkill[]; skills_note: string };
     const pr = brief.skills.find((s) => s.name === 'pr-review')!;
     expect(pr.where).toEqual({ kind: 'repo', path: '.claude/skills/pr-review/SKILL.md' });
     expect(pr.missing).toMatch(/not in your workstream .*bring your branch up to date with the main branch/);

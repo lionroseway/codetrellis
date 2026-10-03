@@ -39,7 +39,7 @@ test.describe.serial('Sign-off waits for an open high overlap', () => {
   const check = async (): Promise<Check> => {
     const r = await agent.callTool('check_criterion', { criterion_uid: criterionUid });
     expect(r.isError, r.text).toBeFalsy();
-    return JSON.parse(r.text) as Check;
+    return JSON.parse(r.answer) as Check;
   };
 
   test.beforeAll(async () => {
