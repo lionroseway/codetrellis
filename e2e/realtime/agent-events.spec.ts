@@ -24,7 +24,8 @@ test.describe('Agent events', () => {
   test('connected agents widget shows count matching sessions', async ({ page }) => {
     await gotoWithProject(page);
 
-    // Without any MCP sessions, should show "No agents"
-    await expect(page.getByText('No agents').first()).toBeVisible({ timeout: 5000 });
+    // Without any MCP sessions it says so: by its title below 2xl (1536px),
+    // where the widget is its icon, and in words above.
+    await expect(page.getByTitle('No agents connected')).toBeVisible({ timeout: 5000 });
   });
 });
