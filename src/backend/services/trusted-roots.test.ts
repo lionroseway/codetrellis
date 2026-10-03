@@ -59,12 +59,16 @@ describe('with no project open, everything is refused', () => {
 });
 
 describe('with a project open', () => {
-  test('the opened project is trusted and comes back canonical', () => {
+  test('the opened project is trusted and comes back as it was opened', () => {
+    // As opened, not canonical: rows are stored under the opened path and MCP
+    // passes it through, so the window must name the project the same way
+    // (on macOS the temp dir is under /var, a link to /private/var).
     const project = fs.mkdtempSync(path.join(tmp, 'project-'));
     roots.setActiveProjectRoot(project);
 
     const resolved = roots.resolveTrustedProjectRoot(project);
-    assert.equal(resolved, fs.realpathSync.native(project));
+    assert.equal(resolved, project);
+    assert.equal(roots.resolveTrustedProjectRoot(fs.realpathSync.native(project)), project, 'the canonical spelling names the same opened project');
     assert.equal(roots.isTrustedProjectRoot(project), true);
   });
 
@@ -104,7 +108,7 @@ describe('with a project open', () => {
     fs.symlinkSync(project, alias, 'dir');
     roots.setActiveProjectRoot(project);
 
-    assert.equal(roots.resolveTrustedProjectRoot(alias), fs.realpathSync.native(project));
+    assert.equal(roots.resolveTrustedProjectRoot(alias), project);
   });
 
   test('a link pointing ELSEWHERE is not the project', () => {

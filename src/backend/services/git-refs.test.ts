@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { diffCommand, filesBetween, listRefs, mergeBase, parseMergeBase, sideLabel, treeOf, workingCopyTree } from './git-refs';
+import { diffCommand, filesBetween, findWorkstream, listRefs, mergeBase, parseMergeBase, sideLabel, treeOf, workingCopyTree } from './git-refs';
 import { readFileAt, resolveComparand } from './snapshot-compare-service';
 import type { Workstream } from '../../shared/types';
 
@@ -199,4 +199,23 @@ test('a project in a subfolder of its repository lists and compares only its own
   const r = filesBetween(sub, 'commit:HEAD', 'live', []);
   assert.ok(r.ok);
   assert.deepEqual(r.files.map((f) => `${f.status} ${f.path}`), ['modified index.ts']);
+});
+
+test('a worktree named through a link is the same worktree; a link elsewhere is not one', () => {
+  // git names worktrees by their realpath. A project opened through a link
+  // (macOS's /var and /tmp are links) gave ids in the opened spelling, and
+  // line history answered "No such worktree" for a worktree it had listed.
+  const { dir } = repo();
+  const ws = worktree(dir);
+  const real = { ...ws, root: fs.realpathSync.native(ws.root) };
+  const link = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ct-refs-link-')), 'wt');
+  fs.symlinkSync(real.root, link, 'dir');
+  assert.equal(findWorkstream([real], link)?.root, real.root);
+  assert.equal(findWorkstream([real], real.root)?.root, real.root);
+
+  const other = path.join(path.dirname(link), 'other');
+  fs.symlinkSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ct-refs-other-')), other, 'dir');
+  assert.equal(findWorkstream([real], other), null);
+  assert.equal(findWorkstream([real], '/etc'), null);
+  assert.equal(findWorkstream([{ ...real, root: 'branch:billing-v2' }], 'branch:billing-v2')?.root, 'branch:billing-v2');
 });

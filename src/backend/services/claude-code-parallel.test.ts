@@ -19,7 +19,9 @@ const CONNECTOR = { command: '/Applications/Code Trellis.app/Contents/MacOS/Code
 const COMMAND = hookCommand(CONNECTOR);
 
 function home(): { where: ClaudeCodeWhere; dir: string } {
-  const h = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-claude-code-'));
+  // Canonical: the backup path comes back resolved, and on macOS the temp
+  // dir is under /var, a link to /private/var.
+  const h = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ct-claude-code-')));
   const dir = path.join(h, '.claude');
   fs.mkdirSync(dir);
   return { where: { home: h, env: {}, exists: (p) => fs.existsSync(p) }, dir };

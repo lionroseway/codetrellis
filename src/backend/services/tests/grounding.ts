@@ -26,6 +26,7 @@ import path from 'node:path';
 import { importersOf } from '../importers';
 import { getDb } from '../database';
 import { resolveWithin } from '../confined-fs';
+import { projectRelative } from '../trusted-roots';
 import { listTestResults, testResultsAt, type TestResultRow } from './test-results';
 import { listFrames } from '../replay-frames';
 import { getSnapshot, type TrellisSnapshotData } from '../trellis-service';
@@ -66,7 +67,7 @@ export function testFileOf(root: string, t: Pick<TestResultRow, 'file' | 'classn
   const raw = [t.file, t.classname, t.suite].find(looksLikeFile);
   if (!raw) return null;
   const abs = path.isAbsolute(raw) ? raw : path.join(root, raw);
-  const rel = path.relative(root, abs);
+  const rel = projectRelative(root, abs);
   return rel.startsWith('..') || path.isAbsolute(rel) ? null : rel.split(path.sep).join('/');
 }
 
@@ -104,8 +105,11 @@ function runEntries(run: TeammateRun, f: RunFile): FileGrounding['tests'] {
 
 /** One file's grounding. `candidate` is absolute or relative to the project. */
 export function groundingOf(projectRoot: string, candidate: string, known?: TestResultRow[], knownRuns?: TeammateRun[]): FileGrounding {
+  // resolveWithin answers with the realpath; the root is the path the project
+  // was opened at. Under a link (macOS's /var and /tmp) a plain relative
+  // between them is "../../private/…", and every file read "no tests".
   const abs = resolveWithin(projectRoot, path.isAbsolute(candidate) ? candidate : path.join(projectRoot, candidate), 'file');
-  const rel = path.relative(projectRoot, abs).split(path.sep).join('/');
+  const rel = projectRelative(projectRoot, abs).split(path.sep).join('/');
   // A folder has no tests of its own; saying "no tests" of one would mislead.
   try { if (fs.lstatSync(abs).isDirectory()) throw new NotAFileError(`${rel || '.'} is a folder, not a file.`); } catch (err) { if (err instanceof NotAFileError) throw err; }
   const results = known ?? listTestResults(projectRoot, { limit: 100_000 });
@@ -116,7 +120,9 @@ export function groundingOf(projectRoot: string, candidate: string, known?: Test
   if (isOwn) {
     testFiles = [rel];
   } else {
-    const importers = new Set(importersOf(abs).map((i) => i.relativePath.split(path.sep).join('/')));
+    // Asked under the project's own root: the graph stores files as the
+    // project was opened, and `abs` is the realpath.
+    const importers = new Set(importersOf(path.join(projectRoot, rel)).map((i) => i.relativePath.split(path.sep).join('/')));
     const known = new Set<string>([...withFile.map((x) => x.testFile).filter((f): f is string => !!f), ...runs.flatMap((r) => r.files.map((f) => f.file))]);
     testFiles = [...known].filter((f) => importers.has(f)).sort();
   }
@@ -202,7 +208,7 @@ export function groundingMap(projectRoot: string): GroundingMap {
       for (const abs of frontier) {
         if (seen.has(abs)) continue;
         seen.add(abs);
-        const rel = path.relative(projectRoot, abs);
+        const rel = projectRelative(projectRoot, abs);
         if (rel.startsWith('..') || path.isAbsolute(rel)) continue;
         candidates.add(rel.split(path.sep).join('/'));
         // A barrel passes on what it re-exports: follow those, not its own imports.

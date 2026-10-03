@@ -25,6 +25,7 @@ import chokidar, { type FSWatcher } from 'chokidar';
 import type { ChangedFile, WorkstreamChanges } from '../../shared/types';
 import { isSafeGitRef } from './git-safety';
 import { gitAsync, refreshIndexOccasionallyAsync } from './git-env';
+import { checkoutWatchOptions } from './watch-ignore';
 
 /** More than this is listed as truncated: a footprint is a summary, not a diff. */
 export const MAX_CHANGED_FILES = 500;
@@ -37,9 +38,6 @@ const debounceMs = (): number => Number(process.env.CODETRELLIS_WORKSTREAM_DEBOU
  * is replaced on its own events, so it never goes stale this way.
  */
 const UNWATCHED_TTL_MS = 20_000;
-
-/** Paths a watcher ignores: dependencies, build output, git's own files. */
-const IGNORED = /(^|[/\\])(node_modules|\.git|dist|build|out|coverage|\.next|\.turbo|\.codetrellis)([/\\]|$)/;
 
 const git = (folder: string, args: string[]): Promise<string> => gitAsync(folder, args);
 
@@ -358,10 +356,14 @@ export function setWorkstreamWatchStartedListener(listener: (folder: string) => 
 }
 
 function watch(folder: string, entry: Entry): void {
+  // The same rule as the opened project's watcher (watch-ignore.ts): this
+  // one kept its own list, without ios/Pods and following links, and held a
+  // descriptor on every file of a React Native checkout until git could no
+  // longer start.
   const watcher = chokidar.watch(folder, {
+    ...checkoutWatchOptions(folder),
     ignoreInitial: true,
     persistent: true,
-    ignored: (p: string) => IGNORED.test(path.relative(folder, p)),
   });
   watcher.on('all', () => schedule(folder, entry));
   // A change made while chokidar was still scanning raises no event, and
