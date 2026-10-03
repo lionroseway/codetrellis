@@ -143,16 +143,16 @@ test.describe.serial('Line changes per workstream', () => {
   test('an agent with no hook is told the other side\'s lines, in words, and not its own', async () => {
     const res = await agent.callTool('get_line_changes', { path: REL });
     expect(res.isError).toBeFalsy();
-    const body = JSON.parse(res.text) as { your_workstream: string; says: string[]; changes: Changes[] };
+    const body = JSON.parse(res.answer) as { your_workstream: string; says: string[]; changes: Changes[] };
     expect(fs.realpathSync(body.your_workstream)).toBe(fs.realpathSync(billing));
     expect(body.changes.map((c) => c.branch)).toEqual(['exports']);
     expect(body.says).toEqual(['exports changed line 12, in validateCreateUser']);
   });
 
   test('naming its own workstream shows its own; a file no one else changes says so', async () => {
-    const own = JSON.parse((await agent.callTool('get_line_changes', { path: REL, workstream: 'billing-v2' })).text) as { says: string[] };
+    const own = JSON.parse((await agent.callTool('get_line_changes', { path: REL, workstream: 'billing-v2' })).answer) as { says: string[] };
     expect(own.says).toEqual(['billing-v2 added line 20, in validateCreateOrder, not committed']);
-    const none = JSON.parse((await agent.callTool('get_line_changes', { path: 'packages/shared/src/types.ts' })).text) as { says: string[] };
+    const none = JSON.parse((await agent.callTool('get_line_changes', { path: 'packages/shared/src/types.ts' })).answer) as { says: string[] };
     expect(none.says).toEqual(['No other workstream changes packages/shared/src/types.ts.']);
     const bad = await agent.callTool('get_line_changes', { path: '../outside' });
     expect(bad.isError).toBe(true);

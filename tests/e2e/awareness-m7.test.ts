@@ -118,7 +118,7 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
     const sam = await h.spawnAgent({ agentType: 'cursor' });
     const r = await sam.callTool('get_awareness', { project_path: root });
     expect(r.isError, r.text).toBeFalsy();
-    const digest = (JSON.parse(r.text) as { digest: string }).digest;
+    const digest = (JSON.parse(r.answer) as { digest: string }).digest;
     expect(digest).toBe(
       `1 signal needs attention. \`exports-v2\` now imports across the rule “${RULE}”: ${USERS} → ${CONFIG}. Agents told. ` +
       'Waiting on the person: route it through what the rule allows, or change the rule?',

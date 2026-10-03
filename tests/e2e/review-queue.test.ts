@@ -107,7 +107,7 @@ test.describe.serial('The review queue', () => {
     const agent = await h.spawnAgent({ agentType: 'codex' });
     const r = await agent.callTool('get_review_queue', { project_path: root });
     expect(r.isError, r.text).toBeFalsy();
-    const got = JSON.parse(r.text) as Queue;
+    const got = JSON.parse(r.answer) as Queue;
     expect(got.lines.map((l) => l.branch)).toEqual(['billing-v2', 'checkout-fix']);
   });
 

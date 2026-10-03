@@ -191,7 +191,7 @@ test.describe.serial('M4: away from the desk', () => {
 
     const onTask = await caller.callTool('list_channel_events', { plan_uid: planUid, item_uid: itemUid, event_types: ['steer'] });
     expect(onTask.isError, onTask.text).toBeFalsy();
-    const events = JSON.parse(onTask.text) as ChannelEvent[];
+    const events = JSON.parse(onTask.answer) as ChannelEvent[];
     expect(events).toHaveLength(1);
     expect(events[0].payload.message).toContain(WORDS);
 

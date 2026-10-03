@@ -104,7 +104,7 @@ test.describe.serial('Workstreams', () => {
   test('list_workstreams tells an agent which workstream is its own', async () => {
     const res = await agents[0].callTool('list_workstreams', {});
     expect(res.isError).toBeFalsy();
-    const body = JSON.parse(res.text) as { project_path: string; workstreams: Workstream[] };
+    const body = JSON.parse(res.answer) as { project_path: string; workstreams: Workstream[] };
     expect(same(body.project_path, root)).toBe(true);
     const mine = body.workstreams.filter((w) => w.yours);
     expect(mine).toHaveLength(1);
@@ -112,7 +112,7 @@ test.describe.serial('Workstreams', () => {
     expect(find(body.workstreams, root)?.yours).toBe(false);
 
     const withIdle = await agents[0].callTool('list_workstreams', { project_path: root, include_idle: true });
-    expect((JSON.parse(withIdle.text) as { workstreams: Workstream[] }).workstreams).toHaveLength(2);
+    expect((JSON.parse(withIdle.answer) as { workstreams: Workstream[] }).workstreams).toHaveLength(2);
   });
 
   test('the project comes from what is opened, not from the caller', async () => {
@@ -152,7 +152,7 @@ test.describe.serial('Workstreams', () => {
 
   test('list_workstreams gives an agent the same files', async () => {
     const res = await agents[0].callTool('list_workstreams', {});
-    const body = JSON.parse(res.text) as { workstreams: Workstream[] };
+    const body = JSON.parse(res.answer) as { workstreams: Workstream[] };
     const mine = body.workstreams.find((w) => w.yours)!;
     expect(mine.changes.files.map((f) => f.path)).toContain('refresh.ts');
   });
@@ -207,7 +207,7 @@ test.describe.serial('Workstreams', () => {
       .toEqual({ before: '(email: string): boolean', after: '(email: string, strict = false): boolean' });
 
     // An agent listing workstreams is told the same.
-    const body = JSON.parse((await agents[0].callTool('list_workstreams', {})).text) as { workstreams: Workstream[] };
+    const body = JSON.parse((await agents[0].callTool('list_workstreams', {})).answer) as { workstreams: Workstream[] };
     const mine = body.workstreams.find((w) => w.yours)!.changes.files.find((x) => x.path === rel)!;
     expect(mine.symbols?.find((s) => s.name === 'isValidEmail')?.signature?.after).toBe('(email: string, strict = false): boolean');
   });

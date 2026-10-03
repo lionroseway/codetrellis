@@ -99,7 +99,7 @@ test.describe.serial('Declared intent', () => {
     expect(theirs.intents![0].summary).toBeUndefined();
 
     // Its own summary comes back to the agent that wrote it.
-    const own = JSON.parse((await planner.callTool('list_workstreams', {})).text) as { workstreams: Ws[] };
+    const own = JSON.parse((await planner.callTool('list_workstreams', {})).answer) as { workstreams: Ws[] };
     expect(own.workstreams.find((w) => w.yours)!.intents![0].summary).toBe('Tighten email validation for billing contacts');
   });
 

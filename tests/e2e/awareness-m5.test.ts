@@ -86,7 +86,7 @@ test.describe.serial('M5: review knows what else is in flight', () => {
     const reviewer = await h.spawnAgent({ agentType: 'claude-code' });
     const json = await reviewer.callTool('review_plan', { plan_uid: planUid, project_path: root, ...billingRange() });
     expect(json.isError, json.text).toBeFalsy();
-    const other = (JSON.parse(json.text) as { otherWork: OtherWork }).otherWork;
+    const other = (JSON.parse(json.answer) as { otherWork: OtherWork }).otherWork;
     expect(other.workstream.name).toBe('billing-v2');
     expect(other.openHigh).toBe(1);
     expect(other.entries.find((e) => e.kind === 'contract')).toMatchObject({ merge: MERGE_LINE, outcome: 'open' });
@@ -100,7 +100,7 @@ test.describe.serial('M5: review knows what else is in flight', () => {
     const author = await h.spawnAgent({ agentType: 'codex' });
     const pr = await author.callTool('get_pr_draft', { plan_uid: planUid, project_path: root, ...billingRange() });
     expect(pr.isError, pr.text).toBeFalsy();
-    const draft = JSON.parse(pr.text) as { body: string; warnings: string[] };
+    const draft = JSON.parse(pr.answer) as { body: string; warnings: string[] };
     expect(draft.body).toContain('### Other work in flight');
     expect(draft.body).toContain(MERGE_LINE);
     expect(draft.warnings).toContain('1 high overlap(s) with other work are still open; see "Other work in flight".');
@@ -110,7 +110,7 @@ test.describe.serial('M5: review knows what else is in flight', () => {
     const lead = await h.spawnAgent({ agentType: 'cursor' });
     const r = await lead.callTool('get_review_queue', { project_path: root });
     expect(r.isError, r.text).toBeFalsy();
-    const queue = JSON.parse(r.text) as Queue;
+    const queue = JSON.parse(r.answer) as Queue;
     expect(queue.base).toBe(base);
     expect(queue.lines.map((l) => [l.position, l.branch, l.status])).toEqual([[1, 'billing-v2', 'held'], [2, 'checkout-fix', 'held']]);
     expect(queue.lines[0].reason).toBe(FIRST);

@@ -116,14 +116,14 @@ test.describe.serial('Being told without asking', () => {
   test('the agent answers with acknowledge_signal: its note sits beside the person\'s answer and changes nothing of it', async () => {
     const r = await caller.callTool('acknowledge_signal', { id: contractId, note: 'Seen. I will pass strict: false until billing-v2 merges.' });
     expect(r.isError, r.text).toBeFalsy();
-    expect(JSON.parse(r.text)).toMatchObject({ acknowledged: { id: contractId, kind: 'contract' }, state: 'open' });
+    expect(JSON.parse(r.answer)).toMatchObject({ acknowledged: { id: contractId, kind: 'contract' }, state: 'open' });
 
     const c = (await signals()).find((s) => s.id === contractId)!;
     expect(c.state).toBe('open');
     expect(c.told?.find((t) => t.agentType === 'codex')?.note).toBe('Seen. I will pass strict: false until billing-v2 merges.');
 
     // It sees its own note again; the other agent never sees it.
-    const mine = JSON.parse((await caller.callTool('get_awareness', {})).text) as { signals: Array<{ id: string; your_note?: string }> };
+    const mine = JSON.parse((await caller.callTool('get_awareness', {})).answer) as { signals: Array<{ id: string; your_note?: string }> };
     expect(mine.signals.find((s) => s.id === contractId)?.your_note).toBe('Seen. I will pass strict: false until billing-v2 merges.');
     const theirs = await changer.callTool('get_awareness', {});
     expect(theirs.text).not.toContain('strict: false until');

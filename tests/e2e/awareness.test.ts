@@ -90,11 +90,11 @@ test.describe.serial('Awareness signals', () => {
   test('an agent in one of them is told, and check_footprint names the other side', async () => {
     const res = await agent.callTool('get_awareness', {});
     expect(res.isError).toBeFalsy();
-    const body = JSON.parse(res.text) as { your_workstream: string; signals: Signal[] };
+    const body = JSON.parse(res.answer) as { your_workstream: string; signals: Signal[] };
     expect(same(body.your_workstream, auth)).toBe(true);
     expect(body.signals.map((x) => x.kind)).toEqual(['collision']);
 
-    const fp = JSON.parse((await agent.callTool('check_footprint', { paths: [REL, 'packages/shared/src/nothing.ts'] })).text) as {
+    const fp = JSON.parse((await agent.callTool('check_footprint', { paths: [REL, 'packages/shared/src/nothing.ts'] })).answer) as {
       paths: Array<{ path: string; changed_in: Array<{ workstream: string; branch: string; symbols: Array<{ name: string }> | null }>; imported_by: string[] }>;
     };
     const [v, none] = fp.paths;
