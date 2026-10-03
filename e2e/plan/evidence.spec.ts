@@ -51,7 +51,7 @@ test.describe('Evidence export', () => {
     const saved = testInfo.outputPath('evidence.html');
     await download.saveAs(saved);
     const html = fs.readFileSync(saved, 'utf-8');
-    expect(html).toContain('Approved “Refunds round half-even”');
+    expect(html).toContain('Someone over the local API approved “Refunds round half-even”');
     await expect(evidence.getByTestId('evidence-message')).toContainText('It is signed by this computer');
 
     await evidence.getByTestId('evidence-verify-input').setInputFiles(saved);

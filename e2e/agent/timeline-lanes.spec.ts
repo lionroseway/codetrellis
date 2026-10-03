@@ -69,10 +69,10 @@ const COMMITS: Record<string, WorkstreamCommit[]> = {
 // B2.2: a person deciding auth-refresh's criteria, and a check run on billing-v2.
 const CHECKS: AgentEvent[] = [
   event(now - 15 * MIN, 'criterion_decided',
-    { criterionUid: 'cr-1', decision: 'approved', text: 'Old tokens are refused', itemTitle: 'Rotate refresh tokens', agentType: 'human', workstreamRoot: '/work/acme-auth' },
+    { criterionUid: 'cr-1', decision: 'approved', text: 'Old tokens are refused', itemTitle: 'Rotate refresh tokens', agentType: 'human', actorType: 'human', workstreamRoot: '/work/acme-auth' },
     { source: 'app' }),
   event(now - 8 * MIN, 'criterion_decided',
-    { criterionUid: 'cr-2', decision: 'sent_back', text: 'Rotation is logged', itemTitle: 'Rotate refresh tokens', agentType: 'human', workstreamRoot: '/work/acme-auth' },
+    { criterionUid: 'cr-2', decision: 'sent_back', text: 'Rotation is logged', itemTitle: 'Rotate refresh tokens', agentType: 'human', actorType: 'human', workstreamRoot: '/work/acme-auth' },
     { source: 'app' }),
   event(now - 7 * MIN, 'check_run',
     { planUid: 'p-1', trigger: 'manual', passed: 3, failed: 0, failing: [], agentType: 'human', workstreamRoot: '/work/acme-billing' },
@@ -172,8 +172,8 @@ test.describe('Timeline lanes', () => {
     // Words beside glyphs: the hover names each, and a commit its agent and short sha.
     await expect(lane('auth-refresh').locator('[data-kind="commit"]')).toHaveAttribute('title', /commit · codex: Tighten email check \(bbbbbbb\)/);
     await expect(lane('auth-refresh').locator('[data-kind="merge"]')).toHaveAttribute('title', /merge · Sam: Merge auth-side \(ccccccc\)/);
-    await expect(lane('auth-refresh').locator('[data-kind="check-pass"]')).toHaveAttribute('title', /checks passed · human: Approved “Old tokens are refused”/);
-    await expect(lane('auth-refresh').locator('[data-kind="check-fail"]')).toHaveAttribute('title', /checks failed · human: Sent back “Rotation is logged”/);
+    await expect(lane('auth-refresh').locator('[data-kind="check-pass"]')).toHaveAttribute('title', /checks passed · human: You approved “Old tokens are refused”/);
+    await expect(lane('auth-refresh').locator('[data-kind="check-fail"]')).toHaveAttribute('title', /checks failed · human: You sent back “Rotation is logged”/);
     await expect(lane('billing-v2').locator('[data-kind="check-pass"]')).toHaveAttribute('title', /checks passed · human: Checked criteria: all 3 passing/);
     await expect(lane('auth-refresh').locator('[data-kind="check-fail"]')).toHaveText('✗');
     await expect(lane('auth-refresh').locator('[data-kind="merge"]')).toHaveText('⧫');
@@ -183,7 +183,7 @@ test.describe('Timeline lanes', () => {
 
     // A decision opens as its turn below; a commit opens nothing.
     await lane('auth-refresh').locator('[data-kind="check-fail"]').click();
-    await expect(page.locator('[data-testid="turn-card"]', { hasText: 'Sent back “Rotation is logged”' })).toBeVisible();
+    await expect(page.locator('[data-testid="turn-card"]', { hasText: 'You sent back “Rotation is logged”' })).toBeVisible();
   });
 
   test('B4.3b: ⏸ a held call spans to its answer, dashed while it waits; ⊘ a breach is its own mark', async ({ page }) => {

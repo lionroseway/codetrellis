@@ -102,6 +102,10 @@ test.describe.serial('Line history', () => {
     expect(all[0].text.split('\n')[0]).toBe(`${FILE}: 5 runs of lines.`);
     expect(all[0].text).toContain('Line 5 is changed in the working copy and not yet committed.');
     expect((await agent.callTool('line_history', { path: '../etc/passwd' })).isError).toBe(true);
+    // Past the end, it says so in words; it used to answer with only the git command.
+    const past = await agent.callTool('line_history', { path: FILE, line: 40 });
+    expect(past.isError).toBe(true);
+    expect((past.content as Array<{ text: string }>)[0].text).toBe(`${FILE} has 5 lines at live; line 40 is past its end.`);
   });
 
   test('a branch reads its own lines', async () => {

@@ -119,14 +119,14 @@ Intended, setting a breakpoint, answering it) are asked for in the window;
 
 Plans assigned to lines of work, read the ways a lead reads them: the Stack,
 a past moment, review and the merge order, and plans played forward.
-`npm run demo -- --group=observe`. The one person's step is re-sequencing.
+`npm run demo -- --group=observe`. The person approves two plans on the plan header and re-sequences them.
 
 | Scene | Watch for |
 |---|---|
 | `stack` | "Billing v2" and "JIRA-150", codex on `billing-v2` and Claude Code on `exports`; "⚠ overlaps JIRA-150", and "Export form" waiting on "Strict validation" |
 | `replay` | the window replays from the moment before Exports existed, at 4×: Billing alone, its task pending with nobody on it, no signals; back to live, the contract is open |
 | `review-queue` | "Other work in flight" says exports will need updating; the PR draft warns while the overlap is open; `billing-v2` merges first; once Billing's task is done, Export form waits on nothing |
-| `play-forward` | play-forward on: "◇ planned overlap: JIRA-142 and JIRA-151 both plan to change …validators.ts"; then in Stack, re-sequenced with JIRA-142 first, "Add a currency field" waits on "Round VAT per line" |
+| `play-forward` | an agent's `update_plan` to approve is refused; you approve both plans with **Approve** on the plan header; play-forward on: "◇ planned overlap: JIRA-142 and JIRA-151 both plan to change …validators.ts"; then in Stack, re-sequenced with JIRA-142 first, "Add a currency field" waits on "Round VAT per line" |
 
 ## A4. The record (`record`) — *built*
 

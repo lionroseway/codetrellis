@@ -81,6 +81,22 @@ test.describe.serial('Per-test results', () => {
     expect((await listed()).reports).toHaveLength(1);
   });
 
+  test('the same bytes from a later run are a new run: it is counted from when it ran', async () => {
+    // A runner that stamps no time writes the same file when nothing changed.
+    // It kept the first run's time, so tests re-run on the code as it is now
+    // still read as older than the code.
+    const before = (await call('report_tests', { path: 'reports/junit-1.xml' })).data;
+    const later = new Date(Date.now() - 5_000);
+    write('reports/junit-1.xml', FIRST, later);
+    const { data } = await call('report_tests', { path: 'reports/junit-1.xml' });
+    expect(data.says).toBe('5 tests, 2 failing, 1 skipped.');
+    expect(Date.parse(data.ran_at)).toBe(later.getTime());
+    expect(Date.parse(data.ran_at)).toBeGreaterThan(Date.parse(before.ran_at));
+    expect((await listed()).reports).toHaveLength(1);
+    // And handing that same run over again is, again, nothing new.
+    expect((await call('report_tests', { path: 'reports/junit-1.xml' })).data.says).toBe('5 tests, 2 failing, 1 skipped (already reported; nothing changed).');
+  });
+
   test('the window and get_test_results say the same, failing first', async () => {
     const l = await listed();
     expect(l.summary).toMatchObject({ tests: 5, failing: 2, words: '5 tests, 2 failing, 1 skipped' });

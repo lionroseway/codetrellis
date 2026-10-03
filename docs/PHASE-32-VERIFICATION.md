@@ -20,7 +20,7 @@ records that — but "✗ none" is proof of a gap.
 | REST routes | 295 | 293 | 0 | 0 | 217 | 0 |
 | MCP tools | 212 | 212 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
-| Frontend components | 138 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 139 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 38 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 0 | n/a | n/a | n/a | 0 | 0 |
 
@@ -30,7 +30,7 @@ records that — but "✗ none" is proof of a gap.
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 25 | 12 | 10 | 0 | 0 | 0 |
 | 0.4b Graph | 22 | 15 | 8 | 15 | 0 | 0 |
-| 0.4c Plans and items | 119 | 61 | 29 | 63 | 0 | 0 |
+| 0.4c Plans and items | 119 | 61 | 29 | 64 | 0 | 0 |
 | 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 4 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 13 | 7 | 1 | 0 | 0 |
@@ -75,7 +75,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
 | a | `POST /api/git/fetch` |  | ✗ none | 2 |  |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 205 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 206 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `DELETE /api/rules/:id` |  | ✗ none | 2 |  |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
@@ -213,7 +213,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `PUT /api/items/:uid/workstream` |  | ✗ none | 12 |  |  |  |
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 3 | ✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `PUT /api/plan-phases/:phaseUid` |  | ✗ none | 2 | ✓ 0.4c: exercised by full-loop, plan-phases (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `PUT /api/plans/:uid` |  | ✗ none | 8 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `PUT /api/plans/:uid` |  | ✗ none | 9 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `PUT /api/plans/:uid/budget` |  | ✗ none | 1 | ✓ 0.4g: recorded with who and how (local-api / desktop), never flagged; invalid ceilings 400; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
 | c | `PUT /api/recurring/:id` |  | ✗ none | 1 |  |  |  |
 | c | `PUT /api/recurring/:id/agent` |  | ✗ none | 1 |  |  |  |
@@ -414,7 +414,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `list_items` | plan-item · read | ✗ none | 3 | ✓ 0.4c: exercised by cdev-phase5, intake, plan-items (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `list_plan_pointers` | plan · read | ✗ none | 1 | ✓ 0.4c: exercised by cdev-cross-repo (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `list_plan_templates` | plan · read | ✗ none | 1 | ✓ 0.4c-1: built-ins; project templates with project_root (plan-tools) |  |  |
-| c | `list_plans` | plan · read | ✗ none | 21 | ✓ 0.4c: exercised by plan-tools, transport-auth (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `list_plans` | plan · read | ✗ none | 22 | ✓ 0.4c: exercised by plan-tools, transport-auth (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `list_plans_by_repo` | plan · read | ✗ none | 1 | ✓ 0.4c: exercised by cdev-cross-repo (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `list_recurring` | plan · read | ✗ none | 1 |  |  |  |
 | c | `list_rules` | plan · read | ✗ none | 1 |  |  |  |
@@ -489,7 +489,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `open_plan` | session · write | ✗ none | 1 | ✓ 0.4g: plan opens; unknown plan refused with no toast (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `open_settings` | session · write | ✗ none | 1 | ✓ 0.4g: settings dialog opens (agent-ui-tools, mcp-ui-tools.spec) |  |  |
 | g | `refresh_ui` | session · write | ✗ none | 1 | ✓ 0.4g: sends ui-refresh (agent-ui-tools) |  |  |
-| g | `register_session` | session · read | ✗ none | 49 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
+| g | `register_session` | session · read | ✗ none | 50 | ✓ 0.4g: the agent appears in /api/sessions under its type (sessions; every harness agent registers) |  |  |
 | g | `screenshot` | ui · capture | ✗ none | 1 | ✓ 0.4g: refused without capture; image from the window's answer; empty answer an error (agent-ui-tools) |  |  |
 | g | `select_item` | ui · write | ✗ none | 1 | ✓ 0.4g: item selected; unknown item or wrong plan refused (agent-ui-tools, mcp-ui-tools.spec); bug 27 |  |  |
 | g | `set_active_plan` | session · write | ✗ none | 1 | ✓ 0.4g: shown and recorded as the agent's plan; unknown refused, unchanged (agent-ui-tools); bug 27 |  |  |
@@ -664,7 +664,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (138)
+## Frontend components (139)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -696,6 +696,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `plan/RecurringSeriesList.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/StatusBadge.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/AnchorPicker.tsx` |  | n/a | n/a |  |  |  |
+| c | `plan/v2/ApprovePlanButton.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/BodyRenderer.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/ChannelPanel.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/v2/CodebaseOrientation.tsx` |  | n/a | n/a |  |  |  |
@@ -833,7 +834,7 @@ records that — but "✗ none" is proof of a gap.
 | j | `notification-settings.tsx` |  | n/a | n/a |  |  |  |
 | j | `pair.tsx` |  | n/a | n/a |  |  |  |
 | j | `plan-channel.tsx` |  | n/a | n/a |  |  |  |
-| j | `plan-detail.tsx` |  | n/a | 1 |  |  |  |
+| j | `plan-detail.tsx` |  | n/a | 2 |  |  |  |
 | j | `plan-review.tsx` |  | n/a | 1 |  |  |  |
 | j | `plan-templates.tsx` |  | n/a | n/a |  |  |  |
 | j | `project-browser.tsx` |  | n/a | n/a |  |  |  |

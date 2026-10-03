@@ -230,7 +230,7 @@ export const observeGroup: Group = {
     {
       id: 'play-forward',
       title: 'Two plans that will meet, settled before either starts',
-      watch: 'play-forward: "◇ planned overlap: JIRA-142 and JIRA-151 both plan to change validators.ts"; then in Stack, resequenced, JIRA-151 waits on JIRA-142',
+      watch: 'the agent may not approve; you approve both on the plan header; play-forward: "◇ planned overlap: JIRA-142 and JIRA-151 both plan to change validators.ts"; then in Stack, resequenced, JIRA-151 waits on JIRA-142',
       async run(c) {
         await c.say('Two new tickets', 'VAT rounding (JIRA-142) and Currency (JIRA-151) both plan to change validators.ts. Nothing is written yet.');
         const make = async (title: string, key: string, taskTitle: string) => {
@@ -244,12 +244,21 @@ export const observeGroup: Group = {
         await claim(c, claude, vatTask, 'claude-code');
         await claim(c, codex, currencyTask, 'codex');
 
-        // The window and the phone have no Approve control for a plan yet, so the demo sets it (to fix before 0.2.0).
-        await c.say('Both approved', 'The lead approves both plans. Nothing has been written yet.');
-        for (const uid of [vat, currency]) await c.call('update_plan', { plan_uid: uid, status: 'approved' });
+        // An agent cannot approve a plan: it asks, and the person decides.
+        const refused = await codex.callTool('update_plan', { plan_uid: currency, status: 'approved' });
+        if (!refused.isError) c.flag('update_plan from an agent approved a plan; approving is the person\'s');
+        for (const uid of [vat, currency]) await c.call('update_plan', { plan_uid: uid, status: 'review' });
+        const status = async (uid: string) => (await c.json('get_plan', { plan_uid: uid }))?.status;
+        for (const [uid, key] of [[vat, 'JIRA-142'], [currency, 'JIRA-151']]) {
+          await c.call('navigate_to', { target: 'plan', plan_uid: uid });
+          await c.person({
+            ask: `On ${key}'s plan header, choose Approve.`,
+            decide: () => c.api(`/api/plans/${uid}`, { status: 'approved' }, 'PUT'),
+            done: async () => (await status(uid)) === 'approved',
+          });
+        }
         for (const uid of [vat, currency]) {
-          const p = await c.json('get_plan', { plan_uid: uid });
-          if (p?.status !== 'approved') c.flag(`"${p?.title}" should be approved; it is ${p?.status}`);
+          if ((await status(uid)) !== 'approved') c.flag(`plan ${uid} should be approved by the person; it is ${await status(uid)}`);
         }
         await c.call('navigate_to', { target: 'play-forward' });
         c.defer('back to live', () => c.call('navigate_to', { target: 'live' }));

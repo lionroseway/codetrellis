@@ -93,7 +93,10 @@ test.describe('Replay', () => {
     await page.getByTestId('replay-start').click();
     const bar = page.getByTestId('replay-bar');
     await expect(bar).toBeVisible();
-    await expect(page.getByTestId('replay-range')).toHaveText(/^Replaying \d\d:\d\d → \d\d:\d\d · at \d\d:\d\d$/);
+    // Times alone on the day itself; a time on another day carries its date
+    // ("2 Oct 23:30"), which an hour's replay just after midnight does.
+    const t = String.raw`(?:\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d`;
+    await expect(page.getByTestId('replay-range')).toHaveText(new RegExp(`^Replaying ${t} → ${t} · at ${t}$`));
     await expect(page.getByTestId('replay-moment')).toHaveText("Codex's turn ended · no signals open · nothing waiting on you");
     // The canvas says it is the graph as it was, not now.
     await expect(page.getByTestId('replay-canvas')).toContainText(/As it was at \d\d:\d\d · 3 files · replaying/);

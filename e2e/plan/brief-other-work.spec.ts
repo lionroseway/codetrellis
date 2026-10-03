@@ -101,7 +101,13 @@ test.describe('Other work affected', () => {
 
       // The sign-off pack says what touched each task and how it ended (A6.5).
       await card.getByRole('button', { name: 'Acknowledge' }).click();
-      await expect(card).toHaveAttribute('data-state', 'acknowledged');
+      // The answer waits behind any signal refresh already running, and those
+      // run git and parsing on the backend's one thread. The browser suite
+      // shares one backend between two workers, and the spec beside this one
+      // writes into the same project, so a refresh can be running: the same
+      // 20 s as the other awareness waits here, not the 5 s default. (That the
+      // refresh blocks requests at all is the follow-up, not this test.)
+      await expect(card).toHaveAttribute('data-state', 'acknowledged', { timeout: 20_000 });
       const res = await request.get(`${API}/plans/${plan.uid}/signoff-pack.html`, { headers: authHeaders() });
       expect(res.ok()).toBeTruthy();
       const packPage = await page.context().newPage();

@@ -265,6 +265,11 @@ function humaniseToolName(tool: string): string {
  * agent), and the Claude Code session-JSONL events, which carry
  * read/write/edit/bash actions instead of tool names.
  */
+/** Who made a person's decision, in the record's words. */
+function decidedBy(actorType: unknown): string {
+  return actorType === 'human' ? 'You' : actorType === 'unverified' ? 'Someone over the local API' : 'Someone';
+}
+
 export function phraseEvent(event: AgentEvent, vocabulary: PhraseVocabulary = 'code'): PhrasedEvent {
   const payload = event.payload ?? {};
 
@@ -338,7 +343,11 @@ export function phraseEvent(event: AgentEvent, vocabulary: PhraseVocabulary = 'c
   if (event.type === 'criterion_decided') {
     const text = typeof payload.text === 'string' ? payload.text : 'a criterion';
     const approved = payload.decision === 'approved';
-    return { text: `${approved ? 'Approved' : 'Sent back'} “${text.slice(0, 80)}”`, intent: approved ? 'write' : 'error', tool: null, mutating: true };
+    // Who decided, as every other decision in the record says: the evidence
+    // export used to read "Approved “…”" with no one doing it.
+    const who = decidedBy(payload.actorType);
+    const from = payload.channel === 'phone' ? ', from the phone' : '';
+    return { text: `${who} ${approved ? 'approved' : 'sent back'} “${text.slice(0, 80)}”${from}`, intent: approved ? 'write' : 'error', tool: null, mutating: true };
   }
   if (event.type === 'check_run') {
     const passed = Number(payload.passed) || 0;
@@ -348,7 +357,7 @@ export function phraseEvent(event: AgentEvent, vocabulary: PhraseVocabulary = 'c
   }
 
   // ── A person's decisions, kept in the record (B10.1) ──────────────
-  const whoDid = (t: unknown) => (t === 'human' ? 'You' : t === 'unverified' ? 'Someone over the local API' : 'Someone');
+  const whoDid = decidedBy;
   if (event.type === 'signal_answered') {
     const kind = typeof payload.kind === 'string' ? payload.kind.replace(/-/g, ' ') : 'a';
     const signal = `a ${kind} signal`;

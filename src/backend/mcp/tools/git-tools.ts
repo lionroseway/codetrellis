@@ -47,6 +47,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (!isProjectRelativePath(rel)) return { isError: true, content: [{ type: 'text' as const, text: 'path must be relative to the project.' }] };
       try {
         const h = lineHistory(projectRoot, at ?? 'live', rel, worktreesForCompare(projectRoot), recordedKnowledge(projectRoot));
+        // A line past the end used to match no run of lines and answer with
+        // only the git command, as if that were the history.
+        if (line && line > h.lineCount) {
+          const has = h.lineCount === 0 ? 'has no lines' : `has ${h.lineCount} line${h.lineCount === 1 ? '' : 's'}`;
+          return { isError: true, content: [{ type: 'text' as const, text: `${h.path} ${has} at ${at ?? 'live'}; line ${line} is past its end.` }] };
+        }
         const from = line ?? 1;
         const to = line ? Math.max(end_line ?? line, line) : h.lineCount;
         const said = h.hunks.filter((x) => x.end >= from && x.start <= to).map((x) => lineWords(h, Math.max(x.start, from)));

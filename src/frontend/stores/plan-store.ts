@@ -60,6 +60,8 @@ interface PlanState {
    * apply on the active plan + plans list; WS plan-updated will
    * reconcile from authoritative state.
    */
+  /** The person approves a plan: its baseline is captured and its planned overlaps said (B9.3b). */
+  approvePlan: (planUid: string) => Promise<{ ok: boolean; plannedOverlaps: string[]; error?: string }>;
   updatePlanGitContext: (planUid: string, patch: Partial<Pick<Plan, 'baseRef' | 'targetBranch' | 'targetWorktree' | 'autoCreateBranch'>>) => Promise<void>;
 
   /** Delete a plan (archives in DB + removes disk files). */
@@ -251,6 +253,25 @@ export const usePlanStore = create<PlanState>((set, get) => ({
 
 
 
+
+  approvePlan: async (planUid) => {
+    try {
+      const res = await fetch(`/api/plans/${planUid}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'approved' }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { plannedOverlaps?: string[]; error?: string };
+      if (!res.ok) return { ok: false, plannedOverlaps: [], error: body.error ?? `HTTP ${res.status}` };
+      set((s) => ({
+        plans: s.plans.map((p) => (p.uid === planUid ? { ...p, status: 'approved' } : p)),
+        activePlan: s.activePlan && s.activePlan.uid === planUid ? { ...s.activePlan, status: 'approved' } : s.activePlan,
+      }));
+      return { ok: true, plannedOverlaps: body.plannedOverlaps ?? [] };
+    } catch (err) {
+      return { ok: false, plannedOverlaps: [], error: err instanceof Error ? err.message : String(err) };
+    }
+  },
 
   updatePlanGitContext: async (planUid, patch) => {
     try {

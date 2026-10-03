@@ -83,6 +83,23 @@ test.describe.serial('Plan tools', () => {
     expect(versions[0]).toMatchObject({ author: 'plan-agent', authorType: 'mcp' });
   });
 
+  test('update_plan cannot approve a plan: the agent is told to ask, and nothing in the call is applied', async () => {
+    const before = await json('get_plan', { plan_uid: planUid });
+    const res = await agent.callTool('update_plan', { plan_uid: planUid, status: 'approved', title: 'Approved by an agent' });
+    expect(res.isError).toBe(true);
+    expect(res.text).toContain('approving a plan is the person\'s');
+    expect(res.text).toContain('"review"');
+    const after = await json('get_plan', { plan_uid: planUid });
+    expect(after).toMatchObject({ title: before.title, status: before.status });
+    // Asking for it is allowed; the person approves over the window's own path.
+    await json('update_plan', { plan_uid: planUid, status: 'review' });
+    expect((await json('get_plan', { plan_uid: planUid })).status).toBe('review');
+    const put = await h.client.raw('PUT', `/api/plans/${planUid}`, { status: 'approved' });
+    expect(put.ok).toBe(true);
+    expect((await json('get_plan', { plan_uid: planUid })).status).toBe('approved');
+    await json('update_plan', { plan_uid: planUid, status: 'in_progress' });
+  });
+
   test('after a rename, write-through keeps writing to the same directory', async () => {
     const [dir] = dirsFor(planUid);
     await json('add_item', { plan_uid: planUid, kind: 'action', title: 'Added after the rename' });
