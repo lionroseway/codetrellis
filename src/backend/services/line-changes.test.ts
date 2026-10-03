@@ -114,9 +114,9 @@ describe('in a real repository', () => {
     'export function gone() {', '  return 0;', '}', '',
   ].join('\n');
 
-  const ws = (root: string, branch: string, isMain = false): Workstream => ({
+  const ws = async (root: string, branch: string, isMain = false): Promise<Workstream> => ({
     root, branch, head: git(root, 'rev-parse', 'HEAD').trim(), main: isMain, shape: 'worktree', agents: [], idle: false,
-    changes: computeChanges(root, isMain ? null : 'main'),
+    changes: await computeChanges(root, isMain ? null : 'main'),
   } as Workstream);
 
   before(async () => {
@@ -145,8 +145,8 @@ describe('in a real repository', () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  test('each hunk: which lines, which function, committed or not', () => {
-    const r = lineChangesOf(ws(tree, 'feature'), main, FILE, parse);
+  test('each hunk: which lines, which function, committed or not', async () => {
+    const r = lineChangesOf(await ws(tree, 'feature'), main, FILE, parse);
     assert.equal(r.status, 'changed');
     assert.deepEqual(r.hunks.map((h) => `${h.kind} ${h.new.start}+${h.new.lines} ${h.functions.join(',')} ${h.committed ? 'committed' : 'not committed'}`), [
       'changed 7+1 Cart.add committed',
@@ -157,29 +157,29 @@ describe('in a real repository', () => {
     assert.equal(r.diff, undefined);
   });
 
-  test('the diff text only when asked', () => {
-    const r = lineChangesOf(ws(tree, 'feature'), main, FILE, parse, { diff: true });
+  test('the diff text only when asked', async () => {
+    const r = lineChangesOf(await ws(tree, 'feature'), main, FILE, parse, { diff: true });
     assert.match(r.diff ?? '', /^-\s+return n \+ 1;$/m);
     assert.match(r.diff ?? '', /^\+\s+if \(n < 1\) return 0;$/m);
   });
 
-  test('a file git does not track yet is all added and not committed', () => {
-    const r = lineChangesOf(ws(tree, 'feature'), main, 'src/new.ts', parse);
+  test('a file git does not track yet is all added and not committed', async () => {
+    const r = lineChangesOf(await ws(tree, 'feature'), main, 'src/new.ts', parse);
     assert.deepEqual(r.hunks.map((h) => [h.kind, h.new.start, h.new.lines, h.committed]), [['added', 1, 2, false]]);
   });
 
-  test('a workstream that leaves the file alone says so', () => {
-    const r = lineChangesOf(ws(main, 'main', true), main, FILE, parse);
+  test('a workstream that leaves the file alone says so', async () => {
+    const r = lineChangesOf(await ws(main, 'main', true), main, FILE, parse);
     assert.equal(r.status, 'unchanged');
     assert.deepEqual(r.hunks, []);
   });
 
-  test('binary, too large, and a link out of the folder say so instead of lines', () => {
+  test('binary, too large, and a link out of the folder say so instead of lines', async () => {
     fs.writeFileSync(path.join(tree, 'img.bin'), Buffer.from([0x89, 0x50, 0, 0x01]));
     fs.writeFileSync(path.join(tree, 'big.txt'), 'x'.repeat(MAX_FILE_BYTES + 1));
     fs.writeFileSync(path.join(tmp, 'secret.txt'), 'outside\n');
     fs.symlinkSync(path.join(tmp, 'secret.txt'), path.join(tree, 'link.txt'));
-    const w = ws(tree, 'feature');
+    const w = await ws(tree, 'feature');
     assert.equal(lineChangesOf(w, main, 'img.bin', parse).status, 'binary');
     assert.equal(lineChangesOf(w, main, 'big.txt', parse).status, 'too-large');
     const link = lineChangesOf(w, main, 'link.txt', parse, { diff: true });
@@ -187,9 +187,9 @@ describe('in a real repository', () => {
     assert.equal(link.diff, undefined);
   });
 
-  test('a branch with no folder is read at its head, all committed', () => {
+  test('a branch with no folder is read at its head, all committed', async () => {
     git(tree, 'commit', '-q', '-am', 'the rest');
-    const w = ws(tree, 'feature');
+    const w = await ws(tree, 'feature');
     const branch = { ...w, root: 'branch:feature', shape: 'branch' } as Workstream;
     const r = lineChangesOf(branch, main, FILE, parse);
     assert.deepEqual(r.hunks.map((h) => [h.kind, h.functions.join(','), h.committed]), [
@@ -197,8 +197,8 @@ describe('in a real repository', () => {
     ]);
   });
 
-  test('by default every workstream changing the file; one named even when it does not', () => {
-    const all = [ws(main, 'main', true), ws(tree, 'feature')];
+  test('by default every workstream changing the file; one named even when it does not', async () => {
+    const all = [await ws(main, 'main', true), await ws(tree, 'feature')];
     assert.deepEqual(lineChangesFor(all, FILE, parse).map((r) => r.branch), ['feature']);
     assert.deepEqual(lineChangesFor(all, FILE, parse, { exclude: (w) => w.branch === 'feature' }), []);
     assert.deepEqual(lineChangesFor(all, FILE, parse, { workstream: 'main' }).map((r) => [r.branch, r.status]), [['main', 'unchanged']]);

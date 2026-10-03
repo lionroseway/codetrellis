@@ -565,7 +565,7 @@ function setupMcpServerInstance(sessionId: string): McpServer {
         if (reply) result.content.push({ type: 'text', text: reply });
         // A breakpoint breach (B4.2): a file with a breakpoint that this
         // workstream changed with its own editor, which nothing could pause.
-        const breach = breachNoticeFor(sessionId, getActiveProjectPath());
+        const breach = await breachNoticeFor(sessionId, getActiveProjectPath());
         if (breach) result.content.push({ type: 'text', text: breach });
         // A spec change proposed to a page this session's task relies on (B7.3), once.
         // When it tells the agent a spec changed, the task's page says so at once (B7.4).
@@ -830,7 +830,7 @@ export async function startMcpServer(): Promise<void> {
         if (root || terminal) sessionService.bindSession(sessionId, root, terminal);
         bound = root !== null;
         // Its line of work is watched from now, not from the next listing.
-        if (root) setImmediate(() => discoverAround(root));
+        if (root) setImmediate(() => { discoverAround(root).catch(() => { /* best-effort */ }); });
         // A folder no trusted root covers may be a clone of the opened repo
         // (A1.7c). Nothing is read from it: it is shown to the person, who
         // decides whether to include it.
@@ -855,7 +855,7 @@ export async function startMcpServer(): Promise<void> {
             if (!root) return;
             sessionService.bindSession(sessionId, root);
             broadcast('mcp-session-changed', { reason: 'bound', sessionId });
-            setImmediate(() => discoverAround(root));
+            setImmediate(() => { discoverAround(root).catch(() => { /* best-effort */ }); });
           }).catch(() => { /* a client that cannot answer stays unbound */ })
             .finally(() => { if (pendingBindings.get(sessionId) === lookup) pendingBindings.delete(sessionId); });
           pendingBindings.set(sessionId, lookup);

@@ -198,7 +198,7 @@ test.describe.serial('M4: away from the desk', () => {
     expect(await nextCall(changer)).toContain(`> ${WORDS}`);
 
     // The desktop shows who has read it.
-    const desk = (await (await raw('GET', `/api/awareness?project=${encodeURIComponent(root)}`)).json()) as {
+    const desk = (await (await raw('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(root)}`)).json()) as {
       signals: Array<{ id: string; replies?: Array<{ readBy: Array<{ agentType: string }> }> }>;
     };
     const readers = desk.signals.find((s) => s.id === pushedId)!.replies![0].readBy.map((r) => r.agentType).sort();

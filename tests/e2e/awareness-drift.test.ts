@@ -30,7 +30,7 @@ test.describe.serial('Drift signals', () => {
   let itemUid: string;
 
   const drift = async () => {
-    const res = await h.client.raw('GET', `/api/awareness?project=${encodeURIComponent(root)}`);
+    const res = await h.client.raw('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(root)}`);
     return ((await res.json()) as { signals: Signal[] }).signals.filter((s) => s.kind === 'drift');
   };
   const same = (a: string, b: string) => fs.realpathSync(a) === fs.realpathSync(b);

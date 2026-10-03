@@ -64,7 +64,7 @@ async function onArtefactChanged(w: ProjectWatch, absPath: string): Promise<void
     // Tasks that share the file are told (A6.3): the material signals are
     // recomputed with the rest of the project's, once per change.
     if (anyChanged) {
-      try { awareness.refreshSignals(w.projectPath); } catch (err) { console.warn('[Artefacts] Signal refresh failed:', err); }
+      await awareness.refreshSignals(w.projectPath).catch((err) => console.warn('[Artefacts] Signal refresh failed:', err));
     }
   }
 }

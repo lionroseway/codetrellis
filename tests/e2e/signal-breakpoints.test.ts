@@ -93,7 +93,7 @@ test.describe.serial('Signal breakpoints', () => {
     edit(billing, VALIDATORS, 'validateCreateUser(payload: CreateUserPayload)', 'validateCreateUser(payload: CreateUserPayload, strict: boolean)');
     let r: Record<string, unknown> = {};
     await expect.poll(async () => {
-      const s = ((await (await h.client.raw('GET', `/api/awareness?project=${encodeURIComponent(root)}`)).json()) as { signals: Array<{ id: string; kind: string; severity: string }> }).signals;
+      const s = ((await (await h.client.raw('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(root)}`)).json()) as { signals: Array<{ id: string; kind: string; severity: string }> }).signals;
       contractId = s.find((x) => x.kind === 'contract' && x.severity === 'high')?.id ?? '';
       return contractId;
     }, { timeout: 15_000, intervals: [300] }).not.toBe('');

@@ -46,7 +46,7 @@ test.describe.serial('Teammates\' material reads', () => {
   const git = (repo: string, ...args: string[]) => String(execFileSync('git', ['-C', repo, ...args], { env: ENV, stdio: ['ignore', 'pipe', 'pipe'] })).trim();
   const shared = async (h: Harness, repo: string) => (await (await h.client.raw('GET', `/api/shared-task-state?project=${encodeURIComponent(repo)}`)).json()) as Shared;
   const put = (h: Harness, repo: string, body: Record<string, unknown>) => h.client.raw('PUT', `/api/shared-task-state?project=${encodeURIComponent(repo)}`, body);
-  const signals = async (h: Harness, repo: string) => ((await (await h.client.raw('GET', `/api/awareness?project=${encodeURIComponent(repo)}`)).json()) as { signals: Signal[] }).signals
+  const signals = async (h: Harness, repo: string) => ((await (await h.client.raw('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(repo)}`)).json()) as { signals: Signal[] }).signals
     .filter((s) => s.subject.material);
   const readsIn = (repo: string, itemUid: string) => {
     const dir = path.join(repo, '.codetrellis', 'reads', plan, itemUid);

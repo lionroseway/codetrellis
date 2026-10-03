@@ -93,8 +93,8 @@ const described = (symbols: { change: string; kind: string; name: string }[] | u
 
 describe('symbol changes per language, against the merge base', () => {
   for (const [lang, f] of Object.entries(FIXTURES)) {
-    test(lang, () => {
-      const changes = withSymbolChanges(tree, computeChanges(tree, 'main'), parse);
+    test(lang, async () => {
+      const changes = await withSymbolChanges(tree, await computeChanges(tree, 'main'), parse);
       const file = changes.files.find((x) => x.path === f.file);
       assert.ok(file, `${f.file} is a changed file`);
       assert.deepEqual(described(file!.symbols).sort(), [...f.expect].sort());
@@ -103,25 +103,25 @@ describe('symbol changes per language, against the merge base', () => {
 });
 
 describe('what is not a symbol change', () => {
-  test('a file in a language we do not parse keeps its path and carries no symbols', () => {
-    const changes = withSymbolChanges(tree, computeChanges(tree, 'main'), parse);
+  test('a file in a language we do not parse keeps its path and carries no symbols', async () => {
+    const changes = await withSymbolChanges(tree, await computeChanges(tree, 'main'), parse);
     const readme = changes.files.find((x) => x.path === 'README.md')!;
     assert.equal(readme.status, 'modified');
     assert.equal(readme.symbols, undefined, 'unparsed, which is not the same as "changed no symbols"');
   });
 
-  test('a new file: every symbol in it is added', () => {
-    const changes = withSymbolChanges(tree, computeChanges(tree, 'main'), parse);
+  test('a new file: every symbol in it is added', async () => {
+    const changes = await withSymbolChanges(tree, await computeChanges(tree, 'main'), parse);
     assert.deepEqual(described(changes.files.find((x) => x.path === 'src/new.ts')!.symbols), ['added function brandNew']);
   });
 
-  test('a deleted file: every symbol in it is removed', () => {
+  test('a deleted file: every symbol in it is removed', async () => {
     fs.rmSync(path.join(tree, 'src/new.ts'));
     const other = path.join(tree, 'ledger/session.go');
     const saved = fs.readFileSync(other, 'utf-8');
     fs.rmSync(other);
     try {
-      const changes = withSymbolChanges(tree, computeChanges(tree, 'main'), parse);
+      const changes = await withSymbolChanges(tree, await computeChanges(tree, 'main'), parse);
       assert.deepEqual(described(changes.files.find((x) => x.path === 'ledger/session.go')!.symbols).sort(), [
         'removed class Session', 'removed function (Session).Renew', 'removed function Gone', 'removed function Keep',
       ]);
@@ -179,12 +179,12 @@ describe('signature changes (A2.1)', () => {
     assert.equal('signature' in diffSymbols(flatSymbols(s, 'f(a) {}'), flatSymbols(withSig, 'f(a, b) {}'))[0], false);
   });
 
-  test('in a real worktree, a changed method signature is reported with it', () => {
+  test('in a real worktree, a changed method signature is reported with it', async () => {
     const file = path.join(tree, 'src/session.ts');
     const saved = fs.readFileSync(file, 'utf-8');
     fs.writeFileSync(file, saved.replace('renew() { return 2 }', 'renew(force: boolean) { return 2 }'));
     try {
-      const changes = withSymbolChanges(tree, computeChanges(tree, 'main'), parse);
+      const changes = await withSymbolChanges(tree, await computeChanges(tree, 'main'), parse);
       const renew = changes.files.find((x) => x.path === 'src/session.ts')!.symbols!.find((x) => x.name === 'Session.renew')!;
       assert.deepEqual(renew.signature, { before: '()', after: '(force: boolean)' });
     } finally {
@@ -192,21 +192,21 @@ describe('signature changes (A2.1)', () => {
     }
   });
 
-  test("the fixtures' body edits carry no signature", () => {
-    const changes = withSymbolChanges(tree, computeChanges(tree, 'main'), parse);
+  test("the fixtures' body edits carry no signature", async () => {
+    const changes = await withSymbolChanges(tree, await computeChanges(tree, 'main'), parse);
     const withSignature = changes.files.flatMap((f) => (f.symbols ?? []).filter((x) => x.signature).map((x) => `${f.path} ${x.name}`));
     assert.deepEqual(withSignature, []);
   });
 });
 
 describe('safety and cost', () => {
-  test('a symlink out of the worktree is not read', () => {
+  test('a symlink out of the worktree is not read', async () => {
     const outside = path.join(tmp, 'secret.ts');
     fs.writeFileSync(outside, 'export function secret() { return 42 }\n');
     const link = path.join(tree, 'src/link.ts');
     fs.symlinkSync(outside, link);
     try {
-      const changes = withSymbolChanges(tree, computeChanges(tree, 'main'), parse);
+      const changes = await withSymbolChanges(tree, await computeChanges(tree, 'main'), parse);
       const f = changes.files.find((x) => x.path === 'src/link.ts');
       assert.ok(f, 'the link itself is a changed file');
       assert.ok(!described(f!.symbols).some((d) => d.includes('secret')), 'its target was not parsed');
@@ -215,12 +215,12 @@ describe('safety and cost', () => {
     }
   });
 
-  test('an unchanged file is parsed once across repeated listings', () => {
+  test('an unchanged file is parsed once across repeated listings', async () => {
     let calls = 0;
     const counting: SymbolParser = (p, c) => { calls++; return parse(p, c); };
-    withSymbolChanges(tree, computeChanges(tree, 'main'), counting);
+    await withSymbolChanges(tree, await computeChanges(tree, 'main'), counting);
     const first = calls;
-    withSymbolChanges(tree, computeChanges(tree, 'main'), counting);
+    await withSymbolChanges(tree, await computeChanges(tree, 'main'), counting);
     assert.ok(first > 0);
     assert.equal(calls, first, 'the second listing hit the cache');
   });

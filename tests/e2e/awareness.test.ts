@@ -27,7 +27,7 @@ test.describe.serial('Awareness signals', () => {
   let original: string;
 
   const signals = async () => {
-    const res = await h.client.raw('GET', `/api/awareness?project=${encodeURIComponent(root)}`);
+    const res = await h.client.raw('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(root)}`);
     expect(res.status).toBe(200);
     return ((await res.json()) as { signals: Signal[] }).signals;
   };
@@ -135,7 +135,7 @@ test.describe.serial('Awareness signals', () => {
 
   test('the project comes from what is opened, not from the caller', async () => {
     expect((await h.client.raw('GET', '/api/awareness')).status).toBe(400);
-    expect((await h.client.raw('GET', `/api/awareness?project=${encodeURIComponent(path.dirname(root))}`)).status).toBe(403);
+    expect((await h.client.raw('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(path.dirname(root))}`)).status).toBe(403);
     for (const tool of ['get_awareness', 'check_footprint']) {
       const r = await agent.callTool(tool, { project_path: path.dirname(root), ...(tool === 'check_footprint' ? { paths: [REL] } : {}) });
       expect(r.isError).toBe(true);

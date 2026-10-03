@@ -8,7 +8,6 @@
  * that lasts ten minutes.
  */
 
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { AwarenessSignal, SettableSignalState, SignalState, SignalStateBy, Workstream } from '../../shared/types';
@@ -16,6 +15,8 @@ import { getDb } from './database';
 import { recordDecision } from './agent-event-log';
 import { markDirty } from './persistence';
 import { isSafeGitRef } from './git-safety';
+import { gitAsync } from './git-env';
+import { coalesced } from './coalesce';
 import { listWorkstreams } from './workstream-service';
 import { importersOf } from './importers';
 import { intentFiles } from './intent-service';
@@ -34,12 +35,10 @@ const SHA = /^[0-9a-f]{40}$/;
  * Files main changed between a workstream's merge base and main's tip. Never
  * throws; both refs are checked before git sees them.
  */
-export function mainChangesSince(folder: string, base: string | null, mainRef: string | null): string[] {
+export async function mainChangesSince(folder: string, base: string | null, mainRef: string | null): Promise<string[]> {
   if (!base || !SHA.test(base) || !mainRef || !isSafeGitRef(mainRef)) return [];
   try {
-    return execFileSync('git', ['-C', folder, 'diff', '--name-only', '-z', base, mainRef, '--'], {
-      encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000, maxBuffer: 16 * 1024 * 1024,
-    }).split('\0').filter(Boolean);
+    return (await gitAsync(folder, ['diff', '--name-only', '-z', base, mainRef, '--'])).split('\0').filter(Boolean);
   } catch {
     return [];
   }
@@ -97,21 +96,25 @@ export function contractsOf(projectRoot: string, w: Pick<Workstream, 'changes'>)
  * The footprints of a repository's active workstreams, with what main did
  * since each branched and, given the project, who imports what each changed.
  */
-export function footprintsOf(all: readonly Workstream[], projectRoot?: string): FootprintInput[] {
+export async function footprintsOf(all: readonly Workstream[], projectRoot?: string): Promise<FootprintInput[]> {
   const main = all.find((w) => w.main);
   const mainRef = main?.branch ?? main?.head ?? null;
-  return all.filter((w) => !w.idle).map((w) => ({
-    root: w.root,
-    branch: w.branch,
-    main: w.main,
-    files: w.changes.files,
-    // A branch workstream has no folder of its own: git runs in the main checkout.
-    mainSinceBase: w.main ? [] : mainChangesSince(w.shape === 'branch' && main ? main.root : w.root, w.changes.base, mainRef),
-    ...(projectRoot ? { contracts: contractsOf(projectRoot, w) } : {}),
-    ...(w.intents?.length ? { intended: declaredFiles(w.intents) } : {}),
-    ...scopeEntry(scopeOf(w)),
-    ...(projectRoot ? ruleEntry(projectRoot, w, main?.root ?? null) : {}),
-  }));
+  const out: FootprintInput[] = [];
+  for (const w of all.filter((x) => !x.idle)) {
+    out.push({
+      root: w.root,
+      branch: w.branch,
+      main: w.main,
+      files: w.changes.files,
+      // A branch workstream has no folder of its own: git runs in the main checkout.
+      mainSinceBase: w.main ? [] : await mainChangesSince(w.shape === 'branch' && main ? main.root : w.root, w.changes.base, mainRef),
+      ...(projectRoot ? { contracts: contractsOf(projectRoot, w) } : {}),
+      ...(w.intents?.length ? { intended: declaredFiles(w.intents) } : {}),
+      ...scopeEntry(scopeOf(w)),
+      ...(projectRoot ? await ruleEntry(projectRoot, w, main?.root ?? null) : {}),
+    });
+  }
+  return out;
 }
 
 /**
@@ -120,11 +123,11 @@ export function footprintsOf(all: readonly Workstream[], projectRoot?: string): 
  * needs its aliases and systems; and only when it has rules, so a project
  * without any parses nothing more.
  */
-function ruleEntry(projectRoot: string, w: Workstream, mainRoot: string | null): Pick<FootprintInput, 'ruleBreaches'> {
+async function ruleEntry(projectRoot: string, w: Workstream, mainRoot: string | null): Promise<Pick<FootprintInput, 'ruleBreaches'>> {
   const rules = rulesOf(projectRoot);
   if (rules.length === 0 || w.changes.files.length === 0) return {};
   if (!importsReadableFor(projectRoot)) return {};
-  const breaches = checkEdges(rules, importsAdded(projectRoot, w, mainRoot));
+  const breaches = checkEdges(rules, await importsAdded(projectRoot, w, mainRoot));
   if (breaches.length === 0) return {};
   return {
     ruleBreaches: rules
@@ -226,21 +229,49 @@ function recordSignalSpans(projectRoot: string, previous: readonly AwarenessSign
   }
 }
 
+/** One refresh per project at a time, and one after it for whoever asked meanwhile. */
+const refreshes = coalesced((projectRoot: string) => runRefresh(projectRoot));
+
 /**
- * Recompute a project's signals and store what changed. Returns true when
+ * Recompute a project's signals and store what changed. Resolves true when
  * anything did, after telling the listener. `projectRoot` is already
  * confined by the caller.
+ *
+ * Git runs without blocking the server, so a refresh takes as long as it
+ * did but no request waits behind it. **One runs at a time per project.** A
+ * call while one runs may have just changed something that run already
+ * read past, so it waits for one more run after it; every call in that
+ * window shares that one, so a burst of changes costs two runs, not one each.
  */
-export function refreshSignals(projectRoot: string, now = Date.now()): boolean {
+export function refreshSignals(projectRoot: string): Promise<boolean> {
+  return refreshes(projectRoot);
+}
+
+/**
+ * Start a refresh unless one is already running, for a reader that has
+ * changed nothing (the window's Awareness tab): what is stored is answered
+ * at once, and the listener tells the window if this moves anything.
+ */
+export function refreshSignalsSoon(projectRoot: string): void {
+  (refreshes.running(projectRoot) ?? refreshes(projectRoot)).catch((err) => console.warn('[Awareness] refresh failed:', err));
+}
+
+async function runRefresh(projectRoot: string): Promise<boolean> {
+  const footprints = await footprintsOf(await listWorkstreams(projectRoot, { includeIdle: true, fresh: true }), projectRoot);
+  // From here to the end nothing waits, so no other write lands between
+  // reading the stored signals and writing what changed.
   // Tasks' materials in the same pass (A6.3): a refresh reconciles every
   // signal of the project, so computed apart each would resolve the other's.
   const materials = materialInputsOf(projectRoot);
   const drafts = [
-    ...computeSignals(footprintsOf(listWorkstreams(projectRoot, { includeIdle: true, fresh: true }), projectRoot)),
+    ...computeSignals(footprints),
     ...computeMaterialSignals(materials.tasks, materials.current),
     // Teammates' records that set a task two ways at once (C3.2).
     ...stateSplitDrafts(projectRoot),
   ];
+  // Stamped when the answer is known, not when it was asked for: git may
+  // have taken a while, and a signal is first seen when it is found.
+  const now = Date.now();
   const previous = loadSignals(projectRoot);
   const { upserts, resolved, reopened } = reconcileSignals(previous, drafts, now);
   if (upserts.length === 0 && resolved.length === 0) return false;

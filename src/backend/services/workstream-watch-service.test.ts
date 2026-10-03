@@ -26,6 +26,7 @@ import {
   stopWorkstreamWatchers,
   setExternallyWatchedFolder,
   nudgeWorkstream,
+  setWorkstreamWatchStartedListener,
 } from './workstream-watch-service';
 
 const ENV = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@x', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@x' };
@@ -91,20 +92,20 @@ describe('line counts (B3.3)', () => {
 });
 
 describe('computeChanges', () => {
-  test('a clean checkout has changed nothing', () => {
-    const c = computeChanges(main, 'main');
+  test('a clean checkout has changed nothing', async () => {
+    const c = await computeChanges(main, 'main');
     assert.deepEqual(c.files, []);
     assert.match(c.base ?? '', /^[0-9a-f]{40}$/);
   });
 
-  test("a worktree's commits, edits, deletions and new files — but not ignored ones", () => {
+  test("a worktree's commits, edits, deletions and new files — but not ignored ones", async () => {
     write(tree, 'src/session.ts', 'export const a = 2;\n');
     git(tree, 'commit', '-q', '-am', 'refresh tokens');
     write(tree, 'src/billing.ts', 'export const b = 2;\n'); // uncommitted edit
     fs.rmSync(path.join(tree, 'README.md'));                // uncommitted delete
     write(tree, 'src/refresh.ts');                           // untracked
     write(tree, 'dist/bundle.js');                           // ignored
-    const c = computeChanges(tree, 'main');
+    const c = await computeChanges(tree, 'main');
     assert.deepEqual(summary(c.files), [
       'deleted README.md', 'modified src/billing.ts', 'added src/refresh.ts', 'modified src/session.ts',
     ]);
@@ -115,42 +116,42 @@ describe('computeChanges', () => {
     assert.equal(counts['src/refresh.ts'], null);
   });
 
-  test('work landing on main after the worktree branched is not the worktree\'s change', () => {
+  test('work landing on main after the worktree branched is not the worktree\'s change', async () => {
     write(main, 'src/main-only.ts');
     git(main, 'add', '-A');
     git(main, 'commit', '-q', '-m', 'on main');
-    const c = computeChanges(tree, 'main');
+    const c = await computeChanges(tree, 'main');
     assert.ok(!c.files.some((f) => f.path === 'src/main-only.ts'), 'measured from the merge base, not from main\'s tip');
     // And on the main checkout, a commit is not a change: only uncommitted work is.
-    assert.deepEqual(computeChanges(main, 'main').files, []);
+    assert.deepEqual((await computeChanges(main, 'main')).files, []);
   });
 
-  test('how far from main: commits ahead and behind, and files not committed (C5.3b)', () => {
+  test('how far from main: commits ahead and behind, and files not committed (C5.3b)', async () => {
     // The worktree has one commit of its own; main has one it lacks; three files wait uncommitted.
-    const c = computeChanges(tree, 'main');
+    const c = await computeChanges(tree, 'main');
     assert.equal(c.ahead, 1);
     assert.equal(c.behind, 1);
     assert.equal(c.uncommitted, 3);
-    const m = computeChanges(main, 'main');
+    const m = await computeChanges(main, 'main');
     assert.deepEqual([m.ahead, m.behind, m.uncommitted], [0, 0, 0]);
     // Unknown is left out, never zero.
-    const none = computeChanges(path.join(tmp, 'nope'), 'main');
+    const none = await computeChanges(path.join(tmp, 'nope'), 'main');
     assert.deepEqual([none.ahead, none.behind, none.uncommitted], [undefined, undefined, undefined]);
   });
 
-  test('a rename is one uncommitted file, not two', () => {
+  test('a rename is one uncommitted file, not two', async () => {
     assert.equal(countStatusEntries('R  new.ts\0old.ts\0 M a.ts\0?? b.ts\0'), 3);
     assert.equal(countStatusEntries(''), 0);
   });
 
-  test('an unsafe ref is never passed to git; it falls back to HEAD', () => {
-    const c = computeChanges(main, '--output=/tmp/pwned');
+  test('an unsafe ref is never passed to git; it falls back to HEAD', async () => {
+    const c = await computeChanges(main, '--output=/tmp/pwned');
     assert.deepEqual(c.files, []);
     assert.ok(!fs.existsSync('/tmp/pwned'));
   });
 
-  test('a folder git cannot read has no changes, and nothing throws', () => {
-    const c = computeChanges(path.join(tmp, 'nope'), 'main');
+  test('a folder git cannot read has no changes, and nothing throws', async () => {
+    const c = await computeChanges(path.join(tmp, 'nope'), 'main');
     assert.deepEqual(c, { base: null, files: [], truncated: false });
   });
 });
@@ -169,7 +170,7 @@ describe('watching', () => {
     assert.equal(heard.at(-1)!.folder, tree);
     assert.ok(heard.at(-1)!.files.includes('src/new-feature.ts'));
     // And the answer is served from the watcher without asking git again.
-    assert.ok(getChanges(tree, 'main').files.some((f) => f.path === 'src/new-feature.ts'));
+    assert.ok((await getChanges(tree, 'main')).files.some((f) => f.path === 'src/new-feature.ts'));
   });
 
   test('editing a file that is already changed tells the listener again, though the list is the same (bug 54)', async () => {
@@ -195,8 +196,27 @@ describe('watching', () => {
     await syncWorkstreamWatchers([{ folder: tree, mainRef: 'main' }]);
     write(tree, 'src/during-startup.ts'); // before chokidar is ready: no event for it
     await settle();
-    assert.ok(getChanges(tree, 'main').files.some((x) => x.path === 'src/during-startup.ts'));
+    assert.ok((await getChanges(tree, 'main')).files.some((x) => x.path === 'src/during-startup.ts'));
     fs.rmSync(f);
+  });
+
+  test('a folder newly watched is announced once its watcher is listening, with nothing having changed', async () => {
+    const started: string[] = [];
+    setWorkstreamWatchStartedListener((folder) => started.push(folder));
+    try {
+      // An edit made before the listing asked git is in the first answer, so
+      // no change is ever reported for it: the start is what says to look.
+      write(tree, 'src/before-watching.ts');
+      await syncWorkstreamWatchers([{ folder: tree, mainRef: 'main' }]);
+      await settle(300);
+      assert.deepEqual(started, [tree]);
+      await syncWorkstreamWatchers([{ folder: tree, mainRef: 'main' }]);
+      await settle(300);
+      assert.deepEqual(started, [tree], 'a folder already watched is not announced again');
+    } finally {
+      setWorkstreamWatchStartedListener(() => {});
+      fs.rmSync(path.join(tree, 'src/before-watching.ts'));
+    }
   });
 
   test('changes inside ignored folders do not wake it', async () => {

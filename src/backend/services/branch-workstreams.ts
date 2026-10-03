@@ -18,9 +18,10 @@
  * `git show <branch>:<path>`, so nothing is checked out.
  */
 
-import { execFile, execFileSync } from 'node:child_process';
-import type { ChangedFile, WorkstreamChanges } from '../../shared/types';
+import { execFileSync } from 'node:child_process';
+import type { WorkstreamChanges } from '../../shared/types';
 import { isSafeGitRef } from './git-safety';
+import { gitAsync as sharedGitAsync } from './git-env';
 import { parseNameStatusZ, parseNumstatZ, withLineCounts, combineChanges } from './workstream-watch-service';
 
 export interface BranchRef {
@@ -40,14 +41,8 @@ function git(repo: string, args: string[]): string {
   });
 }
 
-/** The same, without blocking the server: for the warmer below. */
-function gitAsync(repo: string, args: string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile('git', ['-C', repo, ...args], { encoding: 'utf-8', timeout: 5000, maxBuffer: 16 * 1024 * 1024 }, (err, out) => {
-      if (err) reject(err); else resolve(out);
-    }).stdin?.end();
-  });
-}
+/** The same, without blocking the server: for awareness's listing and the warmer below. */
+const gitAsync = (repo: string, args: string[]): Promise<string> => sharedGitAsync(repo, args);
 
 /** Parse `git for-each-ref --format='%(refname)%00%(refname:short)%00%(objectname)%00%(committerdate:unix)'`. Pure. */
 export function parseForEachRef(out: string): BranchRef[] {
@@ -132,6 +127,18 @@ export function mainVersionsSince(repo: string, mainHead: string, sinceSec: numb
   return out;
 }
 
+/** The same, without blocking the server. */
+export async function mainVersionsSinceAsync(repo: string, mainHead: string, sinceSec: number): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (!/^[0-9a-f]{40}$/.test(mainHead)) return out;
+  try {
+    const log = await gitAsync(repo, ['log', mainHead, `--since=@${Math.max(0, Math.floor(sinceSec))}`, '--max-count=5000',
+      '--format=', '--raw', '-z', '--no-renames', '--no-abbrev']);
+    for (const c of parseRawZ(log)) out.add(`${c.path}\0${c.blob ?? 'deleted'}`);
+  } catch { /* none */ }
+  return out;
+}
+
 /** The versions a branch leaves its changed files at, relative to its merge base with main. Never throws. */
 export function branchVersions(repo: string, mainHead: string, head: string): Array<{ path: string; blob: string | null }> {
   if (!/^[0-9a-f]{40}$/.test(mainHead) || !/^[0-9a-f]{40}$/.test(head)) return [];
@@ -155,31 +162,16 @@ export function listBranchRefs(repo: string): BranchRef[] {
   }
 }
 
-/** Does `ref` have commits `mainRef` does not? Never throws. */
-export function isAhead(repo: string, mainRef: string, head: string): boolean {
-  if (!isSafeGitRef(mainRef) || !/^[0-9a-f]{40}$/.test(head)) return false;
+/** The same, without blocking the server. */
+async function listBranchRefsAsync(repo: string): Promise<BranchRef[]> {
   try {
-    return Number(git(repo, ['rev-list', '--count', `${mainRef}..${head}`]).trim()) > 0;
+    return parseForEachRef(await gitAsync(repo, [
+      'for-each-ref', '--format=%(refname)%00%(refname:short)%00%(objectname)%00%(committerdate:unix)',
+      'refs/heads', 'refs/remotes',
+    ]));
   } catch {
-    return false;
+    return [];
   }
-}
-
-/** A branch's committed changes since its merge base with main. Never throws. */
-export function branchChanges(repo: string, mainRef: string | null, head: string): WorkstreamChanges {
-  if (!mainRef || !isSafeGitRef(mainRef) || !/^[0-9a-f]{40}$/.test(head)) return { base: null, files: [], truncated: false };
-  let base: string | null = null;
-  try {
-    base = git(repo, ['merge-base', mainRef, head]).trim() || null;
-  } catch {
-    return { base: null, files: [], truncated: false };
-  }
-  let files: ChangedFile[] = [];
-  try {
-    files = parseNameStatusZ(git(repo, ['diff', '--name-status', '-z', '-M', base!, head, '--']));
-    files = withLineCounts(files, parseNumstatZ(git(repo, ['diff', '--numstat', '-z', '-M', base!, head, '--'])));
-  } catch { /* none */ }
-  return { base, ...combineChanges(files, []) };
 }
 
 /** A file's content on a commit, or null. For symbols without a checkout. */
@@ -187,6 +179,16 @@ export function showAt(repo: string, commit: string, relPath: string): string | 
   if (!/^[0-9a-f]{40}$/.test(commit) || relPath.startsWith('-')) return null;
   try {
     return git(repo, ['show', `${commit}:${relPath}`]);
+  } catch {
+    return null;
+  }
+}
+
+/** The same, without blocking the server. */
+export async function showAtAsync(repo: string, commit: string, relPath: string): Promise<string | null> {
+  if (!/^[0-9a-f]{40}$/.test(commit) || relPath.startsWith('-')) return null;
+  try {
+    return await gitAsync(repo, ['show', `${commit}:${relPath}`]);
   } catch {
     return null;
   }
@@ -205,13 +207,14 @@ const cache = new Map<string, Entry>();
 const mainCache = new Map<string, Set<string>>();
 
 /**
- * How many branches one listing works out inline, by blocking git calls
- * (Phase 32 HD4b). Each takes about six; with 133 recent remote branches the
- * first listing ran some 800 one after another, 6–12 s in which the server
- * answered nothing, the window included. Past this many, the rest are worked
- * out off the request path, a few at a time without blocking, and the window
+ * How many branches one listing works out before it answers (Phase 32 HD4b).
+ * Each takes about six git calls; with 133 recent remote branches the first
+ * listing ran some 800 one after another, 6–12 s in which the server answered
+ * nothing, the window included. Git no longer blocks the server, but a
+ * listing that waited for 800 would still be a 10 s answer. Past this many,
+ * the rest are worked out in the background, a few at a time, and the window
  * is told when they are ready. A repository with a handful of branches is
- * answered inline, as before.
+ * answered in full, as before.
  */
 export const INLINE_BRANCHES = 8;
 const WARM_CONCURRENCY = 4;
@@ -235,7 +238,7 @@ export function resetBranchWorkstreamCache(): void {
   cache.clear(); mainCache.clear();
 }
 
-async function computeEntry(repo: string, mainHead: string, head: string, mainLeft: () => Set<string>): Promise<Entry> {
+async function computeEntry(repo: string, mainHead: string, head: string, mainLeft: () => Promise<Set<string>>): Promise<Entry> {
   const entry: Entry = { ahead: false, merged: null, changes: null };
   try {
     entry.ahead = Number((await gitAsync(repo, ['rev-list', '--count', `${mainHead}..${head}`])).trim()) > 0;
@@ -245,7 +248,7 @@ async function computeEntry(repo: string, mainHead: string, head: string, mainLe
   try { base = (await gitAsync(repo, ['merge-base', mainHead, head])).trim(); } catch { return entry; }
   try {
     const versions = parseRawZ(await gitAsync(repo, ['diff', '--raw', '-z', '--no-renames', '--no-abbrev', base, head, '--']));
-    entry.merged = isMergedInto(versions, mainLeft());
+    entry.merged = isMergedInto(versions, await mainLeft());
   } catch { entry.merged = false; }
   if (entry.merged) return entry;
   try {
@@ -258,7 +261,7 @@ async function computeEntry(repo: string, mainHead: string, head: string, mainLe
   return entry;
 }
 
-function warm(repo: string, mainHead: string, heads: string[], mainLeft: () => Set<string>): void {
+function warm(repo: string, mainHead: string, heads: string[], mainLeft: () => Promise<Set<string>>): void {
   if (warming.has(repo) || heads.length === 0) return;
   const todo = [...new Set(heads)];
   const run = (async () => {
@@ -282,16 +285,17 @@ function warm(repo: string, mainHead: string, heads: string[], mainLeft: () => S
  * working tree of it (the main checkout). Never throws. Branches beyond
  * `INLINE_BRANCHES` not yet worked out are left out of this answer and
  * worked out in the background; `setBranchWorkstreamsWarmedListener` hears
- * when they are ready.
+ * when they are ready. Git runs without blocking the server, so "inline"
+ * means only that this answer waits for them.
  */
-export function branchWorkstreamsOf(
+export async function branchWorkstreamsOf(
   repo: string,
   opts: { mainBranch: string | null; mainRef: string | null; checkedOut: ReadonlySet<string>; windowDays: number; nowSec?: number; inline?: number },
-): BranchWorkstream[] {
+): Promise<BranchWorkstream[]> {
   if (!opts.mainRef || !isSafeGitRef(opts.mainRef)) return [];
   let mainHead: string;
   try {
-    mainHead = git(repo, ['rev-parse', '--verify', opts.mainRef]).trim();
+    mainHead = (await gitAsync(repo, ['rev-parse', '--verify', opts.mainRef])).trim();
   } catch {
     return [];
   }
@@ -303,41 +307,37 @@ export function branchWorkstreamsOf(
   // hold every merge that matters. A day's slack for clock skew.
   const since = nowSec - (opts.windowDays + 1) * 86_400;
   const mainKey = `${repo}\0${mainHead}\0${Math.floor(since / 86_400)}`;
-  const mainLeft = () => {
+  const mainLeft = async () => {
     let v = mainCache.get(mainKey);
-    if (!v) { v = mainVersionsSince(repo, mainHead, since); mainCache.set(mainKey, v); }
+    if (!v) { v = await mainVersionsSinceAsync(repo, mainHead, since); mainCache.set(mainKey, v); }
     return v;
   };
-  let budget = opts.inline ?? INLINE_BRANCHES;
-  const later: string[] = [];
-  const entry = (r: BranchRef): Entry | null => {
-    const k = `${repo}\0${r.head}\0${mainHead}`;
-    let hit = cache.get(k);
-    if (!hit) {
-      if (budget <= 0 || warming.has(repo)) { later.push(r.head); return null; }
-      budget--;
-      hit = { ahead: isAhead(repo, mainHead, r.head), merged: null, changes: null };
-      cache.set(k, hit);
-    }
-    return hit;
-  };
-  const selected = selectBranchWorkstreams(listBranchRefs(repo), {
+  // Every rule but "ahead of main and not merged into it", which needs git
+  // per branch: `selectBranchWorkstreams` asks that last, so the candidates
+  // it keeps here are exactly the ones that question decides.
+  const candidates = selectBranchWorkstreams(await listBranchRefsAsync(repo), {
     mainBranch: opts.mainBranch,
     checkedOut: opts.checkedOut,
     windowDays: opts.windowDays,
     nowSec,
-    aheadOf: (r) => {
-      const hit = entry(r);
-      if (!hit || !hit.ahead) return false;
-      // Ahead by ancestry, but maybe merged by content (bug 53).
-      if (hit.merged === null) hit.merged = isMergedInto(branchVersions(repo, mainHead, r.head), mainLeft());
-      return !hit.merged;
-    },
+    aheadOf: () => true,
   });
+  let budget = opts.inline ?? INLINE_BRANCHES;
+  const later: string[] = [];
+  const selected: BranchWorkstream[] = [];
+  for (const r of candidates) {
+    const k = `${repo}\0${r.head}\0${mainHead}`;
+    let hit = cache.get(k);
+    if (!hit) {
+      if (budget <= 0 || warming.has(repo)) { later.push(r.head); continue; }
+      budget--;
+      hit = await computeEntry(repo, mainHead, r.head, mainLeft);
+      cache.set(k, hit);
+    }
+    // Ahead by ancestry, but maybe merged by content (bug 53).
+    if (!hit.ahead || hit.merged) continue;
+    selected.push({ ...r, changes: hit.changes ?? { base: null, files: [], truncated: false } });
+  }
   warm(repo, mainHead, later, mainLeft);
-  return selected.map((r) => {
-    const hit = entry(r)!;
-    if (!hit.changes) hit.changes = branchChanges(repo, mainHead, r.head);
-    return { ...r, changes: hit.changes };
-  });
+  return selected;
 }

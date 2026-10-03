@@ -127,7 +127,7 @@ test.describe.serial('Awareness on the phone', () => {
     expect(text).toContain('From the person, from their phone:');
     expect(text).toContain(`> ${WORDS}`);
 
-    const desk = (await (await raw('GET', `/api/awareness?project=${encodeURIComponent(root)}`)).json()) as { signals: Array<{ id: string; replies?: Array<{ message: string; by: { channel: string; actor: string } }> }> };
+    const desk = (await (await raw('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(root)}`)).json()) as { signals: Array<{ id: string; replies?: Array<{ message: string; by: { channel: string; actor: string } }> }> };
     const reply = desk.signals.find((s) => s.id === id)!.replies![0];
     expect(reply).toMatchObject({ message: WORDS, by: { channel: 'phone' } });
     expect(reply.by.actor).not.toBe('Priya');

@@ -95,7 +95,7 @@ test.describe.serial('H1: the lead\'s morning view', () => {
     // The window shows the strip once, which starts the watchers; the contract opens between the two lines of work.
     expect((await h.client.raw('GET', `/api/workstreams?${q()}`)).ok).toBe(true);
     await expect.poll(async () => {
-      const body = (await (await h.client.raw('GET', `/api/awareness?${q()}`)).json()) as { signals: Array<{ kind: string }> };
+      const body = (await (await h.client.raw('GET', `/api/awareness?fresh=1&${q()}`)).json()) as { signals: Array<{ kind: string }> };
       return body.signals.some((s) => s.kind === 'contract');
     }, { timeout: 15_000, intervals: [300] }).toBe(true);
   });

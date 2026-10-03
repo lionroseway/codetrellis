@@ -57,7 +57,7 @@ test.describe.serial('Message the agents about a signal', () => {
     expect(r.isError, r.text).toBeFalsy();
     return r.text;
   };
-  const signals = async () => ((await (await raw('GET', `/api/awareness?${q()}`)).json()) as { signals: Signal[] }).signals;
+  const signals = async () => ((await (await raw('GET', `/api/awareness?fresh=1&${q()}`)).json()) as { signals: Signal[] }).signals;
 
   test.beforeAll(async () => {
     h = await setupHarness('awareness-replies', { env: { CODETRELLIS_WORKSTREAM_DEBOUNCE_MS: '150' } });

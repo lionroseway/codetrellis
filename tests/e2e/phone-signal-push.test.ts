@@ -101,7 +101,7 @@ test.describe.serial('A serious overlap, pushed', () => {
     expect(JSON.stringify(push)).not.toMatch(/validateCreateUser|validators|billing|checkout|claude/i);
 
     // The id opens the signal the desktop shows.
-    const res = await h.client.raw('GET', `/api/awareness?project=${encodeURIComponent(root)}`);
+    const res = await h.client.raw('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(root)}`);
     const contract = ((await res.json()) as { signals: Array<{ id: string; kind: string }> }).signals.find((s) => s.kind === 'contract')!;
     expect(push.data.id).toBe(contract.id);
   });

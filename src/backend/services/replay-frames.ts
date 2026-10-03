@@ -313,7 +313,7 @@ export function seedHeads(project: string | null): void {
   for (const [root, head] of checkoutHeads(project)) heads.set(root, head);
   // The refs watcher starts when workstreams are first listed; a commit
   // frame should not wait for someone to open the strip.
-  try { watchRefs(project); } catch { /* not a git project */ }
+  watchRefs(project).catch(() => { /* not a git project */ });
 }
 
 /**

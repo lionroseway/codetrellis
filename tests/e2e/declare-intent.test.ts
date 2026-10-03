@@ -34,7 +34,7 @@ test.describe.serial('Declared intent', () => {
 
   const same = (a: string, b: string) => fs.realpathSync(a) === fs.realpathSync(b);
   const signals = async () => {
-    const res = await h.client.raw('GET', `/api/awareness?project=${encodeURIComponent(root)}`);
+    const res = await h.client.raw('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(root)}`);
     return ((await res.json()) as { signals: Signal[] }).signals;
   };
   const declare = async (args: Record<string, unknown>) => {

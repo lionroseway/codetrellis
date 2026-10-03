@@ -41,7 +41,7 @@ test.describe.serial('Branch workstreams', () => {
   };
 
   const list = async () => (await (await h.client.raw('GET', `/api/workstreams?project=${encodeURIComponent(root)}&idle=1`)).json()) as Workstream[];
-  const signals = async () => ((await (await h.client.raw('GET', `/api/awareness?project=${encodeURIComponent(root)}`)).json()) as { signals: Signal[] }).signals;
+  const signals = async () => ((await (await h.client.raw('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(root)}`)).json()) as { signals: Signal[] }).signals;
   let original: string;
 
   test.beforeAll(async () => {

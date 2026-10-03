@@ -72,7 +72,7 @@ test.describe.serial('Overlap bands in the stack', () => {
     // Wait for the contract signal between the two worktrees.
     expect((await h.client.raw('GET', `/api/workstreams?project=${encodeURIComponent(root)}`)).ok).toBe(true);
     await expect.poll(async () => {
-      const body = (await (await h.client.raw('GET', `/api/awareness?project=${encodeURIComponent(root)}`)).json()) as { signals: Array<{ kind: string }> };
+      const body = (await (await h.client.raw('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(root)}`)).json()) as { signals: Array<{ kind: string }> };
       return body.signals.some((s) => s.kind === 'contract');
     }, { timeout: 15_000, intervals: [300] }).toBe(true);
   });
@@ -104,7 +104,7 @@ test.describe.serial('Overlap bands in the stack', () => {
   });
 
   test('once the signal is dismissed, the overlap is what the plans declare', async () => {
-    const body = (await (await h.client.raw('GET', `/api/awareness?project=${encodeURIComponent(root)}`)).json()) as { signals: Array<{ id: string; kind: string }> };
+    const body = (await (await h.client.raw('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(root)}`)).json()) as { signals: Array<{ id: string; kind: string }> };
     for (const sig of body.signals.filter((x) => x.kind === 'contract')) {
       expect((await h.client.raw('POST', `/api/awareness/${encodeURIComponent(sig.id)}/state?project=${encodeURIComponent(root)}`, { state: 'dismissed' })).ok).toBe(true);
     }

@@ -26,10 +26,10 @@ export interface OtherWork {
 }
 
 /** The material signals naming this task. `refresh` recomputes the project's signals first. */
-export function affectedByOtherWork(itemUid: string, projectRoot: string | null, opts: { refresh?: boolean } = {}): OtherWork[] {
+export async function affectedByOtherWork(itemUid: string, projectRoot: string | null, opts: { refresh?: boolean } = {}): Promise<OtherWork[]> {
   if (!projectRoot) return [];
   if (opts.refresh) {
-    try { refreshSignals(projectRoot); } catch { /* not a repository, or git is missing: the stored signals stand */ }
+    await refreshSignals(projectRoot).catch(() => { /* not a repository, or git is missing: the stored signals stand */ });
   }
   const id = taskWorkstreamId(itemUid);
   return listSignals(projectRoot)

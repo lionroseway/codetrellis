@@ -67,7 +67,7 @@ export async function handleBreakpointMethod(
 ): Promise<unknown> {
   switch (method) {
     case 'breakpoint.waiting':
-      return { hits: phoneWaiting(ctx.projectRoot) };
+      return { hits: await phoneWaiting(ctx.projectRoot) };
     case 'breakpoint.answer':
       return answer(params, peer, ctx);
     default:
@@ -80,15 +80,15 @@ export async function handleBreakpointMethod(
  * A call held on a signal the person has since answered is let through
  * first, as the window's list does (B4.2b).
  */
-export function phoneWaiting(projectRoot: string | null): PhoneHit[] {
+export async function phoneWaiting(projectRoot: string | null): Promise<PhoneHit[]> {
   if (projectRoot) { try { releaseSettled(projectRoot); } catch { /* the list still answers */ } }
-  const workstreams = workstreamsOf(projectRoot);
+  const workstreams = await workstreamsOf(projectRoot);
   // A spec proposal (B7.4) is listed too, and decided with proposal.decide (B7.6).
   return listHits({ state: 'waiting' }).map((h) => toPhoneHit(h, workstreams));
 }
 
 /** `{ hit }` once answered; `{ hit, alreadyAnswered: true }` with the answer that stood when someone answered first. */
-function answer(params: Record<string, unknown>, peer: PeerContext, ctx: PhoneBreakpointContext): { hit: PhoneHit; alreadyAnswered?: true } {
+async function answer(params: Record<string, unknown>, peer: PeerContext, ctx: PhoneBreakpointContext): Promise<{ hit: PhoneHit; alreadyAnswered?: true }> {
   const ref = params.ref;
   if (typeof ref !== 'string' || !ref) throw new Error('ref is required');
   const decision = params.decision as BreakpointDecision;
@@ -101,10 +101,10 @@ function answer(params: Record<string, unknown>, peer: PeerContext, ctx: PhoneBr
   const hit = getHit(ref);
   if (!hit) throw new Error('No such breakpoint hit');
   if (hit.kind === 'proposal') throw new Error('A spec proposal is decided on the proposal: accept or reject it (proposal.decide).');
-  const workstreams = workstreamsOf(ctx.projectRoot);
-  if (hit.answeredAt !== null) return { hit: toPhoneHit(hit, workstreams), alreadyAnswered: true };
+  // The answer is decided before anything waits, so two answers at once cannot both be taken.
+  if (hit.answeredAt !== null) return { hit: toPhoneHit(hit, await workstreamsOf(ctx.projectRoot)), alreadyAnswered: true };
   const answered = answerHit({ ref, decision, note: params.note, by: ctx.who.author, byType: ctx.who.authorType });
-  if (!answered) return { hit: toPhoneHit(getHit(ref) ?? hit, workstreams), alreadyAnswered: true };
+  if (!answered) return { hit: toPhoneHit(getHit(ref) ?? hit, await workstreamsOf(ctx.projectRoot)), alreadyAnswered: true };
   recordPeerAudit({
     kind: 'decision',
     fingerprint: peer.fingerprint,
@@ -114,7 +114,7 @@ function answer(params: Record<string, unknown>, peer: PeerContext, ctx: PhoneBr
   });
   // The window's list and its lanes refresh on this, as they do for an answer given there.
   peer.broadcast?.('breakpoint-answered', { ref: answered.ref, planUid: answered.planUid, decision: answered.decision });
-  return { hit: toPhoneHit(answered, workstreams) };
+  return { hit: toPhoneHit(answered, await workstreamsOf(ctx.projectRoot)) };
 }
 
 export function toPhoneHit(hit: BreakpointHit, workstreams: readonly Workstream[]): PhoneHit {
@@ -138,7 +138,7 @@ export function toPhoneHit(hit: BreakpointHit, workstreams: readonly Workstream[
   };
 }
 
-function workstreamsOf(projectRoot: string | null): Workstream[] {
+async function workstreamsOf(projectRoot: string | null): Promise<Workstream[]> {
   if (!projectRoot) return [];
-  try { return listWorkstreams(projectRoot, { includeIdle: true }); } catch { return []; }
+  try { return await listWorkstreams(projectRoot, { includeIdle: true }); } catch { return []; }
 }

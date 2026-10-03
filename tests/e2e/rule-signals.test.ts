@@ -34,7 +34,7 @@ test.describe.serial('Rule signals', () => {
   const q = () => `project=${encodeURIComponent(root)}`;
   const ruleSignals = async () => {
     await h.client.raw('GET', `/api/workstreams?${q()}`);
-    const body = (await (await h.client.raw('GET', `/api/awareness?${q()}`)).json()) as { signals: AwarenessSignal[] };
+    const body = (await (await h.client.raw('GET', `/api/awareness?fresh=1&${q()}`)).json()) as { signals: AwarenessSignal[] };
     return body.signals.filter((s) => s.kind === 'rule' && s.state !== 'resolved');
   };
 

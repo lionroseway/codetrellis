@@ -17,7 +17,7 @@ import type { ChangedFile, Workstream } from '../../shared/types';
 import { parseVirtualFile } from './ast-parser';
 import { getAllFileHashes, getImportResolutionContext, resolutionContextRoot } from './database';
 import { getResolverForLanguage } from './resolvers';
-import { showAt } from './branch-workstreams';
+import { showAtAsync } from './branch-workstreams';
 import { baseContent, currentContent } from './workstream-symbols';
 import { checkEdges, rulesOf } from './architecture-rules';
 import type { RuleImport } from './conformity-gate';
@@ -44,11 +44,11 @@ function stampOf(folder: string, base: string | null, file: ChangedFile, head: s
  * is the main checkout, where a branch workstream (no folder of its own) is
  * read at its head commit.
  */
-export function importsAdded(projectRoot: string, w: Pick<Workstream, 'root' | 'shape' | 'head' | 'changes'>, mainRoot: string | null): ImportEdge[] {
+export async function importsAdded(projectRoot: string, w: Pick<Workstream, 'root' | 'shape' | 'head' | 'changes'>, mainRoot: string | null): Promise<ImportEdge[]> {
   const base = w.changes.base;
   const branch = w.shape === 'branch' && w.head && mainRoot ? w.head : null;
   const folder = branch ? mainRoot! : w.root;
-  const read = (rel: string) => (branch ? showAt(mainRoot!, branch, rel) : currentContent(w.root, rel));
+  const read = async (rel: string) => (branch ? showAtAsync(mainRoot!, branch, rel) : currentContent(w.root, rel));
 
   const known = new Set(getAllFileHashes().keys());
   for (const f of w.changes.files) if (f.status !== 'deleted') known.add(path.join(projectRoot, f.path));
@@ -78,8 +78,8 @@ export function importsAdded(projectRoot: string, w: Pick<Workstream, 'root' | '
     const hit = cache.get(key);
     if (hit && hit.stamp === stamp) { edges.push(...hit.added); continue; }
     const beforePath = file.status === 'renamed' && file.from ? file.from : file.path;
-    const after = targets(file.path, read(file.path));
-    const before = file.status === 'added' || !base ? new Set<string>() : targets(beforePath, baseContent(folder, base, beforePath));
+    const after = targets(file.path, await read(file.path));
+    const before = file.status === 'added' || !base ? new Set<string>() : targets(beforePath, await baseContent(folder, base, beforePath));
     const added = [...after].filter((t) => !before.has(t)).sort().map((to) => ({ from: file.path, to }));
     if (cache.size >= MAX_CACHED) cache.clear();
     cache.set(key, { stamp, added });
@@ -105,11 +105,11 @@ export function importsReadableFor(projectRoot: string): boolean {
  * project's own folder, add across its rules since `base` (a commit)? Null
  * when the project's imports cannot be read here; empty when it has no rules.
  */
-export function ruleImports(projectRoot: string, files: readonly string[], base: string | null): RuleImport[] | null {
+export async function ruleImports(projectRoot: string, files: readonly string[], base: string | null): Promise<RuleImport[] | null> {
   const rules = rulesOf(projectRoot);
   if (rules.length === 0) return [];
   if (!importsReadableFor(projectRoot)) return null;
-  const edges = importsAdded(projectRoot, {
+  const edges = await importsAdded(projectRoot, {
     root: projectRoot, shape: 'shared', head: null,
     changes: { base, files: files.map((f) => ({ path: f, status: 'modified' as const })), truncated: false },
   }, null);

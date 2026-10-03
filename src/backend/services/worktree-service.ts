@@ -37,6 +37,7 @@ import * as path from 'node:path';
 import { parse as parseYaml } from 'yaml';
 
 import { canonicalRoot, readTextWithin, resolveWithin } from './confined-fs';
+import { gitAsync } from './git-env';
 
 export interface Worktree {
   path: string;
@@ -150,6 +151,21 @@ export function listWorktrees(projectRoot: string): Worktree[] {
     out = git(projectRoot, ['worktree', 'list', '--porcelain']);
     commonDir = fs.realpathSync.native(
       path.resolve(projectRoot, git(projectRoot, ['rev-parse', '--git-common-dir']).trim()),
+    );
+  } catch {
+    return [];
+  }
+  return parseWorktreePorcelain(out, projectRoot).filter((w) => w.bare || w.prunable || belongsToRepo(w, commonDir));
+}
+
+/** The same, without blocking the server: for awareness, which lists them on every refresh. */
+export async function listWorktreesAsync(projectRoot: string): Promise<Worktree[]> {
+  let out: string;
+  let commonDir: string;
+  try {
+    out = await gitAsync(projectRoot, ['worktree', 'list', '--porcelain']);
+    commonDir = fs.realpathSync.native(
+      path.resolve(projectRoot, (await gitAsync(projectRoot, ['rev-parse', '--git-common-dir'])).trim()),
     );
   } catch {
     return [];

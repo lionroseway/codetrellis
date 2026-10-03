@@ -43,7 +43,7 @@ import { buildPlayForward } from './play-forward';
 import { resequence, tellAgents, leaveOverlap, approvalNotices } from './planned-overlap-actions';
 import { planStatusFresh } from './plan-status';
 import { buildPrDraft } from './pr-draft-service';
-import { listComparands, compareSnapshots } from './snapshot-compare-service';
+import { comparandBranches, listComparands, compareSnapshots } from './snapshot-compare-service';
 import {
   onChannelMessage,
   sendToPeer,
@@ -1263,7 +1263,7 @@ async function routeMethod(
       // genuinely want the active project keep working.
       const planUid = params.planUid as string | undefined;
       const projectPath = planUid ? planProjectRoot(planUid) : peerProjectRoot(params, { required: true })!;
-      return listComparands(projectPath);
+      return listComparands(projectPath, undefined, await comparandBranches(projectPath));
     }
 
     case 'review.compare': {

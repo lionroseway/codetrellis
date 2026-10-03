@@ -35,7 +35,7 @@ test.describe.serial('M6: a replaced spreadsheet, told once to both tasks', () =
   const TASKS = [['report', 'Q3 report'], ['pack', 'Board pack']] as const;
 
   const post = async (url: string, body: unknown) => ((await (await h.client.raw('POST', url, body)).json()) as { uid: string }).uid;
-  const signals = async () => ((await (await h.client.raw('GET', `/api/awareness?project=${encodeURIComponent(root)}`)).json()) as { signals: Signal[] })
+  const signals = async () => ((await (await h.client.raw('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(root)}`)).json()) as { signals: Signal[] })
     .signals.filter((s) => s.subject.material);
   const workbook = (emea: number) => fs.writeFileSync(path.join(root, BOOK), makeWorkbook({ Summary: [['Region', 'Q3'], ['EMEA', emea], ['APAC', 80]] }));
   /** An ordinary call the agent makes anyway, and everything that came back with it. */

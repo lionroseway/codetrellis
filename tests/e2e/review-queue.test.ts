@@ -64,10 +64,10 @@ test.describe.serial('The review queue', () => {
 
     expect((await h.client.raw('GET', `/api/workstreams?${q()}`)).ok).toBe(true);
     await expect.poll(async () => {
-      const body = (await (await h.client.raw('GET', `/api/awareness?${q()}`)).json()) as { signals: Array<{ id: string; kind: string }> };
+      const body = (await (await h.client.raw('GET', `/api/awareness?fresh=1&${q()}`)).json()) as { signals: Array<{ id: string; kind: string }> };
       return body.signals.find((s) => s.kind === 'contract')?.id ?? null;
     }, { timeout: 15_000, intervals: [300] }).not.toBeNull();
-    const body = (await (await h.client.raw('GET', `/api/awareness?${q()}`)).json()) as { signals: Array<{ id: string; kind: string }> };
+    const body = (await (await h.client.raw('GET', `/api/awareness?fresh=1&${q()}`)).json()) as { signals: Array<{ id: string; kind: string }> };
     signalId = body.signals.find((s) => s.kind === 'contract')!.id;
   });
 
