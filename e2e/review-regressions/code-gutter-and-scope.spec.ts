@@ -19,20 +19,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import os from 'node:os';
-import { gotoWithProject } from '../helpers/setup';
+import { gotoWithProject, authHeaders } from '../helpers/setup';
 
-const authHeaders = (): Record<string, string> => {
-  try {
-    return {
-      'x-codetrellis-token': fs
-        .readFileSync(path.join(os.homedir(), '.codetrellis', 'capability-token'), 'utf-8')
-        .trim(),
-    };
-  } catch {
-    return {};
-  }
-};
 
 const PROJECT_PATH = path.resolve(process.cwd(), 'tests/fixtures/sample-app');
 const open = (page: Page) => gotoWithProject(page, { projectPath: PROJECT_PATH });

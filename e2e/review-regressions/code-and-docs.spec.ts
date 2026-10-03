@@ -29,6 +29,28 @@ async function enterCodeMode(page: Page): Promise<Locator> {
 test.describe('Code mode — end to end', () => {
   test.setTimeout(90_000);
 
+  test('the layout under code mode takes no clicks: its resize handles are beneath the surface', async ({ page }) => {
+    // Allotment's handles are z-index 35 and the takeovers z-30. Sharing a
+    // stacking context, the hidden layout's handles sat on top of code mode,
+    // invisible, and took clicks meant for what lay under them: on macOS's
+    // metrics, the Diff button.
+    await open(page);
+    await enterCodeMode(page);
+    const stolen = await page.evaluate(() => {
+      const surface = document.querySelector('div.absolute.inset-0.z-30');
+      const out: string[] = [];
+      for (const sash of Array.from(document.querySelectorAll('[data-testid="sash"]'))) {
+        if (surface?.contains(sash)) continue; // code mode's own handles work as they should
+        const r = sash.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue;
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        if (hit && !surface?.contains(hit)) out.push(`${Math.round(r.left)},${Math.round(r.top)} → ${hit.className}`);
+      }
+      return out;
+    });
+    expect(stolen).toEqual([]);
+  });
+
   test('a file can be picked, read, and diffed without leaving the surface', async ({ page }) => {
     await open(page);
     const surface = await enterCodeMode(page);

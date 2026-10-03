@@ -269,7 +269,12 @@ export function App() {
           mounted (no scan / canvas re-init when minimizing) but is
           hidden under the takeover. */}
       <div className="relative flex-1 min-h-0">
-        <Allotment className="absolute inset-0" ref={horizontalRef}>
+        {/* z-0: a stacking context of its own, so the takeovers below (z-30)
+            cover all of it. Allotment's resize handles are z-index 35; in the
+            shared context they sat ABOVE every takeover, invisible, and took
+            the clicks meant for whatever lay under them: on macOS's metrics,
+            code mode's Diff button. */}
+        <Allotment className="absolute inset-0 z-0" ref={horizontalRef}>
           <Allotment.Pane preferredSize={SIDEBAR_DEFAULT} minSize={180} maxSize={400}>
             <Sidebar />
           </Allotment.Pane>
