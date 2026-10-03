@@ -6,7 +6,7 @@ import { usePlanStore } from '../../stores/plan-store';
 import { useToastStore } from '../../stores/toast-store';
 import { useUiStore } from '../../stores/ui-store';
 import { agentBadge, formatLastSeen } from './ConnectedAgents';
-import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, signatureLines, signatureWords, signalsFor, chipSeverity, signalWords, intentLines, MAX_CHIPS, MAX_LISTED_FILES } from '../../lib/workstream-strip';
+import { stripWorkstreams, chipsThatFit, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, signatureLines, signatureWords, signalsFor, chipSeverity, signalWords, intentLines, MAX_LISTED_FILES } from '../../lib/workstream-strip';
 import type { AwarenessSignal, Workstream } from '@shared/types';
 import { singleFlight } from '../../lib/single-flight';
 
@@ -57,6 +57,15 @@ export function WorkstreamStrip() {
   const [tasks, setTasks] = useState<TaskWorkstreamView[]>([]);
   const [open, setOpen] = useState<{ root: string | null; top: number; left: number } | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  // The room the strip has, so it shows the chips that fit (chipsThatFit).
+  const [width, setWidth] = useState<number | null>(null);
+  const [stripEl, setStripEl] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!stripEl || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([e]) => setWidth(Math.floor(e.contentRect.width)));
+    ro.observe(stripEl);
+    return () => ro.disconnect();
+  }, [stripEl]);
 
   // One read at a time, all four together: the strip listens to every
   // workstream and signal broadcast, which come in bursts (HD4).
@@ -121,7 +130,7 @@ export function WorkstreamStrip() {
   const shown = stripWorkstreams(all, signals);
   if (shown.length === 0 && requests.length === 0 && tasks.length === 0) return null;
 
-  const chips = shown.length > MAX_CHIPS ? shown.slice(0, MAX_CHIPS - 1) : shown;
+  const chips = shown.slice(0, chipsThatFit(width, shown.length));
   const overflow = shown.length - chips.length;
   const toggle = (e: React.MouseEvent<HTMLButtonElement>, wsRoot: string | null) => {
     e.stopPropagation();
@@ -150,7 +159,16 @@ export function WorkstreamStrip() {
   };
 
   return (
-    <div ref={wrapperRef} data-testid="workstream-strip" className="flex items-center gap-1 shrink-0" aria-label="Workstreams">
+    <div
+      ref={(el) => { wrapperRef.current = el; setStripEl(el); }}
+      data-testid="workstream-strip"
+      // The room left in the bar, and as many chips as fit in it, the rest
+      // behind "+N" (chipsThatFit). As shrink-0 with a chip per recent
+      // branch, it pushed the project tab, the branch chip and "+" out of a
+      // 1280px top bar (dependabot branches alone filled it).
+      className="flex items-center gap-1 min-w-0 flex-1 overflow-hidden"
+      aria-label="Workstreams"
+    >
       {chips.map((w) => {
         const shared = w.shape === 'shared';
         return (
@@ -161,7 +179,7 @@ export function WorkstreamStrip() {
             aria-expanded={open?.root === w.root}
             title={[chipLabel(w), shapeWords(w), changeWords(w), w.agents.length === 0 ? 'no agent working' : null, signalWords(signalsFor(w.root, signals))].filter(Boolean).join(' — ')}
             data-severity={chipSeverity(signalsFor(w.root, signals)) ?? undefined}
-            className={`flex items-center gap-1.5 max-w-[160px] text-[11px] px-2 py-1 rounded-lg border bg-surface transition-all ${
+            className={`flex items-center gap-1.5 min-w-[4rem] max-w-[160px] shrink text-[11px] px-2 py-1 rounded-lg border bg-surface transition-all ${
               // What overlaps other work is the thing worth a look (A1.6).
               chipSeverity(signalsFor(w.root, signals)) === 'high' ? 'border-danger/70 text-foreground shadow-[0_0_8px_rgba(239,68,68,0.25)]'
               : chipSeverity(signalsFor(w.root, signals)) === 'medium' || shared ? 'border-warning/50 text-foreground'
@@ -197,7 +215,7 @@ export function WorkstreamStrip() {
             aria-expanded={open?.root === t.id}
             title={[`Task · ${t.title}`, t.planTitle, t.agents.length === 0 ? 'no agent working' : null, signalWords(signalsFor(t.id, signals))].filter(Boolean).join(' — ')}
             data-severity={sev ?? undefined}
-            className={`flex items-center gap-1.5 max-w-[180px] text-[11px] px-2 py-1 rounded-lg border bg-surface transition-all ${
+            className={`flex items-center gap-1.5 min-w-[4rem] max-w-[180px] shrink text-[11px] px-2 py-1 rounded-lg border bg-surface transition-all ${
               sev === 'high' ? 'border-danger/70 text-foreground' : sev === 'medium' ? 'border-warning/50 text-foreground' : 'border-border text-foreground hover:border-border-glow'
             } ${open?.root === t.id ? 'border-border-glow' : ''}`}
           >
@@ -221,7 +239,7 @@ export function WorkstreamStrip() {
           onClick={(e) => toggle(e, `request:${r.id}`)}
           aria-expanded={open?.root === `request:${r.id}`}
           title={`An agent is working in ${r.folder}, which CodeTrellis has not opened`}
-          className="flex items-center gap-1.5 max-w-[180px] text-[11px] px-2 py-1 rounded-lg border border-dashed border-accent/60 bg-surface text-foreground-muted hover:text-foreground"
+          className="flex items-center gap-1.5 min-w-[4rem] max-w-[180px] shrink text-[11px] px-2 py-1 rounded-lg border border-dashed border-accent/60 bg-surface text-foreground-muted hover:text-foreground"
         >
           <FolderPlus size={11} className="text-accent shrink-0" />
           <span className="truncate">Agent in {folderName(r.folder)}</span>
@@ -231,7 +249,7 @@ export function WorkstreamStrip() {
         <button
           data-testid="workstream-overflow"
           onClick={(e) => toggle(e, null)}
-          className="text-[11px] px-2 py-1 rounded-lg border border-border bg-surface text-foreground-muted hover:text-foreground"
+          className="shrink-0 text-[11px] px-2 py-1 rounded-lg border border-border bg-surface text-foreground-muted hover:text-foreground"
           title={`${overflow} more workstream${overflow === 1 ? '' : 's'}`}
         >
           +{overflow}

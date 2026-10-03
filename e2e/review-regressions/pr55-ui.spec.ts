@@ -17,29 +17,12 @@
  * fails there — otherwise it is decoration.
  */
 
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test, expect, type Page, type Locator } from '@playwright/test';
-import { gotoWithProject } from '../helpers/setup';
+import { gotoWithProject, authHeaders } from '../helpers/setup';
 
 const API = 'http://localhost:3001/api';
 
-/**
- * Every local transport authenticates with the per-launch capability
- * token — loopback is not an authorisation boundary, which is a Phase 19
- * rule. The browser gets it from the page bootstrap; a Playwright
- * `request` context is a separate client and has to send it too, or it
- * gets a 401 that looks like a broken test.
- */
-const authHeaders = (): Record<string, string> => {
-  const file = path.join(os.homedir(), '.codetrellis', 'capability-token');
-  try {
-    return { 'x-codetrellis-token': fs.readFileSync(file, 'utf-8').trim() };
-  } catch {
-    return {};
-  }
-};
 
 /**
  * The small fixture, not this repository.

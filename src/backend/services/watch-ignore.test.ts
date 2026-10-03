@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import chokidar from 'chokidar';
+import { watchTree } from './tree-watcher';
 import { isIgnoredByWatchers, checkoutWatchOptions } from './watch-ignore';
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ct-watch-ignore-')));
@@ -60,13 +60,13 @@ test('a watcher over a checkout with Pods linking into node_modules holds no des
 
   const open = () => fs.readdirSync(process.platform === 'linux' ? '/proc/self/fd' : '/dev/fd').length;
   const before = open();
-  const watcher = chokidar.watch(root, { ...checkoutWatchOptions(root), ignoreInitial: true, persistent: true });
-  await new Promise<void>((resolve) => watcher.on('ready', () => resolve()));
+  const watcher = watchTree(root, { ...checkoutWatchOptions(root), ignoreInitial: true, persistent: true });
+  await new Promise<void>((resolve) => watcher.once('ready', () => resolve()));
   try {
     assert.ok(open() - before < 50, `the watcher opened ${open() - before} descriptors over 800 skipped files`);
 
     // And the source under a dot-folder checkout is watched. Read from what
-    // chokidar holds rather than waited for as an event: file events are
+    // the watcher holds rather than waited for as an event: file events are
     // late or lost on a loaded macOS, and that read as a missing watch.
     const watched = watcher.getWatched();
     assert.deepEqual(watched[path.join(root, 'src')], ['index.ts']);

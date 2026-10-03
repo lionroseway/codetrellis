@@ -9,27 +9,14 @@
  * encoded as the colour of a 4px triangle.
  */
 
-import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { gotoWithProject } from '../helpers/setup';
+import { gotoWithProject, authHeaders } from '../helpers/setup';
 
 const API = 'http://localhost:3001/api';
 const PROJECT_PATH = path.resolve(process.cwd(), 'tests/fixtures/sample-app');
 const TARGET = 'services/shared-go/money/money.go';
 
-const authHeaders = (): Record<string, string> => {
-  try {
-    return {
-      'x-codetrellis-token': fs
-        .readFileSync(path.join(os.homedir(), '.codetrellis', 'capability-token'), 'utf-8')
-        .trim(),
-    };
-  } catch {
-    return {};
-  }
-};
 
 async function seedPlanTouching(page: Page, action: 'create' | 'modify' | 'delete', title: string) {
   const planRes = await page.request.post(`${API}/plans`, {

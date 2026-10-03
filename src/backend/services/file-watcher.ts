@@ -1,7 +1,7 @@
 // [codemod] hoisted lazy requires → static namespace imports for bundling
 import * as _lazy___cross_system_service from './cross-system-service';
 import * as _lazy___plan_progress_service from './plan-progress-service';
-import { watch, type FSWatcher } from 'chokidar';
+import { watchTree, type TreeWatcher } from './tree-watcher';
 import path from 'node:path';
 import { parseFile, initParser, getParseableExtensions } from './ast-parser';
 import { storeParsedFile, getFileHash, removeStaleFiles, resolvePendingImports } from './database';
@@ -12,7 +12,7 @@ import { recordFileActivity } from './stuck-sensor-service';
 import { nudgeWorkstream, setExternallyWatchedFolder } from './workstream-watch-service';
 import { checkoutWatchOptions } from './watch-ignore';
 
-let watcher: FSWatcher | null = null;
+let watcher: TreeWatcher | null = null;
 
 /**
  * How long `startWatching` waits for chokidar's initial walk before
@@ -84,7 +84,7 @@ export async function startWatching(projectRoot: string): Promise<void> {
   // work's watcher (watch-ignore.ts), and tested on the path under the
   // project: tested on the absolute path, a project inside any dot folder
   // (~/.config/…) had its root ignored and was never watched at all.
-  watcher = watch(projectRoot, {
+  watcher = watchTree(projectRoot, {
     ...checkoutWatchOptions(projectRoot),
     ignoreInitial: true,
     awaitWriteFinish: {

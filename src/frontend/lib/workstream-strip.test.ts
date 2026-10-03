@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { stripWorkstreams, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, signatureLines, signatureWords, signalsFor, chipSeverity, signalWords, intentLines } from './workstream-strip';
+import { stripWorkstreams, chipsThatFit, MAX_CHIPS, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, signatureLines, signatureWords, signalsFor, chipSeverity, signalWords, intentLines } from './workstream-strip';
 import type { AwarenessSignal, Workstream, WorkstreamAgent } from '../../shared/types';
 
 const agent = (sessionId: string): WorkstreamAgent => ({ sessionId, agentType: 'claude-code', model: null, source: 'mcp', lastSeen: 0 });
@@ -182,5 +182,19 @@ describe('declared intent on the strip (A2.4)', () => {
     ]);
     assert.deepEqual(intentLines({ paths: ['src/a.ts'], symbols: [] }), ['src/a.ts']);
     assert.deepEqual(intentLines({ paths: [], symbols: [] }), []);
+  });
+});
+
+describe('chipsThatFit', () => {
+  // A repository with many recent branches filled a 1280px top bar with five
+  // chips and pushed the project tab, its branch chip and "+" out of it.
+  test('as many as the room holds, the rest behind "+N", never more than MAX_CHIPS', () => {
+    assert.equal(chipsThatFit(null, 3), 3, 'not measured yet: as before');
+    assert.equal(chipsThatFit(null, 9), MAX_CHIPS - 1);
+    assert.equal(chipsThatFit(1000, 3), 3, 'room for all three');
+    assert.equal(chipsThatFit(1000, 9), MAX_CHIPS - 1, 'plenty of room, still capped');
+    assert.equal(chipsThatFit(131, 7), 1, 'one chip and "+6" in 131px');
+    assert.equal(chipsThatFit(72, 1), 1, 'one line of work in exactly its room');
+    assert.equal(chipsThatFit(60, 4), 0, 'only "+4" when no chip fits beside it');
   });
 });

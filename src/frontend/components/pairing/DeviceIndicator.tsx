@@ -138,7 +138,7 @@ export function DeviceIndicator({ onPairDevice }: { onPairDevice?: () => void } 
         ) : (
           <WifiOff className="w-3.5 h-3.5" />
         )}
-        <span>{connectedCount > 0 ? connectedCount : 'Devices'}</span>
+        {connectedCount > 0 ? <span className="tabular-nums">{connectedCount}</span> : <span className="hidden 2xl:inline">Devices</span>}
       </button>
 
       {open && createPortal(

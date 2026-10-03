@@ -62,15 +62,28 @@ export function headlessDataDir(
 ): string {
   const fromEnv = env.CODETRELLIS_DATA_DIR;
   if (fromEnv && fromEnv.trim()) return fromEnv;
+  const resolved = path.resolve(projectRoot);
+  const id = crypto.createHash('sha256').update(resolved).digest('hex').slice(0, 10);
+  const name = path.basename(resolved).replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'project';
+  return path.join(headlessCacheRoot(env, home, platform), `${name}-${id}`);
+}
+
+/**
+ * The folder every project's headless data sits in: the platform's own user
+ * cache (~/Library/Caches on macOS, LOCALAPPDATA on Windows, XDG elsewhere),
+ * then `codetrellis`. Tests ask this rather than spelling one platform's.
+ */
+export function headlessCacheRoot(
+  env: NodeJS.ProcessEnv,
+  home: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
   const cache = platform === 'darwin'
     ? path.join(home, 'Library', 'Caches')
     : platform === 'win32'
       ? (env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'))
       : (env.XDG_CACHE_HOME && path.isAbsolute(env.XDG_CACHE_HOME) ? env.XDG_CACHE_HOME : path.join(home, '.cache'));
-  const resolved = path.resolve(projectRoot);
-  const id = crypto.createHash('sha256').update(resolved).digest('hex').slice(0, 10);
-  const name = path.basename(resolved).replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'project';
-  return path.join(cache, 'codetrellis', `${name}-${id}`);
+  return path.join(cache, 'codetrellis');
 }
 
 export interface ConnectorLine {
