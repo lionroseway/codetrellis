@@ -30,7 +30,7 @@ import * as _lazy____server from '../server';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import chokidar, { type FSWatcher } from 'chokidar';
+import { watchTree, type TreeWatcher } from './tree-watcher';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import * as planService from './plan-service';
 import * as planPhasesService from './plan-phases-service';
@@ -1137,7 +1137,7 @@ export function scheduleWriteThrough(planUid: string, projectRoot?: string): voi
  * left that plan's `channels/` invisible for the rest of the session, and
  * a teammate's event arriving by `git pull` was never imported.
  */
-const watchersByProject = new Map<string, FSWatcher>();
+const watchersByProject = new Map<string, TreeWatcher>();
 const watcherReady = new Map<string, Promise<void>>();
 const PLAN_WATCHER_READY_TIMEOUT_MS = 10_000;
 /** How long after a folder appears the watcher looks in it for files it was not told about (bug 26). */
@@ -1175,7 +1175,7 @@ export function startPlanFileWatcher(projectRoot: string): Promise<void> {
     console.warn('[Auto-sync] Could not pre-create plans dir:', err);
   }
 
-  const watcher = chokidar.watch(plansRoot, {
+  const watcher = watchTree(plansRoot, {
     ignoreInitial: true,
     persistent: true,
     awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },

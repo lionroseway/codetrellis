@@ -24,6 +24,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { prepareFixture, type PreparedFixture } from '../harness/fixture';
 import { findFreePorts } from '../harness/ports';
 import { REPO_ROOT } from '../harness/paths';
+import { headlessCacheRoot } from '../../src/cli/args';
 
 const BIN = path.join(REPO_ROOT, 'bin', 'codetrellis.mjs');
 
@@ -79,7 +80,8 @@ test.describe.serial('codetrellis serve', () => {
 
   test('serve opens the project headless, keeps its data in the cache, and says how to connect', async () => {
     expect(served.project).toBe(fs.realpathSync(fx.projectPath));
-    expect(served.dataDir.startsWith(path.join(home, '.cache', 'codetrellis'))).toBe(true);
+    // The platform's own cache (~/Library/Caches on macOS), as the CLI picks it.
+    expect(served.dataDir.startsWith(headlessCacheRoot(env(), home))).toBe(true);
     expect(served.counts.files).toBeGreaterThan(0);
     expect(served.counts.symbols).toBeGreaterThan(0);
     expect(served.api).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);

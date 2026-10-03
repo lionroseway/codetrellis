@@ -26,6 +26,7 @@ import type { ChangedFile, WorkstreamChanges } from '../../shared/types';
 import { isSafeGitRef } from './git-safety';
 import { gitAsync, refreshIndexOccasionallyAsync } from './git-env';
 import { checkoutWatchOptions } from './watch-ignore';
+import { watchTree, type TreeWatcher } from './tree-watcher';
 
 /** More than this is listed as truncated: a footprint is a summary, not a diff. */
 export const MAX_CHANGED_FILES = 500;
@@ -190,7 +191,7 @@ interface Entry {
   mainRef: string | null;
   changes: WorkstreamChanges;
   computedAt: number;
-  watcher: FSWatcher | null;
+  watcher: TreeWatcher | null;
   timer: ReturnType<typeof setTimeout> | null;
   /** A file event is waiting in the debounce (see `schedule`). */
   pendingEvent?: boolean;
@@ -360,7 +361,7 @@ function watch(folder: string, entry: Entry): void {
   // one kept its own list, without ios/Pods and following links, and held a
   // descriptor on every file of a React Native checkout until git could no
   // longer start.
-  const watcher = chokidar.watch(folder, {
+  const watcher = watchTree(folder, {
     ...checkoutWatchOptions(folder),
     ignoreInitial: true,
     persistent: true,

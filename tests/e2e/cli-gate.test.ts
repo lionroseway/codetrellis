@@ -22,6 +22,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { test, expect } from '@playwright/test';
 import { setupHarness, findFreePorts, type Harness, type ScriptedAgent } from '../harness';
 import { REPO_ROOT } from '../harness/paths';
+import { headlessCacheRoot } from '../../src/cli/args';
 
 const BIN = path.join(REPO_ROOT, 'bin', 'codetrellis.mjs');
 const SHARED = 'packages/shared/src';
@@ -102,7 +103,9 @@ test.describe.serial('codetrellis in sessions and pipelines', () => {
       // What the agent starts with: the plan, from its files, and the work so far.
       expect(first.stdout).toMatch(/^Exports/m);
       expect(first.stdout).toContain('Conforms:');
-      const dataDir = fs.readdirSync(path.join(home, '.cache', 'codetrellis')).map((d) => path.join(home, '.cache', 'codetrellis', d))[0];
+      // The platform's own cache (~/Library/Caches on macOS), as the CLI picks it.
+      const cacheRoot = headlessCacheRoot(env, home);
+      const dataDir = fs.readdirSync(cacheRoot).map((d) => path.join(cacheRoot, d))[0];
       const pid = (JSON.parse(fs.readFileSync(path.join(dataDir, 'mcp-endpoint.json'), 'utf8')) as { pid: number }).pid;
 
       // A second session finds it running: no second backend.

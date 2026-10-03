@@ -11,6 +11,7 @@
 
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { setupHarness, type Harness, type ScriptedAgent } from '../harness';
 
@@ -51,7 +52,10 @@ test.describe.serial('Brief surface', () => {
   };
 
   test.beforeAll(async () => {
-    h = await setupHarness('brief-surface');
+    // No conversion engine, whatever this checkout holds: the release build
+    // fetches one into resources/rendition/engine (gitignored), and then the
+    // "no engine" case below converted the .docx instead of falling back.
+    h = await setupHarness('brief-surface', { env: { CODETRELLIS_RENDITION_ENGINE: path.join(os.tmpdir(), 'ct-no-rendition-engine') } });
     root = h.fixture.projectPath;
     await h.client.scanProject(root);
     agent = await h.spawnAgent({ agentType: 'claude-desktop' });
