@@ -18,13 +18,13 @@
  * sha checked and the path refused if git could read it as an option.
  */
 
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import type { ChangedFile, ParsedSymbol, SymbolChange, WorkstreamChanges } from '../../shared/types';
 import { readTextWithin } from './confined-fs';
 import { assertSafeGitPathArg } from './git-safety';
+import { gitAsync } from './git-env';
 
 /** Files larger than this are not parsed: a footprint is a summary. */
 export const MAX_PARSE_BYTES = 1_000_000;
@@ -178,16 +178,11 @@ export function diffSymbols(before: FlatSymbol[] | null, after: FlatSymbol[] | n
 const SHA = /^[0-9a-f]{40}$/;
 
 /** The file's content at `base`, or null when it did not exist there. */
-export function baseContent(folder: string, base: string, relPath: string): string | null {
+export async function baseContent(folder: string, base: string, relPath: string): Promise<string | null> {
   if (!SHA.test(base)) return null;
   assertSafeGitPathArg(relPath, 'workstream base file');
   try {
-    return execFileSync('git', ['-C', folder, 'show', `${base}:${relPath}`], {
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      timeout: 5000,
-      maxBuffer: MAX_PARSE_BYTES * 2,
-    });
+    return await gitAsync(folder, ['show', `${base}:${relPath}`], { maxBuffer: MAX_PARSE_BYTES * 2 });
   } catch {
     return null;
   }
@@ -209,17 +204,17 @@ export function currentContent(folder: string, relPath: string): string | null {
  * not parsed (a README, a lockfile) — "no symbols" and "not a language we
  * read" are different answers.
  */
-export function fileSymbolChanges(
+export async function fileSymbolChanges(
   folder: string,
   base: string | null,
   file: ChangedFile,
   parse: SymbolParser,
-  readCurrent: (relPath: string) => string | null = (rel) => currentContent(folder, rel),
-): SymbolChange[] | undefined {
+  readCurrent: (relPath: string) => string | null | Promise<string | null> = (rel) => currentContent(folder, rel),
+): Promise<SymbolChange[] | undefined> {
   const abs = path.join(folder, file.path);
-  const after = file.status === 'deleted' ? null : readCurrent(file.path);
+  const after = file.status === 'deleted' ? null : await readCurrent(file.path);
   const beforePath = file.status === 'renamed' && file.from ? file.from : file.path;
-  const before = file.status === 'added' || !base ? null : baseContent(folder, base, beforePath);
+  const before = file.status === 'added' || !base ? null : await baseContent(folder, base, beforePath);
   if (after === null && before === null) return undefined;
 
   const afterSyms = after === null ? null : parse(abs, after);
@@ -251,7 +246,7 @@ function stampOf(folder: string, base: string | null, file: ChangedFile): string
  * The changes with each parseable file's symbol changes attached. Cached per
  * file, so a listing that repeats every few seconds parses only what moved.
  */
-export function withSymbolChanges(
+export async function withSymbolChanges(
   folder: string,
   changes: WorkstreamChanges,
   parse: SymbolParser,
@@ -259,9 +254,14 @@ export function withSymbolChanges(
    * For a branch with no working tree (A1.7a): read the current version at
    * this commit instead of from disk, and key the cache by it.
    */
-  atCommit?: { head: string; read: (relPath: string) => string | null },
-): WorkstreamChanges {
-  const files = changes.files.map((f, i) => {
+  atCommit?: { head: string; read: (relPath: string) => Promise<string | null> },
+): Promise<WorkstreamChanges> {
+  // One file after another: each may ask git for its base version.
+  const files: ChangedFile[] = [];
+  for (const [i, f] of changes.files.entries()) files.push(await symbolsFor(i, f));
+  return { ...changes, files };
+
+  async function symbolsFor(i: number, f: ChangedFile): Promise<ChangedFile> {
     if (i >= MAX_PARSED_FILES) return f;
     const k = `${folder}\0${atCommit ? `@${atCommit.head}` : ''}\0${f.path}`;
     const stamp = atCommit ? `${changes.base}|${atCommit.head}|${f.status}|${f.from ?? ''}` : stampOf(folder, changes.base, f);
@@ -269,17 +269,20 @@ export function withSymbolChanges(
     if (!hit || hit.stamp !== stamp) {
       let symbols: SymbolChange[] | undefined;
       try {
-        symbols = fileSymbolChanges(folder, changes.base, f, parse, atCommit?.read);
+        symbols = await fileSymbolChanges(folder, changes.base, f, parse, atCommit?.read);
       } catch {
         symbols = undefined;
       }
       hit = { stamp, symbols };
       if (cache.size > MAX_CACHED) cache.clear(); // crude, and enough: answers are cheap to rebuild
       cache.set(k, hit);
+      // Parsing runs here, in the backend's thread. A new file asks git for
+      // nothing, so a batch of them would parse back to back with no request
+      // answered between; let waiting requests in after each file parsed.
+      await new Promise<void>((resolve) => setImmediate(resolve));
     }
     return hit.symbols === undefined ? f : { ...f, symbols: hit.symbols };
-  });
-  return { ...changes, files };
+  }
 }
 
 /** Forget every parsed answer. For tests. */

@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { quietGitLocks, refreshIndexOccasionally, REFRESH_EVERY_MS } from './git-env';
+import { quietGitLocks, refreshIndexOccasionally, REFRESH_EVERY_MS, gitAsync, gitAsyncLoad, GIT_CONCURRENCY, refreshIndexOccasionallyAsync } from './git-env';
 
 function repoWithStaleIndex(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-git-env-'));
@@ -79,4 +79,30 @@ test('when someone else holds the index lock, the refresh gives way and leaves t
   assert.equal(indexStamp(dir), before);
   assert.equal(fs.existsSync(lock), true);
   assert.equal(refreshIndexOccasionally('/nonexistent/folder', 5_000_000), true, 'not a checkout: no throw');
+});
+
+test('gitAsync answers like git, and never runs more than GIT_CONCURRENCY at once', async () => {
+  const dir = repoWithStaleIndex();
+  assert.match(await gitAsync(dir, ['rev-parse', '--is-inside-work-tree']), /^true/);
+  await assert.rejects(gitAsync(dir, ['rev-parse', '--verify', 'no-such-ref']), 'a failing git rejects');
+
+  let most = 0;
+  const calls = Array.from({ length: GIT_CONCURRENCY * 3 }, () => gitAsync(dir, ['status', '--porcelain']).then((out) => {
+    // This call's slot has passed to the next in line by now: what is running is the others.
+    most = Math.max(most, gitAsyncLoad().running);
+    return out;
+  }));
+  const load = gitAsyncLoad();
+  assert.equal(load.running, GIT_CONCURRENCY, 'the cap is reached');
+  assert.equal(load.queued, GIT_CONCURRENCY * 2, 'the rest wait for a slot');
+  await Promise.all(calls);
+  assert.ok(most <= GIT_CONCURRENCY, `at most ${GIT_CONCURRENCY} ran together (saw ${most})`);
+  assert.deepEqual(gitAsyncLoad(), { running: 0, queued: 0 }, 'every slot is given back');
+});
+
+test('the async index refresh keeps the same once-per-period rule', async () => {
+  const dir = repoWithStaleIndex();
+  assert.equal(await refreshIndexOccasionallyAsync(dir, 9_000_000), true);
+  assert.equal(await refreshIndexOccasionallyAsync(dir, 9_000_000 + REFRESH_EVERY_MS - 1), false, 'not again within the period');
+  assert.equal(await refreshIndexOccasionallyAsync('/nonexistent/folder', 9_000_000), true, 'not a checkout: no throw');
 });

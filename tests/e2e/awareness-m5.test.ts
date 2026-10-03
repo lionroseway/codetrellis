@@ -70,7 +70,7 @@ test.describe.serial('M5: review knows what else is in flight', () => {
     // The window shows the strip once, which starts the watchers.
     expect((await h.client.raw('GET', `/api/workstreams?${q()}`)).ok).toBe(true);
     await expect.poll(async () => {
-      const body = (await (await h.client.raw('GET', `/api/awareness?${q()}`)).json()) as { signals: Array<{ kind: string }> };
+      const body = (await (await h.client.raw('GET', `/api/awareness?fresh=1&${q()}`)).json()) as { signals: Array<{ kind: string }> };
       return body.signals.some((s) => s.kind === 'contract');
     }, { timeout: 15_000, intervals: [300] }).toBe(true);
   });
@@ -124,7 +124,7 @@ test.describe.serial('M5: review knows what else is in flight', () => {
       const review = await phone.rpc('review.get', { planUid, ...billingRange() }) as { otherWork: OtherWork };
       expect(review.otherWork.entries.find((e) => e.kind === 'contract')?.merge).toBe(MERGE_LINE);
 
-      const signals = (await (await h.client.raw('GET', `/api/awareness?${q()}`)).json()) as { signals: Array<{ id: string; kind: string }> };
+      const signals = (await (await h.client.raw('GET', `/api/awareness?fresh=1&${q()}`)).json()) as { signals: Array<{ id: string; kind: string }> };
       const contract = signals.signals.find((s) => s.kind === 'contract')!;
       expect((await h.client.raw('POST', `/api/awareness/${contract.id}/state?${q()}`, { state: 'intended' })).ok).toBe(true);
 

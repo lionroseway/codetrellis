@@ -83,30 +83,30 @@ const opts = (extra: Partial<Parameters<typeof branchWorkstreamsOf>[1]> = {}) =>
   ({ mainBranch: 'main', mainRef: 'main', checkedOut: new Set(['main', 'checked-out']), windowDays: 7, ...extra });
 
 describe('which branches are workstreams', () => {
-  test('recent, ahead, not checked out: a local branch and a remote one with no local copy', () => {
-    assert.deepEqual(branchWorkstreamsOf(repo, opts()).map((b) => b.short).sort(), ['feature-a', 'origin/cloud-agent']);
+  test('recent, ahead, not checked out: a local branch and a remote one with no local copy', async () => {
+    assert.deepEqual((await branchWorkstreamsOf(repo, opts())).map((b) => b.short).sort(), ['feature-a', 'origin/cloud-agent']);
   });
 
-  test('not: main, a checked-out branch, one not ahead, origin/HEAD, a remote copy of a local branch, or old work', () => {
-    const names = branchWorkstreamsOf(repo, opts()).map((b) => b.short);
+  test('not: main, a checked-out branch, one not ahead, origin/HEAD, a remote copy of a local branch, or old work', async () => {
+    const names = (await branchWorkstreamsOf(repo, opts())).map((b) => b.short);
     for (const excluded of ['main', 'checked-out', 'merged', 'origin/HEAD', 'origin/main', 'origin/feature-a', 'old-work']) {
       assert.ok(!names.includes(excluded), `${excluded} is not a branch workstream`);
     }
   });
 
-  test('the window is a setting: widen it and old work counts', () => {
-    assert.ok(branchWorkstreamsOf(repo, opts({ windowDays: 60 })).some((b) => b.short === 'old-work'));
+  test('the window is a setting: widen it and old work counts', async () => {
+    assert.ok((await branchWorkstreamsOf(repo, opts({ windowDays: 60 }))).some((b) => b.short === 'old-work'));
   });
 
-  test('a detached or unsafe main ref yields nothing rather than guessing', () => {
-    assert.deepEqual(branchWorkstreamsOf(repo, opts({ mainRef: '--all' })), []);
-    assert.deepEqual(branchWorkstreamsOf(repo, opts({ mainRef: null })), []);
+  test('a detached or unsafe main ref yields nothing rather than guessing', async () => {
+    assert.deepEqual(await branchWorkstreamsOf(repo, opts({ mainRef: '--all' })), []);
+    assert.deepEqual(await branchWorkstreamsOf(repo, opts({ mainRef: null })), []);
   });
 });
 
 describe('what a branch changed', () => {
-  test('committed changes since its merge base, read from git, nothing checked out', () => {
-    const a = branchWorkstreamsOf(repo, opts()).find((b) => b.short === 'feature-a')!;
+  test('committed changes since its merge base, read from git, nothing checked out', async () => {
+    const a = (await branchWorkstreamsOf(repo, opts())).find((b) => b.short === 'feature-a')!;
     assert.deepEqual(a.changes.files.map((f) => `${f.status} ${f.path}`), ['added src/new.ts', 'modified src/session.ts']);
     assert.match(a.changes.base ?? '', /^[0-9a-f]{40}$/);
     assert.match(showAt(repo, a.head, 'src/session.ts') ?? '', /return 2/);
@@ -204,19 +204,19 @@ describe('merged by content, not ancestry (bug 53)', () => {
     commitIn('live', { 'live.ts': 'export const live = 1\n' });
   });
 
-  const names = () => branchWorkstreamsOf(r, { mainBranch: 'main', mainRef: 'main', checkedOut: new Set(['main']), windowDays: 7 }).map((b) => b.short).sort();
+  const names = async () => (await branchWorkstreamsOf(r, { mainBranch: 'main', mainRef: 'main', checkedOut: new Set(['main']), windowDays: 7 })).map((b) => b.short).sort();
 
-  test('a squash-merged branch is not work, even after main edits the same file again', () => {
-    assert.equal(names().includes('squashed'), false);
+  test('a squash-merged branch is not work, even after main edits the same file again', async () => {
+    assert.equal((await names()).includes('squashed'), false);
   });
 
-  test('nor is a cherry-picked one, or one whose deletion main made too', () => {
-    assert.equal(names().includes('cherry'), false);
-    assert.equal(names().includes('deleting'), false);
+  test('nor is a cherry-picked one, or one whose deletion main made too', async () => {
+    assert.equal((await names()).includes('cherry'), false);
+    assert.equal((await names()).includes('deleting'), false);
   });
 
-  test('a branch only partly merged, or merged with a file resolved differently, is still work; so is one not merged', () => {
-    assert.deepEqual(names(), ['live', 'partly', 'resolved-differently']);
+  test('a branch only partly merged, or merged with a file resolved differently, is still work; so is one not merged', async () => {
+    assert.deepEqual(await names(), ['live', 'partly', 'resolved-differently']);
   });
 
   test('parsing raw output: the version each file is left at, a deletion as null', () => {
@@ -235,16 +235,16 @@ describe('merged by content, not ancestry (bug 53)', () => {
 
 describe('many branches: off the request path (HD4b)', () => {
   test('past the inline budget, the rest are worked out in the background, the same answer, and told once', async () => {
-    const inline = branchWorkstreamsOf(repo, opts());
+    const inline = await branchWorkstreamsOf(repo, opts());
     resetBranchWorkstreamCache();
     const told: string[] = [];
     setBranchWorkstreamsWarmedListener((r) => { told.push(r); });
     try {
       // Nothing inline: the first answer leaves the branches out rather than block.
-      assert.deepEqual(branchWorkstreamsOf(repo, opts({ inline: 0 })), []);
+      assert.deepEqual(await branchWorkstreamsOf(repo, opts({ inline: 0 })), []);
       await branchWorkstreamsWarmed(repo);
       assert.deepEqual(told, [repo]);
-      const warmed = branchWorkstreamsOf(repo, opts({ inline: 0 }));
+      const warmed = await branchWorkstreamsOf(repo, opts({ inline: 0 }));
       assert.deepEqual(
         warmed.map((b) => [b.short, b.changes.files.map((f) => `${f.status} ${f.path}`)]).sort(),
         inline.map((b) => [b.short, b.changes.files.map((f) => `${f.status} ${f.path}`)]).sort(),
@@ -255,8 +255,8 @@ describe('many branches: off the request path (HD4b)', () => {
     }
   });
 
-  test('within the budget, a branch is answered inline, as before', () => {
+  test('within the budget, a branch is answered inline, as before', async () => {
     resetBranchWorkstreamCache();
-    assert.deepEqual(branchWorkstreamsOf(repo, opts({ inline: 8 })).map((b) => b.short).sort(), ['feature-a', 'origin/cloud-agent']);
+    assert.deepEqual((await branchWorkstreamsOf(repo, opts({ inline: 8 }))).map((b) => b.short).sort(), ['feature-a', 'origin/cloud-agent']);
   });
 });

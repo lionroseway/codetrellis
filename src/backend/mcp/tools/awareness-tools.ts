@@ -66,7 +66,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (!root) {
         return { isError: true, content: [{ type: 'text' as const, text: 'No project is open, and none was named.' }] };
       }
-      const workstreams = listWorkstreams(root, { includeIdle: include_idle === true }).map((w) => ({
+      const workstreams = (await listWorkstreams(root, { includeIdle: include_idle === true })).map((w) => ({
         ...w,
         // Another agent's words are never passed on (awareness principle 5):
         // what it claims, yes; what it wrote about it, only to itself.
@@ -107,7 +107,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
     async ({ project_path }) => {
       const root = project_path ?? deps.getActiveProjectPath();
       if (!root) return noProject;
-      refreshSignals(root);
+      await refreshSignals(root);
       const workstream = callerWorkstream(deps.sessionId);
       // Its folder and its task (A6.1): a Claude Desktop session has only the task.
       const mine = sessionWorkstreams(getActiveSessions().find((s) => s.sessionId === deps.sessionId));
@@ -125,7 +125,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const told = toldFor(signals.map((s) => s.id));
       const yourNote = (id: string) => told.get(id)?.find((t) => t.sessionId === deps.sessionId)?.note;
       // The digest (A3.1): the same few lines the person reads, over these signals.
-      const names = new Map(listWorkstreams(root, { includeIdle: true }).map((w) => [w.root, w.branch ?? path.basename(w.root)]));
+      const names = new Map((await listWorkstreams(root, { includeIdle: true })).map((w) => [w.root, w.branch ?? path.basename(w.root)]));
       const digest = digestText(buildDigest(
         signals.map((s) => ({ ...s, told: told.get(s.id) })),
         (r) => names.get(r) ?? (r.startsWith('branch:') ? r.slice(7) : path.basename(r)),
@@ -232,7 +232,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const mine = callerWorkstream(deps.sessionId);
       // By real path: a session is bound to a root as opened, git lists the real one.
       const canon = (p: string) => { try { return fs.realpathSync.native(p); } catch { return p; } };
-      const others = listWorkstreams(root, { fresh: true }).filter((w) => !mine || canon(w.root) !== canon(mine));
+      const others = (await listWorkstreams(root, { fresh: true })).filter((w) => !mine || canon(w.root) !== canon(mine));
       const report = paths.map((raw) => {
         const rel = raw.replace(/^\.\//, '');
         const changedIn = others.flatMap((w) => {
@@ -279,7 +279,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (!rel) return { isError: true, content: [{ type: 'text' as const, text: 'path must be a file relative to the repository root.' }] };
       const mine = callerWorkstream(deps.sessionId);
       const canon = (p: string) => { try { return fs.realpathSync.native(p); } catch { return p; } };
-      const workstreams = listWorkstreams(root, { includeIdle: true, fresh: true });
+      const workstreams = await listWorkstreams(root, { includeIdle: true, fresh: true });
       if (workstream && !workstreams.some((w) => w.root === workstream || w.branch === workstream)) {
         return { isError: true, content: [{ type: 'text' as const, text: `No workstream ${workstream} in this project. list_workstreams names them.` }] };
       }
@@ -407,7 +407,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
 
       if (clear) {
         const had = clearIntent(deps.sessionId);
-        refreshSignals(root);
+        await refreshSignals(root);
         return { content: [{ type: 'text' as const, text: JSON.stringify({ project_path: root, cleared: had }, null, 2) }] };
       }
 
@@ -441,8 +441,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         sessionId: deps.sessionId, agentType: session?.agentType ?? 'agent', summary,
         paths: declaredPaths, symbols: declaredSymbols, declaredAt: Date.now(),
       });
-      refreshSignals(root);
-      const placed = listWorkstreams(root, { includeIdle: true }).find((w) => w.agents.some((a) => a.sessionId === deps.sessionId));
+      await refreshSignals(root);
+      const placed = (await listWorkstreams(root, { includeIdle: true })).find((w) => w.agents.some((a) => a.sessionId === deps.sessionId));
       const overlaps = placed ? listSignals(root, { workstream: placed.root }) : [];
       // Shown here, so no notice repeats them (A2.6).
       if (placed) markTold(root, overlaps.map((s) => s.id), deps.sessionId, session?.agentType ?? 'agent');

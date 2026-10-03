@@ -15,7 +15,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
-import { compareSnapshots, listComparands } from '../../services/snapshot-compare-service';
+import { compareSnapshots, comparandBranches, listComparands } from '../../services/snapshot-compare-service';
 import { reviewPlan, renderReviewMarkdown } from '../../services/plan-review-service';
 import { buildPrDraft } from '../../services/pr-draft-service';
 import { reviewQueue } from '../../services/review-queue-service';
@@ -39,7 +39,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ project_path }) => ({
-      content: [{ type: 'text' as const, text: JSON.stringify(listComparands(project_path), null, 2) }],
+      content: [{ type: 'text' as const, text: JSON.stringify(listComparands(project_path, undefined, await comparandBranches(project_path)), null, 2) }],
     }),
   );
 

@@ -68,14 +68,14 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/git/refs/compare` |  | ✗ none | 2 |  |  |  |
 | a | `GET /api/git/status` |  | ✗ none | 1 | ✓ 0.4a: hash and file arrays (git-integration) |  |  |
 | a | `GET /api/git/worktrees` |  | ✗ none | 2 | ✓ 0.4a: both checkouts and the other one's plans, from a worktree; unopened refused (worktree-project, misc-endpoints) |  |  |
-| a | `GET /api/health` |  | ✗ none | 3 | ✓ 0.4a: status, parser, memory (misc-endpoints, smoke) |  |  |
+| a | `GET /api/health` |  | ✗ none | 4 | ✓ 0.4a: status, parser, memory (misc-endpoints, smoke) |  |  |
 | a | `GET /api/identity/git-defaults` |  | ✗ none | 2 | ✓ 0.4a: the project's own git identity (project-open) |  |  |
 | a | `GET /api/onboarding-state` |  | ✗ none | 2 | ✓ 0.4a: moves with plans and connected agents (project-open) |  |  |
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
 | a | `POST /api/git/fetch` |  | ✗ none | 2 |  |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 206 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 207 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `DELETE /api/rules/:id` |  | ✗ none | 2 |  |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
@@ -244,7 +244,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `DELETE /api/breakpoints/:id` |  | ✗ none | 4 |  |  |  |
 | g | `GET /api/agent-events` |  | ✗ none | 9 |  |  |  |
 | g | `GET /api/agent/status` |  | ✗ none | 3 | ✓ 0.4g: the session watcher's state, nothing more (misc-endpoints) |  |  |
-| g | `GET /api/awareness` |  | ✗ none | 27 |  |  |  |
+| g | `GET /api/awareness` |  | ✗ none | 28 |  |  |  |
 | g | `GET /api/breakpoint-hits` |  | ✗ none | 4 |  |  |  |
 | g | `GET /api/breakpoints` |  | ✗ none | 1 |  |  |  |
 | g | `GET /api/evidence` |  | ✗ none | 2 |  |  |  |

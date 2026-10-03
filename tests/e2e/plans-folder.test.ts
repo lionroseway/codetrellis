@@ -442,7 +442,7 @@ test.describe.serial('Materials in the plans folder', () => {
     }
     fs.writeFileSync(path.join(place, 'Materials', 'sales.csv'), 'region,q3\nEMEA,125\n');
     type Signal = { kind: string; workstreams: string[]; subject: Record<string, unknown>; summary: string };
-    const signals = async () => ((await (await h.client.raw('GET', `/api/awareness?project=${encodeURIComponent(code)}`)).json()) as { signals: Signal[] }).signals.filter((s) => s.subject.material);
+    const signals = async () => ((await (await h.client.raw('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(code)}`)).json()) as { signals: Signal[] }).signals.filter((s) => s.subject.material);
     let found: Signal[] = [];
     await expect.poll(async () => (found = await signals()).length, { timeout: 15_000 }).toBe(1);
     expect(found[0]).toMatchObject({ kind: 'stale-base', subject: expect.objectContaining({ material: 'plans://Materials/sales.csv' }) });

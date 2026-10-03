@@ -30,7 +30,7 @@ test.describe.serial('Intended and cooldown', () => {
   let id: string;
 
   const signals = async () => {
-    const res = await h.client.raw('GET', `/api/awareness?project=${encodeURIComponent(root)}`);
+    const res = await h.client.raw('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(root)}`);
     return ((await res.json()) as { signals: Signal[] }).signals.filter((s) => s.kind === 'collision');
   };
   const answer = (sid: string, state: string) =>

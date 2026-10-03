@@ -38,7 +38,7 @@ test.describe.serial('Contract signals', () => {
   let agent: ScriptedMcp;
 
   const signals = async () => {
-    const res = await h.client.raw('GET', `/api/awareness?project=${encodeURIComponent(root)}`);
+    const res = await h.client.raw('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(root)}`);
     expect(res.status).toBe(200);
     return ((await res.json()) as { signals: Signal[] }).signals;
   };

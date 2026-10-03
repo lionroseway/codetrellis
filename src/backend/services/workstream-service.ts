@@ -14,12 +14,12 @@
 
 import fs from 'node:fs';
 import type { AgentSessionInfo, Workstream, WorkstreamAgent, WorkstreamChanges, WorkstreamIntent } from '../../shared/types';
-import { listWorktrees, type Worktree } from './worktree-service';
+import { listWorktreesAsync, type Worktree } from './worktree-service';
 import { getActiveSessions } from './session-service';
 import { getIntent } from './intent-service';
 import { getChanges, isWatchedFolder, syncWorkstreamWatchers, watchRefs } from './workstream-watch-service';
 import { withSymbolChanges, type SymbolParser } from './workstream-symbols';
-import { branchWorkstreamsOf, showAt } from './branch-workstreams';
+import { branchWorkstreamsOf, showAtAsync } from './branch-workstreams';
 import { getEffectiveSensorConfig } from './project-config-service';
 import { listTrustedRoots } from './trusted-roots';
 import { getRecentProject } from './recent-projects-service';
@@ -34,8 +34,8 @@ export interface WorkstreamInputs {
   worktrees: readonly Worktree[];
   mcpSessions: readonly AgentSessionInfo[];
   claudeSessions: readonly ClaudeLogSession[];
-  /** Each working tree's changes (A1.4). Absent means none known. */
-  changes?: (folder: string) => WorkstreamChanges;
+  /** Each working tree's changes (A1.4), worked out beforehand. Absent means none known. */
+  changes?: (folder: string) => WorkstreamChanges | undefined;
   realpath?: (p: string) => string;
 }
 
@@ -149,15 +149,18 @@ export function getSymbolParser(): SymbolParser | null {
  * already confined `projectRoot` to an opened project. Idle ones are left
  * out unless asked for. `fresh` recomputes folders nothing watches rather
  * than reusing a recent answer.
+ *
+ * Git runs without blocking the server (`gitAsync`): a listing used to hold
+ * the backend's only thread for every call it made, and requests waited.
  */
-export function listWorkstreams(projectRoot: string, opts: { includeIdle?: boolean; fresh?: boolean } = {}): Workstream[] {
+export async function listWorkstreams(projectRoot: string, opts: { includeIdle?: boolean; fresh?: boolean } = {}): Promise<Workstream[]> {
   let claudeSessions: readonly ClaudeLogSession[] = [];
   try {
     claudeSessions = claudeSource();
   } catch { /* the watcher is optional; MCP sessions still place agents */ }
   // A folder that is not a git repository still has agents working in it:
   // it is one working tree, with no branch.
-  const listed = listWorktrees(projectRoot);
+  const listed = await listWorktreesAsync(projectRoot);
   const worktrees: Worktree[] = listed.length
     ? listed
     : [{ path: projectRoot, branch: null, head: null, isMain: true, isCurrent: true, bare: false, prunable: false }];
@@ -167,16 +170,22 @@ export function listWorkstreams(projectRoot: string, opts: { includeIdle?: boole
   const mainRef = main?.branch ?? main?.head ?? null;
   // Clones the person included (A1.7c), or opened: same repository, another
   // folder. Treated like a worktree from here on.
-  const clones = listed.length ? cloneTrees(projectRoot, worktrees) : [];
+  const clones = listed.length ? await cloneTrees(projectRoot, worktrees) : [];
   const cloneRoots = new Set(clones.map((c) => c.path));
+  const trees = [...worktrees, ...clones];
+  // Each tree's changes first, one tree after another, then the pure derivation.
+  const changesOf = new Map<string, WorkstreamChanges>();
+  for (const w of trees) {
+    if (w.bare || w.prunable || changesOf.has(w.path)) continue;
+    const changes = await getChanges(w.path, mainRef, { fresh: opts.fresh });
+    changesOf.set(w.path, symbolParser ? await withSymbolChanges(w.path, changes, symbolParser) : changes);
+  }
   const derived = deriveWorkstreams({
-    worktrees: [...worktrees, ...clones],
+    worktrees: trees,
+    // Sessions read after the awaits above, so an agent that connected meanwhile is placed.
     mcpSessions: getActiveSessions(),
     claudeSessions,
-    changes: (folder) => {
-      const changes = getChanges(folder, mainRef, { fresh: opts.fresh });
-      return symbolParser ? withSymbolChanges(folder, changes, symbolParser) : changes;
-    },
+    changes: (folder) => changesOf.get(folder),
   });
   const all = derived.map((w) => (cloneRoots.has(w.root) ? { ...w, shape: 'clone' as const } : w));
   // This listing is the discovery pass: watch what is active, and stop
@@ -188,8 +197,8 @@ export function listWorkstreams(projectRoot: string, opts: { includeIdle?: boole
 
   // Branches with no checkout here (A1.7a): committed work, no folder, no
   // agent on this machine. Read from local refs only, never fetched.
-  const branches = main && listed.length ? branchWorkstreams(main.path, main.branch, mainRef, worktrees, projectRoot) : [];
-  if (main && listed.length) watchRefs(main.path);
+  const branches = main && listed.length ? await branchWorkstreams(main.path, main.branch, mainRef, worktrees, projectRoot) : [];
+  if (main && listed.length) void watchRefs(main.path).catch(() => {});
   const withBranches = withIntents([...all, ...branches]);
   return opts.includeIdle ? withBranches : withBranches.filter((w) => !w.idle);
 }
@@ -204,15 +213,14 @@ export function listWorkstreams(projectRoot: string, opts: { includeIdle?: boole
  * connected and edited was watched by nobody, and the agent beside it was not
  * told of an overlap until something happened to list them.
  */
-export function discoverAround(folder: string): void {
+export async function discoverAround(folder: string): Promise<void> {
   // Already watched (the opened project, or a folder an earlier pass found):
-  // nothing to start. Most connections are this, and a pass is git calls on
-  // the backend's one thread.
+  // nothing to start. Most connections are this, and a pass is many git calls.
   if (isWatchedFolder(folder)) return;
   for (const root of listTrustedRoots()) {
     try {
-      if (root !== folder && !listWorktrees(root).some((w) => w.path === folder)) continue;
-      listWorkstreams(root, { includeIdle: true });
+      if (root !== folder && !(await listWorktreesAsync(root)).some((w) => w.path === folder)) continue;
+      await listWorkstreams(root, { includeIdle: true });
     } catch { /* discovery is best-effort; a connection never waits on it */ }
   }
 }
@@ -224,13 +232,13 @@ export function discoverAround(folder: string): void {
  * watchers and places no agents, so a picker asking does not become the
  * discovery pass.
  */
-export function workstreamBranches(projectRoot: string): string[] {
-  const worktrees = listWorktrees(projectRoot);
+export async function workstreamBranches(projectRoot: string): Promise<string[]> {
+  const worktrees = await listWorktreesAsync(projectRoot);
   const main = worktrees.find((w) => w.isMain);
   if (!main) return [];
   const mainRef = main.branch ?? main.head ?? null;
   const out = worktrees.filter((w) => !w.isMain && w.branch).map((w) => w.branch as string);
-  for (const b of branchWorkstreams(main.path, main.branch, mainRef, worktrees, projectRoot)) {
+  for (const b of await branchWorkstreams(main.path, main.branch, mainRef, worktrees, projectRoot)) {
     if (!b.idle && b.branch && !out.includes(b.branch)) out.push(b.branch);
   }
   return out;
@@ -248,7 +256,7 @@ function withIntents(all: Workstream[]): Workstream[] {
   });
 }
 
-function branchWorkstreams(repo: string, mainBranch: string | null, mainRef: string | null, worktrees: readonly Worktree[], projectRoot: string): Workstream[] {
+async function branchWorkstreams(repo: string, mainBranch: string | null, mainRef: string | null, worktrees: readonly Worktree[], projectRoot: string): Promise<Workstream[]> {
   let windowDays: number;
   try {
     windowDays = getEffectiveSensorConfig(projectRoot).awareness.branchWindowDays;
@@ -256,19 +264,23 @@ function branchWorkstreams(repo: string, mainBranch: string | null, mainRef: str
     windowDays = 7;
   }
   const checkedOut = new Set(worktrees.map((w) => w.branch).filter((b): b is string => !!b));
-  return branchWorkstreamsOf(repo, { mainBranch, mainRef, checkedOut, windowDays }).map((b) => ({
-    root: `branch:${b.short}`,
-    ref: b.ref,
-    branch: b.short,
-    head: b.head,
-    main: false,
-    shape: 'branch' as const,
-    agents: [],
-    changes: symbolParser
-      ? withSymbolChanges(repo, b.changes, symbolParser, { head: b.head, read: (rel) => showAt(repo, b.head, rel) })
-      : b.changes,
-    idle: b.changes.files.length === 0,
-  }));
+  const out: Workstream[] = [];
+  for (const b of await branchWorkstreamsOf(repo, { mainBranch, mainRef, checkedOut, windowDays })) {
+    out.push({
+      root: `branch:${b.short}`,
+      ref: b.ref,
+      branch: b.short,
+      head: b.head,
+      main: false,
+      shape: 'branch' as const,
+      agents: [],
+      changes: symbolParser
+        ? await withSymbolChanges(repo, b.changes, symbolParser, { head: b.head, read: (rel) => showAtAsync(repo, b.head, rel) })
+        : b.changes,
+      idle: b.changes.files.length === 0,
+    });
+  }
+  return out;
 }
 
 const canonicalPath = (p: string): string => {
@@ -286,7 +298,7 @@ const canonicalPath = (p: string): string => {
  * opened — no git runs in a folder to decide it. A project with no origin has
  * no clones by this rule.
  */
-function cloneTrees(projectRoot: string, worktrees: readonly Worktree[]): Worktree[] {
+async function cloneTrees(projectRoot: string, worktrees: readonly Worktree[]): Promise<Worktree[]> {
   const origin = getRecentProject(projectRoot)?.originUrl ?? null;
   if (!origin) return [];
   const own = new Set(worktrees.map((w) => canonicalPath(w.path)));
@@ -295,7 +307,7 @@ function cloneTrees(projectRoot: string, worktrees: readonly Worktree[]): Worktr
   for (const root of listTrustedRoots()) {
     if (own.has(canonicalPath(root))) continue;
     if (getRecentProject(root)?.originUrl !== origin) continue;
-    const self = listWorktrees(root).find((w) => w.isMain);
+    const self = (await listWorktreesAsync(root)).find((w) => w.isMain);
     out.push({ path: root, branch: self?.branch ?? null, head: self?.head ?? null, isMain: false, isCurrent: false, bare: false, prunable: false });
   }
   return out;

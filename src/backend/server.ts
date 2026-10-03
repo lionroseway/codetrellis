@@ -61,9 +61,9 @@ import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-wa
 import { listWorkstreams, setClaudeSessionSource, setSymbolParser, getSymbolParser } from './services/workstream-service';
 import { resolveSection, cleanBranch, workstreamOfBranch, whereWorked, worktreeDirFor, usableBase } from './services/section-workstreams';
 import { suggestSectionBranch } from '../shared/lib/branch-name';
-import { setWorkstreamChangesListener, setRefsChangedListener } from './services/workstream-watch-service';
+import { setWorkstreamChangesListener, setRefsChangedListener, setWorkstreamWatchStartedListener } from './services/workstream-watch-service';
 import { setBranchWorkstreamsWarmedListener } from './services/branch-workstreams';
-import { refreshSignals, listSignals, setAwarenessListener, setSignalState } from './services/awareness-service';
+import { refreshSignals, refreshSignalsSoon, listSignals, setAwarenessListener, setSignalState } from './services/awareness-service';
 import { withTold, setNoticeListener } from './services/awareness-notices';
 import { recordReply, withReplies, cleanReply, setReplyReadListener, MAX_REPLY } from './services/awareness-replies';
 import { listFolderRequests, takeFolderRequest, dismissFolderRequest, rememberDismissal, setFolderRequestsListener } from './services/folder-requests';
@@ -76,7 +76,7 @@ import { startAutoSave, saveNow } from './services/persistence';
 import { exportDatabase } from './services/database';
 import * as planService from './services/plan-service';
 import * as budgetService from './services/budget-service';
-import { compareSnapshots, listComparands, readFileAt } from './services/snapshot-compare-service';
+import { compareSnapshots, comparandBranches, listComparands, readFileAt } from './services/snapshot-compare-service';
 import { sourceControl, projectPrefix } from './services/source-control';
 import { diffCommand, filesBetween, listRefs, sideLabel, worktreesForCompare } from './services/git-refs';
 import { fetchRemotes, listBranches, startRemoteKeeper } from './services/git-branches';
@@ -717,6 +717,9 @@ setWorkstreamChangesListener((folder, changes) => {
   broadcast('workstreams-changed', { root: folder, changedFiles: changes.files.length });
   scheduleSignalRefresh();
 });
+// A line of work newly watched (an agent connected, or a listing found it):
+// its work so far is taken in, even with nothing changing after.
+setWorkstreamWatchStartedListener(() => scheduleSignalRefresh());
 
 // A branch moved (A1.7a): a branch workstream's footprint follows its ref.
 setRefsChangedListener((repo) => {
@@ -744,9 +747,7 @@ function scheduleSignalRefresh(): void {
   signalTimer = setTimeout(() => {
     signalTimer = null;
     const root = getActiveProjectPath();
-    if (root) {
-      try { refreshSignals(root); } catch (err) { console.warn('[Awareness] refresh failed:', err); }
-    }
+    if (root) refreshSignals(root).catch((err) => console.warn('[Awareness] refresh failed:', err));
   }, 500);
 }
 
@@ -861,10 +862,18 @@ app.get('/api/replay/state', (req, res) => {
   res.json(stateAt(projectRoot, raw ? Number(raw) : Date.now(), holds));
 });
 
-app.get('/api/awareness', (req, res) => {
+// Answered from what is stored, at once: the window asks on every awareness
+// change. Signals follow the watchers and the writes that move them, each of
+// which refreshes them; this starts one more only if none is running, and the
+// window hears `awareness-changed` if it moves anything. `fresh=1` waits for
+// a refresh first, for a caller that has just changed something and must see
+// it (an agent's get_awareness does the same). Neither holds other requests:
+// git runs without blocking.
+app.get('/api/awareness', async (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
-  refreshSignals(projectRoot);
+  if (req.query.fresh === '1') await refreshSignals(projectRoot);
+  else refreshSignalsSoon(projectRoot);
   // With the agents told about each and what they said (A2.6).
   res.json({ signals: withReplies(withTold(listSignals(projectRoot))) });
 });
@@ -900,10 +909,10 @@ app.post('/api/awareness/:id/reply', (req, res) => {
   res.status(201).json(reply);
 });
 
-app.get('/api/workstreams', (req, res) => {
+app.get('/api/workstreams', async (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
-  res.json(listWorkstreams(projectRoot, { includeIdle: req.query.idle === '1' }));
+  res.json(await listWorkstreams(projectRoot, { includeIdle: req.query.idle === '1' }));
 });
 
 // Tasks worked as workstreams (Phase 32 A6.1): a session bound to a task by
@@ -918,13 +927,13 @@ app.get('/api/workstreams/tasks', (req, res) => {
 // root: ◆ marks on its Timeline lane (Phase 32 B2.2). The project must be
 // open; the folders and refs are the ones listWorkstreams found, never
 // anything from the request.
-app.get('/api/workstreams/commits', (req, res) => {
+app.get('/api/workstreams/commits', async (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   const now = Date.now();
   const asked = typeof req.query.since === 'string' && /^\d+$/.test(req.query.since) ? Number(req.query.since) : now - 2 * 60 * 60 * 1000;
   const since = Math.min(now, Math.max(now - 24 * 60 * 60 * 1000, asked));
-  res.json({ since, commits: commitsByWorkstream(listWorkstreams(projectRoot, { includeIdle: true }), since) });
+  res.json({ since, commits: commitsByWorkstream(await listWorkstreams(projectRoot, { includeIdle: true }), since) });
 });
 
 // One file's changed lines in each workstream (Phase 32 B3.1): hunks against
@@ -932,7 +941,7 @@ app.get('/api/workstreams/commits', (req, res) => {
 // `workstream` picks one by id or branch among those listWorkstreams found,
 // never a folder from the request; without it, every workstream changing the
 // file. The copy is read through confined-fs with its folder as the root.
-app.get('/api/workstreams/changes', (req, res) => {
+app.get('/api/workstreams/changes', async (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   const rel = cleanRelPath(req.query.path);
@@ -940,7 +949,7 @@ app.get('/api/workstreams/changes', (req, res) => {
   const named = typeof req.query.workstream === 'string' && req.query.workstream ? req.query.workstream : null;
   // The watched listing, not a fresh one: the code view asks on every file
   // it opens and on every awareness change, and the watchers keep it current.
-  const workstreams = listWorkstreams(projectRoot, { includeIdle: true });
+  const workstreams = await listWorkstreams(projectRoot, { includeIdle: true });
   if (named && !workstreams.some((w) => w.root === named || w.branch === named)) {
     res.status(404).json({ error: `No workstream ${named} in this project.` });
     return;
@@ -2709,7 +2718,7 @@ app.get('/api/rules', (req, res) => {
   res.json({ rules: rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)) });
 });
 
-app.put('/api/rules/:id', (req, res) => {
+app.put('/api/rules/:id', async (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   if (!mayGrant(req)) { res.status(403).json({ error: `Only you can set an architecture rule — in the CodeTrellis app, ${RULES_WHERE}.` }); return; }
@@ -2721,7 +2730,7 @@ app.put('/api/rules/:id', (req, res) => {
     const person = personFrom(req);
     recordDecision('rule_changed', { projectRoot, ruleId: rule.id, change: 'set', from: rule.from, mayNotImport: rule.mayNotImport, except: rule.except, because: rule.because, author: person.author, authorType: person.authorType }, person.authorType);
     // A7.2 — work in flight is checked against the new rule at once.
-    try { refreshSignals(projectRoot); } catch (err) { console.warn('[Awareness] refresh failed:', err); }
+    await refreshSignals(projectRoot).catch((err) => console.warn('[Awareness] refresh failed:', err));
     res.json({ rule, view: rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)).find((v) => v.rule.id === rule.id) });
   } catch (err) {
     if (err instanceof RuleError) { res.status(err.status).json({ error: err.message }); return; }
@@ -2729,7 +2738,7 @@ app.put('/api/rules/:id', (req, res) => {
   }
 });
 
-app.delete('/api/rules/:id', (req, res) => {
+app.delete('/api/rules/:id', async (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   if (!mayGrant(req)) { res.status(403).json({ error: `Only you can stop an architecture rule — in the CodeTrellis app, ${RULES_WHERE}.` }); return; }
@@ -2738,7 +2747,7 @@ app.delete('/api/rules/:id', (req, res) => {
     broadcast('rules-changed', { project: projectRoot });
     const person = personFrom(req);
     recordDecision('rule_changed', { projectRoot, ruleId: req.params.id, change: 'stopped', author: person.author, authorType: person.authorType }, person.authorType);
-    try { refreshSignals(projectRoot); } catch (err) { console.warn('[Awareness] refresh failed:', err); }
+    await refreshSignals(projectRoot).catch((err) => console.warn('[Awareness] refresh failed:', err));
     res.json({ removed: req.params.id });
   } catch (err) {
     if (err instanceof RuleError) { res.status(err.status).json({ error: err.message }); return; }
@@ -2994,12 +3003,12 @@ app.post('/api/spec-proposals/:uid/decision', (req, res) => {
   res.json({ proposal, flagged: flagged.map((t) => ({ itemUid: t.itemUid, title: t.title, planTitle: t.planTitle })) });
 });
 
-app.get('/api/items/:uid/workstream', (req, res) => {
+app.get('/api/items/:uid/workstream', async (req, res) => {
   const item = planItemService.getItem(req.params.uid);
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
   const root = getActiveProjectPath();
-  let workstreams: ReturnType<typeof listWorkstreams> = [];
-  try { workstreams = root ? listWorkstreams(root, { includeIdle: true }) : []; } catch { /* no git */ }
+  let workstreams: Awaited<ReturnType<typeof listWorkstreams>> = [];
+  try { workstreams = root ? await listWorkstreams(root, { includeIdle: true }) : []; } catch { /* no git */ }
   const section = resolveSection(item, planItemService.getItem);
   res.json({
     own: item.workstream ?? null,
@@ -3014,15 +3023,15 @@ app.get('/api/items/:uid/workstream', (req, res) => {
  * The branch must be a workstream CodeTrellis knows; the root is never the
  * request's. The author is how the call arrived.
  */
-app.put('/api/items/:uid/workstream', (req, res) => {
+app.put('/api/items/:uid/workstream', async (req, res) => {
   const item = planItemService.getItem(req.params.uid);
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
   const raw = req.body?.workstream;
   let branch: string | null = null;
   if (raw !== null) {
     const root = getActiveProjectPath();
-    let workstreams: ReturnType<typeof listWorkstreams> = [];
-    try { workstreams = root ? listWorkstreams(root, { includeIdle: true }) : []; } catch { /* no git */ }
+    let workstreams: Awaited<ReturnType<typeof listWorkstreams>> = [];
+    try { workstreams = root ? await listWorkstreams(root, { includeIdle: true }) : []; } catch { /* no git */ }
     branch = cleanBranch(raw);
     if (!branch || !workstreamOfBranch(branch, workstreams)) {
       res.status(400).json({ error: 'workstream must be the branch of a known workstream, or null' });
@@ -4221,7 +4230,7 @@ app.get('/api/playback', (req, res) => {
 // falling back to the live file, which would diff a file against itself
 // and render as "no changes" — a confident wrong answer where the honest
 // one is "cannot".
-app.get('/api/file/at', (req, res) => {
+app.get('/api/file/at', async (req, res) => {
   const projectPath = optionalProjectRoot(req, res);
   if (projectPath === null) return;
   const relativePath = req.query.path as string;
@@ -4250,7 +4259,7 @@ app.get('/api/file/at', (req, res) => {
     // project's repository has, read inside that workstream's own folder.
     if (at.startsWith('workstream:')) {
       // Its paths are from its repository's top: a project in a subfolder adds where it sits (E1).
-      const copy = readWorkstreamCopy(listWorkstreams(owningRoot, { includeIdle: true }), at.slice('workstream:'.length), `${projectPrefix(projectPath)}${relativePath}`);
+      const copy = readWorkstreamCopy(await listWorkstreams(owningRoot, { includeIdle: true }), at.slice('workstream:'.length), `${projectPrefix(projectPath)}${relativePath}`);
       if (!copy) { res.status(404).json({ error: `No workstream ${at.slice('workstream:'.length)} in this project.` }); return; }
       res.json({ ok: true, content: copy.content, label: copy.label });
       return;
@@ -4327,14 +4336,14 @@ app.get('/api/file/overlay', (req, res) => {
 // editor's source control tab lists it: staged, unstaged, untracked,
 // committed since the graph's baseline, and each other worktree or branch,
 // each group with the two points its files are diffed between. No plan.
-app.get('/api/source-control', (req, res) => {
+app.get('/api/source-control', async (req, res) => {
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
   const trimRoot = (p: string) => p.replace(/[\\/]+$/, '');
   const baseline = getBaseline();
   const baselineCommit = baseline && baseline.projectPath && trimRoot(baseline.projectPath) === trimRoot(projectPath) ? baseline.commitHash ?? null : null;
-  let workstreams: ReturnType<typeof listWorkstreams> = [];
-  try { workstreams = listWorkstreams(projectPath, { includeIdle: false }); } catch { /* not a repository: the service says so */ }
+  let workstreams: Awaited<ReturnType<typeof listWorkstreams>> = [];
+  try { workstreams = await listWorkstreams(projectPath, { includeIdle: false }); } catch { /* not a repository: the service says so */ }
   res.json(sourceControl(projectPath, baselineCommit, workstreams));
 });
 
@@ -4343,11 +4352,11 @@ app.get('/api/source-control', (req, res) => {
 // differ between any two, each side said plainly and the command git would
 // use. A worktree is named by the id `listWorkstreams` gave it; refs are
 // checked before they reach git.
-app.get('/api/git/refs', (req, res) => {
+app.get('/api/git/refs', async (req, res) => {
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
-  let workstreams: ReturnType<typeof listWorkstreams> = [];
-  try { workstreams = listWorkstreams(projectPath, { includeIdle: true }); } catch { /* not a repository: the listing says so */ }
+  let workstreams: Awaited<ReturnType<typeof listWorkstreams>> = [];
+  try { workstreams = await listWorkstreams(projectPath, { includeIdle: true }); } catch { /* not a repository: the listing says so */ }
   res.json(listRefs(projectPath, workstreams));
 });
 
@@ -4447,10 +4456,10 @@ app.get('/api/record/decisions', (req, res) => {
   });
 });
 
-app.get('/api/comparands', (req, res) => {
+app.get('/api/comparands', async (req, res) => {
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
-  res.json(listComparands(projectPath));
+  res.json(listComparands(projectPath, undefined, await comparandBranches(projectPath)));
 });
 
 app.get('/api/compare', (req, res) => {
@@ -6388,7 +6397,7 @@ export async function initializeBackend(): Promise<void> {
   });
   // C3.2: people setting a task two ways at once is a signal; it starts and
   // ends with the records, so the project's signals are refreshed then.
-  setSplitChangedListener((projectRoot) => { refreshSignals(projectRoot); });
+  setSplitChangedListener((projectRoot) => { refreshSignals(projectRoot).catch((err) => console.warn('[Awareness] refresh failed:', err)); });
   // D1.5a: a teammate's test run arrived (or was forgotten): grounding is asked again.
   setRunsChangedListener((projectRoot) => { broadcast('tests-reported', { project: projectRoot }); });
   planItemService.setStatusChangeListener(({ planUid, itemUid }) => {

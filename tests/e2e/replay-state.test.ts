@@ -44,7 +44,7 @@ test.describe.serial('The state at a moment', () => {
   const raw = (method: string, url: string, body?: unknown) => h.client.raw(method, url, body);
   const json = async <T>(method: string, url: string, body?: unknown) => (await (await raw(method, url, body)).json()) as T;
   const stateAt = (at: number) => json<StateAt>('GET', `/api/replay/state?project=${encodeURIComponent(root)}&at=${at}`);
-  const openSignals = async () => (await json<{ signals: Array<{ id: string; kind: string }> }>('GET', `/api/awareness?project=${encodeURIComponent(root)}`)).signals;
+  const openSignals = async () => (await json<{ signals: Array<{ id: string; kind: string }> }>('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(root)}`)).signals;
   const edit = (dir: string, from: string, to: string) => {
     const f = path.join(dir, REL);
     fs.writeFileSync(f, fs.readFileSync(f, 'utf-8').replace(from, to));

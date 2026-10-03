@@ -169,6 +169,18 @@ notes are stored separately (`awareness_signal_notes`). It broadcasts
 `awareness-changed`. The server refreshes signals 500 ms after a watcher
 event, for the active project.
 
+**Nothing here holds the backend.** Every git call on the refresh path goes
+through `gitAsync` (`git-env.ts`): `execFile` without waiting, at most
+`GIT_CONCURRENCY` (4) processes at once, so a refresh costs the same git
+work as before and other requests are answered while it runs. Parsing stays
+in the backend's thread and lets requests in after each file it parses.
+`refreshSignals` runs one refresh per project at a time (`coalesce.ts`): a
+call while one runs waits for one more after it, shared by every call in
+that window, because it may have changed something the running one already
+read. Watched folders recompute the same way, one at a time each.
+`GET /api/awareness` answers from what is stored and starts a refresh only
+if none is running; `?fresh=1` waits for one first, as `get_awareness` does.
+
 ## Telling people and agents
 
 - **The digest** (`src/shared/lib/awareness-digest.ts`, A3.1) is pure. It

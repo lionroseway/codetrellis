@@ -33,7 +33,7 @@ export interface StaleDoc { uid: string; title: string; slug: string; verifiedAt
 export interface RuleImport { path: string; imports: string; rule: string; words: string; because: string }
 
 /** The imports these changed files add across the rules, or null when they could not be read (injected). */
-export type RuleChecker = (files: readonly string[]) => RuleImport[] | null;
+export type RuleChecker = (files: readonly string[]) => RuleImport[] | null | Promise<RuleImport[] | null>;
 
 export interface Conformity {
   ok: boolean;
@@ -90,7 +90,7 @@ export async function checkChanges(root: string, changed: readonly string[], che
   }
 
   // The team's architecture rules (A7.3): one line per import, with the rule's reason.
-  const found = files.length && checkRules ? checkRules(files) : [];
+  const found = files.length && checkRules ? await checkRules(files) : [];
   const rules = found ?? [];
   for (const r of rules) says.push(`✗ ${r.path} now imports ${r.imports}, which the rule “${r.words}” forbids${r.because ? `: ${r.because}` : ''}`);
 

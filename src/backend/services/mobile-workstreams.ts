@@ -75,11 +75,11 @@ export async function handleWorkstreamMethod(
 ): Promise<unknown> {
   switch (method) {
     case 'workstreams.list':
-      return { projectRoot: ctx.projectRoot, workstreams: phoneWorkstreams(ctx.projectRoot), tasks: phoneTaskWorkstreams(ctx.projectRoot) };
+      return { projectRoot: ctx.projectRoot, workstreams: await phoneWorkstreams(ctx.projectRoot), tasks: phoneTaskWorkstreams(ctx.projectRoot) };
     case 'workstreams.detail': {
       const id = params.id;
       if (typeof id !== 'string' || !id) throw new Error('id is required');
-      return { workstream: phoneWorkstream(ctx.projectRoot, id) };
+      return { workstream: await phoneWorkstream(ctx.projectRoot, id) };
     }
     default:
       throw new Error(`Unknown workstream method: ${method}`);
@@ -87,9 +87,9 @@ export async function handleWorkstreamMethod(
 }
 
 /** The project's lines of work, as the strip shows them: idle ones left out. */
-export function phoneWorkstreams(projectRoot: string | null): PhoneWorkstream[] {
+export async function phoneWorkstreams(projectRoot: string | null): Promise<PhoneWorkstream[]> {
   if (!projectRoot) return [];
-  return listWorkstreams(projectRoot).map((w) => toPhone(projectRoot, w));
+  return (await listWorkstreams(projectRoot)).map((w) => toPhone(projectRoot, w));
 }
 
 /** A task worked as a workstream (A6.1), as the phone lists it. */
@@ -123,9 +123,9 @@ export function phoneTaskWorkstreams(projectRoot: string | null): PhoneTaskWorks
 }
 
 /** One workstream, with its changed files and recent turns. */
-export function phoneWorkstream(projectRoot: string | null, id: string): PhoneWorkstreamDetail {
+export async function phoneWorkstream(projectRoot: string | null, id: string): Promise<PhoneWorkstreamDetail> {
   if (!projectRoot) throw new Error('No project is open on the desktop');
-  const w = listWorkstreams(projectRoot, { includeIdle: true }).find((x) => x.root === id);
+  const w = (await listWorkstreams(projectRoot, { includeIdle: true })).find((x) => x.root === id);
   if (!w) throw new Error('No such workstream in this project');
   return {
     ...toPhone(projectRoot, w),

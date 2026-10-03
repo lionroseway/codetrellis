@@ -90,7 +90,7 @@ export async function handleAwarenessMethod(
     case 'awareness.needsYou':
       return phoneNeedsYou(ctx.projectRoot);
     case 'awareness.signal':
-      return { signal: phoneSignal(ctx.projectRoot, idOf(params)) };
+      return { signal: await phoneSignal(ctx.projectRoot, idOf(params)) };
     case 'awareness.answer':
       return answer(params, peer, ctx);
     case 'awareness.reply':
@@ -103,12 +103,12 @@ export async function handleAwarenessMethod(
 const RANK = { high: 0, medium: 1, low: 2 } as const;
 
 /** What needs the person, in the digest's words, and the signals to open. */
-export function phoneNeedsYou(projectRoot: string | null): PhoneNeedsYou {
+export async function phoneNeedsYou(projectRoot: string | null): Promise<PhoneNeedsYou> {
   const empty: PhoneNeedsYou = { projectRoot, digest: { needsYou: 0, low: 0, moreLines: 0, lines: [] }, signals: [] };
   if (!projectRoot) return empty;
   // The stored signals, as the snapshot's count reads them: the folder and ref
   // watchers keep them current (scheduleSignalRefresh), window open or not.
-  const workstreams = workstreamsOf(projectRoot);
+  const workstreams = await workstreamsOf(projectRoot);
   const label = (root: string) => sideLabel(root, workstreams);
   const signals = withTold(listSignals(projectRoot));
   const d = buildDigest(signals, label);
@@ -128,11 +128,12 @@ export function phoneNeedsYou(projectRoot: string | null): PhoneNeedsYou {
 }
 
 /** One live signal of the opened project, in full. */
-export function phoneSignal(projectRoot: string | null, id: string): PhoneSignalDetail {
+export async function phoneSignal(projectRoot: string | null, id: string): Promise<PhoneSignalDetail> {
   if (!projectRoot) throw new Error('No project is open on the desktop');
+  // The labels first: the signal is read after, so it is as current as the answer.
+  const workstreams = await workstreamsOf(projectRoot);
   const s = withReplies(withTold(listSignals(projectRoot))).find((x) => x.id === id);
   if (!s) throw new Error('No such open signal in this project');
-  const workstreams = workstreamsOf(projectRoot);
   const label = (root: string) => sideLabel(root, workstreams);
   return {
     ...toPhoneSignal(s, label),
@@ -182,7 +183,7 @@ function confirmedDevice(peer: PeerContext, what: string) {
   return device;
 }
 
-function answer(params: Record<string, unknown>, peer: PeerContext, ctx: PhoneAwarenessContext): { signal: PhoneSignalDetail } {
+async function answer(params: Record<string, unknown>, peer: PeerContext, ctx: PhoneAwarenessContext): Promise<{ signal: PhoneSignalDetail }> {
   const id = idOf(params);
   const state = params.state as SettableSignalState;
   if (!(SETTABLE_SIGNAL_STATES as readonly unknown[]).includes(state)) throw new Error(`state must be one of ${SETTABLE_SIGNAL_STATES.join(', ')}`);
@@ -193,10 +194,10 @@ function answer(params: Record<string, unknown>, peer: PeerContext, ctx: PhoneAw
   recordPeerAudit({ kind: 'decision', fingerprint: peer.fingerprint, alias: device.alias, method: 'awareness.answer', detail: `${state} on signal ${id}` });
   // The window's tab and strip refresh on this, as for an answer given there.
   peer.broadcast?.('awareness-changed', { projectRoot: ctx.projectRoot });
-  return { signal: phoneSignal(ctx.projectRoot, id) };
+  return { signal: await phoneSignal(ctx.projectRoot, id) };
 }
 
-function reply(params: Record<string, unknown>, peer: PeerContext, ctx: PhoneAwarenessContext): { reply: SignalReply; steers: number; signal: PhoneSignalDetail } {
+async function reply(params: Record<string, unknown>, peer: PeerContext, ctx: PhoneAwarenessContext): Promise<{ reply: SignalReply; steers: number; signal: PhoneSignalDetail }> {
   const id = idOf(params);
   const message = cleanReply(params.message);
   if (!message) throw new Error(`message must be 1–${MAX_REPLY} characters`);
@@ -206,9 +207,9 @@ function reply(params: Record<string, unknown>, peer: PeerContext, ctx: PhoneAwa
   if (!sent) throw new Error('No such open signal in this project');
   recordPeerAudit({ kind: 'decision', fingerprint: peer.fingerprint, alias: device.alias, method: 'awareness.reply', detail: `reply on signal ${id}` });
   const { signalId: _s, steers, ...kept } = sent;
-  return { reply: kept, steers: steers.length, signal: phoneSignal(ctx.projectRoot, id) };
+  return { reply: kept, steers: steers.length, signal: await phoneSignal(ctx.projectRoot, id) };
 }
 
-function workstreamsOf(projectRoot: string): Workstream[] {
-  try { return listWorkstreams(projectRoot, { includeIdle: true }); } catch { return []; }
+async function workstreamsOf(projectRoot: string): Promise<Workstream[]> {
+  try { return await listWorkstreams(projectRoot, { includeIdle: true }); } catch { return []; }
 }

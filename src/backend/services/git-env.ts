@@ -20,7 +20,7 @@
  * the lock.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 
 export function quietGitLocks(env: NodeJS.ProcessEnv = process.env): void {
   if (env.GIT_OPTIONAL_LOCKS === undefined) env.GIT_OPTIONAL_LOCKS = '0';
@@ -47,4 +47,68 @@ export function refreshIndexOccasionally(folder: string, now = Date.now()): bool
     });
   } catch { /* changed files, a busy lock, or not a checkout: nothing to do */ }
   return true;
+}
+
+/** The same, without blocking the server. */
+export async function refreshIndexOccasionallyAsync(folder: string, now = Date.now()): Promise<boolean> {
+  if (now - (refreshedAt.get(folder) ?? -Infinity) < REFRESH_EVERY_MS) return false;
+  refreshedAt.set(folder, now);
+  // Exits 1 when files differ from the index; the refresh is still written.
+  await gitAsync(folder, ['update-index', '-q', '--refresh'], { timeout: 30_000, env: { ...process.env, GIT_OPTIONAL_LOCKS: '1' } })
+    .catch(() => { /* changed files, a busy lock, or not a checkout: nothing to do */ });
+  return true;
+}
+
+// ── Git without blocking ─────────────────────────────────────────────────
+
+/**
+ * At most this many git processes run at once for `gitAsync`. Awareness used
+ * to run git with `execFileSync`, one call after another on the backend's only
+ * thread, and every request waited behind it. Run without waiting, a refresh,
+ * a watcher's recompute and a listing could each start their own, so the
+ * number running together is capped: the same git work as before, never
+ * spread over more cores than this.
+ */
+export const GIT_CONCURRENCY = 4;
+let running = 0;
+const queued: Array<() => void> = [];
+
+function release(): void {
+  running -= 1;
+  queued.shift()?.();
+}
+
+async function slot(): Promise<void> {
+  if (running < GIT_CONCURRENCY) { running += 1; return; }
+  await new Promise<void>((resolve) => queued.push(() => { running += 1; resolve(); }));
+}
+
+/** How many git processes `gitAsync` has running and waiting (tests). */
+export function gitAsyncLoad(): { running: number; queued: number } {
+  return { running, queued: queued.length };
+}
+
+/**
+ * `git -C <cwd> <args>`, its stdout as text, without blocking the server.
+ * `execFile`, no shell; stdin is closed and stderr is not returned. Rejects
+ * when git exits non-zero, times out, or prints more than `maxBuffer`.
+ */
+export async function gitAsync(
+  cwd: string,
+  args: readonly string[],
+  opts: { timeout?: number; maxBuffer?: number; env?: NodeJS.ProcessEnv } = {},
+): Promise<string> {
+  await slot();
+  try {
+    return await new Promise<string>((resolve, reject) => {
+      execFile('git', ['-C', cwd, ...args], {
+        encoding: 'utf-8',
+        timeout: opts.timeout ?? 5000,
+        maxBuffer: opts.maxBuffer ?? 16 * 1024 * 1024,
+        ...(opts.env ? { env: opts.env } : {}),
+      }, (err, out) => (err ? reject(err) : resolve(out))).stdin?.end();
+    });
+  } finally {
+    release();
+  }
 }

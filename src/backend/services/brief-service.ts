@@ -213,9 +213,9 @@ export async function getBrief(itemUid: string, opts: { workstreamRoot?: string 
     // What git proves about the task's branch (C2.1), when it is worked on one.
     git_state: taskGitState(item.planUid, item.uid),
     // What other tasks' work did to this one, from this task's side (A6.4).
-    affected_by_other_work: affectedByOtherWork(item.uid, plan?.projectPath ?? null, { refresh: opts.refreshSignals }),
+    affected_by_other_work: await affectedByOtherWork(item.uid, plan?.projectPath ?? null, { refresh: opts.refreshSignals }),
     ...skillsBlock(item, plan?.projectPath ?? null, opts.workstreamRoot ?? null),
-    ...worktreeBlock(item, plan?.projectPath ?? null, opts.workstreamRoot ?? null),
+    ...(await worktreeBlock(item, plan?.projectPath ?? null, opts.workstreamRoot ?? null)),
     how_to_work: HOW_TO_WORK,
     about_materials: ABOUT_MATERIALS,
   };
@@ -233,11 +233,11 @@ async function groundingForBrief(itemUid: string) {
  * worktree, and whether that is the asking agent's own. Nothing when no
  * section above it names one.
  */
-export function worktreeBlock(item: PlanItem, projectRoot: string | null, workstreamRoot: string | null) {
+export async function worktreeBlock(item: PlanItem, projectRoot: string | null, workstreamRoot: string | null) {
   const section = resolveSection(item, getItem);
   if (!section) return {};
-  let workstreams: ReturnType<typeof listWorkstreams> = [];
-  try { workstreams = projectRoot ? listWorkstreams(projectRoot, { includeIdle: true }) : []; } catch { /* no git */ }
+  let workstreams: Awaited<ReturnType<typeof listWorkstreams>> = [];
+  try { workstreams = projectRoot ? await listWorkstreams(projectRoot, { includeIdle: true }) : []; } catch { /* no git */ }
   const yours = branchOfRoot(workstreamRoot, workstreams) === section.branch;
   return {
     worktree: {

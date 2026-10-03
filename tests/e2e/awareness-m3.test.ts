@@ -36,7 +36,7 @@ test.describe.serial('M3: distilled', () => {
   const canon = (p: string) => { try { return fs.realpathSync(p); } catch { return p; } };
 
   const signals = async () => {
-    const res = await h.client.raw('GET', `/api/awareness?project=${encodeURIComponent(root)}`);
+    const res = await h.client.raw('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(root)}`);
     return ((await res.json()) as { signals: AwarenessSignal[] }).signals;
   };
   const label = (r: string) => {

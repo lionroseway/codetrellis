@@ -28,7 +28,7 @@ test.describe.serial('Material signals', () => {
   const agents: Record<string, ScriptedAgent> = {};
 
   const post = async (url: string, body: unknown) => ((await (await h.client.raw('POST', url, body)).json()) as { uid: string }).uid;
-  const signals = async () => ((await (await h.client.raw('GET', `/api/awareness?project=${encodeURIComponent(root)}`)).json()) as { signals: Signal[] }).signals
+  const signals = async () => ((await (await h.client.raw('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(root)}`)).json()) as { signals: Signal[] }).signals
     .filter((s) => s.subject.material);
   const replace = (text: string) => fs.writeFileSync(path.join(root, 'data/sales.csv'), text);
   const readIt = async (who: 'report' | 'pack') => {

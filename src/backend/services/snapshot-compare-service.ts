@@ -340,6 +340,15 @@ export function resolveComparand(spec: string, projectPath: string): ResolvedCom
   return null;
 }
 
+/** The lines of work's branches for `listComparands`; none when git cannot say. */
+export async function comparandBranches(projectPath: string): Promise<string[]> {
+  try {
+    return await workstreamBranches(projectPath);
+  } catch {
+    return []; // not a git repository, or nothing to list
+  }
+}
+
 /** Everything a picker needs to offer. */
 export function listComparands(
   projectPath: string,
@@ -352,6 +361,12 @@ export function listComparands(
    * nothing said about the ceiling.
    */
   commitLimit: number = 20,
+  /**
+   * The lines of work's branches (`workstreamBranches`), for a picker. The
+   * caller asks for them, because finding them runs git without blocking
+   * and this list does not wait; playback and the review's default need none.
+   */
+  branches: readonly string[] = [],
 ): Array<{ spec: string; label: string; kind: string; timestamp?: number }> {
   const out: Array<{ spec: string; label: string; kind: string; timestamp?: number }> = [
     { spec: 'live', label: 'Live (working tree)', kind: 'live' },
@@ -375,13 +390,9 @@ export function listComparands(
 
   // The lines of work, each at its branch's latest commit (Phase 32 A5.1), so
   // a branch review is one pick rather than a sha to look up.
-  try {
-    for (const branch of workstreamBranches(projectPath)) {
-      if (!isSafeGitRef(branch)) continue;
-      out.push({ spec: `commit:${branch}`, label: `${branch} (line of work)`, kind: 'branch' });
-    }
-  } catch {
-    /* not a git repository, or nothing to list */
+  for (const branch of branches) {
+    if (!isSafeGitRef(branch)) continue;
+    out.push({ spec: `commit:${branch}`, label: `${branch} (line of work)`, kind: 'branch' });
   }
 
   // Recent commits, so the common case needs no typing.

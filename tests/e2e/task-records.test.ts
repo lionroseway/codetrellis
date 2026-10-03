@@ -62,7 +62,7 @@ test.describe.serial('Task state shared as records', () => {
     const res = await h.client.raw('PUT', `/api/items/${uid}`, body);
     expect(res.ok, await res.clone().text()).toBe(true);
   };
-  const signals = async (h: Harness, repo: string) => ((await (await h.client.raw('GET', `/api/awareness?project=${encodeURIComponent(repo)}`)).json()) as { signals: Signal[] }).signals;
+  const signals = async (h: Harness, repo: string) => ((await (await h.client.raw('GET', `/api/awareness?fresh=1&project=${encodeURIComponent(repo)}`)).json()) as { signals: Signal[] }).signals;
   const statusOf = async (h: Harness, uid: string) => ((await (await h.client.raw('GET', `/api/plans/${plan}/status`)).json()) as Status).items.find((i) => i.itemUid === uid)!;
   const recordsIn = (repo: string, itemUid: string) => {
     const dir = path.join(repo, '.codetrellis', 'records', plan, itemUid);

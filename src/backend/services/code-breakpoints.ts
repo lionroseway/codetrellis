@@ -286,7 +286,7 @@ export function breachText(hits: readonly BreakpointHit[]): string {
  * (only when there are any), breaches recorded, and each told once. Never
  * throws: a notice must not break the call it rides on.
  */
-export function breachNoticeFor(sessionId: string, projectRoot: string | null): string | null {
+export async function breachNoticeFor(sessionId: string, projectRoot: string | null): Promise<string | null> {
   if (!projectRoot) return null;
   try {
     const session = getActiveSessions().find((s) => s.sessionId === sessionId);
@@ -294,7 +294,7 @@ export function breachNoticeFor(sessionId: string, projectRoot: string | null): 
     if (!codeBreakpoints(projectRoot).length) return null;
     const canon = (p: string) => { try { return fs.realpathSync.native(p); } catch { return path.resolve(p); } };
     const mine = canon(session.workstreamRoot);
-    const w = listWorkstreams(projectRoot, { fresh: true }).find((x) => canon(x.root) === mine);
+    const w = (await listWorkstreams(projectRoot, { fresh: true })).find((x) => canon(x.root) === mine);
     const caller = { agent: session.agentType ?? 'mcp-agent', sessionId, workstreamRoot: session.workstreamRoot };
     if (w) recordBreaches(projectRoot, caller, w.changes.files);
     const hits = untoldBreaches(session.workstreamRoot, sessionId);

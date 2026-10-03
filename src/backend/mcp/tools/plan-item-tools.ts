@@ -642,7 +642,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       // Phase 32 C5.1 — a section worked in another worktree is not this agent's to claim.
       const target = deps.planItemService.getItem(args.uid);
       if (target) {
-        const { workstreams, callerBranch } = sectionContext(deps);
+        const { workstreams, callerBranch } = await sectionContext(deps);
         const refusal = claimRefusal(target, resolveSection(target, deps.planItemService.getItem), callerBranch, workstreams);
         if (refusal) {
           return { content: [{ type: 'text' as const, text: JSON.stringify({ ok: false, reason: 'worked_elsewhere', message: refusal }, null, 2) }] };
@@ -717,7 +717,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         ? undefined
         : (args.parent_uid === '' ? null : args.parent_uid);
       // Phase 32 C5.1 — only sections worked in this agent's worktree, or in none.
-      const { callerBranch } = sectionContext(deps);
+      const { callerBranch } = await sectionContext(deps);
       const sectionOf = (i: Parameters<typeof resolveSection>[0]) => resolveSection(i, deps.planItemService.getItem);
       const result = deps.planItemService.getNextItem(args.plan_uid, parentFilter, (i) => offeredTo(sectionOf(i), callerBranch));
       const elsewhere = elsewhereLine(
@@ -776,7 +776,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
     async ({ item_uid, workstream }, extra) => {
       const item = deps.planItemService.getItem(item_uid);
       if (!item) return { content: [{ type: 'text' as const, text: `Item ${item_uid} not found` }], isError: true };
-      const { workstreams } = sectionContext(deps);
+      const { workstreams } = await sectionContext(deps);
       let branch: string | null = null;
       if (workstream !== null) {
         branch = cleanBranch(workstream);
@@ -1863,10 +1863,10 @@ function criterionError(deps: ToolDeps, err: unknown) {
 }
 
 /** Phase 32 C5.1 — the project's workstreams, and the branch this agent works on. */
-function sectionContext(deps: ToolDeps) {
+async function sectionContext(deps: ToolDeps) {
   const root = deps.getActiveProjectPath();
-  let workstreams: ReturnType<typeof listWorkstreams> = [];
-  try { workstreams = root ? listWorkstreams(root, { includeIdle: true }) : []; } catch { /* no git: no workstreams */ }
+  let workstreams: Awaited<ReturnType<typeof listWorkstreams>> = [];
+  try { workstreams = root ? await listWorkstreams(root, { includeIdle: true }) : []; } catch { /* no git: no workstreams */ }
   const callerRoot = deps.sessionService.getActiveSessions().find((s) => s.sessionId === deps.sessionId)?.workstreamRoot ?? null;
   return { workstreams, callerBranch: branchOfRoot(callerRoot, workstreams) };
 }
