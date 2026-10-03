@@ -118,9 +118,21 @@ export function mergeBase(projectRoot: string, a: string, b: string): string | n
   }
 }
 
-/** A worktree among the project's, by the id `listWorkstreams` gave it. */
+/**
+ * A worktree among the project's, by the id `listWorkstreams` gave it.
+ *
+ * A folder is matched as the same folder, not the same string: git names
+ * worktrees by their realpath, and a project opened through a link (macOS's
+ * /var and /tmp are links) gave ids in the opened spelling, so line history
+ * and the comparison said "No such worktree" for one that was listed.
+ */
 export function findWorkstream(workstreams: readonly Workstream[], id: string): Workstream | null {
-  return workstreams.find((w) => w.root === id) ?? null;
+  const exact = workstreams.find((w) => w.root === id);
+  if (exact || !path.isAbsolute(id)) return exact ?? null;
+  const real = (p: string): string | null => { try { return fs.realpathSync.native(p); } catch { return null; } };
+  const target = real(id);
+  if (!target) return null;
+  return workstreams.find((w) => path.isAbsolute(w.root) && real(w.root) === target) ?? null;
 }
 
 /**

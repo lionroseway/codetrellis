@@ -127,3 +127,22 @@ test('not a git repository: said, not an error', () => {
   assert.equal(sc.git, false);
   assert.equal(sc.words, 'This folder is not a git repository, so there is nothing to compare it with.');
 });
+
+test('a project opened through a link: its own checkout, named canonically by git, is not other work', () => {
+  // git names worktrees by their realpath; the project arrives as it was
+  // opened. Through a link (macOS's /var and /tmp are links) the subfolder's
+  // own repository read as another worktree and listed its edit twice.
+  const dir = fs.realpathSync(repo({ 'packages/api/index.ts': 'export const a = 1;\n' }));
+  const link = `${dir}-link`;
+  fs.symlinkSync(dir, link, 'dir');
+  try {
+    const sub = path.join(link, 'packages', 'api');
+    fs.appendFileSync(path.join(sub, 'index.ts'), 'export const b = 2;\n');
+    const base = git(dir, 'rev-parse', 'HEAD');
+    const own = { root: dir, branch: 'main', head: base, main: true, shape: 'worktree', idle: false, agents: [], changes: { base, files: [{ path: 'packages/api/index.ts', status: 'modified' }], truncated: false } } as unknown as Workstream;
+    const sc = sourceControl(sub, null, [own]);
+    assert.deepEqual(sc.groups.map((g) => [g.kind, g.files.map((f) => f.path)]), [['changes', ['index.ts']]]);
+  } finally {
+    fs.rmSync(link, { force: true });
+  }
+});

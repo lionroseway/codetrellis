@@ -107,11 +107,21 @@ export function listTrustedRoots(): string[] {
 }
 
 /**
- * Turn a caller-supplied project path into a trusted, canonical root.
+ * Turn a caller-supplied project path into the trusted root it names.
  *
- * Throws unless it matches a project the user actually opened. The caller
- * must use the RETURNED value — it is canonical, so a later comparison
- * cannot be fooled by a link or a `..` that normalises differently.
+ * Throws unless it matches a project the user actually opened. Membership is
+ * decided canonically, so a link or a `..` cannot pass for another project.
+ * The caller must use the RETURNED value: the opened project's own recorded
+ * path, never the caller's string.
+ *
+ * Recorded, not canonical. Every row about a project is stored under the path
+ * the user opened, and MCP passes that same spelling through (mcp.projectScope).
+ * This returned the realpath, so for a project reached through a link — macOS's
+ * /var and /tmp are links — the window's requests named a different project
+ * from the agents': a signal an agent raised could not be answered from the
+ * window (404), and play-forward could not resequence (0.1.18 demo).
+ * Containment is unaffected: every confined-fs helper canonicalises the root
+ * it is given before it polices a path beneath it.
  *
  * `allowAbsent` exists for the narrow case of a project that has been
  * deleted from disk but whose plans are still being read; it relaxes the
@@ -142,11 +152,7 @@ export function resolveTrustedProjectRoot(
 
   for (const root of listTrustedRoots()) {
     const canonRoot = canonicaliseForCompare(root);
-    if (canonRoot && canonRoot === canonCandidate) {
-      // Re-canonicalise through confined-fs so callers get a value produced
-      // by the same code path that will later police paths beneath it.
-      return canonicalRoot(canonCandidate);
-    }
+    if (canonRoot && canonRoot === canonCandidate) return path.resolve(root);
   }
 
   const evicted = evictedHint(candidate);
@@ -247,9 +253,9 @@ export function isTrustedProjectRoot(candidate: unknown): boolean {
  *
  * These drift apart by design. `scan` is exempt from confinement — it is how a
  * path becomes a project — so rows are written under whatever the user typed,
- * e.g. `/tmp/demo`. Every confined handler then resolves through
- * `resolveTrustedProjectRoot`, which returns the REALPATH: `/private/tmp/demo`
- * on macOS, because /tmp is a symlink. A plain `path.relative` between the two
+ * e.g. `/tmp/demo`, while git, realpath and anything canonical report
+ * `/private/tmp/demo` on macOS, because /tmp is a symlink (confined handlers
+ * were also given the realpath until 0.1.18). A plain `path.relative` between the two
  * yields `../../tmp/demo/src/a.ts`, which matches nothing — so diff, compare,
  * review and playback reported every file as removed AND re-added for any
  * project opened through a symlink. On macOS that is anything under /tmp.

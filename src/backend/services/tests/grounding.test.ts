@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { groundingWords, testFileOf } from './grounding';
+import { setActiveProjectRoot } from '../trusted-roots';
 
 const T = (result: string) => ({ result: result as 'passed' });
 
@@ -24,4 +28,22 @@ test('a result\'s test file, from the file attribute, else a path-like class or 
   assert.equal(testFileOf('/w/app', { file: '/w/app/src/a.test.ts', classname: null, suite: null }), 'src/a.test.ts');
   assert.equal(testFileOf('/w/app', { file: '../other/a.test.ts', classname: null, suite: null }), null);
   assert.equal(testFileOf('/w/app', { file: null, classname: 'TaxTest', suite: 'unit' }), null);
+});
+
+test('a project opened through a link: a runner\'s realpath still names a file in it', () => {
+  // macOS's /var and /tmp are links. The runner writes the realpath; the
+  // project is stored under the path it was opened at. A plain relative
+  // between the two was "../../private/…", and every file read "no tests".
+  const real = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ct-grounding-')));
+  const link = `${real}-link`;
+  fs.symlinkSync(real, link, 'dir');
+  try {
+    setActiveProjectRoot(link);
+    assert.equal(testFileOf(link, { file: path.join(real, 'src', 'a.test.ts'), classname: null, suite: null }), 'src/a.test.ts');
+    assert.equal(testFileOf(link, { file: path.join(link, 'src', 'a.test.ts'), classname: null, suite: null }), 'src/a.test.ts');
+  } finally {
+    setActiveProjectRoot(null);
+    fs.rmSync(link, { force: true });
+    fs.rmSync(real, { recursive: true, force: true });
+  }
 });

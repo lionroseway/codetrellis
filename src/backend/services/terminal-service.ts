@@ -291,7 +291,16 @@ export function writeTerminal(id: string, data: string): boolean {
 export function resizeTerminal(id: string, cols: number, rows: number): boolean {
   const s = sessions.get(id);
   if (!s || !s.alive) return false;
-  s.pty.resize(cols, rows);
+  // node-pty closes the PTY's fd when the process ends, and a resize that
+  // arrives before onExit marks the session dead gets `ioctl(2) failed,
+  // EBADF`. Thrown from the window's IPC handler it was an uncaught exception
+  // per resize (the 0.1.18 demo logged 18 in a second); the terminal has
+  // ended either way, so it is the same answer as a dead one.
+  try {
+    s.pty.resize(cols, rows);
+  } catch {
+    return false;
+  }
   return true;
 }
 

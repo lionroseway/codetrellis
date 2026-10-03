@@ -18,6 +18,7 @@
  * are added. With none of these, the commit is the git author's alone.
  */
 
+import fs from 'node:fs';
 import { getDb } from './database';
 import { framesByCommit } from './replay-frames';
 
@@ -115,12 +116,18 @@ export function recordedKnowledge(projectPath: string): Knowledge {
   return {
     seenBy: (shas) => framesByCommit(projectPath, shas),
     sessionAt: (checkoutRoot, at) => {
+      // Sessions are placed by the folder's realpath; a checkout opened as a
+      // project through a link (macOS's /var, /tmp) asks in its opened
+      // spelling. Either names the same checkout.
+      const spelled = trim(checkoutRoot);
+      let real = spelled;
+      try { real = fs.realpathSync.native(spelled); } catch { /* gone: the spelling is all there is */ }
       const row = getDb().exec(
         `SELECT session_id, agent_type FROM agent_sessions
-         WHERE workstream_root = ? AND connected_at <= ? AND last_seen + ? >= ?
+         WHERE workstream_root IN (?, ?) AND connected_at <= ? AND last_seen + ? >= ?
          ORDER BY connected_at DESC LIMIT 1`,
         // A commit's time is whole seconds: one made in the second the session started is in it.
-        [trim(checkoutRoot), at + 999, SESSION_GRACE_MS, at],
+        [spelled, real, at + 999, SESSION_GRACE_MS, at],
       )[0]?.values?.[0];
       return row ? { sessionId: String(row[0]), agentType: String(row[1]) } : null;
     },

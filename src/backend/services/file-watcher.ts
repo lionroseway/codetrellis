@@ -10,6 +10,7 @@ import { checkFileDeviation } from './deviation-service';
 import { checkDocFreshnessForFile } from './sensor-bridge-service';
 import { recordFileActivity } from './stuck-sensor-service';
 import { nudgeWorkstream, setExternallyWatchedFolder } from './workstream-watch-service';
+import { checkoutWatchOptions } from './watch-ignore';
 
 let watcher: FSWatcher | null = null;
 
@@ -79,41 +80,17 @@ export async function startWatching(projectRoot: string): Promise<void> {
   setExternallyWatchedFolder(projectRoot);
 
   // Function-based ignore — globs in chokidar aren't reliable for
-  // dotdir / node_modules in nested layouts. A function tested against
-  // every path is foolproof. Mirrors project-scanner's ALWAYS_IGNORED.
-  const HEAVY_DIRS = new Set([
-    'node_modules', 'dist', 'out', 'build',
-    '__pycache__', 'venv', 'env',
-    'target',
-    'vendor',
-    // Go's convention for fixture input that is deliberately not valid
-    // source — mirrors project-scanner's ALWAYS_IGNORED.
-    'testdata',
-    'coverage', 'test-results', 'playwright-report', 'cypress',
-  ]);
-  const isIgnoredPath = (p: string): boolean => {
-    // Any segment starting with '.' (dotdir / dotfile) is skipped.
-    if (/[\\/]\.[^\\/]/.test(p)) return true;
-    // Any segment matching a heavy non-source directory.
-    const segs = p.split(/[\\/]/);
-    for (const seg of segs) {
-      if (HEAVY_DIRS.has(seg)) return true;
-    }
-    // Tail-only filters
-    if (p.endsWith('.log')) return true;
-    return false;
-  };
-
+  // dotdir / node_modules in nested layouts. Shared with each line of
+  // work's watcher (watch-ignore.ts), and tested on the path under the
+  // project: tested on the absolute path, a project inside any dot folder
+  // (~/.config/…) had its root ignored and was never watched at all.
   watcher = watch(projectRoot, {
-    ignored: isIgnoredPath,
+    ...checkoutWatchOptions(projectRoot),
     ignoreInitial: true,
     awaitWriteFinish: {
       stabilityThreshold: 300,
       pollInterval: 100,
     },
-    // Don't traverse symlinks — they often point into massive shared
-    // dirs (homebrew prefixes, system Python) and explode the watch.
-    followSymlinks: false,
   });
 
   watcher.on('error', (err) => {

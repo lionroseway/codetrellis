@@ -25,6 +25,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import type { ChangedFileStatus, Workstream } from '../../shared/types';
 import { isSafeGitRef } from './git-safety';
 
@@ -78,6 +79,12 @@ export interface SourceControl {
 
 const MAX_FILES = 500;
 const trim = (p: string) => p.replace(/[\\/]+$/, '');
+/**
+ * A folder by its realpath. git names worktrees canonically and the project
+ * arrives as it was opened; through a link (macOS's /var, /tmp) the two
+ * spellings differ for the same checkout.
+ */
+const real = (p: string): string => { try { return fs.realpathSync.native(trim(p)); } catch { return trim(p); } };
 
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf-8', maxBuffer: 32 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] });
@@ -179,9 +186,10 @@ export function sourceControl(projectRoot: string, baselineCommit: string | null
   // checkout this project is in (the project itself, or the repository's
   // top when the project is a subfolder) is not "other work"; another's
   // files are listed relative to the project, and only those inside it.
+  const projectReal = real(project);
   for (const w of workstreams) {
-    const wroot = trim(w.root);
-    if (wroot === project || project.startsWith(`${wroot}/`) || project.startsWith(`${wroot}\\`)) continue;
+    const wroot = w.root.startsWith('branch:') ? trim(w.root) : real(w.root);
+    if (wroot === projectReal || projectReal.startsWith(`${wroot}/`) || projectReal.startsWith(`${wroot}\\`)) continue;
     const inside = w.changes.files
       .filter((f) => !prefix || f.path.startsWith(prefix))
       .map((f) => ({ ...f, path: f.path.slice(prefix.length), ...(f.from ? { from: f.from.startsWith(prefix) ? f.from.slice(prefix.length) : f.from } : {}) }));
