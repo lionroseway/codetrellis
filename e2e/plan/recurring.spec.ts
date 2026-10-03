@@ -97,7 +97,8 @@ test.describe('Recurring playbooks in the window', () => {
 
     // Started from the row after all: the run opens, and the row marks it in progress.
     await row.locator('[data-testid="recurring-run"][data-state="due"]').click();
-    expect(state.calls).toEqual(['dismiss', 'start']);
+    // The click returns before its request reaches the route: wait for it.
+    await expect.poll(() => state.calls).toEqual(['dismiss', 'start']);
     await expect(row.getByTestId('recurring-run')).toHaveText(['29 Sep ✗ missed', '30 Sep ✗ missed', '1 Oct ◐', '2 Oct next']);
     await expect(page.getByText(`${TITLE} — 1 Oct`).first()).toBeVisible();
     await expect(page.getByText('Claude Code started in a terminal on the computer')).toBeVisible();
