@@ -23,3 +23,5 @@ func (a Amount) Add(b Amount) Amount {
 }
 
 func normalise(minor int64) int64 { return minor }
+
+// round-trip probe

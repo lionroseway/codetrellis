@@ -97,6 +97,31 @@ function updateActiveTab(
   return tabs.map((t) => (t.id === activeTabId ? { ...t, ...update } : t));
 }
 
+/**
+ * A scan the backend refused because another project's was running: asked
+ * again each second for the open project, for two minutes at most, and
+ * dropped when the project changes or a scan lands.
+ */
+let refusedRetry: { root: string; timer: ReturnType<typeof setTimeout>; tries: number } | null = null;
+function retryRefusedScan(root: string | null): void {
+  if (!root) return;
+  const tries = refusedRetry?.root === root ? refusedRetry.tries + 1 : 1;
+  if (refusedRetry) clearTimeout(refusedRetry.timer);
+  refusedRetry = null;
+  if (tries > 120) return;
+  const timer = setTimeout(async () => {
+    if (useProjectStore.getState().root !== root) { refusedRetry = null; return; }
+    try {
+      const { getAPI } = await import('../bridge');
+      const result = await getAPI().scanProject(root);
+      if (useProjectStore.getState().root === root) useProjectStore.getState().applyScanResult(result);
+    } catch {
+      retryRefusedScan(root);
+    }
+  }, 1000);
+  refusedRetry = { root, timer, tries };
+}
+
 export const useProjectStore = create<ProjectState>((set, get) => ({
   tabs: [],
   activeTabId: null,
@@ -191,6 +216,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     s.setScanStatus('ready');
     if (result.astError) {
       console.warn('[Scan] Analysis degraded (file tree intact):', result.astError);
+      // Another project held the scanner. Ask again when it is free, here,
+      // so this project is analysed whatever view is showing: only the graph
+      // canvas asked again, and only while it was on screen and empty, so a
+      // file opened in the code reader meanwhile never got its verdicts.
+      if (/already in progress/i.test(result.astError)) retryRefusedScan(get().root);
+    } else if (refusedRetry && refusedRetry.root === get().root) {
+      clearTimeout(refusedRetry.timer);
+      refusedRetry = null;
     }
   },
 

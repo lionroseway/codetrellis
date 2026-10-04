@@ -92,12 +92,15 @@ test.describe('Plan item canvas', () => {
 
     const statusSelect = page.locator('select[title="Change status"]');
     await statusSelect.selectOption('in_progress');
-    await page.waitForTimeout(1000);
 
-    // Verify via API
-    const res = await page.request.get(`${API}/items/${plan.actionUids[0]}`);
-    const item = await res.json();
-    expect(item.status).toBe('in_progress');
+    // Verify via API, waiting for the save rather than a fixed second: with
+    // two workers, another test's scan of this repository can hold the
+    // backend for longer than that, and the write lands after it.
+    await expect.poll(async () => {
+      const res = await page.request.get(`${API}/items/${plan.actionUids[0]}`);
+      return (await res.json()).status;
+    }, { timeout: 15_000 }).toBe('in_progress');
+    await expect(statusSelect).toHaveValue('in_progress');
   });
 
   test('file specs display for actions with file targets', async ({ page, request }) => {
