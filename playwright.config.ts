@@ -92,7 +92,7 @@ const SPLIT = process.env.E2E_SPLIT === '1';
  * the sample app's dependencies, and a plan seeded in the sample app went
  * missing from the list while the repository was the one held.
  */
-const FIXTURE_SPECS = [
+export const FIXTURE_SPECS = [
   '**/golden-chain/onboarding-to-plan.spec.ts',
   '**/golden-chain/plan-to-graph.spec.ts',
   '**/graph/context-menu.spec.ts',
@@ -117,10 +117,24 @@ const FIXTURE_SPECS = [
   // and the plan it created or the task it added was not there in time
   // (#147, #158).
   '**/plan/plan-by-hand.spec.ts',
+  // The rest of those that open the sample app or plan in it; found by
+  // tools/e2e-serial/serial-specs.test.ts, which fails on the next one.
+  '**/graph/canvas-rescan-wait.spec.ts',
+  '**/graph/grounding-overlay.spec.ts',
+  '**/graph/nodes-stay-drawn.spec.ts',
+  '**/live-agent/multi-agent-contention.spec.ts',
+  '**/plan/play-forward.spec.ts',
+  '**/review-regressions/code-and-docs.spec.ts',
+  '**/review-regressions/code-gutter-and-scope.spec.ts',
+  '**/review-regressions/guide.spec.ts',
+  '**/review-regressions/phase30-settings.spec.ts',
+  '**/review-regressions/pr55-ui.spec.ts',
+  '**/review-regressions/round-trip.spec.ts',
+  '**/review-regressions/trace-a-change.spec.ts',
 ];
 
 /** Specs that need the backend to themselves — see the `serial` project. */
-const SERIAL_SPECS = [
+export const SERIAL_SPECS = [
   ...FIXTURE_SPECS,
   // Their agents navigate every open page.
   '**/live-agent/preseeded-execution.spec.ts',
