@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="assets/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: "Geist"; src: url(assets/geist-sans-latin-400-normal.woff2) format("woff2"); font-weight: 400; }
+      @font-face { font-family: "Geist"; src: url(assets/geist-sans-latin-500-normal.woff2) format("woff2"); font-weight: 500; }
+      @font-face { font-family: "Geist"; src: url(assets/geist-sans-latin-600-normal.woff2) format("woff2"); font-weight: 600; }
+      @font-face { font-family: "Geist"; src: url(assets/geist-sans-latin-700-normal.woff2) format("woff2"); font-weight: 700; }
+      @font-face { font-family: "Geist Mono"; src: url(assets/geist-mono-latin-400-normal.woff2) format("woff2"); font-weight: 400; }
+      @font-face { font-family: "Geist Mono"; src: url(assets/geist-mono-latin-500-normal.woff2) format("woff2"); font-weight: 500; }
+      :root { --page: #f6f8fc; --ink: #0b1220; --sub: #4a5873; --faint: #8a96ad; --blue: #2f6bff; --line: #dfe5f0; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--page); }
+      body { font-family: "Geist", "Liberation Sans", sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+      .clip { position: absolute; inset: 0; }
+      #root { position: absolute; inset: 0; overflow: hidden; background: var(--page); }
+      .glow { position: absolute; inset: 0; background:
+          radial-gradient(900px 600px at 72% 40%, rgba(47,107,255,.10), transparent 70%),
+          radial-gradient(700px 500px at 15% 80%, rgba(0,190,255,.07), transparent 70%); }
+      /* The camera: transform-origin 0 0; a shot is (x, y, scale) from cam(). */
+      #cam { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+      #win { position: absolute; left: 160px; top: 90px; width: 1600px; height: 900px; border-radius: 12px; overflow: hidden;
+          background: #0b0f17; box-shadow: 0 40px 90px rgba(16,34,80,.28), 0 12px 30px rgba(16,34,80,.16), 0 0 0 1px rgba(11,18,32,.10); }
+      #win video, #win img { position: absolute; inset: 0; width: 1600px; height: 900px; display: block; }
+      #hero { position: absolute; left: 170px; top: 0; height: 1080px; display: flex; flex-direction: column; justify-content: center; }
+      #hero .eyebrow { font: 500 20px "Geist Mono", monospace; letter-spacing: .2em; color: #1f50d8; margin-bottom: 26px; }
+      #hero h1 { font-size: 150px; line-height: 1.0; font-weight: 700; letter-spacing: -.045em; }
+      #hero .line { display: block; overflow: hidden; padding-bottom: .08em; }
+      #hero .line span { display: block; }
+      #hero .b { color: var(--blue); }
+      #hero p { margin-top: 34px; font-size: 36px; line-height: 1.4; color: var(--sub); max-width: 760px; }
+      .cap { position: absolute; left: 50%; bottom: 46px; white-space: nowrap; display: flex; align-items: center; gap: 20px;
+          padding: 20px 32px 20px 22px; border-radius: 18px; background: #ffffff; color: var(--ink);
+          box-shadow: 0 24px 60px rgba(16,34,80,.22), 0 0 0 1px rgba(11,18,32,.06); }
+      .cap .n { font: 500 18px "Geist Mono", monospace; color: #1a46c4; background: #eaf0ff; border-radius: 9px; padding: 7px 11px; }
+      .cap .t { font-size: 34px; font-weight: 500; letter-spacing: -.015em; }
+      .cap .t b { font-weight: 600; color: var(--blue); }
+      .cap .t code { font: 500 31px "Geist Mono", monospace; color: #b5530b; }
+      #real { position: absolute; right: 60px; top: 30px; display: flex; gap: 10px; align-items: center; font: 500 15px "Geist Mono", monospace; letter-spacing: .14em; color: var(--sub);
+          background: rgba(255,255,255,.85); border-radius: 30px; padding: 9px 16px; box-shadow: 0 6px 20px rgba(16,34,80,.10); }
+      #real i { width: 9px; height: 9px; border-radius: 50%; background: #ff3b47; display: block; }
+      #phone { position: absolute; left: 1330px; top: 118px; width: 379px; height: 832px; border-radius: 58px; background: #0a0a0c; padding: 14px;
+          box-shadow: 0 50px 100px rgba(16,34,80,.35), 0 0 0 2px #2a2d35 inset, 0 0 0 1px rgba(11,18,32,.25); }
+      #screen { position: relative; width: 351px; height: 804px; border-radius: 45px; overflow: hidden; background: #09090b; }
+      #sb { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 30px 0 34px; color: #fafafa; font: 600 15px "Geist", sans-serif; }
+      #island { position: absolute; left: 50%; top: 10px; width: 108px; height: 30px; margin-left: -54px; border-radius: 20px; background: #000; }
+      #pv { position: absolute; left: 0; top: 44px; width: 351px; height: 760px; }
+      #pv video, #pv img { position: absolute; inset: 0; width: 351px; height: 760px; display: block; }
+      #tap { position: absolute; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%; background: rgba(255,255,255,.35); border: 2px solid rgba(255,255,255,.85); left: 67px; top: 259px; }
+      #end { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: var(--page); }
+      #end .mark { display: flex; align-items: center; gap: 22px; font-size: 96px; font-weight: 700; letter-spacing: -.04em; }
+      #end .mark i { width: 96px; height: 96px; border-radius: 24px; background: var(--blue); display: grid; place-items: center; box-shadow: 0 20px 50px rgba(47,107,255,.35); }
+      #end p { margin-top: 26px; font-size: 38px; color: var(--sub); }
+      #end p b { color: var(--blue); font-weight: 500; }
+      #end .pills { display: flex; gap: 12px; margin-top: 40px; }
+      #end .pills span { font: 500 18px "Geist Mono", monospace; color: var(--sub); background: #fff; border-radius: 30px; padding: 10px 18px; box-shadow: 0 0 0 1px var(--line); }
+      #end .url { margin-top: 44px; font: 500 26px "Geist Mono", monospace; color: var(--blue); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="33" data-width="1920" data-height="1080">
+      <div class="clip" id="scene" data-start="0" data-duration="33">
+        <div class="glow"></div>
+        <div id="hero">
+          <div class="eyebrow" id="h0">CODETRELLIS</div>
+          <h1><span class="line"><span id="h1">Any agent.</span></span><span class="line"><span id="h2">Any number.</span></span><span class="line"><span id="h3">One <i class="b" style="font-style:normal">map.</i></span></span></h1>
+          <p id="h4">See every AI coding agent working on your code at once, and tell them when their work collides.</p>
+        </div>
+        <div id="cam">
+          <div id="win">
+            <video class="clip" id="v0" src="assets/desktop.mp4" muted playsinline data-start="3" data-duration="7.2" data-media-start="12.6"></video>
+            <video class="clip" id="v1" src="assets/desktop.mp4" muted playsinline data-start="10" data-duration="5.2" data-media-start="23.4"></video>
+            <video class="clip" id="v2" src="assets/desktop.mp4" muted playsinline data-start="15" data-duration="5.2" data-media-start="47"></video>
+            <video class="clip" id="v3" src="assets/desktop.mp4" muted playsinline data-start="20" data-duration="4.4" data-media-start="64.2"></video>
+            <img class="clip" id="held" src="assets/held.jpg" alt="" data-start="24.2" data-duration="5.8" />
+            <img class="clip" id="cleared" src="assets/cleared.jpg" alt="" data-start="24.2" data-duration="5.8" />
+          </div>
+        </div>
+        <div id="phone">
+          <div id="screen">
+            <div id="sb"><span>9:41</span><span>●●● ▮</span></div>
+            <div id="island"></div>
+            <div id="pv">
+              <img class="clip" id="pdone" src="assets/phone-done.png" alt="" data-start="24.2" data-duration="5.8" />
+              <video class="clip" id="p0" src="assets/phone.mp4" muted playsinline data-start="24.2" data-duration="5.1" data-media-start="0"></video>
+            </div>
+            <div id="tap"></div>
+          </div>
+        </div>
+        <div id="real"><i></i>REAL CODETRELLIS UI · RECORDED, NOT MOCKED</div>
+        <div class="cap" id="c1"><span class="n">01</span><span class="t"><b>Codex</b> and <b>Claude Code</b>, each in its own worktree.</span></div>
+        <div class="cap" id="c2"><span class="n">02</span><span class="t">Both change <code>isValidEmail</code>. CodeTrellis says so, once.</span></div>
+        <div class="cap" id="c3"><span class="n">03</span><span class="t">A signature changes. <b>Claude Code is told</b> on its next call.</span></div>
+        <div class="cap" id="c4"><span class="n">04</span><span class="t">“Ask me before this changes.” <b>The edit waits.</b></span></div>
+        <div class="cap" id="c5"><span class="n">05</span><span class="t">Answer it from <b>your phone</b>.</span></div>
+      </div>
+      <div class="clip" id="end" data-start="29.6" data-duration="3.4">
+        <div class="mark" id="e1"><i><svg width="56" height="56" viewBox="0 0 20 20"><g stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round"><path d="M10 2.5v15M4 6.5l6 4 6-4M4 12l6 4 6-4"/></g></svg></i>CodeTrellis</div>
+        <p id="e2">Mission control for <b>AI coding agents</b>.</p>
+        <div class="pills" id="e3"><span>Any MCP agent</span><span>Desktop + phone</span><span>No telemetry</span><span>Apache 2.0</span></div>
+        <div class="url" id="e4">codetrellis.dev →</div>
+      </div>
+    </div>
+    <script>
+      // The window sits at (160, 90) inside the camera, 1:1 with the footage's
+      // 1600x900 layout (captured at 2x). A shot frames footage point (fx, fy)
+      // at scale s, centred horizontally, at screen y `sy`.
+      const L = 160, T = 90;
+      const cam = (fx, fy, s, sy, sx = 960) => ({ x: sx - (L + fx) * s, y: sy - (T + fy) * s, scale: s });
+      const HERO = { x: 800 - L * 0.66, y: 262 - T * 0.66, scale: 0.66 };
+      const WIDE = { x: 0, y: 0, scale: 1 };
+      const CHIPS = cam(1265, 20, 2.1, 330);
+      const CARD = (fy, s) => cam(632, fy, s, 520);
+      const SIDE = { x: 120 - L * 0.68, y: 236 - T * 0.68, scale: 0.68 };
+      const io = 'power3.inOut';
+
+      const tl = gsap.timeline({ paused: true });
+      gsap.set('#cam', HERO);
+      gsap.set(['#c1', '#c2', '#c3', '#c4', '#c5'], { xPercent: -50, opacity: 0, y: 24 });
+      gsap.set('#phone', { x: 700, rotation: 6 });
+      gsap.set('#tap', { scale: .4, opacity: 0 });
+      gsap.set('#cleared', { opacity: 0 });
+
+      // Hero type: each line slides up out of its mask
+      tl.from('#h1', { yPercent: 110, duration: .9, ease: 'expo.out' }, .2);
+      tl.from('#h2', { yPercent: 110, duration: .9, ease: 'expo.out' }, .55);
+      tl.from('#h3', { yPercent: 110, duration: .9, ease: 'expo.out' }, .9);
+      tl.from('#h0', { opacity: 0, y: 12, duration: .6, ease: 'power2.out' }, 1.3);
+      gsap.set('#hero', { x: 380, y: 0 });
+      tl.to('#hero', { x: 0, scale: .62, transformOrigin: '0% 50%', duration: 1.2, ease: io }, 2.6);
+      tl.from('#h4', { opacity: 0, y: 14, duration: .7, ease: 'power2.out' }, 3.4);
+
+      // The real window rises in and settles
+      tl.from('#win', { opacity: 0, y: 220, rotationX: 16, rotationY: -8, transformPerspective: 2200, duration: 1.5, ease: 'expo.out' }, 3.0);
+      tl.from('#real', { opacity: 0, y: -10, duration: .5, ease: 'power2.out' }, 3.8);
+
+      // 01: into the window, then the agents in the top bar
+      tl.to('#hero', { opacity: 0, x: -120, duration: .7, ease: 'power2.in' }, 6.1);
+      tl.to('#cam', { ...CHIPS, duration: 1.5, ease: io }, 6.2);
+      tl.to('#c1', { opacity: 1, y: 0, duration: .5, ease: 'expo.out' }, 7.0);
+      tl.to('#c1', { opacity: 0, y: -10, duration: .3, ease: 'power2.in' }, 9.6);
+
+      // 02: the overlap
+      tl.from('#v1', { opacity: 0, duration: .4, ease: 'none' }, 10);
+      tl.to('#cam', { ...CARD(772, 1.62), duration: 1.0, ease: io }, 9.8);
+      tl.to('#c2', { opacity: 1, y: 0, duration: .5, ease: 'expo.out' }, 10.4);
+      tl.to('#cam', { ...CARD(772, 1.74), duration: 3.8, ease: 'none' }, 10.8);
+      tl.to('#c2', { opacity: 0, y: -10, duration: .3, ease: 'power2.in' }, 14.6);
+
+      // 03: told on its next call
+      tl.from('#v2', { opacity: 0, duration: .4, ease: 'none' }, 15);
+      tl.to('#cam', { ...CARD(762, 1.55), duration: .8, ease: io }, 15);
+      tl.to('#c3', { opacity: 1, y: 0, duration: .5, ease: 'expo.out' }, 15.4);
+      tl.to('#cam', { ...CARD(762, 1.66), duration: 3.8, ease: 'none' }, 15.8);
+      tl.to('#c3', { opacity: 0, y: -10, duration: .3, ease: 'power2.in' }, 19.6);
+
+      // 04: the breakpoint holds the edit
+      tl.from('#v3', { opacity: 0, duration: .4, ease: 'none' }, 20);
+      tl.to('#cam', { ...CARD(776, 1.62), duration: .8, ease: io }, 20);
+      tl.to('#c4', { opacity: 1, y: 0, duration: .5, ease: 'expo.out' }, 20.4);
+      tl.to('#cam', { ...CARD(776, 1.72), duration: 3.0, ease: 'none' }, 20.8);
+      tl.to('#c4', { opacity: 0, y: -10, duration: .3, ease: 'power2.in' }, 23.8);
+
+      // 05: the window steps aside; the phone answers; the desktop clears
+      tl.to('#cam', { ...SIDE, duration: 1.2, ease: io }, 23.9);
+      tl.to('#phone', { x: 0, rotation: 0, duration: 1.1, ease: 'expo.out' }, 24.2);
+      tl.to('#c5', { opacity: 1, y: 0, duration: .5, ease: 'expo.out' }, 24.9);
+      // tap.json: Continue tapped 1.59 s into the phone footage
+      tl.to('#tap', { opacity: 1, scale: 1, duration: .18, ease: 'power2.out' }, 24.2 + 1.45);
+      tl.to('#tap', { opacity: 0, scale: 1.6, duration: .45, ease: 'power2.out' }, 24.2 + 1.65);
+      tl.to('#cleared', { opacity: 1, duration: .5, ease: 'none' }, 24.2 + 2.1);
+      tl.to('#c5', { opacity: 0, y: -10, duration: .3, ease: 'power2.in' }, 29.1);
+
+      // End card
+      tl.from('#end', { opacity: 0, duration: .5, ease: 'none' }, 29.6);
+      tl.from('#e1', { y: 30, opacity: 0, scale: .96, duration: .8, ease: 'expo.out' }, 29.75);
+      tl.from('#e2', { y: 20, opacity: 0, duration: .7, ease: 'power3.out' }, 30.1);
+      tl.from('#e3 span', { y: 14, opacity: 0, duration: .5, stagger: .08, ease: 'power3.out' }, 30.4);
+      tl.from('#e4', { opacity: 0, duration: .6, ease: 'none' }, 30.9);
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines['main'] = tl;
+    </script>
+  </body>
+</html>

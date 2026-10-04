@@ -1,0 +1,4 @@
+{
+  "_note": "Cut against the smooth capture recorded on 2026-10-04 (its scenes.json). A new recording moves the data-media-start times in index.html.",
+  "assets/footage.mp4": { "from": "captures/parallel-smooth/raw.mp4" }
+}

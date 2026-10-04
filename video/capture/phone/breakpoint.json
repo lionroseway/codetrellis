@@ -1,0 +1,28 @@
+{
+  "about": "The phone's 'Waiting on you' screen (mobile/app/breakpoints.tsx) held on the same breakpoint the desktop demo pauses on, then answered with Continue. The screen is the real app code through react-native-web (tools/phone-preview); the data is this fixture, worded as the desktop words it.",
+  "screen": "breakpoints",
+  "state": { "waitingBreakpoints": 1 },
+  "list": { "method": "breakpoint.waiting", "key": "hits" },
+  "answer": { "method": "breakpoint.answer", "key": "hit", "set": { "decision": "continue" } },
+  "items": [
+    {
+      "ref": "bp-1",
+      "breach": false,
+      "headline": "claude-code in billing-v2 wants to change “packages/shared/src/validators.ts”",
+      "why": "You asked to be asked before this code changes. The edit was not made.",
+      "labels": { "continue": "Continue", "steer": "Continue with steer", "stop": "Stop" },
+      "breakpointNote": "Ask me before touching shared",
+      "agent": "claude-code",
+      "planUid": null,
+      "itemUid": null,
+      "path": "packages/shared/src/validators.ts",
+      "hitAt": -20000,
+      "decision": null,
+      "note": null,
+      "answeredAt": null
+    }
+  ],
+  "tap": "Continue",
+  "before": 1.5,
+  "after": 3.0
+}

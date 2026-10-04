@@ -8,5 +8,8 @@ Material for rebuilding codetrellis.dev.
 - [`video-research.md`](video-research.md): making motion-graphics video with code
   (HyperFrames, Remotion, Playwright footage), what the cloud container can render, and
   a proposed pilot.
+- [`../../video/`](../../video/README.md): the video pipeline the research led to. It
+  records the real app and phone and composes them into product video. The spike's
+  four results and the workflow are in its README.
 
 Public repo: nothing here may name customers or unreleased security findings.
