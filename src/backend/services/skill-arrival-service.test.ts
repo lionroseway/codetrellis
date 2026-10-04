@@ -104,3 +104,23 @@ test('the plan\'s list: waiting skills with their task, not ones since removed f
   item('t2', []); // removed again before anyone accepted it
   assert.deepEqual(svc.planArrivals('p1').map((a) => [a.itemTitle, a.skill]), [['Task t1', 'pr-review']]);
 });
+
+test('seen before it was committed, it learns who added it once committed; one already known is kept', () => {
+  item('t1', [rec('pr-review')]);
+  fs.writeFileSync(file, 'skills: [pr-review]\n');
+  svc.noteArrivals({ itemUid: 't1', before: [], after: [rec('pr-review')], file });
+  assert.deepEqual(svc.pendingArrivals('t1').get('pr-review')?.addedBy, null);
+
+  git('commit', '-qam', 'Recommend pr-review');
+  const sha = git('rev-parse', '--short', 'HEAD');
+  // The next import of the file has nothing new, and fills in who and where.
+  assert.deepEqual(svc.noteArrivals({ itemUid: 't1', before: [rec('pr-review')], after: [rec('pr-review')], file }), []);
+  assert.deepEqual([svc.pendingArrivals('t1').get('pr-review')?.addedBy, svc.pendingArrivals('t1').get('pr-review')?.commit], ['Priya', sha]);
+
+  // A later commit to the file is an edit, not the arrival.
+  fs.writeFileSync(file, 'skills: [pr-review, other]\n');
+  git('commit', '-qam', 'Edit');
+  svc.noteArrivals({ itemUid: 't1', before: [rec('pr-review')], after: [rec('pr-review')], file });
+  assert.equal(svc.pendingArrivals('t1').get('pr-review')?.commit, sha);
+  git('reset', '-q', '--hard', 'HEAD~2');
+});

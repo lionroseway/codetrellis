@@ -66,6 +66,7 @@ export function lastCommitOf(file: string): { addedBy: string | null; commit: st
  * finds it already waiting).
  */
 export function noteArrivals(input: { itemUid: string; before: readonly Skill[]; after: readonly Skill[]; file: string; now?: number }): string[] {
+  completeArrivals(input.itemUid, input.file);
   const had = new Set(input.before.filter(wanted).map((s) => s.name));
   const arrived = input.after.filter((s) => wanted(s) && !had.has(s.name)).map((s) => s.name);
   if (arrived.length === 0) return [];
@@ -85,6 +86,22 @@ export function noteArrivals(input: { itemUid: string; before: readonly Skill[];
     return [];
   }
   return fresh;
+}
+
+/**
+ * A skill seen arriving before its edit was committed learns who added it
+ * once git has the commit: an import runs as soon as the file changes, which
+ * can be before the person commits it. One already known is never rewritten,
+ * as with a plan's own arrival (`completePlanArrival`).
+ */
+function completeArrivals(itemUid: string, file: string): void {
+  if (![...pendingArrivals(itemUid).values()].some((a) => !a.commit)) return;
+  const { addedBy, commit } = lastCommitOf(file);
+  if (!commit) return;
+  getDb().run(
+    'UPDATE skill_arrivals SET added_by = ?, commit_sha = ? WHERE item_uid = ? AND accepted_at IS NULL AND commit_sha IS NULL',
+    [addedBy, commit, itemUid],
+  );
 }
 
 /** The item's skills still waiting for a person, by name. */
