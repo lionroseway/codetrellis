@@ -1300,6 +1300,23 @@ export async function scanProject(projectPath: string): Promise<ScanStats> {
   }
 }
 
+/**
+ * Store parsed files without holding the server. About a millisecond each,
+ * so a project of a few thousand files held every other request, the
+ * window's included, for two seconds or more; this hands the event loop
+ * back every 25 ms.
+ */
+async function storeParsedFiles(files: Awaited<ReturnType<typeof parseFiles>>, projectPath: string): Promise<void> {
+  let since = Date.now();
+  for (const parsed of files) {
+    storeParsedFile(parsed, projectPath);
+    if (Date.now() - since >= 25) {
+      await new Promise<void>((r) => setImmediate(r));
+      since = Date.now();
+    }
+  }
+}
+
 async function runScan(projectPath: string): Promise<ScanStats> {
     const isSameProject = lastScannedProject === projectPath;
     console.log(`[Scan] Scanning project: ${projectPath}${isSameProject ? ' (incremental)' : ' (full)'}`);
@@ -1352,15 +1369,11 @@ async function runScan(projectPath: string): Promise<ScanStats> {
       }
       console.log(`[Scan] Incremental: ${toParse.length} changed / ${filePaths.length} total files (${stalePaths.length} removed)`);
       parsedFiles = await parseFiles(toParse);
-      for (const parsed of parsedFiles) {
-        storeParsedFile(parsed, projectPath);
-      }
+      await storeParsedFiles(parsedFiles, projectPath);
     } else {
       clearAstData();
       parsedFiles = await parseFiles(filePaths);
-      for (const parsed of parsedFiles) {
-        storeParsedFile(parsed, projectPath);
-      }
+      await storeParsedFiles(parsedFiles, projectPath);
     }
 
     lastScannedProject = projectPath;
@@ -2093,7 +2106,10 @@ export async function pinBaseline(projectPath: string, commitHash?: string | nul
     const fileTree = scanDirectory(projectPath);
     const filePaths = collectFilePaths(fileTree);
     const parsedFiles = await parseFiles(filePaths);
-    for (const parsed of parsedFiles) storeParsedFile(parsed, projectPath);
+    // Only what changed since the last scan is stored again: after a scan,
+    // that is nothing, where it used to be every file in the project.
+    const stored = getAllFileHashes();
+    await storeParsedFiles(parsedFiles.filter((f) => stored.get(f.path) !== f.contentHash), projectPath);
     resolveImports(projectPath);
     const snapshot = captureSnapshot(parsedFiles.map((f) => ({
       path: path.relative(projectPath, f.path),
