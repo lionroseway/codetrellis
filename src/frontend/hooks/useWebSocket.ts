@@ -166,10 +166,25 @@ export function useWebSocket() {
             const attachment = payload?.attachment;
             if (itemUid && attachment) usePlanItemsStore.getState().onItemAttachmentAdded(itemUid, attachment);
           }
-          if (type === 'plan-item-progress' || type === 'plan-item-blocked' || type === 'plan-item-claimed' || type === 'plan-item-version-saved') {
-            // These already cascade through plan-item-updated; nothing
-            // additional needed here unless the V2 UI wants its own
-            // toast/animation later.
+          // A claim and a progress report do NOT arrive as plan-item-updated
+          // (a comment here said they did), so an agent claiming a task or
+          // reporting 40% left the open plan showing it pending, unassigned,
+          // with no bar, until it was reloaded. Every route that claims or
+          // reports progress sends these two, so they are handled here once.
+          if (type === 'plan-item-progress') {
+            const planUid = payload?.planUid as string | undefined;
+            const itemUid = payload?.itemUid as string | undefined;
+            if (planUid && itemUid && typeof payload?.percent === 'number') {
+              usePlanItemsStore.getState().onItemUpdated(planUid, itemUid, { progressPercent: payload.percent });
+            }
+          }
+          if (type === 'plan-item-claimed') {
+            // The claim decides status and assignee on the server; read them back.
+            const planUid = payload?.planUid as string | undefined;
+            const itemUid = payload?.itemUid as string | undefined;
+            if (planUid && itemUid && usePlanItemsStore.getState().activePlanUid === planUid) {
+              void usePlanItemsStore.getState().fetchItemFull(itemUid);
+            }
           }
           if (type === 'plan-event') {
             const event = payload?.event;

@@ -39,6 +39,15 @@ export interface AppendPlanEventInput {
   createdAt?: number;
 }
 
+/**
+ * Told of every event as it is recorded, so the window's Activity shows it
+ * live. Only one tool broadcast its own events; a status change, a move or
+ * a new task reached an open plan only when it was reloaded.
+ */
+type PlanEventListener = (event: PlanEvent) => void;
+let eventListener: PlanEventListener | null = null;
+export function setPlanEventListener(fn: PlanEventListener | null): void { eventListener = fn; }
+
 export function appendPlanEvent(input: AppendPlanEventInput): PlanEvent {
   const db = getDb();
   const now = input.createdAt ?? Date.now();
@@ -73,7 +82,7 @@ export function appendPlanEvent(input: AppendPlanEventInput): PlanEvent {
 
   markDirty();
 
-  return {
+  const event: PlanEvent = {
     id,
     planUid: input.planUid,
     itemUid: input.itemUid ?? null,
@@ -85,6 +94,8 @@ export function appendPlanEvent(input: AppendPlanEventInput): PlanEvent {
     authorType: input.authorType,
     createdAt: now,
   };
+  try { eventListener?.(event); } catch { /* telling the window never undoes the record */ }
+  return event;
 }
 
 export interface ListPlanEventsOptions {

@@ -60,3 +60,19 @@ test('a list for a plan that is no longer open is dropped', async () => {
   assert.equal(usePlanItemsStore.getState().activePlanUid, 'new');
   assert.equal(usePlanItemsStore.getState().itemsByUid['old-item'], undefined);
 });
+
+test('an Activity event that arrives twice is listed once, and a progress report moves the bar', () => {
+  // Every recorded event is broadcast now, and the one tool that also sends
+  // its own repeats it with the same id.
+  const store = usePlanItemsStore.getState();
+  store.resetForPlan('p2');
+  usePlanItemsStore.setState({ itemsByUid: { a1: { ...summary, uid: 'a1', planUid: 'p2' } as never } });
+  const event = { id: 41, planUid: 'p2', itemUid: 'a1', eventType: 'status_changed', summary: 'pending → assigned', author: 'codex', authorType: 'agent', createdAt: 1 };
+  usePlanItemsStore.getState().onItemEvent(event as never);
+  usePlanItemsStore.getState().onItemEvent(event as never);
+  usePlanItemsStore.getState().onItemEvent({ ...event, id: 42 } as never);
+  assert.deepEqual(usePlanItemsStore.getState().events.map((e) => e.id), [42, 41]);
+
+  usePlanItemsStore.getState().onItemUpdated('p2', 'a1', { progressPercent: 40 });
+  assert.equal(usePlanItemsStore.getState().itemsByUid.a1.progressPercent, 40);
+});

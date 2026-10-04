@@ -523,6 +523,9 @@ export const usePlanItemsStore = create<PlanItemsState>((set, get) => ({
   onItemEvent: (event) => {
     set((s) => {
       if (event.planUid !== s.activePlanUid) return s;
+      // Every recorded event is broadcast now, and one tool also sends its
+      // own: an event already in the list is not added twice.
+      if (typeof event.id === 'number' && event.id >= 0 && s.events.some((e) => e.id === event.id)) return s;
       const next = [event, ...s.events];
       return { events: next.length > EVENTS_CAP ? next.slice(0, EVENTS_CAP) : next };
     });
