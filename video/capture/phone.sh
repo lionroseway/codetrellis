@@ -11,10 +11,10 @@ OUT="$VIDEO_DIR/captures/phone-$FIX"
 PREVIEW=""
 trap '[ -n "$PREVIEW" ] && kill "$PREVIEW" 2>/dev/null || true' EXIT
 
-if ! curl -fs -o /dev/null http://127.0.0.1:5190/; then
+if ! curl -fs -o /dev/null http://localhost:5190/; then
   cd "$REPO_DIR"
   node node_modules/vite/bin/vite.js --config tools/phone-preview/vite.config.ts --port 5190 --strictPort > /dev/null 2>&1 & PREVIEW=$!
-  for i in $(seq 1 90); do curl -fs -o /dev/null http://127.0.0.1:5190/ && break; sleep 1; done
+  for i in $(seq 1 90); do curl -fs -o /dev/null http://localhost:5190/ && break; sleep 1; done
 fi
 
 node "$VIDEO_DIR/capture/phone.cjs" --fixture="phone/$FIX.json" --out="$OUT"

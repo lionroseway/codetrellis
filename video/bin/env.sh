@@ -28,9 +28,12 @@ export DO_NOT_TRACK=1 HYPERFRAMES_NO_TELEMETRY=1 HYPERFRAMES_NO_UPDATE_CHECK=1 \
 # The headless shell renders compositions; full Chromium records the app.
 first() { for p in "$@"; do [ -x "$p" ] && { echo "$p"; return; }; done; }
 if [ -z "${HYPERFRAMES_BROWSER_PATH:-}" ]; then
+  # Newer Playwright installs Chrome for Testing: chrome-headless-shell-<platform>/chrome-headless-shell.
   HYPERFRAMES_BROWSER_PATH="$(first /opt/pw-browsers/chromium_headless_shell-*/chrome-linux/headless_shell \
     "$HOME"/Library/Caches/ms-playwright/chromium_headless_shell-*/chrome-mac*/headless_shell \
-    "$HOME"/.cache/ms-playwright/chromium_headless_shell-*/chrome-linux*/headless_shell)"
+    "$HOME"/Library/Caches/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-mac*/chrome-headless-shell \
+    "$HOME"/.cache/ms-playwright/chromium_headless_shell-*/chrome-linux*/headless_shell \
+    "$HOME"/.cache/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-linux*/chrome-headless-shell)"
 fi
 if [ -n "$HYPERFRAMES_BROWSER_PATH" ]; then
   export HYPERFRAMES_BROWSER_PATH HYPERFRAMES_NO_AUTO_INSTALL=1
@@ -40,9 +43,23 @@ fi
 if [ -z "${VIDEO_CHROMIUM:-}" ]; then
   VIDEO_CHROMIUM="$(first /opt/pw-browsers/chromium-*/chrome-linux/chrome \
     "$HOME"/Library/Caches/ms-playwright/chromium-*/chrome-mac*/Chromium.app/Contents/MacOS/Chromium \
+    "$HOME"/Library/Caches/ms-playwright/chromium-*/chrome-mac*/"Google Chrome for Testing.app"/Contents/MacOS/"Google Chrome for Testing" \
     "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux*/chrome)"
 fi
 [ -n "$VIDEO_CHROMIUM" ] && export VIDEO_CHROMIUM
+
+# need_space <GB> <what>: stop before starting something that would fill the
+# disk halfway through. A smooth capture writes up to ~2 GB of frames before it
+# encodes them, and a render that runs out of room dies late with FFmpeg's
+# exit 1. `npm run clean` frees what is rebuildable.
+need_space() {
+  local free_gb
+  free_gb="$(df -Pk "$VIDEO_DIR" | awk 'NR==2 { printf "%d", $4 / 1048576 }')"
+  if [ "$free_gb" -lt "$1" ]; then
+    echo "Only ${free_gb} GB free on this disk; $2 needs about $1 GB. Run 'npm run clean' (or free space) and try again." >&2
+    return 1
+  fi
+}
 
 # The app and the demo run on the repository's own Node (.nvmrc).
 if [ -d "$HOME/.local/node26/bin" ]; then export PATH="$HOME/.local/node26/bin:$PATH"; fi
