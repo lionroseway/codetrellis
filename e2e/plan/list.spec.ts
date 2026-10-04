@@ -80,7 +80,7 @@ test.describe('Plan list', () => {
     await page.waitForTimeout(1500);
 
     // Workspace should open with the plan title input
-    await expect(page.locator('input[placeholder="Untitled plan"]')).toBeVisible({
+    await expect(page.locator('textarea[placeholder="Untitled plan"]')).toBeVisible({
       timeout: 5000,
     });
   });

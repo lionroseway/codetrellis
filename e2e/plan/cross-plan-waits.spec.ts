@@ -46,7 +46,7 @@ test.describe('A task waiting on another plan', () => {
     // The other plan's task is a link: it opens that plan with the task selected.
     await page.getByTestId('next-up-wait-link').click();
     await expect(page.getByTestId('copy-ref-plan')).toBeVisible();
-    await expect(page.locator('input[placeholder="Untitled"]')).toHaveValue('Migrate schema', { timeout: 10_000 });
+    await expect(page.locator('textarea[placeholder="Untitled"]')).toHaveValue('Migrate schema', { timeout: 10_000 });
     await expect(page.getByText(BILLING).first()).toBeVisible();
     await shot(page, 'cross-plan-wait-opened');
 

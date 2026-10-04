@@ -27,7 +27,7 @@ test.describe('Plan item canvas', () => {
     await page.getByText('Canvas Test Action').first().click();
     await page.waitForTimeout(500);
 
-    const titleInput = page.locator('input[placeholder="Untitled"]');
+    const titleInput = page.locator('textarea[placeholder="Untitled"]');
     await expect(titleInput).toBeVisible({ timeout: 5000 });
     await expect(titleInput).toHaveValue('Canvas Test Action');
   });
@@ -44,7 +44,7 @@ test.describe('Plan item canvas', () => {
     await page.getByText('Editable Title').first().click();
     await page.waitForTimeout(500);
 
-    const titleInput = page.locator('input[placeholder="Untitled"]');
+    const titleInput = page.locator('textarea[placeholder="Untitled"]');
     await titleInput.clear();
     await titleInput.fill('Renamed Title');
     await page.keyboard.press('Tab');

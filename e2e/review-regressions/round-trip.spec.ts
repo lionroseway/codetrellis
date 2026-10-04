@@ -74,7 +74,7 @@ test.describe('code and plan, both directions', () => {
     await page.waitForTimeout(1500);
 
     // We are on the item.
-    const itemTitle = page.locator('input[placeholder="Untitled"]').first();
+    const itemTitle = page.locator('textarea[placeholder="Untitled"]').first();
     await expect(itemTitle).toBeVisible({ timeout: 8000 });
     await expect(itemTitle).toHaveValue(/Align rounding/);
 

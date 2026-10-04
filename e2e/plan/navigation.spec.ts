@@ -30,7 +30,7 @@ test.describe('Plan navigation', () => {
     // Click first item
     await page.getByText('Nav Item One').first().click();
     await page.waitForTimeout(500);
-    const titleInput = page.locator('input[placeholder="Untitled"]');
+    const titleInput = page.locator('textarea[placeholder="Untitled"]');
     await expect(titleInput).toHaveValue('Nav Item One');
 
     // Click second item

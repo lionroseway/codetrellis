@@ -23,7 +23,7 @@ test.describe('Workspace shell', () => {
     await gotoWithProject(page);
     await openPlan(page, PLAN_TITLE);
 
-    await expect(page.locator('input[placeholder="Untitled plan"]')).toBeVisible({
+    await expect(page.locator('textarea[placeholder="Untitled plan"]')).toBeVisible({
       timeout: 5000,
     });
   });
@@ -66,7 +66,7 @@ test.describe('Workspace shell', () => {
     await gotoWithProject(page);
     await openPlan(page, PLAN_TITLE);
 
-    await expect(page.locator('input[placeholder="Untitled plan"]')).toBeVisible({
+    await expect(page.locator('textarea[placeholder="Untitled plan"]')).toBeVisible({
       timeout: 5000,
     });
 
@@ -102,7 +102,7 @@ test.describe('Workspace shell', () => {
     await page.waitForTimeout(1000);
 
     // Workspace should be visible again
-    await expect(page.locator('input[placeholder="Untitled plan"]')).toBeVisible({
+    await expect(page.locator('textarea[placeholder="Untitled plan"]')).toBeVisible({
       timeout: 5000,
     });
   });
@@ -136,7 +136,7 @@ test.describe('Workspace shell', () => {
     expect(onTop, 'a toast covers the minimised-plan chip').toBe(true);
 
     await chip.click({ timeout: 5000 });
-    await expect(page.locator('input[placeholder="Untitled plan"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('textarea[placeholder="Untitled plan"]')).toBeVisible({ timeout: 5000 });
   });
 
   test('Graph toggle button is in workspace header', async ({ page }) => {

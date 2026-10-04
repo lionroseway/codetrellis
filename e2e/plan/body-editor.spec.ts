@@ -6,7 +6,9 @@
  *
  * Note: New plans auto-focus the body textarea. The placeholder is
  * an HTML attribute ("Write what this plan is about..."), NOT visible
- * text — so use getByPlaceholder or locator('textarea').
+ * text — so use getByPlaceholder, or a textarea that is not the title
+ * (titles are textareas too, so they can wrap; their placeholder is
+ * "Untitled" or "Untitled plan").
  */
 
 import { test, expect } from '@playwright/test';
@@ -27,7 +29,7 @@ test.describe('Body editor', () => {
     await page.waitForTimeout(1500);
 
     // The body textarea is auto-visible for new plans
-    const textarea = page.locator('textarea').first();
+    const textarea = page.locator('textarea:not([placeholder^="Untitled"])').first();
     await expect(textarea).toBeVisible({ timeout: 5000 });
   });
 
@@ -38,7 +40,7 @@ test.describe('Body editor', () => {
     await page.locator('button:has-text("New plan")').click();
     await page.waitForTimeout(1500);
 
-    const textarea = page.locator('textarea').first();
+    const textarea = page.locator('textarea:not([placeholder^="Untitled"])').first();
     const placeholder = await textarea.getAttribute('placeholder');
     expect(placeholder).toBeTruthy();
     expect(placeholder!).toContain('Write what this plan is about');
@@ -52,12 +54,12 @@ test.describe('Body editor', () => {
     await page.waitForTimeout(1500);
 
     // Type in the body textarea (auto-focused for new plans)
-    const textarea = page.locator('textarea').first();
+    const textarea = page.locator('textarea:not([placeholder^="Untitled"])').first();
     await expect(textarea).toBeVisible({ timeout: 3000 });
     await textarea.fill('This is the plan description.');
 
     // Now fill the title — clicking it triggers blur on the textarea (saves body)
-    await page.fill('input[placeholder="Untitled plan"]', PLAN_TITLE);
+    await page.fill('textarea[placeholder="Untitled plan"]', PLAN_TITLE);
     await page.keyboard.press('Tab');
 
     // The title saves 500ms after the last keystroke, then a PUT: poll the
@@ -86,7 +88,7 @@ test.describe('Body editor', () => {
 
     if (!bodyVisible) {
       // Body might be in collapsed/read mode — the item title input should at least work
-      const titleInput = page.locator('input[placeholder="Untitled"]');
+      const titleInput = page.locator('textarea[placeholder="Untitled"]');
       await expect(titleInput).toHaveValue('Body Item');
     } else {
       expect(bodyVisible).toBe(true);

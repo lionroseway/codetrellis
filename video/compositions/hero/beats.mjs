@@ -21,6 +21,7 @@
 const hero = (start) => ({ src: 'hero.mp4', start });
 const main = (start) => ({ src: 'main.mp4', start });
 const history = (start) => ({ src: 'code-history.mp4', start });
+const scale = (start) => ({ src: 'scale.mp4', start });
 
 export const ACTS = [
   {
@@ -52,15 +53,15 @@ export const ACTS = [
         shots: [{}, { at: 2.4, fx: 1090, fy: 60, z: 1.55, d: 1.2 }],
         title: 'Connect <b>any</b> agent.',
         body: 'Claude Code, Codex, Cursor: anything that speaks MCP shows up with the work it is doing.' },
-      // The plan builds from the ticket.
-      { layout: 'split', text: 'right', dur: 5, media: main(18.2),
-        shots: [{}, { at: 2.6, fx: 700, fy: 300, z: 1.25, d: 1.6 }],
-        title: 'Turn a ticket into a <b>plan</b>.',
-        body: 'The epic and its children become a plan, each item pointing at the files it will change. You approve it, not the agent.' },
-      // The map opening from clusters into files.
-      { layout: 'full', dur: 5.5, media: hero(12.6),
-        shots: [{}, { at: 3.0, fx: 700, fy: 360, z: 1.2, d: 2.2 }],
-        caption: 'However <b>complex</b> the system.' },
+      // A plan a payments team would run: phases, every service, tickets, a budget.
+      { layout: 'split', text: 'right', dur: 6, media: scale(8.0),
+        shots: [{}, { at: 3.4, fx: 520, fy: 330, z: 1.2, d: 1.8 }],
+        title: 'Turn a ticket into a plan <b>the whole team runs</b>.',
+        body: 'Phases, tasks across every service, tickets, criteria and a budget, each task pointing at the files it will change. You approve it, not the agent.' },
+      // CodeTrellis mapping itself: 1,506 files, and the imports between them.
+      { layout: 'full', dur: 6, media: scale(53.6),
+        shots: [{}, { at: 2.6, fx: 700, fy: 330, z: 1.25, d: 2.6 }],
+        caption: 'However <b>large</b> the codebase.' },
       // Three agents' edits landing live.
       { layout: 'full', dur: 6, media: hero(24.6),
         shots: [{ z: 1.04 }, { at: 1.5, fx: 760, fy: 400, z: 1.3, d: 3.5, ease: 'sine.inOut' }],

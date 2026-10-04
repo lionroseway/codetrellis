@@ -75,7 +75,7 @@ test.describe('The Stack tab', () => {
     // The link opens the task it waits on, in its own plan.
     await exportsRow.getByTestId('stack-dependency-link').click();
     await expect(page.getByTestId('copy-ref-plan')).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('input[placeholder="Untitled"]')).toHaveValue('Migrate schema', { timeout: 10_000 });
+    await expect(page.locator('textarea[placeholder="Untitled"]')).toHaveValue('Migrate schema', { timeout: 10_000 });
     await shot(page, 'stack-wait-opened');
   });
 

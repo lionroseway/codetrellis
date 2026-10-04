@@ -51,7 +51,7 @@ test.describe('Context rail', () => {
     await page.waitForTimeout(500);
 
     // Canvas should render without errors
-    const titleInput = page.locator('input[placeholder="Untitled"]');
+    const titleInput = page.locator('textarea[placeholder="Untitled"]');
     await expect(titleInput).toHaveValue('No Files Action');
   });
 

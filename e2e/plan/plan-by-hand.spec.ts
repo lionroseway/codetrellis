@@ -53,7 +53,7 @@ test.describe('planning by hand', () => {
     // ── create ────────────────────────────────────────────────────
     await page.getByRole('button', { name: 'Plans', exact: true }).first().click();
     await page.locator('button:has-text("New plan")').click();
-    const titleBox = page.locator('input[placeholder="Untitled plan"]');
+    const titleBox = page.locator('textarea[placeholder="Untitled plan"]');
     await expect(titleBox).toBeVisible({ timeout: 5000 });
     await titleBox.fill(TITLE);
     await page.keyboard.press('Tab');
@@ -97,7 +97,7 @@ test.describe('planning by hand', () => {
     const action = items.find((i) => i.kind === 'action')!;
     await page.getByTestId('plan-item-tree').getByText(action.title).first().click();
     await page.waitForTimeout(500);
-    const itemTitle = page.locator('input[placeholder="Untitled"]').first();
+    const itemTitle = page.locator('textarea[placeholder="Untitled"]').first();
     await expect(itemTitle).toBeVisible({ timeout: 5000 });
     await itemTitle.fill('Round half-up in the Go money package');
     await page.keyboard.press('Tab');

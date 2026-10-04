@@ -187,6 +187,18 @@ What the hero video needs that no other group stages (docs/website/hero-video.md
 | `freeze` | the freeze bar across the plan; Cursor checks before starting and is told the plan is frozen |
 | `catch-up` | the digest in Awareness, then the window moving on its own: the overlap, the line in the code, the last minutes replayed, back to live |
 
+## A9. The product under a real load (`scale`) — *built*
+
+A full plan and a large codebase, so the product is seen at the size a team uses it.
+`npm run demo -- --group=scale`; recorded with `video/capture/demo.sh scale-smooth --group=scale --mode=smooth`.
+
+| Scene | Watch for |
+|---|---|
+| `full-plan` | the ledger plan in its workspace: four phases, eighteen tasks, done and in flight and waiting, ticket keys, a budget |
+| `in-flight` | Codex, Claude Code and Cursor each claim a task; progress and files land in the plan and on the map as they work; the orders task is blocked on security |
+| `merge-order` | the Stack tab with three lines of work against main and what to merge first, then the Timeline's lanes |
+| `big-map` | CodeTrellis's own repository opened and mapped: packages, then files |
+
 ## B. The journeys, and where each one lives
 
 ### B1. A human plans it by hand — *built*

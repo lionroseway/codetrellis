@@ -40,7 +40,7 @@ test.describe('Split view', () => {
 
     // Both workspace (plan title) and graph should be visible
     // In split view, there are TWO .react-flow elements — use .first()
-    await expect(page.locator('input[placeholder="Untitled plan"]')).toBeVisible({
+    await expect(page.locator('textarea[placeholder="Untitled plan"]')).toBeVisible({
       timeout: 5000,
     });
     await expect(page.locator('.react-flow').first()).toBeVisible({ timeout: 5000 });
@@ -64,7 +64,7 @@ test.describe('Split view', () => {
     await page.waitForTimeout(1000);
 
     // Workspace should still be visible
-    await expect(page.locator('input[placeholder="Untitled plan"]')).toBeVisible({
+    await expect(page.locator('textarea[placeholder="Untitled plan"]')).toBeVisible({
       timeout: 5000,
     });
     // Graph pane should no longer have two instances

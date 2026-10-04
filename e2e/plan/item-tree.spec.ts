@@ -64,7 +64,7 @@ test.describe('Plan item tree', () => {
     await page.waitForTimeout(500);
 
     // Canvas should show the item's title input
-    const titleInput = page.locator('input[placeholder="Untitled"]');
+    const titleInput = page.locator('textarea[placeholder="Untitled"]');
     await expect(titleInput).toBeVisible({ timeout: 5000 });
     await expect(titleInput).toHaveValue('Tree Click Item');
   });
@@ -83,7 +83,7 @@ test.describe('Plan item tree', () => {
     const hasEmptyContent = await page.getByText('Task').first().isVisible({ timeout: 3000 })
       .catch(() => false);
     // The plan workspace should at least be visible
-    await expect(page.locator('input[placeholder="Untitled plan"]')).toBeVisible({
+    await expect(page.locator('textarea[placeholder="Untitled plan"]')).toBeVisible({
       timeout: 5000,
     });
   });
