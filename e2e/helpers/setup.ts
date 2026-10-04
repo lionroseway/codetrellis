@@ -467,3 +467,30 @@ export async function reachableNodes(page: Page, timeoutMs = 15_000): Promise<Lo
   }
   return ids.map((id) => page.locator(`.react-flow__node[data-id="${id.replace(/"/g, '\\"')}"]`));
 }
+
+/**
+ * Open `filePath` (relative to the project) in the sidebar's Explorer,
+ * folder by folder, and select it. Each row is found by its own path inside
+ * the Explorer tree: a bare name such as `src` also matches rows elsewhere
+ * on the page (the Changes list on a tree with uncommitted work), and two
+ * folders can share a name.
+ */
+export async function pickInExplorer(page: Page, filePath: string) {
+  const tree = page.getByTestId('explorer-tree');
+  const parts = filePath.split('/');
+  const row = (i: number) => {
+    const rel = parts.slice(0, i + 1).join('/');
+    return tree.locator(`button[data-path="${rel}"], button[data-path$="/${rel}"]`).first();
+  };
+  // The top level renders open; wait for it before reading what is open, or
+  // a folder still loading reads as closed and the click below closes it.
+  await expect(row(0)).toBeVisible({ timeout: 15_000 });
+  for (let i = 0; i < parts.length; i++) {
+    const next = i + 1 < parts.length ? row(i + 1) : null;
+    // A folder already open would close on a click.
+    if (next && (await next.isVisible())) continue;
+    await row(i).scrollIntoViewIfNeeded();
+    await row(i).click();
+    if (next) await expect(next).toBeVisible();
+  }
+}

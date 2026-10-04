@@ -354,7 +354,7 @@ export function Sidebar() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-1 py-0.5">
+      <div data-testid="explorer-tree" className="flex-1 overflow-y-auto px-1 py-0.5">
         {scanStatus === 'idle' && !root && (
           <div className="flex flex-col items-center justify-center h-full text-foreground-subtle text-xs gap-3 px-4 text-center">
             <div className="w-10 h-10 rounded-xl bg-surface border border-border flex items-center justify-center">

@@ -5,13 +5,12 @@
  * node type changes after switching.
  */
 
-import { test, expect, type Page } from '@playwright/test';
-import { gotoWithProject, FIXTURE_PATH } from '../helpers/setup';
+import { test, expect } from '@playwright/test';
+import { gotoWithProject, FIXTURE_PATH, pickInExplorer } from '../helpers/setup';
 
 /**
- * Pick a file the way a person does in a large repository: in the Explorer.
- *
- * These tests used to click the file's card on the canvas. The canvas mounts
+ * Files are picked the way a person does in a large repository: in the
+ * Explorer (`pickInExplorer`). These tests used to click the file's card on the canvas. The canvas mounts
  * only the cards inside the viewport (`onlyRenderVisibleElements`), and this
  * suite's project was the repository itself, too big for fit-view to show
  * whole at its minimum zoom: adding any file could move the card off screen
@@ -19,19 +18,6 @@ import { gotoWithProject, FIXTURE_PATH } from '../helpers/setup';
  * and still pick in the Explorer, which selects and focuses the same file
  * wherever the layout puts it.
  */
-async function pickInExplorer(page: Page, filePath: string) {
-  const parts = filePath.split('/');
-  const row = (name: string) => page.getByRole('button', { name, exact: true }).first();
-  for (const [i, name] of parts.entries()) {
-    const next = parts[i + 1];
-    // A folder already open (the top level starts open) would close on a click.
-    if (next && (await row(next).isVisible())) continue;
-    await row(name).scrollIntoViewIfNeeded();
-    await row(name).click();
-    if (next) await expect(row(next)).toBeVisible();
-  }
-}
-
 test.describe('Depth selector', () => {
   test('Clusters / Files / Symbols buttons are visible', async ({ page }) => {
     await gotoWithProject(page, { projectPath: FIXTURE_PATH });
