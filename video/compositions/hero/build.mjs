@@ -98,6 +98,8 @@ beats.forEach((b, i) => {
   // The window fades out for a beat with no product on screen, and back.
   const shown = !HIDDEN.has(b.layout);
   if (prev && HIDDEN.has(prev.layout) !== !shown) js.push(`tl.to('#frame', { opacity: ${shown ? 1 : 0}, scale: ${shown ? 1 : 0.96}, duration: ${MOVE * 0.8}, ease: 'power2.inOut' }, ${Math.max(b.at - PRE, 0)});`);
+  // The "real UI" tag goes with the window: no product on screen, no tag.
+  if (prev && HIDDEN.has(prev.layout) !== !shown) js.push(`tl.to('#realtag', { opacity: ${shown ? 1 : 0}, duration: ${MOVE * 0.6} }, ${Math.max(b.at - PRE, 0)});`);
   // A light veil dims the product behind the close.
   const dim = b.layout === 'rotate';
   if (prev && (prev.layout === 'rotate') !== dim) js.push(`tl.to('#lveil', { opacity: ${dim ? 1 : 0}, duration: ${MOVE}, ease: 'power2.inOut' }, ${b.at - PRE});`);
@@ -281,9 +283,9 @@ const CSS = `
 .mtext h2 b { color: var(--blue); }
 .mtext p { font-size: 26px; color: var(--sub); line-height: 1.45; }
 .mtext .num { font: 500 18px "Geist Mono", monospace; color: var(--blue-ink); background: var(--blue-soft); border-radius: 9px; padding: 7px 11px; align-self: flex-start; }
-.tile-label { position: absolute; font: 600 17px "Geist", sans-serif; color: #fff; background: rgba(8,12,22,.78); border-radius: 9px; padding: 6px 11px; }
+.tile-label { position: absolute; white-space: nowrap; font: 600 17px "Geist", sans-serif; color: #fff; background: rgba(8,12,22,.78); border-radius: 9px; padding: 6px 11px; }
 .rot { position: relative; height: 120px; width: 100%; }
-.rline { position: absolute; left: 0; right: 0; top: 0; opacity: 0; color: var(--blue); }
+.rline { position: absolute; left: 0; right: 0; top: 0; opacity: 0; color: var(--blue); font-size: 68px; white-space: nowrap; }
 .lead { color: var(--ink); }
 .more { font-size: 30px; color: var(--sub); }
 .strip-h { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
