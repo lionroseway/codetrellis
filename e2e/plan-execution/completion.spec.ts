@@ -68,9 +68,9 @@ test.describe('Completion', () => {
     // Completion summary should appear — look for "Plan Complete" or "100%"
     await page.waitForTimeout(2000);
     const hasComplete = await page.getByText('Plan Complete').first()
-      .isVisible({ timeout: 3000 }).catch(() => false);
+      .waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
     const has100 = await page.getByText('100%').first()
-      .isVisible({ timeout: 2000 }).catch(() => false);
+      .waitFor({ state: 'visible', timeout: 2000 }).then(() => true).catch(() => false);
 
     // At minimum the progress should show all done
     expect(hasComplete || has100).toBe(true);
@@ -113,9 +113,9 @@ test.describe('Completion', () => {
     // Header should show "1/2 actions" or "50%"
     await page.waitForTimeout(1500);
     const has1of2 = await page.getByText('1/2').first()
-      .isVisible({ timeout: 3000 }).catch(() => false);
+      .waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
     const has50 = await page.getByText('50%').first()
-      .isVisible({ timeout: 2000 }).catch(() => false);
+      .waitFor({ state: 'visible', timeout: 2000 }).then(() => true).catch(() => false);
 
     expect(has1of2 || has50).toBe(true);
   });

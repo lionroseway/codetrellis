@@ -32,7 +32,7 @@ test.describe('Screenshot capture', () => {
   test('03 - Tree view packages', async ({ page }) => {
     await gotoWithProject(page);
     const btn = page.locator('button:has-text("Tree")');
-    if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await btn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
       await btn.click();
       await page.waitForTimeout(1500);
     }
@@ -85,7 +85,7 @@ test.describe('Screenshot capture', () => {
     await page.getByRole('button', { name: 'Plans', exact: true }).first().click();
     await page.waitForTimeout(300);
     const plan = page.locator('text=Add Auth System').first();
-    if (await plan.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await plan.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
       await plan.click();
       await page.waitForTimeout(3000);
     }
@@ -104,7 +104,7 @@ test.describe('Screenshot capture', () => {
     await page.getByRole('button', { name: 'Plans', exact: true }).first().click();
     await page.waitForTimeout(300);
     const planItem = page.locator('.truncate.font-medium').first();
-    if (await planItem.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await planItem.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
       await planItem.click();
       await page.waitForTimeout(1000);
     }
@@ -126,7 +126,7 @@ test.describe('Screenshot capture', () => {
     await page.getByRole('button', { name: 'Plans', exact: true }).first().click();
     await page.waitForTimeout(300);
     const newBtn = page.locator('text=New').first();
-    if (await newBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await newBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
       await newBtn.click();
       await page.waitForTimeout(500);
     }

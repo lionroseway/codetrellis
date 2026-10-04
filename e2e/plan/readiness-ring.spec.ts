@@ -66,9 +66,9 @@ test.describe('Readiness ring', () => {
     await page.waitForTimeout(500);
 
     // Checklist should expand — look for "Required" or "Suggested" headers
-    const hasRequired = await page.getByText('Required').first().isVisible({ timeout: 2000 })
+    const hasRequired = await page.getByText('Required').first().waitFor({ state: 'visible', timeout: 2000 }).then(() => true)
       .catch(() => false);
-    const hasSuggested = await page.getByText('Suggested').first().isVisible({ timeout: 2000 })
+    const hasSuggested = await page.getByText('Suggested').first().waitFor({ state: 'visible', timeout: 2000 }).then(() => true)
       .catch(() => false);
 
     expect(hasRequired || hasSuggested).toBe(true);

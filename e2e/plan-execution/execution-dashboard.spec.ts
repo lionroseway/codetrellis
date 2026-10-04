@@ -35,9 +35,9 @@ test.describe('Execution dashboard', () => {
     // Activity tab should be visible in the drawer
     // Use a broader check — either "Activity" tab with count badge or "Live" tab
     const hasActivity = await page.getByText('Activity').nth(1)
-      .isVisible({ timeout: 3000 }).catch(() => false);
+      .waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
     const hasLive = await page.getByText('Live').first()
-      .isVisible({ timeout: 2000 }).catch(() => false);
+      .waitFor({ state: 'visible', timeout: 2000 }).then(() => true).catch(() => false);
 
     // At least the button should have toggled the drawer
     expect(hasActivity || hasLive).toBe(true);

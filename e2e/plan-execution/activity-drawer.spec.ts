@@ -120,7 +120,7 @@ test.describe('Activity drawer', () => {
 
     // Look for the collapse button in the drawer
     const collapseBtn = page.locator('button[title="Collapse"]');
-    if (await collapseBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await collapseBtn.waitFor({ state: 'visible', timeout: 2000 }).then(() => true).catch(() => false)) {
       await collapseBtn.click();
       await page.waitForTimeout(500);
 

@@ -64,7 +64,7 @@ test.describe('WebSocket event pipeline', () => {
 
     // The plan should appear in the list WITHOUT a manual refresh
     const planVisible = await page.getByText(PLAN_TITLE).first()
-      .isVisible({ timeout: 5000 }).catch(() => false);
+      .waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
 
     // If real-time push works, it appears instantly. If not, we can
     // verify it appears after clicking the tab again (polling fallback).
@@ -73,9 +73,7 @@ test.describe('WebSocket event pipeline', () => {
       await page.waitForTimeout(1000);
     }
 
-    const planNowVisible = await page.getByText(PLAN_TITLE).first()
-      .isVisible({ timeout: 3000 }).catch(() => false);
-    expect(planNowVisible).toBe(true);
+    await expect(page.getByText(PLAN_TITLE).first()).toBeVisible({ timeout: 3000 });
   });
 
   test('item status update via API triggers broadcast', async ({ page, request }) => {
