@@ -52,8 +52,42 @@ means a capture is needed first.
 | 15 | Use cases | Simple, everyday, advanced | No new video: cards that reuse the clips above | — |
 | 16 | Download | Free and open source | No video: the platform table | — |
 
-Eleven clips, every one from footage already recorded. The phone terminal is the
+Eleven clips, every one from footage already recorded (plus the ladder's three and the cards' nine, below). The phone terminal is the
 only gap inside these sections.
+
+## Scales with you
+
+Straight after the stats, a three-step ladder so a visitor finds themselves
+whether they run one agent or lead a team: the same app, all the way up. Each
+step is a small loop in the same window.
+
+| Step | Heading | The loop shows | Footage |
+|---|---|---|---|
+| 1 · Getting started | Keep track of one agent | Line history naming the agent that wrote a line | Have: `code-history` 14–19 s |
+| 2 · Several agents | Keep them conforming | Two lines of work on one function, named and told | Have: `parallel` 10–15 s |
+| 3 · A whole team | Oversight for everyone | The Stack: every plan, who is on it, where they meet | Have: `observe` 23–32 s |
+
+## More to explore
+
+Near the end, a scrolling row of cards, each a few seconds of the app looping
+(play on hover, tap on a phone), for features the main rows do not show. Show,
+don't tell: the card's picture carries it, the line under it only names it.
+
+| Card | Loop | Footage |
+|---|---|---|
+| Replay any moment | The stack scrubbed back to 10:45 | Have: `observe` 18–24 s |
+| Freeze for release week | The frozen banner appears; agents check before starting | Have: `hero` 42–45 s |
+| Weekly playbooks | A recurring review comes due as a fresh plan | Have: `teams` 17–22 s |
+| "Done" means tested | A criterion failing on tests older than the code | Have: `teams` 43–47 s |
+| Vague plans flagged | A thin plan says what it is missing | Have: `observe` 36–39 s |
+| Approve the evidence | Evidence offered, a person approves | Have: `record` 12–15 s |
+| Shown the lines | The agent opens the file at the lines both sides changed | Have: `hero` 57–60 s |
+| Suggested merge order | The review queue's order, with reasons | Have: `observe` 29–33 s |
+| Answer from your phone | A changed signature on the phone | Have: phone activity |
+
+Cards are 16:10, so their clips are cropped to the region that matters rather
+than the whole window. They are the cheapest clips to add: a new card needs a
+capture moment and one line, nothing else on the page changes.
 
 ## Not shown yet, and what each would need
 
