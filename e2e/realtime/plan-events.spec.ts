@@ -25,10 +25,10 @@ test.describe('Plan events', () => {
     await openPlan(page, PLAN_TITLE);
 
     // Initial action should be visible
-    await expect(page.getByText('Initial Action').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Initial Action').first()).toBeVisible({ timeout: 10_000 });
 
     // Add another item via API while workspace is open
-    await request.post(`${API}/plans/${plan.uid}/items`, {
+    const created = await request.post(`${API}/plans/${plan.uid}/items`, {
       data: {
         kind: 'action',
         title: 'Dynamic New Action',
@@ -37,15 +37,12 @@ test.describe('Plan events', () => {
         status: 'pending',
       },
     });
+    expect(created.ok(), await created.text()).toBe(true);
 
-    // Wait for the UI to poll/update
-    await page.waitForTimeout(3000);
-
-    // The new item should appear (may need a manual refresh)
-    const hasNewItem = await page.getByText('Dynamic New Action').first()
-      .isVisible({ timeout: 5000 }).catch(() => false);
-
-    // Even if realtime update doesn't fire, the initial items should still be there
+    // It arrives in the open tree on its own, with no reload. This used to
+    // sample once and ignore the answer, so it passed whether or not the
+    // update came; the window has been told of new items live since #340.
+    await expect(page.getByTestId('plan-item-tree').getByText('Dynamic New Action').first()).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('Initial Action').first()).toBeVisible();
   });
 
