@@ -112,6 +112,11 @@ const FIXTURE_SPECS = [
   // Scans the sample app over REST; beside it, the repository's re-exports
   // spec found its inspector empty (#208's second run).
   '**/live-agent/file-watcher-pipeline.spec.ts',
+  // Plans in the sample app by hand. Beside specs opening the repository,
+  // its window's own requests queued behind reads slowed by their scans,
+  // and the plan it created or the task it added was not there in time
+  // (#147, #158).
+  '**/plan/plan-by-hand.spec.ts',
 ];
 
 /** Specs that need the backend to themselves — see the `serial` project. */
