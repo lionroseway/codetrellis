@@ -237,6 +237,22 @@ export function CodeWorkspace() {
     return () => { cancelled = true; };
   }, [lineHistoryOn, root, relativePath]);
   const lineData = lineHistory.path === relativePath ? lineHistory.data : null;
+  // An agent showing whose line it is (navigate_to with line_history): the
+  // toggle a person would press, then that line's card once the file's
+  // history is read, and only on the file it asked about.
+  const lineHistoryRequest = useUiStore((s) => s.lineHistoryRequest);
+  const [answered, setAnswered] = useState<number | null>(null);
+  useEffect(() => {
+    if (!lineHistoryRequest) return;
+    setLineHistoryOn(true);
+    setMode('read');
+  }, [lineHistoryRequest]);
+  useEffect(() => {
+    const r = lineHistoryRequest;
+    if (!r || r.line == null || answered === r.at || !lineData || absPath !== r.filePath) return;
+    setAnswered(r.at);
+    setChosenLine(r.line);
+  }, [lineHistoryRequest, lineData, absPath, answered]);
   const chosenHunk = lineData && chosenLine != null ? hunkAt(lineData, chosenLine) : null;
 
   if (!root) {

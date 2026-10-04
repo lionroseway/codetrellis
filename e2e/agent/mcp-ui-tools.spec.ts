@@ -202,5 +202,31 @@ test.describe('UI tools against the window', () => {
       }
     }
   });
-});
 
+  test('navigate_to opens the code reader with Line history on, at the card for the line the agent named', async ({ page }) => {
+    // "Whose line is this?": an agent could answer in words (line_history)
+    // and open the file, but not put who wrote it on screen.
+    const FILE = 'README.md';
+    const A = 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678';
+    const B = 'b2c3d4e5f60718293a4b5c6d7e8f901234567890';
+    await page.route('**/api/git/line-history?*', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({
+        at: 'live', path: FILE, lineCount: 12, uncommitted: 0, command: `git blame -- ${FILE}`,
+        hunks: [{ start: 1, end: 4, sha: A }, { start: 5, end: 12, sha: B }],
+        commits: {
+          [A]: { sha: A, short: A.slice(0, 7), author: 'Sam Lee', email: 'sam@acme.test', at: Date.now() - 86_400_000, subject: 'Start the readme', attribution: null },
+          [B]: { sha: B, short: B.slice(0, 7), author: 'Sam Lee', email: 'sam@acme.test', at: Date.now() - 3_600_000, subject: 'Half-even',
+            attribution: { agent: 'codex', how: 'timing', words: "probably codex: committed while codex's session was open in this checkout" } },
+        },
+      }),
+    }));
+    await gotoWithProject(page);
+    const res = await client.callTool('navigate_to', { target: 'code', file_path: `${PROJECT_PATH}/${FILE}`, line: 6, line_history: true });
+    expect(res.isError, res.content?.[0]?.text).toBeFalsy();
+    await expect(page.getByTestId('code-line-history')).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+    const card = page.getByTestId('line-card');
+    await expect(card.getByTestId('line-card-subject')).toHaveText('Lines 5–12: Half-even', { timeout: 10_000 });
+    await expect(card.getByTestId('line-card-attribution')).toContainText("probably codex: committed while codex's session was open in this checkout");
+  });
+});

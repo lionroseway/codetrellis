@@ -102,6 +102,9 @@ interface UiState {
   toggleSidebar: () => void;
   highlight: UiHighlight | null;
   setHighlight: (h: UiHighlight | null) => void;
+  /** An agent asked the code reader for its Line history (navigate_to), on a file and optionally a line. */
+  lineHistoryRequest: { filePath: string; line: number | null; at: number } | null;
+  requestLineHistory: (filePath: string, line: number | null) => void;
   /** Show the sidebar when it is hidden (an agent opening one of its views). */
   showSidebar: () => void;
   toggleInspector: () => void;
@@ -211,6 +214,8 @@ export const useUiStore = create<UiState>((set) => ({
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
   highlight: null,
   setHighlight: (highlight) => set({ highlight }),
+  lineHistoryRequest: null,
+  requestLineHistory: (filePath, line) => set({ lineHistoryRequest: { filePath, line, at: Date.now() } }),
   showSidebar: () => set({ sidebarVisible: true }),
   toggleInspector: () => set((s) => ({ inspectorVisible: !s.inspectorVisible })),
   toggleAgentPanel: () => set((s) => ({ agentPanelVisible: !s.agentPanelVisible })),

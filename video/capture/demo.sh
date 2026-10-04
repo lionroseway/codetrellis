@@ -30,7 +30,10 @@ REC=""
 cleanup() {
   [ -n "$REC" ] && { touch "$OUT/stop" 2>/dev/null || true; wait "$REC" 2>/dev/null || true; }
   for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null || true; done
-  rm -rf "$WORK"
+  # The backend writes its data directory as it shuts down: wait for it, or
+  # rm races those writes and fails ("Directory not empty") after a good run.
+  for p in "${PIDS[@]}"; do wait "$p" 2>/dev/null || true; done
+  rm -rf "$WORK" || true
 }
 trap cleanup EXIT
 
@@ -61,6 +64,10 @@ for i in $(seq 1 120); do
   sleep 1
 done
 
+# A re-capture into the same folder must not see the last run's "ready":
+# the demo would start before the window has loaded, and its own check
+# refuses to run against a shell that is not there yet.
+rm -f "$OUT/ready" "$OUT/stop"
 node "$VIDEO_DIR/capture/desktop.cjs" --out="$OUT" --mode="$MODE" & REC=$!
 for i in $(seq 1 60); do [ -f "$OUT/ready" ] && break; sleep 1; done
 sleep 2

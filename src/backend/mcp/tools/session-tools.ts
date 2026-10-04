@@ -114,6 +114,10 @@ export function register(server: McpServer, deps: ToolDeps): void {
         // "look at what changed" could not make that happen.
         file_path: z.string().optional().describe('For target "code": absolute path of the file to open.'),
         line: z.number().int().optional().describe('For target "code": line to scroll to and mark.'),
+        // "Whose line is this?" is a question an agent can answer in words
+        // (line_history) and could not put on screen: the reader opened at
+        // the line, with who wrote it nowhere in sight.
+        line_history: z.boolean().optional().describe('For target "code": turn on the reader\'s Line history, so the person sees who wrote each run of lines; with `line`, that line\'s card opens: its commit, git author, the agent and how CodeTrellis knows.'),
         // Phase 31 §5 — an agent that says "look at the figure I cited" can
         // put it on screen, and one working a brief can show the task.
         item_uid: z.string().optional().describe('For target "brief": the task to show.'),
@@ -133,7 +137,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         }).strict().optional().describe('For target "artefact": where in the file — {sheet, range}, {page}, {lines}, {text} or {t}.'),
       },
     },
-    async ({ target, plan_uid, file_path, line, item_uid, attachment_uid, locator, from, to, speed, signal_id, breakpoint_ref }) => {
+    async ({ target, plan_uid, file_path, line, line_history, item_uid, attachment_uid, locator, from, to, speed, signal_id, breakpoint_ref }) => {
       const when = (v: number | string | undefined, name: string): number | undefined | { error: string } => {
         if (v === undefined) return undefined;
         const ms = typeof v === 'number' ? v : Date.parse(v);
@@ -147,6 +151,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if ((signal_id || breakpoint_ref) && target !== 'awareness') {
         return { content: [{ type: 'text' as const, text: 'signal_id and breakpoint_ref go with target "awareness"' }], isError: true };
       }
+      if (line_history && target !== 'code') {
+        return { content: [{ type: 'text' as const, text: 'line_history goes with target "code"' }], isError: true };
+      }
       if (target === 'artefact' && !attachment_uid) {
         return { content: [{ type: 'text' as const, text: 'target "artefact" needs attachment_uid' }], isError: true };
       }
@@ -154,7 +161,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         ?? (attachment_uid && !deps.artefactService.getArtefact(attachment_uid) ? notFound('Recorded file', attachment_uid) : null);
       if (refused) return refused;
       deps.broadcast('ui-navigate', {
-        target, planUid: plan_uid, filePath: file_path, line, itemUid: item_uid, attachmentUid: attachment_uid, locator: locator ?? null,
+        target, planUid: plan_uid, filePath: file_path, line, lineHistory: line_history === true ? true : undefined, itemUid: item_uid, attachmentUid: attachment_uid, locator: locator ?? null,
         from: fromMs as number | undefined, to: toMs as number | undefined, speed, signalId: signal_id, breakpointRef: breakpoint_ref,
       });
       return { content: [{ type: 'text' as const, text: `Navigated to ${target}${plan_uid ? ` (plan ${plan_uid})` : ''}` }] };

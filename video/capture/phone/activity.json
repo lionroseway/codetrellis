@@ -1,0 +1,60 @@
+{
+  "about": "The phone's Activity tab (mobile/app/(tabs)/activity.tsx) opening on Needs you, worded as the desktop's hero scenes: an agent waiting at a breakpoint, the digest's line, the contract change and the overlap with Dana's branch. Shown, not tapped.",
+  "screen": "activity",
+  "state": {
+    "waitingBreakpoints": 1,
+    "openSignals": 1
+  },
+  "rpc": {
+    "awareness.needsYou": {
+      "projectRoot": "/work/acme-shop",
+      "digest": {
+        "needsYou": 1,
+        "low": 0,
+        "moreLines": 0,
+        "lines": [
+          {
+            "text": "`billing-v2` changed validateCreateUser's signature; `checkout-fix` imports it",
+            "question": "keep the old signature, or update the callers?",
+            "told": true,
+            "signalIds": [
+              "k1"
+            ]
+          }
+        ]
+      },
+      "signals": [
+        {
+          "id": "k1",
+          "kind": "contract",
+          "severity": "high",
+          "state": "open",
+          "heading": "Changed signature",
+          "summary": "`billing-v2` changed validateCreateUser in packages/shared/src/validators.ts: (payload: CreateUserPayload): string[] → (payload: CreateUserPayload, strict: boolean): string[]. `checkout-fix` imports it in 1 file",
+          "sides": [
+            "billing-v2",
+            "checkout-fix"
+          ],
+          "firstSeen": -540000,
+          "lastSeen": -60000
+        },
+        {
+          "id": "c1",
+          "kind": "collision",
+          "severity": "medium",
+          "state": "acknowledged",
+          "heading": "Same function",
+          "summary": "`billing-v2` and `dana/signup-copy` both change packages/shared/src/validators.ts → isValidEmail",
+          "sides": [
+            "billing-v2",
+            "dana/signup-copy"
+          ],
+          "firstSeen": -2400000,
+          "lastSeen": -300000
+        }
+      ]
+    }
+  },
+  "waitFor": "NEEDS YOU",
+  "before": 2.5
+}

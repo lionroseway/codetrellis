@@ -319,8 +319,10 @@ export function useWebSocket() {
               // person clicking would.
               const filePath = payload?.filePath as string | undefined;
               if (filePath) {
-                void import('../lib/open-file-at').then((m) =>
-                  m.openFileAt(filePath, (payload?.line as number | undefined) ?? null));
+                const line = (payload?.line as number | undefined) ?? null;
+                void import('../lib/open-file-at').then((m) => m.openFileAt(filePath, line));
+                // With line_history: who wrote each run, and that line's card.
+                if (payload?.lineHistory === true) useUiStore.getState().requestLineHistory(filePath, line);
               } else {
                 useUiStore.getState().setWorkspaceMode('code');
               }

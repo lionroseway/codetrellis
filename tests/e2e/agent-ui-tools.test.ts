@@ -75,6 +75,7 @@ test.describe.serial('Agent UI and diagnostics tools', () => {
       ['navigate_to', { target: 'stack' }, 'ui-navigate', { target: 'stack' }],
       ['navigate_to', { target: 'review' }, 'ui-navigate', { target: 'review' }],
       ['navigate_to', { target: 'code', file_path: path.join(h.fixture.projectPath, 'packages/web/src/api.ts'), line: 3 }, 'ui-navigate', { target: 'code', line: 3 }],
+      ['navigate_to', { target: 'code', file_path: path.join(h.fixture.projectPath, 'packages/web/src/api.ts'), line: 2, line_history: true }, 'ui-navigate', { target: 'code', line: 2, lineHistory: true }],
       ['toggle_panel', { panel: 'inspector' }, 'ui-toggle', { panel: 'inspector' }],
       ['refresh_ui', {}, 'ui-refresh', {}],
       // set_baseline really pins now (0.4h, bug 29): tests/e2e/baseline.test.ts.
@@ -115,6 +116,7 @@ test.describe.serial('Agent UI and diagnostics tools', () => {
     for (const [tool, args, says] of [
       ['navigate_to', { target: 'replay', from: 'not a time' }, 'from is not a time'],
       ['navigate_to', { target: 'graph', signal_id: 'sig-1' }, 'go with target "awareness"'],
+      ['navigate_to', { target: 'graph', line_history: true }, 'line_history goes with target "code"'],
       ['open_settings', { section: 'no-such-section' }, 'section'],
     ] as Array<[string, Record<string, unknown>, string]>) {
       const res = await agent.callTool(tool, args);
