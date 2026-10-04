@@ -3,6 +3,7 @@
 //
 //   node capture/all.mjs hero            # the missing ones
 //   node capture/all.mjs hero --force    # all of them again
+//   node capture/all.mjs clips           # what the site's short loops use
 //
 // Captures run one at a time (each starts its own app on the same ports).
 import fs from 'node:fs';
@@ -14,11 +15,12 @@ const [name, ...flags] = process.argv.slice(2);
 if (!name) { console.error('usage: node capture/all.mjs <composition> [--force]'); process.exit(2); }
 const force = flags.includes('--force');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'captures.json'), 'utf8'));
-const media = JSON.parse(fs.readFileSync(path.join(root, 'compositions', name, 'media.json'), 'utf8'));
-
-const needed = [...new Set(Object.entries(media)
-  .filter(([k]) => !k.startsWith('_'))
-  .map(([, spec]) => (spec.from ?? spec.still).split('/')[1]))];
+// `clips` is the site's short loops (clips/site.json); anything else is a composition.
+const needed = name === 'clips'
+  ? (() => { const c = JSON.parse(fs.readFileSync(path.join(root, 'clips', 'site.json'), 'utf8')); return [...new Set([...c.clips, ...(c.transcripts ?? [])].map((x) => x.src))]; })()
+  : [...new Set(Object.entries(JSON.parse(fs.readFileSync(path.join(root, 'compositions', name, 'media.json'), 'utf8')))
+    .filter(([k]) => !k.startsWith('_'))
+    .map(([, spec]) => (spec.from ?? spec.still).split('/')[1]))];
 
 const run = (cmd, args) => {
   console.log(`\n$ ${cmd} ${args.join(' ')}`);
@@ -35,4 +37,6 @@ for (const cap of needed) {
   else if (how.phone) run('bash', ['capture/phone.sh', how.phone]);
   else if (how.ci) run('node', ['capture/ci.cjs', `--out=${path.join(root, 'captures', cap)}`]);
 }
-console.log(`\nEvery capture ${name} uses is in captures/. Next: npm run render ${name}, then npm run review ${name}.`);
+console.log(name === 'clips'
+  ? '\nEvery capture the site loops use is in captures/. Next: npm run render:clips.'
+  : `\nEvery capture ${name} uses is in captures/. Next: npm run render ${name}, then npm run review ${name}.`);

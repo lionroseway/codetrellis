@@ -54,11 +54,23 @@ A lighter copy for sharing or review channels that refuse large files:
 . bin/env.sh && "$FFMPEG" -i out/hero.mp4 -c:v libx264 -crf 26 -pix_fmt yuv420p -movflags +faststart out/hero-share.mp4
 ```
 
+### The site's short loops
+
+```bash
+npm run clips        # captures anything missing, then renders out/clips/ (~2–3 min)
+```
+
+Twenty seamless loops (MP4, WebM, poster each), the CI transcript, and
+`manifest.json`, from `clips/site.json`: one list saying what each loop shows and
+the capture, scene and moment it is cut from (`docs/website/section-videos.md`
+has the page they go on). Look at every poster before handing them over.
+
+`npm run site` does the hero and the loops in one go.
+
 ### Handing it to the website
 
-The website session needs only the files in `out/`: `hero.mp4` (or a web encode
-of it) and, once they exist, the section clips. Nothing else in this folder
-ships with the site.
+The website session needs only `out/hero.mp4` (or `out/hero-share.mp4`) and
+`out/clips/`. Nothing else in this folder ships with the site.
 
 ## What the spike found (October 2026)
 
@@ -87,13 +99,16 @@ video/
   bin/
     env.sh            tool paths (FFmpeg from npm, Chromium on the machine), telemetry off
     review.mjs        a frame of every beat at its moment, to check the words against the picture
+    clips.mjs         renders clips/site.json into out/clips/: seamless loops, posters, manifest
     motion.mjs        how much moves, second by second, in a capture: where to cut
     setup.mjs         copies GSAP and the Geist fonts into each composition
     stage.mjs         copies footage and stills from captures/ as media.json says
     check.sh          HyperFrames' check on every HTML composition
     render.sh         stage, check, render one composition, contact sheet
+  clips/
+    site.json         every short loop on the site: capture, scene, moment, crop
   capture/
-    all.mjs           every capture a composition uses, from captures.json
+    all.mjs           every capture a composition (or `clips`) uses, from captures.json
     ci.cjs            a real `codetrellis check` run, recorded as a transcript
     demo.sh           throwaway app + recorder + a demo group, then encode
     desktop.cjs       records the window: --mode=hd (2x) or --mode=smooth

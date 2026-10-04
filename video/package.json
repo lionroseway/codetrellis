@@ -14,7 +14,10 @@
     "render": "bash bin/render.sh",
     "review": "bash -c '. bin/env.sh && node bin/review.mjs \"$@\"' --",
     "hero": "npm run capture hero && npm run render hero && npm run review hero",
-    "render:all": "bash bin/render.sh real-ui-hero && bash bin/render.sh real-footage && bash bin/render.sh collision && bash bin/render.sh remotion-hero"
+    "render:all": "bash bin/render.sh real-ui-hero && bash bin/render.sh real-footage && bash bin/render.sh collision && bash bin/render.sh remotion-hero",
+    "render:clips": "bash -c '. bin/env.sh && node bin/clips.mjs \"$@\"' --",
+    "clips": "npm run capture clips && npm run render:clips",
+    "site": "npm run hero && npm run clips"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
