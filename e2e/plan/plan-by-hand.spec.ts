@@ -54,7 +54,10 @@ test.describe('planning by hand', () => {
     await page.getByRole('button', { name: 'Plans', exact: true }).first().click();
     await page.locator('button:has-text("New plan")').click();
     const titleBox = page.locator('textarea[placeholder="Untitled plan"]');
-    await expect(titleBox).toBeVisible({ timeout: 5000 });
+    // The window has just loaded and fires some forty reads at once; the
+    // browser runs six at a time per host, so the create can queue behind
+    // them for several seconds. 5 s was not always enough.
+    await expect(titleBox).toBeVisible({ timeout: 15_000 });
     await titleBox.fill(TITLE);
     await page.keyboard.press('Tab');
 
@@ -98,7 +101,7 @@ test.describe('planning by hand', () => {
     await page.getByTestId('plan-item-tree').getByText(action.title).first().click();
     await page.waitForTimeout(500);
     const itemTitle = page.locator('textarea[placeholder="Untitled"]').first();
-    await expect(itemTitle).toBeVisible({ timeout: 5000 });
+    await expect(itemTitle).toBeVisible({ timeout: 15_000 });
     await itemTitle.fill('Round half-up in the Go money package');
     await page.keyboard.press('Tab');
     await page.waitForTimeout(900);

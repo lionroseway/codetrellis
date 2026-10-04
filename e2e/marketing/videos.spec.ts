@@ -148,7 +148,7 @@ test.describe('Video: Full experience', () => {
         const driftBtn = page.locator('button:has-text("Changes")').or(
           page.locator('button:has-text("Diff")'),
         ).first();
-        if (await driftBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        if (await driftBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
           await driftBtn.click({ force: true });
           await wait(page, 3000);
         }
@@ -159,7 +159,7 @@ test.describe('Video: Full experience', () => {
 
     // ── Timeline ──
     const timelineBtn = page.locator('button:has-text("Timeline")').first();
-    if (await timelineBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await timelineBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
       await timelineBtn.click({ force: true });
       await wait(page, 4000);
     }
@@ -183,7 +183,7 @@ test.describe('Video: Understand any codebase', () => {
     await wait(page, 4000);
 
     const apiNode = page.locator('text=api.ts').first();
-    if (await apiNode.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await apiNode.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
       await apiNode.click({ force: true });
       await wait(page, 3000);
     }
@@ -251,7 +251,7 @@ test.describe('Video: Plan before you build', () => {
 
     // Projection overlay
     const plannedBtn = page.locator('button:has-text("Planned")');
-    if (await plannedBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await plannedBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
       await plannedBtn.click({ force: true });
       await wait(page, 3000);
     }

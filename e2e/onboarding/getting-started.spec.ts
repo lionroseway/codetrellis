@@ -85,7 +85,7 @@ test.describe('Getting Started checklist', () => {
     // one. When it is offered, it must open the guide (which replaced the
     // three-step "Connect an AI Agent" wizard).
     const link = page.getByText('Show MCP setup');
-    if (await link.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await link.waitFor({ state: 'visible', timeout: 2000 }).then(() => true).catch(() => false)) {
       await link.click();
       await expect(page.getByRole('dialog', { name: 'CodeTrellis guide' })).toBeVisible({ timeout: 3000 });
     }
@@ -102,7 +102,7 @@ test.describe('Getting Started checklist', () => {
     await page.waitForTimeout(1500);
 
     const dismissBtn = page.locator('button[title="Dismiss until next session"]');
-    if (await dismissBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await dismissBtn.waitFor({ state: 'visible', timeout: 2000 }).then(() => true).catch(() => false)) {
       await dismissBtn.click();
       await page.waitForTimeout(500);
 

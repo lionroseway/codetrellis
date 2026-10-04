@@ -38,7 +38,7 @@ test.describe('Plan → Graph flow', () => {
     await expect(page.getByText('Refactor server entry').first()).toBeVisible({ timeout: 5000 });
 
     // The graph canvas should still be accessible (behind or alongside plan)
-    const graphExists = await page.locator('.react-flow').first().isVisible({ timeout: 3000 })
+    const graphExists = await page.locator('.react-flow').first().waitFor({ state: 'visible', timeout: 3000 }).then(() => true)
       .catch(() => false);
     // Graph may be hidden in plan-only mode — that's valid
     expect(typeof graphExists).toBe('boolean');
@@ -80,9 +80,9 @@ test.describe('Plan → Graph flow', () => {
 
     // Both plan content AND graph should be visible
     const planVisible = await page.getByText('Split view action').first()
-      .isVisible({ timeout: 3000 }).catch(() => false);
+      .waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
     const graphVisible = await page.locator('.react-flow').first()
-      .isVisible({ timeout: 3000 }).catch(() => false);
+      .waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
 
     // At least one should be visible (split may not render both in all viewport sizes)
     expect(planVisible || graphVisible).toBe(true);
@@ -146,7 +146,7 @@ test.describe('Plan → Graph flow', () => {
 
     // SelectionActionBar should appear with "Plan these"
     const planTheseBtn = page.getByText('Plan these');
-    const barVisible = await planTheseBtn.isVisible({ timeout: 3000 }).catch(() => false);
+    const barVisible = await planTheseBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
 
     if (barVisible) {
       await planTheseBtn.click();

@@ -13,23 +13,11 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { test, expect, type Page } from '@playwright/test';
-import { gotoWithProject } from '../helpers/setup';
+import { test, expect } from '@playwright/test';
+import { gotoWithProject, pickInExplorer } from '../helpers/setup';
 
 const OUT = path.join('test-results', 'ux-audit');
 const FILE = 'src/shared/types/agent.ts';
-
-async function pickInExplorer(page: Page, filePath: string) {
-  const parts = filePath.split('/');
-  const row = (name: string) => page.getByRole('button', { name, exact: true }).first();
-  for (const [i, name] of parts.entries()) {
-    const next = parts[i + 1];
-    if (next && (await row(next).isVisible())) continue;
-    await row(name).scrollIntoViewIfNeeded();
-    await row(name).click();
-    if (next) await expect(row(next)).toBeVisible();
-  }
-}
 
 const failing = {
   path: FILE, state: 'failing', words: '✗ 1 of 3 tests failing', isTest: false,

@@ -10,23 +10,10 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { test, expect, type Page } from '@playwright/test';
-import { gotoWithProject } from '../helpers/setup';
+import { test, expect } from '@playwright/test';
+import { gotoWithProject, pickInExplorer } from '../helpers/setup';
 
 const OUT = path.join('test-results', 'ux-audit');
-
-/** Open a file from the Explorer, a folder at a time. */
-async function pickInExplorer(page: Page, filePath: string) {
-  const parts = filePath.split('/');
-  const row = (name: string) => page.getByRole('button', { name, exact: true }).first();
-  for (const [i, name] of parts.entries()) {
-    const next = parts[i + 1];
-    if (next && (await row(next).isVisible())) continue; // already open
-    await row(name).scrollIntoViewIfNeeded();
-    await row(name).click();
-    if (next) await expect(row(next)).toBeVisible();
-  }
-}
 
 test.describe('Inspector: re-exports', () => {
   test.use({ viewport: { width: 1440, height: 900 } });

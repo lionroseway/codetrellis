@@ -153,9 +153,7 @@ test.describe('MCP agent flow — golden chain', () => {
     await page.getByRole('button', { name: 'Plans', exact: true }).click();
     await page.waitForTimeout(1000);
 
-    const planVisible = await page.getByText(PLAN_TITLE).first()
-      .isVisible({ timeout: 5000 }).catch(() => false);
-    expect(planVisible).toBe(true);
+    await expect(page.getByText(PLAN_TITLE).first()).toBeVisible({ timeout: 5000 });
 
     // --- Step 5: Update item status (simulates agent working) ---
     await request.put(`${API}/items/${item.uid}`, {

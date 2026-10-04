@@ -26,13 +26,13 @@ test.describe('Toast notifications', () => {
 
     // If the __test_addToast hook isn't exposed, inject directly via evaluate
     const toastVisible = await page.getByText('Test Toast').first()
-      .isVisible({ timeout: 2000 }).catch(() => false);
+      .waitFor({ state: 'visible', timeout: 2000 }).then(() => true).catch(() => false);
 
     if (!toastVisible) {
       // Fallback: trigger a toast by using a known UI action that produces one
       // The "Copy MCP config" button produces a toast-like feedback
       const copyBtn = page.locator('button[title="Copy MCP config"]');
-      if (await copyBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      if (await copyBtn.waitFor({ state: 'visible', timeout: 2000 }).then(() => true).catch(() => false)) {
         await copyBtn.click();
         await page.waitForTimeout(500);
       }
@@ -40,7 +40,7 @@ test.describe('Toast notifications', () => {
 
     // Verify the toast container exists (fixed bottom-right position)
     const toastContainer = page.locator('.fixed.bottom-8.right-4, [role="alert"]').first();
-    const hasToasts = await toastContainer.isVisible({ timeout: 3000 }).catch(() => false);
+    const hasToasts = await toastContainer.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
 
     // At minimum, the toast system should be wired up (container exists when toasts fire)
     expect(typeof hasToasts).toBe('boolean');

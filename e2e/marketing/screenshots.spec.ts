@@ -73,7 +73,7 @@ test.describe('understand/', () => {
     await page.locator('button:has-text("Files")').first().click();
     await wait(page, 2000);
     const serverNode = page.locator('text=server.ts').first();
-    if (await serverNode.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await serverNode.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false)) {
       await serverNode.click();
       await wait(page, 1500);
     }
@@ -152,7 +152,7 @@ test.describe('plan/', () => {
     await wait(page, 2000);
 
     const plannedBtn = page.locator('button:has-text("Planned")');
-    if (await plannedBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await plannedBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
       await plannedBtn.click();
       await wait(page, 2000);
     }
@@ -179,7 +179,7 @@ test.describe('plan/', () => {
     await page.locator('text=Add JWT Authentication').first().click();
     await wait(page, 1500);
     const commentsBtn = page.locator('button:has-text("Comments")').first();
-    if (await commentsBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await commentsBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
       await commentsBtn.click({ force: true });
       await wait(page, 1000);
     }
@@ -192,7 +192,7 @@ test.describe('plan/', () => {
     await page.getByRole('button', { name: 'Plans', exact: true }).first().click();
     await wait(page, 500);
     const newBtn = page.locator('text=New').first();
-    if (await newBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await newBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
       await newBtn.click();
       await wait(page, 1000);
     }
@@ -441,7 +441,7 @@ test.describe('keep-on-track/', () => {
     await page.getByRole('button', { name: 'Plans', exact: true }).first().click({ force: true });
     await wait(page, 500);
     const planRow = page.locator('text=Add Error Handling').first();
-    if (await planRow.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await planRow.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
       await planRow.click({ force: true });
       await wait(page, 1500);
     }
@@ -491,7 +491,7 @@ test.describe('keep-on-track/', () => {
         const changesBtn = page.locator('button:has-text("Changes")').or(
           page.locator('button:has-text("Diff")'),
         ).first();
-        if (await changesBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        if (await changesBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
           await changesBtn.click({ force: true });
           await wait(page, 2000);
         }
@@ -508,7 +508,7 @@ test.describe('keep-on-track/', () => {
     await wait(page, 2000);
 
     const timelineBtn = page.locator('button:has-text("Timeline")').first();
-    if (await timelineBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await timelineBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
       await timelineBtn.click({ force: true });
       await wait(page, 2000);
     }
@@ -535,7 +535,7 @@ test.describe('onboarding/', () => {
     await wait(page, 1000);
 
     const connectBtn = page.locator('button:has-text("Connect Agent")').first();
-    if (await connectBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await connectBtn.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false)) {
       await connectBtn.click();
       await wait(page, 1000);
     }
@@ -553,7 +553,7 @@ test.describe('onboarding/', () => {
     const settingsBtn = page.locator('button[aria-label="Settings"]').or(
       page.locator('button:has-text("Settings")'),
     ).first();
-    if (await settingsBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await settingsBtn.waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)) {
       await settingsBtn.click();
     } else {
       await page.keyboard.press('Meta+,');

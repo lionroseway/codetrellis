@@ -33,9 +33,9 @@ test.describe('Terminal panel', () => {
 
     // Panel should expand — look for "New terminal" button or a session tab
     const hasNewTerminal = await page.locator('button[title="New terminal"]')
-      .isVisible({ timeout: 3000 }).catch(() => false);
+      .waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
     const hasTermContent = await page.getByText('New terminal')
-      .isVisible({ timeout: 2000 }).catch(() => false);
+      .waitFor({ state: 'visible', timeout: 2000 }).then(() => true).catch(() => false);
 
     expect(hasNewTerminal || hasTermContent).toBe(true);
   });

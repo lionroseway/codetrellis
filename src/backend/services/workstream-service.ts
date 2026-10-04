@@ -22,6 +22,7 @@ import { withSymbolChanges, type SymbolParser } from './workstream-symbols';
 import { branchWorkstreamsOf, showAtAsync } from './branch-workstreams';
 import { getEffectiveSensorConfig } from './project-config-service';
 import { listTrustedRoots } from './trusted-roots';
+import { gitAsync } from './git-env';
 import { getRecentProject } from './recent-projects-service';
 
 /** A Claude Code session the watcher follows (see `claude-code-watcher.ts`). */
@@ -201,6 +202,48 @@ export async function listWorkstreams(projectRoot: string, opts: { includeIdle?:
   if (main && listed.length) void watchRefs(main.path).catch(() => {});
   const withBranches = withIntents([...all, ...branches]);
   return opts.includeIdle ? withBranches : withBranches.filter((w) => !w.idle);
+}
+
+/** Where a line of work is checked out, and on which branch: all a section check needs. */
+export interface WorkstreamPlace {
+  /** A worktree or clone folder, or `branch:<name>` for a branch checked out nowhere. */
+  root: string;
+  branch: string | null;
+}
+
+/**
+ * Every place work on this repository can happen, without what was changed
+ * there: its worktrees, the clones the person trusts, and each branch checked
+ * out in none of them (a remote one only where no local branch has its name).
+ * A few cheap git reads.
+ *
+ * For the checks that only ask where a section is worked and which branch a
+ * caller is on (Phase 32 C5.1). `listWorkstreams` measures every line of work
+ * and parses the functions each branch changed; on a checkout with a few
+ * hundred branches a claim waited on that for longer than an agent waits,
+ * and timed out before it could claim anything.
+ */
+export async function listWorkstreamPlaces(projectRoot: string): Promise<WorkstreamPlace[]> {
+  const worktrees = await listWorktreesAsync(projectRoot);
+  if (!worktrees.length) return [];
+  const trees = [...worktrees, ...(await cloneTrees(projectRoot, worktrees))].filter((w) => !w.bare && !w.prunable);
+  const places: WorkstreamPlace[] = trees.map((w) => ({ root: w.path, branch: w.branch }));
+  const checkedOut = new Set(trees.map((w) => w.branch).filter((b): b is string => Boolean(b)));
+  const main = worktrees.find((w) => w.isMain) ?? worktrees[0];
+  let refs: Array<{ ref: string; short: string }> = [];
+  try {
+    refs = (await gitAsync(main.path, ['for-each-ref', '--format=%(refname)%00%(refname:short)', 'refs/heads', 'refs/remotes']))
+      .split('\n')
+      .map((line) => { const [ref, short] = line.split('\0'); return { ref, short }; })
+      .filter((r) => r.ref && r.short && !r.ref.endsWith('/HEAD'));
+  } catch { /* no branches to add: the worktrees are still known */ }
+  const local = new Set(refs.filter((r) => r.ref.startsWith('refs/heads/')).map((r) => r.short));
+  for (const r of refs) {
+    if (checkedOut.has(r.short)) continue;
+    if (r.ref.startsWith('refs/remotes/') && local.has(r.short.split('/').slice(1).join('/'))) continue;
+    places.push({ root: `branch:${r.short}`, branch: r.short });
+  }
+  return places;
 }
 
 /**

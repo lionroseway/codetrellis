@@ -17,7 +17,7 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 295 | 293 | 0 | 0 | 217 | 0 |
+| REST routes | 296 | 294 | 0 | 0 | 217 | 0 |
 | MCP tools | 212 | 212 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
 | Frontend components | 139 | n/a | n/a | n/a | 0 | 23 |
@@ -30,7 +30,7 @@ records that — but "✗ none" is proof of a gap.
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 25 | 12 | 10 | 0 | 0 | 0 |
 | 0.4b Graph | 22 | 15 | 8 | 15 | 0 | 0 |
-| 0.4c Plans and items | 119 | 61 | 29 | 64 | 0 | 0 |
+| 0.4c Plans and items | 120 | 61 | 29 | 64 | 0 | 0 |
 | 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 4 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 13 | 7 | 1 | 0 | 0 |
@@ -48,7 +48,7 @@ records that — but "✗ none" is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (295)
+## REST routes (296)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -68,14 +68,14 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/git/refs/compare` |  | ✗ none | 2 |  |  |  |
 | a | `GET /api/git/status` |  | ✗ none | 1 | ✓ 0.4a: hash and file arrays (git-integration) |  |  |
 | a | `GET /api/git/worktrees` |  | ✗ none | 2 | ✓ 0.4a: both checkouts and the other one's plans, from a worktree; unopened refused (worktree-project, misc-endpoints) |  |  |
-| a | `GET /api/health` |  | ✗ none | 4 | ✓ 0.4a: status, parser, memory (misc-endpoints, smoke) |  |  |
+| a | `GET /api/health` |  | ✗ none | 5 | ✓ 0.4a: status, parser, memory (misc-endpoints, smoke) |  |  |
 | a | `GET /api/identity/git-defaults` |  | ✗ none | 2 | ✓ 0.4a: the project's own git identity (project-open) |  |  |
 | a | `GET /api/onboarding-state` |  | ✗ none | 2 | ✓ 0.4a: moves with plans and connected agents (project-open) |  |  |
 | a | `GET /api/project-config` |  | ✗ none | 1 | ✓ 0.4a: repoRole per project (cdev-central-oversight) |  |  |
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
 | a | `POST /api/git/fetch` |  | ✗ none | 2 |  |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 208 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 210 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `DELETE /api/rules/:id` |  | ✗ none | 2 |  |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
@@ -118,6 +118,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `GET /api/items/:uid/events` |  | ✗ none | 2 | ✓ 0.4c-2: rename recorded before/after (item-surface) |  |  |
 | c | `GET /api/items/:uid/full` |  | ✗ none | 2 | ✓ 0.4c: exercised by item-surface, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/items/:uid/grounding` |  | ✗ none | 2 |  |  |  |
+| c | `GET /api/items/:uid/routing` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/items/:uid/signed-approvals` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/items/:uid/skills` |  | ✗ none | 4 |  |  |  |
 | c | `GET /api/items/:uid/spec-links` |  | ✗ none | 1 |  |  |  |
@@ -187,7 +188,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/items/:uid/skill-arrivals/accept` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/spec-proposals` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/worktree` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans` |  | 1 | 119 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans` |  | 1 | 120 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 3 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:planUid/items` |  | ✗ none | 84 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
@@ -208,7 +209,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/recurring/:id/dismiss` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/recurring/:id/start` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/spec-proposals/:uid/decision` |  | ✗ none | 2 |  |  |  |
-| c | `PUT /api/items/:uid` |  | ✗ none | 29 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
+| c | `PUT /api/items/:uid` |  | ✗ none | 30 | ✓ 0.4c-2: parentUid validated like move (item-surface; bug 23) |  |  |
 | c | `PUT /api/items/:uid/relies-on` |  | ✗ none | 7 |  |  |  |
 | c | `PUT /api/items/:uid/workstream` |  | ✗ none | 12 |  |  |  |
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 3 | ✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -279,7 +280,7 @@ records that — but "✗ none" is proof of a gap.
 | h | `GET /api/freeze` |  | ✗ none | 4 | ✓ 0.4h: reason and until while active; inactive after lifting (review-governance-tools), cdev-phase6 |  |  |
 | h | `GET /api/freeze/changes` |  | ✗ none | 1 | ✓ 0.4k: every change newest first, with who and how it arrived; outside a project 403 (freeze-flags) |  |  |
 | h | `GET /api/review-queue` |  | ✗ none | 1 |  |  |  |
-| h | `POST /api/baseline/capture` |  | ✗ none | 3 | ✓ 0.4h: pins HEAD's contents or a named commit; refs checked before git; 400 for a non-commit (baseline); bug 29 |  |  |
+| h | `POST /api/baseline/capture` |  | ✗ none | 4 | ✓ 0.4h: pins HEAD's contents or a named commit; refs checked before git; 400 for a non-commit (baseline); bug 29 |  |  |
 | h | `POST /api/conflicts/resolve` |  | ✗ none | 2 | ✓ 0.4h: fields and by_side; staged; escaping path refused, outside file untouched (manifest-conflicts, filesystem-sinks) |  |  |
 | h | `POST /api/freeze/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4k: unflags an agent's change and records who saw it; unknown 404, outside a project 403 (freeze-flags, e2e mcp-ui-tools) |  |  |
 | h | `PUT /api/freeze` |  | ✗ none | 2 | ✓ 0.4h: freeze, exempt a plan, lift; every field validated; outside a project 403 (review-governance-tools); bug 33; recorded with who and how, never flagged (freeze-flags, 0.4k) |  |  |

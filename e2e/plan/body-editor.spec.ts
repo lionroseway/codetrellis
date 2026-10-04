@@ -84,7 +84,7 @@ test.describe('Body editor', () => {
 
     // The body content should be visible — rendered as markdown or in textarea
     const bodyVisible = await page.getByText('This is the item body content').first()
-      .isVisible({ timeout: 5000 }).catch(() => false);
+      .waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
 
     if (!bodyVisible) {
       // Body might be in collapsed/read mode — the item title input should at least work

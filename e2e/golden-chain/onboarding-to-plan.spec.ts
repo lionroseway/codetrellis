@@ -22,9 +22,9 @@ test.describe('Onboarding → Plan journey', () => {
 
     // Should show "Open Project" or "CodeTrellis"
     const welcomeVisible = await page.getByText('Open Project').first()
-      .isVisible({ timeout: 5000 }).catch(() => false);
+      .waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
     const brandVisible = await page.getByText('CodeTrellis').first()
-      .isVisible({ timeout: 3000 }).catch(() => false);
+      .waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false);
     expect(welcomeVisible || brandVisible).toBe(true);
 
     // --- Step 2: Open project (via test helper — skips folder picker) ---
@@ -44,7 +44,7 @@ test.describe('Onboarding → Plan journey', () => {
 
     // Click "New Plan" or "+" button
     const newPlanBtn = page.locator('button').filter({ hasText: /New Plan|\+/ }).first();
-    const hasNewBtn = await newPlanBtn.isVisible({ timeout: 2000 }).catch(() => false);
+    const hasNewBtn = await newPlanBtn.waitFor({ state: 'visible', timeout: 2000 }).then(() => true).catch(() => false);
 
     if (hasNewBtn) {
       await newPlanBtn.click();
@@ -52,7 +52,7 @@ test.describe('Onboarding → Plan journey', () => {
 
       // Fill in the plan title
       const titleInput = page.locator('textarea[placeholder="Untitled plan"]').first();
-      const hasTitleInput = await titleInput.isVisible({ timeout: 2000 }).catch(() => false);
+      const hasTitleInput = await titleInput.waitFor({ state: 'visible', timeout: 2000 }).then(() => true).catch(() => false);
 
       if (hasTitleInput) {
         await titleInput.fill(PLAN_TITLE);
@@ -72,9 +72,7 @@ test.describe('Onboarding → Plan journey', () => {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(500);
 
-    const connectBtn = page.locator('button:has-text("Connect Agent")');
-    const hasConnectBtn = await connectBtn.isVisible({ timeout: 3000 }).catch(() => false);
-    expect(hasConnectBtn).toBe(true);
+    await expect(page.locator('button:has-text("Connect Agent")')).toBeVisible({ timeout: 3000 });
   });
 
   test('plan workspace → click items → canvas detail → switch between', async ({ page, request }) => {
@@ -168,8 +166,6 @@ test.describe('Onboarding → Plan journey', () => {
     await page.waitForTimeout(500);
 
     // Graph should be visible again
-    const graphVisible = await page.locator('.react-flow').first()
-      .isVisible({ timeout: 5000 }).catch(() => false);
-    expect(graphVisible).toBe(true);
+    await expect(page.locator('.react-flow').first()).toBeVisible({ timeout: 5000 });
   });
 });

@@ -80,7 +80,7 @@ test.describe('Plan item tree', () => {
 
     // Empty state shows template chooser or add buttons
     // Check for "New task" or "Task" button in empty state
-    const hasEmptyContent = await page.getByText('Task').first().isVisible({ timeout: 3000 })
+    const hasEmptyContent = await page.getByText('Task').first().waitFor({ state: 'visible', timeout: 3000 }).then(() => true)
       .catch(() => false);
     // The plan workspace should at least be visible
     await expect(page.locator('textarea[placeholder="Untitled plan"]')).toBeVisible({

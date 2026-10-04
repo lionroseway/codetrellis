@@ -58,7 +58,7 @@ import { startReplayFrames, pruneFrames, setHeldProject, setFramePublisher, note
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
-import { listWorkstreams, setClaudeSessionSource, setSymbolParser, getSymbolParser } from './services/workstream-service';
+import { listWorkstreams, listWorkstreamPlaces, setClaudeSessionSource, setSymbolParser, getSymbolParser } from './services/workstream-service';
 import { resolveSection, cleanBranch, workstreamOfBranch, whereWorked, worktreeDirFor, usableBase } from './services/section-workstreams';
 import { suggestSectionBranch } from '../shared/lib/branch-name';
 import { setWorkstreamChangesListener, setRefsChangedListener, setWorkstreamWatchStartedListener } from './services/workstream-watch-service';
@@ -1300,6 +1300,23 @@ export async function scanProject(projectPath: string): Promise<ScanStats> {
   }
 }
 
+/**
+ * Store parsed files without holding the server. About a millisecond each,
+ * so a project of a few thousand files held every other request, the
+ * window's included, for two seconds or more; this hands the event loop
+ * back every 25 ms.
+ */
+async function storeParsedFiles(files: Awaited<ReturnType<typeof parseFiles>>, projectPath: string): Promise<void> {
+  let since = Date.now();
+  for (const parsed of files) {
+    storeParsedFile(parsed, projectPath);
+    if (Date.now() - since >= 25) {
+      await new Promise<void>((r) => setImmediate(r));
+      since = Date.now();
+    }
+  }
+}
+
 async function runScan(projectPath: string): Promise<ScanStats> {
     const isSameProject = lastScannedProject === projectPath;
     console.log(`[Scan] Scanning project: ${projectPath}${isSameProject ? ' (incremental)' : ' (full)'}`);
@@ -1352,15 +1369,11 @@ async function runScan(projectPath: string): Promise<ScanStats> {
       }
       console.log(`[Scan] Incremental: ${toParse.length} changed / ${filePaths.length} total files (${stalePaths.length} removed)`);
       parsedFiles = await parseFiles(toParse);
-      for (const parsed of parsedFiles) {
-        storeParsedFile(parsed, projectPath);
-      }
+      await storeParsedFiles(parsedFiles, projectPath);
     } else {
       clearAstData();
       parsedFiles = await parseFiles(filePaths);
-      for (const parsed of parsedFiles) {
-        storeParsedFile(parsed, projectPath);
-      }
+      await storeParsedFiles(parsedFiles, projectPath);
     }
 
     lastScannedProject = projectPath;
@@ -2093,7 +2106,10 @@ export async function pinBaseline(projectPath: string, commitHash?: string | nul
     const fileTree = scanDirectory(projectPath);
     const filePaths = collectFilePaths(fileTree);
     const parsedFiles = await parseFiles(filePaths);
-    for (const parsed of parsedFiles) storeParsedFile(parsed, projectPath);
+    // Only what changed since the last scan is stored again: after a scan,
+    // that is nothing, where it used to be every file in the project.
+    const stored = getAllFileHashes();
+    await storeParsedFiles(parsedFiles.filter((f) => stored.get(f.path) !== f.contentHash), projectPath);
     resolveImports(projectPath);
     const snapshot = captureSnapshot(parsedFiles.map((f) => ({
       path: path.relative(projectPath, f.path),
@@ -2907,6 +2923,23 @@ app.get('/api/items/:uid/skills', (req, res) => {
 });
 
 /**
+ * Who may work an item, how, and within what limits, as in effect: claim
+ * policy, execution settings, guardrails and skills, each with the item it
+ * comes from (null: the default). The window's tree holds item summaries,
+ * without these, so it cannot work out what a task inherits itself.
+ */
+app.get('/api/items/:uid/routing', (req, res) => {
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  res.json({
+    claimPolicy: planItemService.resolveClaimPolicyWithSource(item),
+    executionConfig: planItemService.resolveExecutionConfigWithSource(item),
+    constraints: planItemService.resolveConstraintsWithSource(item),
+    skills: planItemService.resolveSkillsWithSource(item),
+  });
+});
+
+/**
  * Which worktree an item is worked in (Phase 32 C5.1): its own branch, and
  * the section's in effect (its own or inherited), with where that is.
  */
@@ -3007,8 +3040,8 @@ app.get('/api/items/:uid/workstream', async (req, res) => {
   const item = planItemService.getItem(req.params.uid);
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
   const root = getActiveProjectPath();
-  let workstreams: Awaited<ReturnType<typeof listWorkstreams>> = [];
-  try { workstreams = root ? await listWorkstreams(root, { includeIdle: true }) : []; } catch { /* no git */ }
+  let workstreams: Awaited<ReturnType<typeof listWorkstreamPlaces>> = [];
+  try { workstreams = root ? await listWorkstreamPlaces(root) : []; } catch { /* no git */ }
   const section = resolveSection(item, planItemService.getItem);
   res.json({
     own: item.workstream ?? null,
@@ -3030,8 +3063,8 @@ app.put('/api/items/:uid/workstream', async (req, res) => {
   let branch: string | null = null;
   if (raw !== null) {
     const root = getActiveProjectPath();
-    let workstreams: Awaited<ReturnType<typeof listWorkstreams>> = [];
-    try { workstreams = root ? await listWorkstreams(root, { includeIdle: true }) : []; } catch { /* no git */ }
+    let workstreams: Awaited<ReturnType<typeof listWorkstreamPlaces>> = [];
+    try { workstreams = root ? await listWorkstreamPlaces(root) : []; } catch { /* no git */ }
     branch = cleanBranch(raw);
     if (!branch || !workstreamOfBranch(branch, workstreams)) {
       res.status(400).json({ error: 'workstream must be the branch of a known workstream, or null' });
