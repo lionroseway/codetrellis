@@ -71,7 +71,8 @@ test.describe('Line history', () => {
     const asked: string[] = [];
     await serve(page, asked);
     await gotoWithProject(page);
-    await page.getByRole('button', { name: FILE, exact: true }).first().click();
+    // The root README, not one in a folder: the tree has more than one.
+    await page.locator(`button[data-path="${path.join(PROJECT_PATH, FILE)}"]`).click();
     await page.getByRole('button', { name: 'Code', exact: true }).click();
     await page.getByTestId('code-line-history').click();
 
