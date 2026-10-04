@@ -1,7 +1,7 @@
 {
   "_note": "beats.mjs's starts were cut against these captures (scenes.json beside each raw.mp4; bin/motion.mjs for where things move). A new recording moves them.",
   "assets/hero.mp4": {
-    "from": "captures/hero-smooth2/raw.mp4"
+    "from": "captures/hero-smooth/raw.mp4"
   },
   "assets/main.mp4": {
     "from": "captures/main-smooth/raw.mp4"
@@ -10,7 +10,7 @@
     "from": "captures/code-history-smooth/raw.mp4"
   },
   "assets/scale.mp4": {
-    "from": "captures/scale-smooth3/raw.mp4"
+    "from": "captures/scale-smooth/raw.mp4"
   },
   "assets/parallel.mp4": {
     "from": "captures/parallel-smooth/raw.mp4"

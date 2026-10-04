@@ -13,3 +13,5 @@ compositions/remotion-hero/node_modules/
 # The hero index.html is generated from beats.mjs by build.mjs.
 
 compositions/hero/index.html
+
+compositions/hero/timing.json
