@@ -34,124 +34,52 @@ import { worktreeReadiness } from '../../../lib/section-worktrees';
 import { usePlanGitStates, GIT_STATE_TONE } from '../../../lib/plan-git-state';
 import { gitStateChip, sourceWords } from '@shared/lib/git-state-words';
 
-// ─── Cascade resolution (client-side mirror of backend logic) ───────────
+// ─── What the item inherits, from the server ────────────────────────────
 
-function resolveClaimPolicyClient(
-  item: PlanItem,
-  itemsByUid: Record<string, PlanItem>,
-): { policy: ClaimPolicy; source: string } {
-  if (item.claimPolicy && item.claimPolicyMode !== 'inherit') {
-    return { policy: item.claimPolicy, source: item.title };
-  }
-  if (item.claimPolicy && item.claimPolicyMode === 'inherit') {
-    // Has a local policy that's marked inherit — this IS the policy (it's the nearest)
-    return { policy: item.claimPolicy, source: item.title };
-  }
-  // Walk up
-  let cur = item.parentUid ? itemsByUid[item.parentUid] : null;
-  while (cur) {
-    if (cur.claimPolicy) {
-      return { policy: cur.claimPolicy, source: cur.title };
-    }
-    cur = cur.parentUid ? itemsByUid[cur.parentUid] : null;
-  }
-  return { policy: { mode: 'any' }, source: '(default)' };
+/** A setting in effect, and the item it comes from (null: the default). */
+type FromItem<T> = { value: T; fromUid: string | null; fromTitle: string | null };
+
+interface Routing {
+  claimPolicy: FromItem<ClaimPolicy>;
+  executionConfig: FromItem<ExecutionConfig | null>;
+  constraints: FromItem<ItemConstraints>;
+  skills: Array<{ skill: Skill; fromUid: string; fromTitle: string }>;
 }
 
-function resolveSkillsClient(
-  item: PlanItem,
-  itemsByUid: Record<string, PlanItem>,
-): { skills: Skill[]; source: string } {
-  const chain: PlanItem[] = [];
-  let cur: PlanItem | null = item;
-  while (cur) {
-    chain.unshift(cur);
-    cur = cur.parentUid ? itemsByUid[cur.parentUid] : null;
-  }
-
-  let resolved: Skill[] = [];
-  let source = '(none)';
-  for (const ancestor of chain) {
-    const skills = ancestor.skills ?? [];
-    if (skills.length === 0 && (ancestor.skillsMode ?? 'inherit') === 'inherit') continue;
-    if (ancestor.skillsMode === 'replace') {
-      resolved = [...skills];
-      source = ancestor.title;
-    } else if (ancestor.skillsMode === 'none') {
-      resolved = [];
-      source = ancestor.title;
-    } else {
-      const byName = new Map(resolved.map((s) => [s.name, s]));
-      for (const s of skills) byName.set(s.name, s);
-      resolved = Array.from(byName.values());
-      if (skills.length > 0) source = ancestor.title;
-    }
-  }
-  return { skills: resolved, source };
+/** Only what the item sets itself: shown until the server says what it inherits. */
+function ownRouting(item: PlanItem): Routing {
+  const own = <T,>(value: T | null | undefined, fallback: T): FromItem<T> =>
+    value ? { value, fromUid: item.uid, fromTitle: item.title } : { value: fallback, fromUid: null, fromTitle: null };
+  return {
+    claimPolicy: own<ClaimPolicy>(item.claimPolicy, { mode: 'any' }),
+    executionConfig: own<ExecutionConfig | null>(item.executionConfig, null),
+    constraints: own<ItemConstraints>(item.constraintsMode === 'none' ? null : item.constraints, {}),
+    skills: (item.skills ?? []).map((skill) => ({ skill, fromUid: item.uid, fromTitle: item.title })),
+  };
 }
 
-function resolveExecutionConfigClient(
-  item: PlanItem,
-  itemsByUid: Record<string, PlanItem>,
-): { config: ExecutionConfig | null; source: string } {
-  if (item.executionConfig && item.executionConfigMode !== 'inherit') {
-    return { config: item.executionConfig, source: item.title };
-  }
-  if (item.executionConfig) {
-    return { config: item.executionConfig, source: item.title };
-  }
-  let cur = item.parentUid ? itemsByUid[item.parentUid] : null;
-  while (cur) {
-    if (cur.executionConfig) {
-      return { config: cur.executionConfig, source: cur.title };
-    }
-    cur = cur.parentUid ? itemsByUid[cur.parentUid] : null;
-  }
-  return { config: null, source: '(default)' };
-}
-
-function resolveConstraintsClient(
-  item: PlanItem,
-  itemsByUid: Record<string, PlanItem>,
-): { constraints: ItemConstraints; source: string } {
-  const chain: PlanItem[] = [];
-  let cur: PlanItem | null = item;
-  while (cur) {
-    chain.unshift(cur);
-    cur = cur.parentUid ? itemsByUid[cur.parentUid] : null;
-  }
-
-  let resolved: ItemConstraints = {};
-  let source = '(none)';
-  for (const ancestor of chain) {
-    const c = ancestor.constraints;
-    const mode = ancestor.constraintsMode ?? 'inherit';
-
-    if (mode === 'none') {
-      resolved = {};
-      source = ancestor.title;
-      continue;
-    }
-    if (mode === 'replace' && c) {
-      resolved = { ...c };
-      source = ancestor.title;
-      continue;
-    }
-    if (!c) continue;
-    // inherit — merge additively
-    resolved = {
-      excludePaths: [...(resolved.excludePaths ?? []), ...(c.excludePaths ?? [])],
-      excludeSymbols: [...(resolved.excludeSymbols ?? []), ...(c.excludeSymbols ?? [])],
-      lockInterfaces: resolved.lockInterfaces || c.lockInterfaces || false,
-      requireTests: resolved.requireTests || c.requireTests || false,
-      requireLint: resolved.requireLint || c.requireLint || false,
-      maxFilesTouched: c.maxFilesTouched ?? resolved.maxFilesTouched ?? null,
-      maxLinesChanged: c.maxLinesChanged ?? resolved.maxLinesChanged ?? null,
-      customRules: [...(resolved.customRules ?? []), ...(c.customRules ?? [])],
-    };
-    source = ancestor.title;
-  }
-  return { constraints: resolved, source };
+/**
+ * Claim policy, execution settings, guardrails and skills in effect on an
+ * item, each with the item it comes from. Worked out by the server: the
+ * plan tree here holds item summaries without these, so a parent's "Human
+ * only" read as "Anyone (default)" on its tasks until the parent was opened.
+ * Fetched again when the item's own settings or its parent change.
+ */
+function useItemRouting(item: PlanItem): Routing {
+  const [fetched, setFetched] = useState<{ uid: string; routing: Routing } | null>(null);
+  const ownKey = JSON.stringify([
+    item.claimPolicy, item.claimPolicyMode, item.executionConfig, item.executionConfigMode,
+    item.constraints, item.constraintsMode, item.skills, item.skillsMode, item.parentUid,
+  ]);
+  useEffect(() => {
+    let live = true;
+    fetch(`/api/items/${item.uid}/routing`)
+      .then(async (r) => (r.ok ? ((await r.json()) as Routing) : null))
+      .catch(() => null)
+      .then((routing) => { if (live && routing) setFetched({ uid: item.uid, routing }); });
+    return () => { live = false; };
+  }, [item.uid, ownKey]);
+  return fetched?.uid === item.uid ? fetched.routing : ownRouting(item);
 }
 
 // ─── Claim policy display helpers ───────────────────────────────────────
@@ -168,32 +96,29 @@ const CLAIM_MODE_LABELS: Record<string, string> = {
 
 export function ItemRoutingPanel({ item }: { item: PlanItem }) {
   const [expanded, setExpanded] = useState(false);
-  const itemsByUid = usePlanItemsStore((s) => s.itemsByUid);
   const updateItem = usePlanItemsStore((s) => s.updateItem);
 
-  const resolved = useMemo(() => ({
-    claim: resolveClaimPolicyClient(item, itemsByUid),
-    skills: resolveSkillsClient(item, itemsByUid),
-    exec: resolveExecutionConfigClient(item, itemsByUid),
-    constraints: resolveConstraintsClient(item, itemsByUid),
-  }), [item, itemsByUid]);
+  const routing = useItemRouting(item);
+  const constraints = routing.constraints.value;
+  const skills = useMemo(() => routing.skills.map((r) => r.skill), [routing.skills]);
 
   const hasConstraints = !!(
-    (resolved.constraints.constraints.excludePaths?.length) ||
-    (resolved.constraints.constraints.excludeSymbols?.length) ||
-    resolved.constraints.constraints.lockInterfaces ||
-    resolved.constraints.constraints.requireTests ||
-    resolved.constraints.constraints.requireLint ||
-    resolved.constraints.constraints.maxFilesTouched ||
-    (resolved.constraints.constraints.customRules?.length)
+    (constraints.excludePaths?.length) ||
+    (constraints.excludeSymbols?.length) ||
+    constraints.lockInterfaces ||
+    constraints.requireTests ||
+    constraints.requireLint ||
+    constraints.maxFilesTouched ||
+    (constraints.customRules?.length)
   );
 
-  const hasAnyConfig = resolved.skills.skills.length > 0 ||
-    resolved.claim.policy.mode !== 'any' ||
-    resolved.exec.config !== null ||
+  const hasAnyConfig = skills.length > 0 ||
+    routing.claimPolicy.value.mode !== 'any' ||
+    routing.executionConfig.value !== null ||
     hasConstraints;
 
-  const isInherited = (source: string) => source !== item.title && source !== '(default)' && source !== '(none)';
+  /** The ancestor a setting comes from, when it is not the item itself or the default. */
+  const inheritedFrom = (from: FromItem<unknown>) => (from.fromUid && from.fromUid !== item.uid ? from.fromTitle : null);
 
   // Quick-set claim policy
   const setClaimMode = useCallback((mode: ClaimPolicy['mode']) => {
@@ -238,9 +163,9 @@ export function ItemRoutingPanel({ item }: { item: PlanItem }) {
         <span className="uppercase tracking-wider font-medium">Routing & Execution</span>
         {hasAnyConfig && !expanded && (
           <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-white/[0.04] text-foreground-subtle">
-            {resolved.claim.policy.mode !== 'any' ? CLAIM_MODE_LABELS[resolved.claim.policy.mode] : ''}
-            {resolved.skills.skills.length > 0 ? ` · ${resolved.skills.skills.length} skills` : ''}
-            {resolved.exec.config?.model ? ` · ${resolved.exec.config.model}` : ''}
+            {routing.claimPolicy.value.mode !== 'any' ? CLAIM_MODE_LABELS[routing.claimPolicy.value.mode] : ''}
+            {skills.length > 0 ? ` · ${skills.length} skills` : ''}
+            {routing.executionConfig.value?.model ? ` · ${routing.executionConfig.value.model}` : ''}
             {hasConstraints ? ' · guardrails' : ''}
           </span>
         )}
@@ -252,9 +177,9 @@ export function ItemRoutingPanel({ item }: { item: PlanItem }) {
           <div>
             <div className="flex items-center gap-2 mb-1.5">
               <span className="text-[11px] font-medium text-foreground-muted">Who works on this</span>
-              {isInherited(resolved.claim.source) && (
-                <span className="text-[10px] text-foreground-subtle italic">
-                  (inherited from {resolved.claim.source})
+              {inheritedFrom(routing.claimPolicy) && (
+                <span data-testid="claim-inherited" className="text-[10px] text-foreground-subtle italic">
+                  (inherited from {inheritedFrom(routing.claimPolicy)})
                 </span>
               )}
               {item.claimPolicy && (
@@ -264,7 +189,7 @@ export function ItemRoutingPanel({ item }: { item: PlanItem }) {
               )}
             </div>
             <select
-              value={resolved.claim.policy.mode}
+              value={routing.claimPolicy.value.mode}
               onChange={(e) => setClaimMode(e.target.value as ClaimPolicy['mode'])}
               className="w-full text-[12px] px-2.5 py-1.5 rounded-md border border-white/[0.08] bg-white/[0.02] text-foreground focus:outline-none focus:border-accent/30"
             >
@@ -285,7 +210,7 @@ export function ItemRoutingPanel({ item }: { item: PlanItem }) {
           {/* ── Skills (Phase 32 C1.2) ───────────────────── */}
           <SkillsEditor
             item={item}
-            resolved={resolved.skills.skills}
+            resolved={skills}
           />
 
           {/* ── Execution Config ─────────────────────────── */}
@@ -293,9 +218,9 @@ export function ItemRoutingPanel({ item }: { item: PlanItem }) {
             <div className="flex items-center gap-2 mb-1.5">
               <Cpu size={11} className="text-zinc-500" />
               <span className="text-[11px] font-medium text-foreground-muted">Execution settings</span>
-              {isInherited(resolved.exec.source) && (
-                <span className="text-[10px] text-foreground-subtle italic">
-                  (inherited from {resolved.exec.source})
+              {inheritedFrom(routing.executionConfig) && (
+                <span data-testid="exec-inherited" className="text-[10px] text-foreground-subtle italic">
+                  (inherited from {inheritedFrom(routing.executionConfig)})
                 </span>
               )}
               {item.executionConfig && (
@@ -305,8 +230,8 @@ export function ItemRoutingPanel({ item }: { item: PlanItem }) {
               )}
             </div>
             <ExecConfigEditor
-              config={resolved.exec.config}
-              isLocal={resolved.exec.source === item.title}
+              config={routing.executionConfig.value}
+              isLocal={routing.executionConfig.fromUid === item.uid}
               onUpdate={(config) => {
                 updateItem(item.uid, {
                   executionConfig: config,
@@ -321,9 +246,9 @@ export function ItemRoutingPanel({ item }: { item: PlanItem }) {
             <div className="flex items-center gap-2 mb-1.5">
               <ShieldAlert size={11} className="text-amber-500/70" />
               <span className="text-[11px] font-medium text-foreground-muted">Guardrails</span>
-              {isInherited(resolved.constraints.source) && (
-                <span className="text-[10px] text-foreground-subtle italic">
-                  (inherited from {resolved.constraints.source})
+              {inheritedFrom(routing.constraints) && (
+                <span data-testid="guardrails-inherited" className="text-[10px] text-foreground-subtle italic">
+                  (inherited from {inheritedFrom(routing.constraints)})
                 </span>
               )}
               {item.constraints && (
@@ -333,7 +258,7 @@ export function ItemRoutingPanel({ item }: { item: PlanItem }) {
               )}
             </div>
             <ConstraintsEditor
-              constraints={resolved.constraints.constraints}
+              constraints={constraints}
               localConstraints={item.constraints ?? null}
               onUpdate={(c) => {
                 updateItem(item.uid, {

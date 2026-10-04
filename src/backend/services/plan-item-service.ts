@@ -1024,33 +1024,41 @@ export interface ClaimItemResult {
   waitsOn?: string[];
 }
 
+/** A setting in effect on an item, and the item it comes from (null: the default). */
+export interface FromItem<T> {
+  value: T;
+  fromUid: string | null;
+  fromTitle: string | null;
+}
+
 /**
  * Phase 17.P — Resolve the effective claim policy by walking up the tree.
  * Returns the nearest non-null policy (the item's own or inherited from ancestors).
  * Defaults to `{ mode: 'any' }` if no policy is set anywhere in the chain.
  */
 export function resolveClaimPolicy(item: PlanItem): ClaimPolicy {
-  // If item has its own policy set (not inherit mode), use it
-  if (item.claimPolicyMode === 'replace' && item.claimPolicy) {
-    return item.claimPolicy;
-  }
-  if (item.claimPolicy && item.claimPolicyMode !== 'inherit') {
-    return item.claimPolicy;
-  }
+  return resolveClaimPolicyWithSource(item).value;
+}
 
-  // Walk up parents
-  let cur = item.parentUid ? getItem(item.parentUid) : null;
+/** The claim policy in effect, with the item it comes from. */
+export function resolveClaimPolicyWithSource(item: PlanItem): FromItem<ClaimPolicy> {
+  // The nearest policy set, the item's own first, whatever its mode.
+  let cur: PlanItem | null = item;
   while (cur) {
-    if (cur.claimPolicy) {
-      if (cur.claimPolicyMode === 'replace' || cur.claimPolicyMode !== 'inherit') {
-        return cur.claimPolicy;
-      }
-      // Has a policy but mode is inherit — use it (it's the nearest one)
-      return cur.claimPolicy;
-    }
+    if (cur.claimPolicy) return { value: cur.claimPolicy, fromUid: cur.uid, fromTitle: cur.title };
     cur = cur.parentUid ? getItem(cur.parentUid) : null;
   }
-  return { mode: 'any' };
+  return { value: { mode: 'any' }, fromUid: null, fromTitle: null };
+}
+
+/** The execution settings in effect (model, effort, …): the nearest set, the item's own first. */
+export function resolveExecutionConfigWithSource(item: PlanItem): FromItem<ExecutionConfig | null> {
+  let cur: PlanItem | null = item;
+  while (cur) {
+    if (cur.executionConfig) return { value: cur.executionConfig, fromUid: cur.uid, fromTitle: cur.title };
+    cur = cur.parentUid ? getItem(cur.parentUid) : null;
+  }
+  return { value: null, fromUid: null, fromTitle: null };
 }
 
 /**
@@ -1114,6 +1122,14 @@ export function resolveSkillsWithSource(item: PlanItem): Array<{ skill: Skill; f
  * constraintsMode='none' (disable all constraints for subtree).
  */
 export function resolveConstraints(item: PlanItem): ItemConstraints {
+  return resolveConstraintsWithSource(item).value;
+}
+
+/**
+ * The constraints in effect, with the nearest item that shaped them: the
+ * last in the chain from the root that added to, replaced or cleared them.
+ */
+export function resolveConstraintsWithSource(item: PlanItem): FromItem<ItemConstraints> {
   const chain: PlanItem[] = [];
   let cur: PlanItem | null = item;
   while (cur) {
@@ -1122,16 +1138,19 @@ export function resolveConstraints(item: PlanItem): ItemConstraints {
   }
 
   let resolved: ItemConstraints = {};
+  let from: PlanItem | null = null;
   for (const ancestor of chain) {
     const c = ancestor.constraints;
     const mode = ancestor.constraintsMode ?? 'inherit';
 
     if (mode === 'none') {
       resolved = {};
+      from = ancestor;
       continue;
     }
     if (mode === 'replace' && c) {
       resolved = { ...c };
+      from = ancestor;
       continue;
     }
     // inherit — merge additively
@@ -1146,8 +1165,9 @@ export function resolveConstraints(item: PlanItem): ItemConstraints {
       maxLinesChanged: c.maxLinesChanged ?? resolved.maxLinesChanged ?? null,
       customRules: [...(resolved.customRules ?? []), ...(c.customRules ?? [])],
     };
+    from = ancestor;
   }
-  return resolved;
+  return { value: resolved, fromUid: from?.uid ?? null, fromTitle: from?.title ?? null };
 }
 
 /**

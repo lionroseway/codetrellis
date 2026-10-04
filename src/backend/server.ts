@@ -2923,6 +2923,23 @@ app.get('/api/items/:uid/skills', (req, res) => {
 });
 
 /**
+ * Who may work an item, how, and within what limits, as in effect: claim
+ * policy, execution settings, guardrails and skills, each with the item it
+ * comes from (null: the default). The window's tree holds item summaries,
+ * without these, so it cannot work out what a task inherits itself.
+ */
+app.get('/api/items/:uid/routing', (req, res) => {
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  res.json({
+    claimPolicy: planItemService.resolveClaimPolicyWithSource(item),
+    executionConfig: planItemService.resolveExecutionConfigWithSource(item),
+    constraints: planItemService.resolveConstraintsWithSource(item),
+    skills: planItemService.resolveSkillsWithSource(item),
+  });
+});
+
+/**
  * Which worktree an item is worked in (Phase 32 C5.1): its own branch, and
  * the section's in effect (its own or inherited), with where that is.
  */
