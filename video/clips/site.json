@@ -3,13 +3,13 @@
   "clips": [
     { "id": "ladder-one-agent",   "section": "Scales with you · 1",   "src": "code-history-smooth", "scene": 1, "at": 8.1,  "dur": 5,   "shape": "wide",  "crop": [10, 0, 1100, 619],   "shows": "Line history naming the agent that wrote a line" },
     { "id": "ladder-several",     "section": "Scales with you · 2",   "src": "hero-smooth",         "scene": 4, "at": 3.5,  "dur": 5,   "shape": "wide",  "crop": [140, 338, 1000, 562], "shows": "A teammate's branch and an agent's on the same function, flagged" },
-    { "id": "ladder-team",        "section": "Scales with you · 3",   "src": "observe-smooth",      "scene": 4, "at": 1,    "dur": 3.6, "shape": "wide",  "crop": [200, 281, 1100, 619], "shows": "The Stack fills: every plan, who is on it, where they meet" },
+    { "id": "ladder-team",        "section": "Scales with you · 3",   "src": "observe-smooth",      "scene": 4, "at": 0.2,  "dur": 2.6, "shape": "wide",  "crop": [200, 281, 1100, 619], "shows": "The Stack fills: every plan, who is on it, where they meet" },
 
     { "id": "row-map",            "section": "Map the codebase",      "src": "scale-smooth",        "scene": 4, "at": 15.7, "dur": 6,   "shape": "wide",  "crop": [320, 40, 1120, 630],  "shows": "A 1,509-file repository mapped" },
     { "id": "row-plans",          "section": "Plans",                 "src": "scale-smooth",        "scene": 2, "at": 4.5,  "dur": 8,   "shape": "wide",  "crop": [0, 60, 900, 506],     "shows": "Agents claim tasks: Assigned, bars, statuses landing in Activity" },
     { "id": "row-collide",        "section": "Many agents at once",   "src": "parallel-smooth",     "scene": 2, "at": 0.4,  "dur": 5,   "shape": "wide",  "crop": [200, 338, 1000, 562], "shows": "Two lines of work on isValidEmail, named; the chips turn red" },
-    { "id": "row-steer",          "section": "Steer and protect",     "src": "parallel-smooth",     "scene": 6, "at": 0.1,  "dur": 4.6, "shape": "wide",  "crop": [200, 405, 880, 495],  "shows": "A breakpoint holds an edit, then Continue" },
-    { "id": "row-steer-phone",    "section": "Steer and protect",     "src": "phone-breakpoint",    "scene": 0, "at": 0,    "dur": 4.0, "shape": "phone", "crop": [0, 0, 1170, 2532],    "shows": "The same breakpoint answered on the phone" },
+    { "id": "row-steer",          "section": "Steer and protect",     "src": "parallel-smooth",     "scene": 6, "at": -0.5, "dur": 4.6, "shape": "wide",  "crop": [200, 405, 880, 495],  "shows": "A breakpoint holds an edit, then Continue" },
+    { "id": "row-steer-phone",    "section": "Steer and protect",     "src": "phone-breakpoint",    "scene": 0, "at": 0,    "dur": 2.2, "shape": "phone", "crop": [0, 0, 1170, 2532],    "shows": "The same breakpoint answered on the phone" },
     { "id": "row-review",         "section": "Review",                "src": "main-smooth",         "scene": 7, "at": 1.9,  "dur": 5,   "shape": "wide",  "crop": [100, 0, 1000, 562],   "shows": "A changed line flagged against the plan" },
     { "id": "row-rules",          "section": "Hold the line",         "src": "teams-smooth",        "scene": 1, "at": 1.3,  "dur": 5,   "shape": "wide",  "crop": [360, 110, 900, 506],  "shows": "The architecture rule in Settings, with its reason" },
 
@@ -21,7 +21,7 @@
     { "id": "card-tested",        "section": "More to explore",       "src": "teams-smooth",        "scene": 4, "at": 1.4,  "dur": 4,   "shape": "card",  "crop": [960, 40, 640, 400],   "shows": "\"Done\" refused on tests older than the code" },
     { "id": "card-merge-order",   "section": "More to explore",       "src": "observe-smooth",      "scene": 3, "at": 5.2,  "dur": 2.6, "shape": "card",  "crop": [240, 300, 960, 600],  "shows": "The review queue: what to merge first, and why" },
     { "id": "card-approve",       "section": "More to explore",       "src": "record-smooth",       "scene": 1, "at": 6.3,  "dur": 3.5, "shape": "card",  "crop": [960, 40, 640, 400],   "shows": "Evidence offered, a person approves" },
-    { "id": "card-prove",         "section": "More to explore",       "src": "record-smooth",       "scene": 1, "at": 12.8, "dur": 3.5, "shape": "card",  "crop": [320, 140, 960, 600],  "shows": "Settings: the record intact, every entry in the chain" },
+    { "id": "card-prove",         "section": "More to explore",       "src": "record-smooth",       "scene": 1, "at": 12.5, "dur": 2.1, "shape": "card",  "crop": [320, 140, 960, 600],  "shows": "Settings: the record intact, every entry in the chain" },
     { "id": "card-phone",         "section": "More to explore",       "src": "phone-activity",      "scene": 0, "at": 0,    "dur": 1.9, "shape": "card",  "crop": [0, 300, 1170, 731],   "shows": "A changed signature on the phone" }
   ],
   "transcripts": [

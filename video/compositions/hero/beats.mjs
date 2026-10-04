@@ -100,8 +100,10 @@ export const ACTS = [
         shots: [{}, { at: 0.9, fx: 640, fy: 765, z: 2.1, d: 1.2 }],
         title: 'Serious overlaps <b>wait for you</b>.',
         body: 'When two lines of work change the same function, the next step waits in Needs you, with why. Nothing is claimed until you answer.' },
-      // A breakpoint on shared code: held at ~33.8 s, Continue at ~35.7 s.
-      { layout: 'split', text: 'right', dur: 4.8, media: parallel(6, 0.1),
+      // A breakpoint on shared code: held from ~0.25 s into the scene,
+      // Continue at ~2.8 s. Opened before the scene so the 60% frame is on
+      // the held edit and Continue still lands inside the beat.
+      { layout: 'split', text: 'right', dur: 4.8, media: parallel(6, -0.6),
         shots: [{}, { at: 0.7, fx: 630, fy: 775, z: 2.1, d: 1.1 }],
         title: 'Ask me <b>before this changes</b>.',
         body: 'Put a breakpoint on code that matters. The edit is held, not made, until you continue, steer or stop it.' },
@@ -182,11 +184,12 @@ export const ACTS = [
         shots: [{ z: 1.04 }],
         caption: 'Ask your agent to <b>show you</b>.' },
       // The breakpoint answered from the phone. The desktop footage is lined
-      // up so its card clears (~35.7 s) as the phone's tap lands, which is
+      // up so its card clears (~2.8 s into the scene) as the phone's tap
+      // lands (delay + tap.at, from the phone capture's tap.json), which is
       // what an answer from the phone does.
-      { layout: 'phone', dur: 6.5, media: parallel(6, 0.9),
+      { layout: 'phone', dur: 6.5, media: parallel(6, 0.4),
         shots: [{ fx: 630, fy: 775, z: 1.9 }],
-        phone: { src: 'phone-breakpoint.mp4', done: 'phone-breakpoint-done.png', start: 0, delay: 0.9, tap: { x: 68, y: 215, at: 1.58 } },
+        phone: { src: 'phone-breakpoint.mp4', done: 'phone-breakpoint-done.png', start: 0, delay: 0.9, tap: { x: 68, y: 215, at: 1.51 } },
         caption: 'Take it with you: <b>answer from your phone</b>.' },
     ],
   },
@@ -214,7 +217,9 @@ export const ACTS = [
     id: 'close',
     title: 'Close',
     beats: [
-      { layout: 'rotate', dur: 17, media: scale(4, 15.7), shots: [{ z: 1.1 }],
+      // 17 s on the large map: from just after it renders (clusters, then
+      // files), ending before the demo puts the small project back.
+      { layout: 'rotate', dur: 17, media: scale(4, 5.8), shots: [{ z: 1.1 }],
         lead: 'Use CodeTrellis to…',
         lines: [
           'keep agents to the work you agreed',
