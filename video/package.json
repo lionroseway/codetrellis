@@ -5,13 +5,19 @@
   "type": "commonjs",
   "scripts": {
     "setup": "node bin/setup.mjs",
+    "capture": "bash -c '. bin/env.sh && node capture/all.mjs \"$@\"' --",
     "capture:desktop": "bash capture/demo.sh parallel-hd --group=parallel --mode=hd",
-    "capture:desktop:smooth": "bash capture/demo.sh parallel-smooth --group=parallel --mode=smooth",
+    "capture:desktop:smooth": "bash capture/demo.sh parallel-smooth --group=parallel --mode=smooth --pace=normal",
     "capture:phone": "bash capture/phone.sh breakpoint",
     "stage": "node bin/stage.mjs",
     "check": "bash bin/check.sh",
     "render": "bash bin/render.sh",
-    "render:all": "bash bin/render.sh real-ui-hero && bash bin/render.sh real-footage && bash bin/render.sh collision && bash bin/render.sh remotion-hero"
+    "review": "bash -c '. bin/env.sh && node bin/review.mjs \"$@\"' --",
+    "hero": "npm run capture hero && npm run render hero && npm run review hero",
+    "render:all": "bash bin/render.sh real-ui-hero && bash bin/render.sh real-footage && bash bin/render.sh collision && bash bin/render.sh remotion-hero",
+    "render:clips": "bash -c '. bin/env.sh && node bin/clips.mjs \"$@\"' --",
+    "clips": "npm run capture clips && npm run render:clips",
+    "site": "npm run hero && npm run clips"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",

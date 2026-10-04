@@ -8,6 +8,70 @@ video.
 This folder is standalone. It has its own `package.json`; nothing in the app
 depends on it, and `npm ci` at the repository root does not install it.
 
+## From scratch, on your own machine
+
+Everything below runs on a Mac (or Linux) with nothing but Node and git. No
+system FFmpeg, no screen recorder, no account: the captures drive the app in a
+browser of their own, and the renders run headless.
+
+```bash
+# 1. The repository, on its own Node (.nvmrc says 26)
+git clone https://github.com/lionroseway/codetrellis && cd codetrellis
+fnm use            # or nvm use; any Node 26
+npm ci
+npm ci --prefix mobile                 # the phone captures render mobile/ screens
+npx playwright install chromium        # the browser captures and renders use
+
+# 2. The video toolkit
+cd video
+npm install && npm run setup
+
+# 3. Quit CodeTrellis (captures run their own app on :3001, :5173, :19432)
+
+# 4. Capture everything the hero uses, render it, photograph every beat
+npm run hero
+```
+
+`npm run hero` is three steps you can also run alone:
+
+| Step | Command | Makes | Takes (cloud container; a Mac is faster) |
+|---|---|---|---|
+| Capture | `npm run capture hero` | `captures/*` for every capture `compositions/hero/media.json` names, from `captures.json` (skips ones you have; `-- --force` redoes them) | ~25 min, one app at a time |
+| Render | `npm run render hero` | `out/hero.mp4` (~80 MB master) and `out/hero-contact.png` | ~7 min |
+| Review | `npm run review hero` | `out/hero-review/`: a frame of every beat at its moment, contact sheets, and `beats.txt` listing what each beat says | ~3 min |
+
+**Then look at `out/hero-review/`.** Clips are placed by demo scene plus an
+offset (`beats.mjs`), so a re-recording on a faster or slower machine keeps
+every beat in its scene. Inside a scene, timing can still move a little (a map
+that loads faster, say). For each frame, check the picture shows the words in
+`beats.txt`; where one does not, nudge that beat's offset in `beats.mjs` and run
+`npm run review hero` again. Only you can do this check: the composition lint
+passes on a video whose captions lie.
+
+A lighter copy for sharing or review channels that refuse large files:
+
+```bash
+. bin/env.sh && "$FFMPEG" -i out/hero.mp4 -c:v libx264 -crf 26 -pix_fmt yuv420p -movflags +faststart out/hero-share.mp4
+```
+
+### The site's short loops
+
+```bash
+npm run clips        # captures anything missing, then renders out/clips/ (~2–3 min)
+```
+
+Twenty seamless loops (MP4, WebM, poster each), the CI transcript, and
+`manifest.json`, from `clips/site.json`: one list saying what each loop shows and
+the capture, scene and moment it is cut from (`docs/website/section-videos.md`
+has the page they go on). Look at every poster before handing them over.
+
+`npm run site` does the hero and the loops in one go.
+
+### Handing it to the website
+
+The website session needs only `out/hero.mp4` (or `out/hero-share.mp4`) and
+`out/clips/`. Nothing else in this folder ships with the site.
+
 ## What the spike found (October 2026)
 
 Four approaches were tried, all at 1920x1080, 30 fps:
@@ -31,13 +95,21 @@ lives in its own folder with its own dependencies and nothing else uses it.
 
 ```
 video/
+  captures.json       how every capture is made (demo group, mode, pace; phone fixture; CI run)
   bin/
     env.sh            tool paths (FFmpeg from npm, Chromium on the machine), telemetry off
+    review.mjs        a frame of every beat at its moment, to check the words against the picture
+    clips.mjs         renders clips/site.json into out/clips/: seamless loops, posters, manifest
+    motion.mjs        how much moves, second by second, in a capture: where to cut
     setup.mjs         copies GSAP and the Geist fonts into each composition
     stage.mjs         copies footage and stills from captures/ as media.json says
     check.sh          HyperFrames' check on every HTML composition
     render.sh         stage, check, render one composition, contact sheet
+  clips/
+    site.json         every short loop on the site: capture, scene, moment, crop
   capture/
+    all.mjs           every capture a composition (or `clips`) uses, from captures.json
+    ci.cjs            a real `codetrellis check` run, recorded as a transcript
     demo.sh           throwaway app + recorder + a demo group, then encode
     desktop.cjs       records the window: --mode=hd (2x) or --mode=smooth
     phone.sh          phone preview + recorder, then encode
@@ -46,6 +118,7 @@ video/
     encode.cjs        timed frames -> constant 30 fps H.264, scenes.json
     chromium.cjs      the browser the recorders drive
   compositions/
+    hero/             the site hero: beats.mjs (the edit) → build.mjs → index.html
     real-ui-hero/     index.html + media.json (which captures it was cut from)
     real-footage/
     collision/
@@ -114,10 +187,12 @@ Look at the contact sheet first; it shows six frames across the video.
 
 ### After re-recording
 
-The `data-media-start` times in each `index.html` were cut against the captures
-recorded on 2026-10-04. A new recording moves them. Compare the new
-`scenes.json` with the old one and shift each clip by the difference in its
-scene's start; the scenes themselves take the same time at the same pace.
+The hero places every clip by demo scene and an offset into it, and reads each
+capture's `scenes.json` when it builds, so a new recording needs no retiming
+by hand; run `npm run review hero` and check the frames. The older spike
+compositions (`real-ui-hero`, `real-footage`) still carry raw
+`data-media-start` seconds cut against the 2026-10-04 captures: shift each clip
+by the difference in its scene's start between the old and new `scenes.json`.
 
 ### Recording on a Mac
 

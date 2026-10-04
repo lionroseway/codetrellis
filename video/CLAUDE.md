@@ -42,7 +42,11 @@ bounds it. No model identifiers, customer names or anything from `docs/private/`
 
 - A capture runs its own throwaway app; never point one at a real data dir.
 - `--mode=hd` is for anything the camera zooms into; `--mode=smooth` only at 1:1.
-- When a capture is redone, its clips' `data-media-start` move: retime from the
-  new `scenes.json`, and record which capture a composition uses in its
-  `media.json`.
+- Place clips by demo scene plus an offset (the hero's `clip()` in
+  `beats.mjs`), never by raw seconds into one recording: a re-recording on
+  another machine runs at another speed. Record which capture a composition
+  uses in its `media.json`, and how every capture is made in `captures.json`,
+  so `npm run capture <composition>` can rebuild them all from nothing.
+- After any re-recording or recut, run `npm run review <composition>` and look
+  at every frame against `beats.txt`.
 - Captures, renders and staged assets stay out of git (`.gitignore`).

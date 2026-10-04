@@ -33,6 +33,9 @@ for (const name of names) {
     fs.mkdirSync(path.dirname(out), { recursive: true });
     if (spec.from) {
       fs.copyFileSync(src, out);
+      // A demo capture's scene table goes with it: compositions place clips by scene.
+      const scenes = path.join(path.dirname(src), 'scenes.json');
+      if (out.endsWith('.mp4') && fs.existsSync(scenes)) fs.copyFileSync(scenes, out.replace(/\.mp4$/, '.scenes.json'));
     } else {
       const at = spec.at === 'end' ? ['-sseof', '-0.1'] : ['-ss', String(spec.at)];
       execFileSync(ffmpeg, ['-y', '-loglevel', 'error', ...at, '-i', src, '-frames:v', '1', '-q:v', '2', out]);

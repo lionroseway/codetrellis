@@ -66,7 +66,29 @@ function cam(frame, { fx = W / 2, fy = H / 2, z = 1 } = {}) {
 }
 const frameCss = (f) => ({ left: f.x, top: f.y, width: f.w, height: f.h, borderRadius: f.r });
 
-const beats = ACTS.flatMap((a) => a.beats.map((b) => ({ ...b, act: a.id })));
+// A clip names a demo scene and an offset into it (beats.mjs, clip()); the
+// capture's scenes.json, staged beside the video, says where that scene starts
+// in this recording.
+const sceneTables = new Map();
+function sceneStart(src, scene) {
+  if (scene === 0) return 0;
+  if (!sceneTables.has(src)) {
+    const f = path.join(here, 'assets', src.replace(/\.mp4$/, '.scenes.json'));
+    if (!fs.existsSync(f)) throw new Error(`${src} has no scenes.json beside it: run npm run stage, or capture it with capture/demo.sh`);
+    sceneTables.set(src, JSON.parse(fs.readFileSync(f, 'utf8')));
+  }
+  const hit = sceneTables.get(src).find((s) => s.scene === scene);
+  if (!hit) throw new Error(`${src} has no scene ${scene}: was it recorded from the same demo group?`);
+  return hit.at;
+}
+const resolve = (m) => (m && m.scene !== undefined ? { ...m, start: +(sceneStart(m.src, m.scene) + m.at).toFixed(2) } : m);
+
+const beats = ACTS.flatMap((a) => a.beats.map((b) => ({
+  ...b,
+  act: a.id,
+  media: resolve(b.media),
+  ...(b.tiles ? { tiles: b.tiles.map(resolve) } : {}),
+})));
 let t = 0;
 for (const b of beats) { b.at = +t.toFixed(2); t += b.dur; }
 const TOTAL = +t.toFixed(2);
@@ -345,6 +367,13 @@ const html = `<!doctype html>
 </html>
 `;
 fs.writeFileSync(path.join(here, 'index.html'), html);
+// Each beat's time and words, for bin/review.mjs to photograph after a re-recording.
+const plain = (x) => String(x ?? '').replace(/<[^>]+>/g, '');
+fs.writeFileSync(path.join(here, 'timing.json'), JSON.stringify(beats.map((b) => ({
+  act: b.act, at: b.at, dur: b.dur, layout: b.layout,
+  words: plain(b.title ?? b.caption ?? b.lead ?? [b.headline ?? b.lines ?? ''].flat().join(' ')),
+  media: b.media ? `${b.media.src} @ ${b.media.start ?? 0}s` : null,
+})), null, 2) + '\n');
 for (const a of ACTS) {
   const bs = beats.filter((b) => b.act === a.id);
   const end = bs[bs.length - 1].at + bs[bs.length - 1].dur;
