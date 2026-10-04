@@ -17,7 +17,8 @@
     "render:all": "bash bin/render.sh real-ui-hero && bash bin/render.sh real-footage && bash bin/render.sh collision && bash bin/render.sh remotion-hero",
     "render:clips": "bash -c '. bin/env.sh && node bin/clips.mjs \"$@\"' --",
     "clips": "npm run capture clips && npm run render:clips",
-    "site": "npm run hero && npm run clips"
+    "site": "npm run hero && npm run clips && npm run clean",
+    "clean": "node bin/clean.mjs"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",

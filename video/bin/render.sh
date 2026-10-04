@@ -9,6 +9,7 @@ set -euo pipefail
 NAME="${1:?usage: bin/render.sh <composition>  (one of: $(ls "$VIDEO_DIR/compositions" | tr '\n' ' '))}"
 DIR="$VIDEO_DIR/compositions/$NAME"
 [ -d "$DIR" ] || { echo "No composition '$NAME'" >&2; exit 1; }
+need_space 2 "a render" || exit 1
 mkdir -p "$VIDEO_DIR/out"
 OUT="$VIDEO_DIR/out/$NAME.mp4"
 

@@ -25,6 +25,7 @@
  *   npm run demo -- --port=19433 --api-port=3002   # a second instance
  *   npm run demo -- --shots=/tmp/ct-shots          # one PNG per scene
  *   npm run demo -- --scene=brief --decide         # decide for the person (dev only)
+ *   npm run demo -- --grant=terminal               # hold a capability for the run (test backend only)
  *   npm run demo -- --scene=brief --connector=out/connector/mcp-connector.cjs
  *
  * It needs the app running (packaged or `npm run dev`) with its MCP server

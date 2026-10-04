@@ -1,7 +1,7 @@
 {
-  "_note": "How each capture is made. capture/all.mjs reads a composition's media.json, finds the captures it uses, and makes the missing ones from here. Demo captures run scripts/demo.ts --group=<group>; the scenes it prints are what compositions place clips by.",
+  "_note": "How each capture is made. capture/all.mjs reads a composition's media.json, finds the captures it uses, and makes the missing ones from here. Demo captures run scripts/demo.ts --group=<group>; the scenes it prints are what compositions place clips by. `grant` is the MCP capabilities a group's scenes need beyond the defaults, held for the run as a person would turn them on (scripts/demo/grant.ts).",
   "hero-smooth":         { "group": "hero",         "mode": "smooth", "pace": "normal" },
-  "main-smooth":         { "group": "main",         "mode": "smooth", "pace": "normal" },
+  "main-smooth":         { "group": "main",         "mode": "smooth", "pace": "normal", "grant": "terminal" },
   "code-history-smooth": { "group": "code-history", "mode": "smooth", "pace": "normal" },
   "scale-smooth":        { "group": "scale",        "mode": "smooth", "pace": "normal" },
   "parallel-smooth":     { "group": "parallel",     "mode": "smooth", "pace": "normal" },

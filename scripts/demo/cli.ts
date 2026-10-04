@@ -12,6 +12,8 @@ import type { DemoOptions } from './options';
 import { DEFAULT_GROUP, GROUPS } from './registry';
 import { createContext, type RunContext } from './context';
 import { pickScenes, runScenes } from './runner';
+import { grantMcpCapabilities, restoreMcpCapabilities } from './grant';
+import type { PeerCapability } from '../../src/backend/services/peer-capabilities';
 
 let current: RunContext | null = null;
 
@@ -39,6 +41,22 @@ export async function main(opts: DemoOptions): Promise<void> {
     process.exit(1);
   }
   const token = fs.readFileSync(tokenPath, 'utf-8').trim();
+
+  // What a scene needs beyond the defaults (the terminal scene: `terminal`),
+  // granted as a person would and put back when the run ends.
+  let grantedOver: PeerCapability[] | null = null;
+  if (opts.grant) {
+    try {
+      const { before, now } = await grantMcpCapabilities({ apiPort: opts.apiPort, token }, opts.grant);
+      grantedOver = before;
+      console.log(`  granted for this run: ${opts.grant.join(', ')} (MCP clients hold ${now.join(', ')})`);
+    } catch (err) {
+      console.error(`
+Could not grant ${opts.grant.join(', ')}: ${err instanceof Error ? err.message : err}
+`);
+      process.exit(1);
+    }
+  }
 
   let mcp: ScriptedMcp | null = null;
   try {
@@ -92,6 +110,10 @@ export async function main(opts: DemoOptions): Promise<void> {
     await runScenes(run.ctx, chosen.picked);
   } finally {
     await run.tidy();
+    if (grantedOver) {
+      await restoreMcpCapabilities({ apiPort: opts.apiPort, token }, grantedOver)
+        .catch((err) => run.flags.push(`could not put the MCP grants back: ${err instanceof Error ? err.message : err}`));
+    }
     await client.disconnect().catch(() => {});
     console.log('\n' + '='.repeat(66));
     if (run.flags.length === 0) console.log('Nothing looked wrong.');

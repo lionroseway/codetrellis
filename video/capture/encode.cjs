@@ -1,9 +1,12 @@
 // Captured frames (each with the time it was taken) -> constant 30 fps H.264.
 // Each frame is held until the next, so a capture at 1 fps keeps real time.
 //
-// Usage: node encode.cjs <capture-dir> [--blend]
-//   --blend   dissolve over ~0.2 s where the picture changes (for hd captures,
-//             whose frames are far apart); held frames are untouched.
+// Usage: node encode.cjs <capture-dir> [--blend] [--keep-frames]
+//   --blend        dissolve over ~0.2 s where the picture changes (for hd
+//                  captures, whose frames are far apart); held frames are untouched.
+//   --keep-frames  keep frames/ after encoding. By default it goes: a smooth
+//                  capture writes 0.2-2 GB of JPEGs that nothing reads once
+//                  raw.mp4 exists, and a full set of captures filled a disk.
 // Writes <dir>/raw.mp4, and <dir>/scenes.json when <dir>/demo.log exists:
 // each demo scene's start in seconds of raw.mp4, for a composition's
 // data-media-start.
@@ -13,6 +16,7 @@ const { execFileSync } = require('child_process');
 
 const dir = path.resolve(process.argv[2]);
 const blend = process.argv.includes('--blend');
+const keepFrames = process.argv.includes('--keep-frames');
 const ts = JSON.parse(fs.readFileSync(path.join(dir, 'frames.json'), 'utf-8'));
 const ext = path.extname(fs.readdirSync(path.join(dir, 'frames')).sort()[0]);
 const name = (i) => `frames/${String(i).padStart(6, '0')}${ext}`;
@@ -29,6 +33,8 @@ execFileSync(process.env.FFMPEG || 'ffmpeg', ['-y', '-loglevel', 'error', '-f', 
     // point, and x264's default (one in 250) makes the renderer freeze frames.
     '-g', '30', '-keyint_min', '30', '-movflags', '+faststart', path.join(dir, 'raw.mp4')], { stdio: 'inherit' });
 console.log(`encode: ${(ts[ts.length - 1] - ts[0]).toFixed(1)} s from ${ts.length - 1} frames -> ${path.relative(process.cwd(), path.join(dir, 'raw.mp4'))}`);
+// Only after FFmpeg succeeded (execFileSync throws otherwise).
+if (!keepFrames) fs.rmSync(path.join(dir, 'frames'), { recursive: true, force: true });
 
 // demo.log lines are "<epoch seconds> <what the demo printed>"; a scene is "N. Title".
 const log = path.join(dir, 'demo.log');

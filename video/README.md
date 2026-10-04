@@ -48,10 +48,11 @@ that loads faster, say). For each frame, check the picture shows the words in
 `npm run review hero` again. Only you can do this check: the composition lint
 passes on a video whose captions lie.
 
-A lighter copy for sharing or review channels that refuse large files:
+A lighter copy for sharing or review channels that refuse large files
+(`env.sh` is bash; from zsh, wrap it in `bash -c '…'`):
 
 ```bash
-. bin/env.sh && "$FFMPEG" -i out/hero.mp4 -c:v libx264 -crf 26 -pix_fmt yuv420p -movflags +faststart out/hero-share.mp4
+bash -c '. bin/env.sh && "$FFMPEG" -i out/hero.mp4 -c:v libx264 -crf 26 -pix_fmt yuv420p -movflags +faststart out/hero-share.mp4'
 ```
 
 ### The site's short loops
@@ -65,7 +66,34 @@ Twenty seamless loops (MP4, WebM, poster each), the CI transcript, and
 the capture, scene and moment it is cut from (`docs/website/section-videos.md`
 has the page they go on). Look at every poster before handing them over.
 
-`npm run site` does the hero and the loops in one go.
+`npm run site` does the hero and the loops in one go, then `npm run clean`.
+
+### Disk
+
+A smooth capture writes up to ~2 GB of frames before encoding them, so
+`encode.cjs` deletes `frames/` once `raw.mp4` exists (`--keep-frames` keeps
+them). Captures and renders stop up front when the disk has less than 3 GB
+(capture) or 2 GB (render) free, rather than dying halfway. `npm run clean`
+removes what is rebuildable (leftover frames, HyperFrames' temporary render
+folders, footage staged into `compositions/*/assets`); `npm run clean -- --all`
+also removes `captures/` and `out/`.
+
+### What the capture's app is given
+
+- **A demo identity.** The app takes "you" from git config, so `demo.sh` gives
+  its throwaway app `Alex Kim <alex@acme.test>`; otherwise a recording shows
+  the real name and email of whoever ran it.
+- **The capabilities a group needs.** `captures.json` can say
+  `"grant": "terminal"`; the demo holds it for the run (`npm run demo --
+  --grant=…`, `scripts/demo/grant.ts`), as a person would turn it on in
+  Settings → MCP Server. Only a test backend accepts a grant over HTTP.
+
+### On a Mac
+
+- Vite listens on `::1` only, so the scripts poll `localhost`, not
+  `127.0.0.1`, and check both address families for a busy port.
+- Playwright installs "Chrome for Testing" (`chrome-headless-shell`,
+  `Google Chrome for Testing.app`); `env.sh` finds both layouts.
 
 ### Handing it to the website
 
@@ -102,6 +130,7 @@ video/
     clips.mjs         renders clips/site.json into out/clips/: seamless loops, posters, manifest
     motion.mjs        how much moves, second by second, in a capture: where to cut
     setup.mjs         copies GSAP and the Geist fonts into each composition
+    clean.mjs         frees the disk: leftover frames, render temp, staged footage
     stage.mjs         copies footage and stills from captures/ as media.json says
     check.sh          HyperFrames' check on every HTML composition
     render.sh         stage, check, render one composition, contact sheet

@@ -206,6 +206,10 @@ export const scaleGroup: Group = {
           await c.call('graph_set_depth', { depth });
           await c.beat(1.2);
         }
+        // Hold the whole map long enough to take in. On a fast machine the
+        // scan above takes no time, and the scene was gone (and the map with
+        // it) about ten seconds after it opened.
+        await c.beat(4);
         await c.call('graph_set_depth', { depth: 'package' });
         await c.call('open_project', { path: fx.path });
       },
