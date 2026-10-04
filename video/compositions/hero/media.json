@@ -1,6 +1,6 @@
 {
-  "_note": "beats.mjs's media starts were cut against these captures as recorded on 2026-10-04 (scenes.json beside each raw.mp4). A new recording moves them: read its scenes.json and shift.",
-  "assets/hero.mp4": { "from": "captures/hero-smooth/raw.mp4" },
-  "assets/main.mp4": { "from": "captures/main-hd/raw.mp4" },
-  "assets/code-history.mp4": { "from": "captures/code-history-hd/raw.mp4" }
+  "_note": "beats.mjs's starts were cut against these captures as recorded on 2026-10-04 (scenes.json beside each raw.mp4; bin/motion.mjs for where things move). A new recording moves them.",
+  "assets/hero.mp4": { "from": "captures/hero-smooth2/raw.mp4" },
+  "assets/main.mp4": { "from": "captures/main-smooth/raw.mp4" },
+  "assets/code-history.mp4": { "from": "captures/code-history-smooth/raw.mp4" }
 }
