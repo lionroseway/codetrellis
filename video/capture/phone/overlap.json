@@ -1,0 +1,51 @@
+{
+  "about": "The overlap on the phone (mobile/app/signal-detail.tsx): both sides in plain words, the files, what the agent said. Shown, not tapped.",
+  "screen": "signal-detail",
+  "params": {
+    "id": "k1"
+  },
+  "rpc": {
+    "awareness.signal": {
+      "signal": {
+        "id": "k1",
+        "kind": "contract",
+        "severity": "high",
+        "state": "open",
+        "heading": "Changed signature",
+        "summary": "`billing-v2` changed validateCreateUser in packages/shared/src/validators.ts: (payload: CreateUserPayload): string[] → (payload: CreateUserPayload, strict: boolean): string[]. `checkout-fix` imports it in 1 file",
+        "sides": [
+          "billing-v2",
+          "checkout-fix"
+        ],
+        "firstSeen": -540000,
+        "lastSeen": -60000,
+        "sideWords": [
+          {
+            "root": "/work/acme-shop-billing-v2",
+            "name": "billing-v2",
+            "words": "billing-v2 changed validateCreateUser's signature in packages/shared/src/validators.ts: it now takes strict: boolean."
+          },
+          {
+            "root": "/work/acme-shop-checkout-fix",
+            "name": "checkout-fix",
+            "words": "checkout-fix imports it, in 1 file: packages/web/src/UserList.tsx."
+          }
+        ],
+        "files": [
+          "packages/shared/src/validators.ts",
+          "packages/web/src/UserList.tsx"
+        ],
+        "told": [
+          {
+            "agentType": "claude-code",
+            "toldAt": -480000,
+            "note": "Seen. I will pass strict: false until billing-v2 merges."
+          }
+        ],
+        "replies": []
+      }
+    }
+  },
+  "waitFor": "Changed signature",
+  "before": 2.5
+}

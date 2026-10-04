@@ -86,7 +86,7 @@ test.describe('Activity drawer', () => {
     await page.waitForTimeout(500);
 
     // Workspace should still be functional
-    await expect(page.locator('input[placeholder="Untitled plan"]')).toBeVisible({
+    await expect(page.locator('textarea[placeholder="Untitled plan"]')).toBeVisible({
       timeout: 5000,
     });
   });

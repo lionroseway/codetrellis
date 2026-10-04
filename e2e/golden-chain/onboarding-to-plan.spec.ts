@@ -51,7 +51,7 @@ test.describe('Onboarding → Plan journey', () => {
       await page.waitForTimeout(1000);
 
       // Fill in the plan title
-      const titleInput = page.locator('input[placeholder="Untitled plan"]').first();
+      const titleInput = page.locator('textarea[placeholder="Untitled plan"]').first();
       const hasTitleInput = await titleInput.isVisible({ timeout: 2000 }).catch(() => false);
 
       if (hasTitleInput) {

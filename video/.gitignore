@@ -10,3 +10,6 @@ renders/
 compositions/*/assets/
 compositions/remotion-hero/public/
 compositions/remotion-hero/node_modules/
+# The hero index.html is generated from beats.mjs by build.mjs.
+
+compositions/hero/index.html

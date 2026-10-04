@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronRight, FileText, Zap, Folder, Copy, History,
   CheckCircle2, Circle, Loader2, Ban, SkipForward, User,
@@ -544,10 +544,9 @@ function PlanHomePage() {
         <div className="max-w-[42rem] mx-auto px-10 py-12 space-y-8">
           {/* Hero */}
           <div className="space-y-3">
-            <input
-              type="text"
+            <TitleField
               value={title}
-              onChange={(e) => saveTitle(e.target.value)}
+              onChange={saveTitle}
               placeholder="Untitled plan"
               className="w-full bg-transparent border-0 text-[40px] font-bold text-foreground placeholder:text-foreground-subtle focus:outline-none focus:ring-0 px-0 leading-tight"
             />
@@ -949,10 +948,9 @@ function BodyEditor({ item }: { item: PlanItem }) {
 
   return (
     <div className="space-y-4">
-      <input
-        type="text"
+      <TitleField
         value={title}
-        onChange={(e) => saveTitle(e.target.value)}
+        onChange={saveTitle}
         placeholder="Untitled"
         className="w-full bg-transparent border-0 text-[32px] font-bold text-foreground placeholder:text-foreground-subtle focus:outline-none focus:ring-0 px-0 leading-tight"
       />
@@ -1260,3 +1258,42 @@ function CommentsBlock({
   );
 }
 
+/**
+ * A plan's or an item's title, wrapping onto a second line instead of being
+ * cut off mid-word: a one-line input showed "Consistent money rounding ac"
+ * for a title anyone would write. One row until it needs more; Enter ends
+ * the edit rather than adding a line, since a title is one line of text.
+ */
+function TitleField({ value, onChange, placeholder, className }: {
+  value: string;
+  onChange: (next: string) => void;
+  placeholder: string;
+  className: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const fit = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = '0px';
+    el.style.height = `${el.scrollHeight}px`;
+  };
+  useLayoutEffect(fit, [value]);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      value={value}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value.replace(/\r?\n/g, ' '))}
+      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+      className={`${className} block resize-none overflow-hidden`}
+    />
+  );
+}

@@ -1,0 +1,105 @@
+/*
+ * The hero video's look, shared by every act (docs/website/hero-video.md):
+ * a light page, the real product in a dark window, one blue. Only real UI
+ * goes in a window; everything drawn here is type, frames and layout.
+ */
+@font-face { font-family: "Geist"; src: url(assets/geist-sans-latin-400-normal.woff2) format("woff2"); font-weight: 400; }
+@font-face { font-family: "Geist"; src: url(assets/geist-sans-latin-500-normal.woff2) format("woff2"); font-weight: 500; }
+@font-face { font-family: "Geist"; src: url(assets/geist-sans-latin-600-normal.woff2) format("woff2"); font-weight: 600; }
+@font-face { font-family: "Geist"; src: url(assets/geist-sans-latin-700-normal.woff2) format("woff2"); font-weight: 700; }
+@font-face { font-family: "Geist Mono"; src: url(assets/geist-mono-latin-400-normal.woff2) format("woff2"); font-weight: 400; }
+@font-face { font-family: "Geist Mono"; src: url(assets/geist-mono-latin-500-normal.woff2) format("woff2"); font-weight: 500; }
+
+:root {
+  --page: #f6f8fc; --ink: #0b1220; --sub: #4a5873; --faint: #8a96ad; --line: #dfe5f0;
+  --blue: #2f6bff; --blue-ink: #1a46c4; --blue-soft: #eaf0ff;
+  --night: #05080f; --red: #e5484d; --amber: #d98a0b; --green: #1f9d55;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--page); }
+body { font-family: "Geist", "Liberation Sans", sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+.clip { position: absolute; inset: 0; }
+#root { position: absolute; inset: 0; overflow: hidden; background: var(--page); }
+
+/* The page */
+.glow { position: absolute; inset: 0; background:
+  radial-gradient(900px 600px at 72% 40%, rgba(47,107,255,.10), transparent 70%),
+  radial-gradient(700px 500px at 15% 80%, rgba(0,190,255,.07), transparent 70%); }
+.dark { background: var(--night); }
+.dark .glow { background:
+  radial-gradient(900px 600px at 30% 30%, rgba(47,107,255,.22), transparent 70%),
+  radial-gradient(800px 700px at 85% 85%, rgba(38,90,220,.18), transparent 70%); }
+
+/* The camera: transform-origin 0 0; a shot is { x, y, scale } from HERO.cam(). */
+.cam { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+
+/* The real product, 1:1 with the footage's 1600x900 layout (captured at 2x). */
+.win { position: absolute; width: 1600px; height: 900px; border-radius: 12px; overflow: hidden; background: #0b0f17;
+  box-shadow: 0 40px 90px rgba(16,34,80,.28), 0 12px 30px rgba(16,34,80,.16), 0 0 0 1px rgba(11,18,32,.10); }
+.win video, .win img { position: absolute; inset: 0; width: 1600px; height: 900px; display: block; }
+
+/* Type */
+.eyebrow { font: 500 20px "Geist Mono", monospace; letter-spacing: .2em; color: var(--blue-ink); text-transform: uppercase; }
+.statement { position: absolute; display: flex; flex-direction: column; justify-content: center; gap: 22px; }
+.statement h2 { font-size: 76px; line-height: 1.04; font-weight: 700; letter-spacing: -.035em; text-wrap: balance; }
+.statement h2 b { color: var(--blue); font-weight: 700; }
+.statement p { font-size: 28px; line-height: 1.45; color: var(--sub); max-width: 620px; }
+.statement .num { font: 500 18px "Geist Mono", monospace; color: var(--blue-ink); background: var(--blue-soft); border-radius: 9px; padding: 7px 11px; align-self: flex-start; }
+.dark .statement h2, .dark .big { color: #f3f6fc; }
+.dark .statement p { color: #a9b6d3; }
+.big { font-size: 92px; line-height: 1.04; font-weight: 700; letter-spacing: -.04em; text-wrap: balance; }
+.big b { color: var(--blue); }
+
+/* A caption on a white card, for full-window shots */
+.cap { position: absolute; left: 50%; bottom: 46px; white-space: nowrap; display: flex; align-items: center; gap: 20px;
+  padding: 20px 32px 20px 22px; border-radius: 18px; background: #fff; color: var(--ink);
+  box-shadow: 0 24px 60px rgba(16,34,80,.22), 0 0 0 1px rgba(11,18,32,.06); }
+.cap .n { font: 500 18px "Geist Mono", monospace; color: var(--blue-ink); background: var(--blue-soft); border-radius: 9px; padding: 7px 11px; }
+.cap .t { font-size: 34px; font-weight: 500; letter-spacing: -.015em; }
+.cap .t b { font-weight: 600; color: var(--blue); }
+.cap .t code { font: 500 31px "Geist Mono", monospace; color: #b5530b; }
+
+/* "Real UI" tag, top right */
+.real { position: absolute; right: 60px; top: 30px; display: flex; gap: 10px; align-items: center; font: 500 15px "Geist Mono", monospace;
+  letter-spacing: .14em; color: var(--sub); background: rgba(255,255,255,.88); border-radius: 30px; padding: 9px 16px; box-shadow: 0 6px 20px rgba(16,34,80,.10); }
+.real i { width: 9px; height: 9px; border-radius: 50%; background: #ff3b47; display: block; }
+
+/* A mosaic tile: a window onto one region of a capture */
+.tile { position: absolute; overflow: hidden; border-radius: 12px; background: #0b0f17;
+  box-shadow: 0 24px 60px rgba(16,34,80,.24), 0 0 0 1px rgba(11,18,32,.10); }
+.tile .src { position: absolute; left: 0; top: 0; width: 1600px; height: 900px; transform-origin: 0 0; }
+.tile .src video, .tile .src img { position: absolute; inset: 0; width: 1600px; height: 900px; display: block; }
+.tile .label { position: absolute; left: 14px; bottom: 12px; font: 600 17px "Geist", sans-serif; color: #fff;
+  background: rgba(8,12,22,.78); border-radius: 9px; padding: 6px 11px; }
+
+/* A terminal, its lines the real output of a recorded run */
+.term { position: absolute; border-radius: 14px; overflow: hidden; background: #0b0f17;
+  box-shadow: 0 40px 90px rgba(16,34,80,.30), 0 0 0 1px rgba(11,18,32,.12); }
+.term .bar { height: 42px; display: flex; align-items: center; gap: 8px; padding: 0 16px; background: #121826; border-bottom: 1px solid #1e2738; }
+.term .bar i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+.term .bar span { margin-left: 12px; font: 500 15px "Geist Mono", monospace; color: #8592ad; }
+.term pre { padding: 22px 26px; font: 400 21px/1.55 "Geist Mono", monospace; color: #d7deee; white-space: pre-wrap; }
+.term .cmd { color: #ffffff; }
+.term .cmd::before { content: "$ "; color: #5b93ff; }
+.term .bad { color: #ff7b7f; }
+.term .good { color: #4fd18b; }
+.term .dim { color: #6f7c97; }
+
+/* The phone */
+.phone { position: absolute; width: 379px; height: 832px; border-radius: 58px; background: #0a0a0c; padding: 14px;
+  box-shadow: 0 50px 100px rgba(16,34,80,.35), 0 0 0 2px #2a2d35 inset, 0 0 0 1px rgba(11,18,32,.25); }
+.phone .screen { position: relative; width: 351px; height: 804px; border-radius: 45px; overflow: hidden; background: #09090b; }
+.phone .sb { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 30px 0 34px; color: #fafafa; font: 600 15px "Geist", sans-serif; }
+.phone .island { position: absolute; left: 50%; top: 10px; width: 108px; height: 30px; margin-left: -54px; border-radius: 20px; background: #000; }
+.phone .pv { position: absolute; left: 0; top: 44px; width: 351px; height: 760px; }
+.phone .pv video, .phone .pv img { position: absolute; inset: 0; width: 351px; height: 760px; display: block; }
+.tap { position: absolute; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%; background: rgba(255,255,255,.35); border: 2px solid rgba(255,255,255,.85); }
+
+/* Pills and strips */
+.pill { display: inline-flex; align-items: center; gap: 10px; font: 500 19px "Geist Mono", monospace; color: var(--sub); background: #fff;
+  border-radius: 30px; padding: 10px 18px; box-shadow: 0 0 0 1px var(--line); }
+.pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: block; }
+
+/* The real logo, in its dark tile (resources/icon.png has a black ground and no SVG) */
+.logo { display: inline-grid; place-items: center; border-radius: 22%; background: #000; overflow: hidden; box-shadow: 0 16px 40px rgba(16,34,80,.30); }
+.logo img { width: 118%; height: 118%; display: block; }

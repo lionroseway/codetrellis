@@ -27,7 +27,7 @@ test.describe('Plan item canvas', () => {
     await page.getByText('Canvas Test Action').first().click();
     await page.waitForTimeout(500);
 
-    const titleInput = page.locator('input[placeholder="Untitled"]');
+    const titleInput = page.locator('textarea[placeholder="Untitled"]');
     await expect(titleInput).toBeVisible({ timeout: 5000 });
     await expect(titleInput).toHaveValue('Canvas Test Action');
   });
@@ -44,7 +44,7 @@ test.describe('Plan item canvas', () => {
     await page.getByText('Editable Title').first().click();
     await page.waitForTimeout(500);
 
-    const titleInput = page.locator('input[placeholder="Untitled"]');
+    const titleInput = page.locator('textarea[placeholder="Untitled"]');
     await titleInput.clear();
     await titleInput.fill('Renamed Title');
     await page.keyboard.press('Tab');
@@ -92,12 +92,15 @@ test.describe('Plan item canvas', () => {
 
     const statusSelect = page.locator('select[title="Change status"]');
     await statusSelect.selectOption('in_progress');
-    await page.waitForTimeout(1000);
 
-    // Verify via API
-    const res = await page.request.get(`${API}/items/${plan.actionUids[0]}`);
-    const item = await res.json();
-    expect(item.status).toBe('in_progress');
+    // Verify via API, waiting for the save rather than a fixed second: with
+    // two workers, another test's scan of this repository can hold the
+    // backend for longer than that, and the write lands after it.
+    await expect.poll(async () => {
+      const res = await page.request.get(`${API}/items/${plan.actionUids[0]}`);
+      return (await res.json()).status;
+    }, { timeout: 15_000 }).toBe('in_progress');
+    await expect(statusSelect).toHaveValue('in_progress');
   });
 
   test('file specs display for actions with file targets', async ({ page, request }) => {

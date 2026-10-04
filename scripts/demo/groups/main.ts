@@ -388,6 +388,9 @@ const scenes: Scene[] = [
     title: 'Explore the graph properly',
     watch: 'depth changes, a file focuses into its symbols, then the scope narrows to one service',
     async run(c) {
+      // The plan workspace from the scenes before covers the canvas; this
+      // scene is about the graph, so bring it forward first.
+      await c.call('navigate_to', { target: 'graph' });
       await c.say('Reading the architecture', 'Clusters group what people talk about. Files show imports. Symbols open a file up.');
       for (const depth of ['package', 'file', 'symbol'] as const) {
         await c.call('graph_set_depth', { depth });

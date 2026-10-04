@@ -74,7 +74,7 @@ test.describe('code and plan, both directions', () => {
     await page.waitForTimeout(1500);
 
     // We are on the item.
-    const itemTitle = page.locator('input[placeholder="Untitled"]').first();
+    const itemTitle = page.locator('textarea[placeholder="Untitled"]').first();
     await expect(itemTitle).toBeVisible({ timeout: 8000 });
     await expect(itemTitle).toHaveValue(/Align rounding/);
 
@@ -108,10 +108,10 @@ test.describe('code and plan, both directions', () => {
         },
         [abs],
       );
-      await page.waitForTimeout(2200);
-
-      // Some row must carry a non-transparent verdict tint.
-      const tinted = await page.evaluate(() => {
+      // Some row must carry a non-transparent verdict tint. Waited for, not
+      // read once after a fixed pause: opened while another test's project
+      // holds the scanner, the overlay arrives when this project's scan lands.
+      const tinted = () => page.evaluate(() => {
         // Tailwind 4 emits oklab(), not rgba(), so read the alpha out of
         // whatever colour function the browser reports rather than
         // assuming one. A parser that only knows rgba() reports "no
@@ -127,7 +127,7 @@ test.describe('code and plan, both directions', () => {
         return Array.from(document.querySelectorAll('pre div'))
           .some((r) => alphaOf(getComputedStyle(r).backgroundColor) >= 0.08);
       });
-      expect(tinted, 'no line was tinted strongly enough to notice').toBeTruthy();
+      await expect.poll(tinted, { message: 'no line was tinted strongly enough to notice', timeout: 20_000 }).toBe(true);
     } finally {
       fs.writeFileSync(abs, original);
     }

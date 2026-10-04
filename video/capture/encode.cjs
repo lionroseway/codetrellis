@@ -24,7 +24,10 @@ fs.writeFileSync(path.join(dir, 'list.ffconcat'), lines.join('\n'));
 
 const vf = blend ? 'fps=30,tmix=frames=7,format=yuv420p' : 'fps=30,format=yuv420p';
 execFileSync(process.env.FFMPEG || 'ffmpeg', ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', path.join(dir, 'list.ffconcat'),
-  '-vf', vf, '-c:v', 'libx264', '-preset', 'slow', '-crf', '16', '-movflags', '+faststart', path.join(dir, 'raw.mp4')], { stdio: 'inherit' });
+  '-vf', vf, '-c:v', 'libx264', '-preset', process.env.VIDEO_PRESET || 'medium', '-crf', '16',
+    // A keyframe every second: a composition seeks into the footage at any
+    // point, and x264's default (one in 250) makes the renderer freeze frames.
+    '-g', '30', '-keyint_min', '30', '-movflags', '+faststart', path.join(dir, 'raw.mp4')], { stdio: 'inherit' });
 console.log(`encode: ${(ts[ts.length - 1] - ts[0]).toFixed(1)} s from ${ts.length - 1} frames -> ${path.relative(process.cwd(), path.join(dir, 'raw.mp4'))}`);
 
 // demo.log lines are "<epoch seconds> <what the demo printed>"; a scene is "N. Title".

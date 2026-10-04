@@ -19,12 +19,15 @@ const fonts = [
   return weights.map((w) => path.join(dir, `${name}-latin-${w}-normal.woff2`));
 });
 
-const hyperframes = ['collision', 'real-footage', 'real-ui-hero'];
+const hyperframes = ['collision', 'real-footage', 'real-ui-hero', 'hero'];
+// The only mark any video uses: the app's own icon.
+const logo = path.resolve(root, '..', 'resources', 'icon.png');
 for (const c of hyperframes) {
   const dest = path.join(root, 'compositions', c, 'assets');
   fs.mkdirSync(dest, { recursive: true });
   for (const f of [gsap, ...fonts]) fs.copyFileSync(f, path.join(dest, path.basename(f)));
-  console.log(`compositions/${c}/assets: gsap + ${fonts.length} fonts`);
+  fs.copyFileSync(logo, path.join(dest, 'logo.png'));
+  console.log(`compositions/${c}/assets: gsap + ${fonts.length} fonts + logo`);
 }
 const remotionFonts = path.join(root, 'compositions', 'remotion-hero', 'public', 'fonts');
 fs.mkdirSync(remotionFonts, { recursive: true });

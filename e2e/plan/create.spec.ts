@@ -29,7 +29,7 @@ test.describe('Plan creation', () => {
     await page.locator('button:has-text("New plan")').click();
 
     // Three requests on a busy backend: create, open, and the list after.
-    await expect(page.locator('input[placeholder="Untitled plan"]')).toBeVisible({
+    await expect(page.locator('textarea[placeholder="Untitled plan"]')).toBeVisible({
       timeout: 10_000,
     });
   });
@@ -43,7 +43,7 @@ test.describe('Plan creation', () => {
     // Waited for, not slept on: on a busy runner the new plan's workspace
     // took longer than the 1 s this used to allow, and the save longer than
     // the 1.5 s after it (#197, Browser suite 2/3).
-    const title = page.locator('input[placeholder="Untitled plan"]');
+    const title = page.locator('textarea[placeholder="Untitled plan"]');
     await expect(title).toBeEditable({ timeout: 10_000 });
     await title.fill('E2E Create Title Test');
     await page.keyboard.press('Tab');
@@ -62,7 +62,7 @@ test.describe('Plan creation', () => {
     await page.locator('button:has-text("New plan")').click();
     await page.waitForTimeout(1000);
 
-    await page.fill('input[placeholder="Untitled plan"]', 'E2E Create Listed Plan');
+    await page.fill('textarea[placeholder="Untitled plan"]', 'E2E Create Listed Plan');
     await page.keyboard.press('Tab');
     await page.waitForTimeout(1500);
 
@@ -85,7 +85,7 @@ test.describe('Plan creation', () => {
     await page.waitForTimeout(1000);
 
     // The body textarea should be visible for a new plan
-    const textarea = page.locator('textarea').first();
+    const textarea = page.locator('textarea:not([placeholder^="Untitled"])').first();
     await expect(textarea).toBeVisible({ timeout: 3000 });
   });
 });

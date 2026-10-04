@@ -55,7 +55,7 @@ test.describe('Spec links', () => {
 
     // The link opens the page, in its own plan, and the page names who relies on it.
     await page.getByTestId('spec-relies-on-link').click();
-    await expect(page.locator('input[placeholder="Untitled"]')).toHaveValue('Invoice format', { timeout: 10_000 });
+    await expect(page.locator('textarea[placeholder="Untitled"]')).toHaveValue('Invoice format', { timeout: 10_000 });
     await expect(page.getByTestId('spec-relied-on-words')).toHaveText('Relied on by 2 tasks in 2 plans');
     const tasks = page.getByTestId('spec-relied-on-task');
     await expect(tasks).toHaveText(['Add currency', 'Export invoices']);
@@ -108,6 +108,6 @@ test.describe('Spec links', () => {
 
     // A name opens its task.
     await tasks.nth(1).click();
-    await expect(page.locator('input[placeholder="Untitled"]')).toHaveValue('Export invoices', { timeout: 10_000 });
+    await expect(page.locator('textarea[placeholder="Untitled"]')).toHaveValue('Export invoices', { timeout: 10_000 });
   });
 });

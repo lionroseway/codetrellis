@@ -626,7 +626,7 @@ All sensor-emitted events have \`authorType: 'sensor'\` and a \`payload.source\`
 | Tool | What it does |
 |------|-------------|
 | \`ui_ready()\` | **Call this first.** Is the window usable — shell mounted, nothing blocking it? Every other tool answers from the backend and will succeed happily while the user is looking at something else |
-| \`navigate_to(target, plan_uid?, file_path?, line?, item_uid?, attachment_uid?, locator?)\` | Switch to plan / graph / split / timeline / code / brief view, or open a recorded file. For \`code\`, pass \`file_path\` (and optionally \`line\`); for \`brief\`, optionally \`item_uid\` for the task; for \`artefact\`, \`attachment_uid\` and the \`locator\` you cite |
+| \`navigate_to(target, plan_uid?, file_path?, line?, line_history?, item_uid?, attachment_uid?, locator?)\` | Switch to plan / graph / split / timeline / code / brief view, or open a recorded file. For \`code\`, pass \`file_path\` (and optionally \`line\`; \`line_history: true\` shows who wrote each run and that line's card); for \`brief\`, optionally \`item_uid\` for the task; for \`artefact\`, \`attachment_uid\` and the \`locator\` you cite |
 | \`navigate_to(target: 'replay', 'play-forward', 'live' or 'changes', from?, to?, speed?)\` | Show the project as it was from \`from\` (played at 4× with \`speed: 4\`), every active plan played forward, back to now, or the sidebar's Changes. With \`awareness\`, \`signal_id\` or \`breakpoint_ref\` scrolls to that card and marks it. Showing only: none of these decides anything |
 | \`open_plan(plan_uid, split_view?)\` | Open a specific plan |
 | \`select_item(item_uid, plan_uid?)\` | Navigate to a specific item in the plan tree |

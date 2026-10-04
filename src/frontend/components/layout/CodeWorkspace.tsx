@@ -88,6 +88,19 @@ export function CodeWorkspace() {
     return root ? `${root}/${selectedNode}` : selectedNode;
   }, [selectedNode, root]);
 
+  // A scan of this project landing replaces what the overlay is read from:
+  // read the file again then. Opened while another project held the
+  // scanner, the overlay came back empty and was never asked for again.
+  const [scanned, setScanned] = useState(0);
+  useEffect(() => {
+    const onChanged = (e: Event) => {
+      const project = (e as CustomEvent<{ projectPath?: string }>).detail?.projectPath;
+      if (project && project === root) setScanned((n) => n + 1);
+    };
+    window.addEventListener('graph-data-changed', onChanged);
+    return () => window.removeEventListener('graph-data-changed', onChanged);
+  }, [root]);
+
   // File contents + the plan overlay travel together: the overlay's item
   // count is shown before the source is read.
   useEffect(() => {
@@ -107,7 +120,7 @@ export function CodeWorkspace() {
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => setOverlay(data && !data.error ? data : null))
       .catch(() => setOverlay(null));
-  }, [absPath, root]);
+  }, [absPath, root, scanned]);
 
   // Phase 32 B3.2 — who else changes this file, line by line, from git.
   // Refetched when awareness changes (a workstream edited, committed, came
@@ -237,6 +250,22 @@ export function CodeWorkspace() {
     return () => { cancelled = true; };
   }, [lineHistoryOn, root, relativePath]);
   const lineData = lineHistory.path === relativePath ? lineHistory.data : null;
+  // An agent showing whose line it is (navigate_to with line_history): the
+  // toggle a person would press, then that line's card once the file's
+  // history is read, and only on the file it asked about.
+  const lineHistoryRequest = useUiStore((s) => s.lineHistoryRequest);
+  const [answered, setAnswered] = useState<number | null>(null);
+  useEffect(() => {
+    if (!lineHistoryRequest) return;
+    setLineHistoryOn(true);
+    setMode('read');
+  }, [lineHistoryRequest]);
+  useEffect(() => {
+    const r = lineHistoryRequest;
+    if (!r || r.line == null || answered === r.at || !lineData || absPath !== r.filePath) return;
+    setAnswered(r.at);
+    setChosenLine(r.line);
+  }, [lineHistoryRequest, lineData, absPath, answered]);
   const chosenHunk = lineData && chosenLine != null ? hunkAt(lineData, chosenLine) : null;
 
   if (!root) {

@@ -6387,6 +6387,8 @@ export async function initializeBackend(): Promise<void> {
   // its project shares task state); a teammate's record taken is told to the
   // window; a plan imported from its files has its records read.
   planItemService.setStateWriteListener((item, by) => { writeRecordFor(item, by); });
+  // Every recorded plan event reaches the open windows' Activity as it happens.
+  planEventService.setPlanEventListener((event) => { broadcast('plan-event', { planUid: event.planUid, event }); });
   setRecordAppliedListener((item) => {
     broadcast('plan-item-updated', { planUid: item.planUid, itemUid: item.uid, kind: item.kind, changes: { status: item.status, fromRecord: true } });
   });

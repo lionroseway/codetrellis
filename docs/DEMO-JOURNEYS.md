@@ -172,6 +172,33 @@ What can be shown without a device; the phone itself stays B11, by hand.
 | `devices` | paired and connected counts that agree between `get_peer_status` and `list_paired_devices`; Settings → Devices shown, then closed |
 | `reach` | with a phone: a card and the plans list on it; without one, `mobile_present` answers `mobile: false` and `mobile_navigate` is refused with why |
 
+## A8. The hero video's moments (`hero`) — *built*
+
+What the hero video needs that no other group stages (docs/website/hero-video.md).
+`npm run demo -- --group=hero`; recorded with `video/capture/demo.sh hero-hd --group=hero`.
+
+| Scene | Watch for |
+|---|---|
+| `connect` | Codex, Claude Code and Cursor connect one after another, each landing in the top bar with its branch |
+| `map` | the graph from packages down to files, the web app's calls drawn to the Python routes they reach, then one file opened into its symbols |
+| `flood` | the Timeline filling with calls from three agents while files change in three worktrees, faster than anyone could read |
+| `teammate` | Dana's branch (a person, no agent) as a line of work; Codex changing the same function overlaps it and is told on its next call |
+| `hold` | with "ask me when there is a contract change" set, Claude Code's next claim waits in Needs you until it is answered with a steer |
+| `freeze` | the freeze bar across the plan; Cursor checks before starting and is told the plan is frozen |
+| `catch-up` | the digest in Awareness, then the window moving on its own: the overlap, the line in the code, the last minutes replayed, back to live |
+
+## A9. The product under a real load (`scale`) — *built*
+
+A full plan and a large codebase, so the product is seen at the size a team uses it.
+`npm run demo -- --group=scale`; recorded with `video/capture/demo.sh scale-smooth --group=scale --mode=smooth`.
+
+| Scene | Watch for |
+|---|---|
+| `full-plan` | the ledger plan in its workspace: four phases, eighteen tasks, done and in flight and waiting, ticket keys, a budget |
+| `in-flight` | Codex, Claude Code and Cursor each claim a task; progress and files land in the plan and on the map as they work; the orders task is blocked on security |
+| `merge-order` | the Stack tab with three lines of work against main and what to merge first, then the Timeline's lanes |
+| `big-map` | CodeTrellis's own repository opened and mapped: packages, then files |
+
 ## B. The journeys, and where each one lives
 
 ### B1. A human plans it by hand — *built*

@@ -128,6 +128,26 @@ The real logo (`resources/icon.png`, in its dark tile; there is no SVG) ·
 **Keep up with your agents.** · *Free and open source · Apache 2.0* · Download.
 No other mark.
 
+## As built (2026-10-04)
+
+`video/compositions/hero/beats.mjs` is the edit; it runs about 2 min 37 s.
+Every beat opens where its footage shows what its words say (see the
+comments there for the moment each one is cut on). Where the storyboard and
+the cut differ:
+
+- **Intent** and **Channel** are left out for now: the captures say them in
+  the narration panel, not in the product, so the picture would not show
+  the claim.
+- **See every change** uses the `scale` scene, recorded after open plans
+  started following agents' claims and progress live (they did not before;
+  found while cutting this beat).
+- **Cloud** is folded into the CI beat's line; there is no terminal capture
+  of a cloud session yet.
+- **Flashes** are a mosaic: refused "done", the release freeze, a vague
+  plan flagged.
+- **Phone** shows the breakpoint answered on the phone beside the desktop
+  card clearing; the phone terminal is not captured yet.
+
 ## Formats
 
 - **On the site:** the hero section uses the split layout live. Headline,

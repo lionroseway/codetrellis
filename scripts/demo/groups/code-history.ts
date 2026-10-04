@@ -80,7 +80,7 @@ export const codeHistoryGroup: Group = {
         await c.call('navigate_to', { target: 'changes' });
         await c.say('What is not committed yet', 'The sidebar\'s Changes shows the checkout\'s uncommitted edit, with no plan needed: line 3 is the one with no commit to name.');
         await c.shot('h1-changes', { sidebar: 'changes' });
-        await c.call('navigate_to', { target: 'code', file_path: path.join(fx.worktree, fx.file), line: 2 });
+        await c.call('navigate_to', { target: 'code', file_path: path.join(fx.worktree, fx.file), line: 2, line_history: true });
         await c.say('Whose line is it?', 'The commit, its git author, and the agent, with how CodeTrellis knows: from the message, or "probably", from when its session was open here.');
         await c.shot('h1-whose-line', { file: fx.file });
       },
