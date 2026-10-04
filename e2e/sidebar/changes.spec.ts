@@ -107,7 +107,8 @@ test.describe('Changes panel', () => {
     const asked: string[] = [];
     await serve(page, asked);
     await gotoWithProject(page);
-    await page.getByRole('button', { name: README, exact: true }).first().click();
+    // The root README, not one in a folder: the tree has more than one.
+    await page.locator(`button[data-path="${path.join(PROJECT_PATH, README)}"]`).click();
     await page.getByRole('button', { name: 'Code', exact: true }).click();
     const chip = page.getByTestId('code-changed-chip');
     await expect(chip).toContainText('Changed, not staged');

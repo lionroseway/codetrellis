@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="assets/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: "Geist"; src: url(assets/geist-sans-latin-400-normal.woff2) format("woff2"); font-weight: 400; }
+      @font-face { font-family: "Geist"; src: url(assets/geist-sans-latin-500-normal.woff2) format("woff2"); font-weight: 500; }
+      @font-face { font-family: "Geist"; src: url(assets/geist-sans-latin-600-normal.woff2) format("woff2"); font-weight: 600; }
+      @font-face { font-family: "Geist"; src: url(assets/geist-sans-latin-700-normal.woff2) format("woff2"); font-weight: 700; }
+      @font-face { font-family: "Geist Mono"; src: url(assets/geist-mono-latin-400-normal.woff2) format("woff2"); font-weight: 400; }
+      @font-face { font-family: "Geist Mono"; src: url(assets/geist-mono-latin-500-normal.woff2) format("woff2"); font-weight: 500; }
+      :root {
+        --night: #040915; --panel: #0a1222; --panel-2: #0d1730; --line: #1b2a4a; --line-2: #24375e;
+        --ink: #e8eefb; --muted: #8696b8; --blue: #3b7bff; --teal: #3ad6b4;
+        --amber: #f6a623; --red: #ff5b5e; --claude: #e98a5c; --codex: #b48cff; --cursor: #49c2ff;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--night); }
+      body { font-family: "Geist", "Liberation Sans", sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+      .clip { position: absolute; inset: 0; }
+      #root { position: absolute; inset: 0; overflow: hidden; }
+      .bg { position: absolute; inset: -200px; background:
+          radial-gradient(900px 600px at 30% 20%, rgba(59,123,255,.32), transparent 70%),
+          radial-gradient(800px 700px at 85% 85%, rgba(38,90,220,.28), transparent 70%),
+          radial-gradient(1200px 900px at 50% 120%, rgba(10,40,120,.6), transparent 70%), var(--night); }
+      .grid { position: absolute; inset: -200px; opacity: .16;
+          background-image: linear-gradient(rgba(120,160,255,.35) 1px, transparent 1px), linear-gradient(90deg, rgba(120,160,255,.35) 1px, transparent 1px);
+          background-size: 64px 64px; mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%); }
+      #stage { position: absolute; inset: 0; transform-origin: 62% 46%; }
+      #win { position: absolute; left: 190px; top: 120px; width: 1540px; height: 840px; border-radius: 18px;
+          background: linear-gradient(180deg, #0c1528, #080f1e); border: 1px solid var(--line-2);
+          box-shadow: 0 60px 140px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.03) inset, 0 0 120px rgba(59,123,255,.18);
+          overflow: hidden; transform-origin: 50% 60%; }
+      .titlebar { height: 46px; display: flex; align-items: center; gap: 18px; padding: 0 18px; border-bottom: 1px solid var(--line); background: #0a1224; }
+      .dots { display: flex; gap: 8px; } .dots i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+      .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; }
+      .search { margin-left: 120px; width: 360px; height: 28px; border-radius: 8px; border: 1px solid var(--line); background: #0b1430; color: var(--muted); font-size: 13px; display: flex; align-items: center; padding: 0 12px; }
+      .tabs { margin-left: auto; display: flex; gap: 6px; font-size: 13px; color: var(--muted); }
+      .tabs span { padding: 5px 12px; border-radius: 7px; } .tabs .on { background: #14224a; color: var(--ink); }
+      .body { position: absolute; top: 46px; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: 210px 1fr 380px; grid-template-rows: 1fr 196px; }
+      .side { grid-column: 1; grid-row: 1 / 3; border-right: 1px solid var(--line); padding: 20px 14px; font-size: 14px; color: var(--muted); }
+      .side h6 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 500; margin: 4px 8px 10px; color: #7d8eb5; }
+      .side div { padding: 8px 10px; border-radius: 8px; display: flex; justify-content: space-between; margin-bottom: 2px; }
+      .side .on { background: #13244f; color: var(--ink); box-shadow: inset 2px 0 0 var(--blue); }
+      .side em { font-style: normal; font-size: 11px; background: #1b2c55; border-radius: 6px; padding: 1px 7px; color: var(--ink); }
+      .graph { grid-column: 2; grid-row: 1; position: relative; border-bottom: 1px solid var(--line); }
+      .graph svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+      .glabel { position: absolute; left: 22px; top: 18px; font-size: 13px; color: var(--muted); display: flex; gap: 10px; align-items: center; }
+      .live { font-size: 11px; color: var(--teal); border: 1px solid rgba(58,214,180,.4); border-radius: 20px; padding: 2px 9px; }
+      .right { grid-column: 3; grid-row: 1 / 3; border-left: 1px solid var(--line); padding: 20px 18px; display: flex; flex-direction: column; gap: 14px; }
+      .right h5 { font-size: 13px; font-weight: 500; color: var(--muted); display: flex; justify-content: space-between; }
+      .right h5 b { color: var(--blue); font-weight: 500; }
+      .agent { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 12px; background: #0c1630; border: 1px solid var(--line); }
+      .agent .av { width: 32px; height: 32px; border-radius: 9px; flex: none; display: grid; place-items: center; font-weight: 700; font-size: 15px; color: #08101f; }
+      .agent strong { display: block; font-size: 15px; font-weight: 600; }
+      .agent small { display: block; font: 12px "Geist Mono", monospace; color: var(--muted); margin-top: 2px; }
+      .agent p { font-size: 12.5px; color: #a9b6d3; margin-top: 4px; }
+      .attn { margin-top: 6px; border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+      .attn div { display: flex; gap: 10px; align-items: center; font-size: 13.5px; color: #c6d0e6; }
+      .attn i { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; font-style: normal; font-weight: 700; font-size: 12px; color: #1a0d00; }
+      .lanes { grid-column: 2; grid-row: 2; padding: 16px 22px; position: relative; }
+      .lane { display: grid; grid-template-columns: 120px 1fr; align-items: center; height: 40px; font-size: 13px; color: #b8c3dc; }
+      .track { position: relative; height: 10px; }
+      .bar { position: absolute; top: 0; height: 10px; border-radius: 6px; transform-origin: left center; }
+      .axis { display: grid; grid-template-columns: 120px repeat(5, 1fr); font: 11px "Geist Mono", monospace; color: #5f6f94; margin-top: 4px; font-variant-numeric: tabular-nums; }
+      #scrub { position: absolute; top: 12px; bottom: 26px; width: 2px; background: var(--blue); box-shadow: 0 0 14px var(--blue); left: 142px; }
+      #scrub::after { content: "Now"; position: absolute; bottom: -20px; left: -12px; font: 11px "Geist Mono", monospace; color: var(--blue); }
+      #alert { position: absolute; left: 50%; top: 64px; width: 760px; margin-left: -380px; border-radius: 16px; padding: 20px 24px;
+          background: linear-gradient(180deg, rgba(40,12,16,.94), rgba(22,10,14,.94)); border: 1px solid rgba(255,91,94,.55);
+          box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 60px rgba(255,91,94,.25); }
+      #alert .t { display: flex; gap: 12px; align-items: center; font-size: 22px; font-weight: 600; color: #ffd9d9; }
+      #alert .sev { margin-left: auto; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #ff9c9e; border: 1px solid rgba(255,91,94,.5); border-radius: 20px; padding: 3px 10px; }
+      #alert .d { font-size: 16px; color: #e6c8ca; margin-top: 8px; }
+      #alert code { font-family: "Geist Mono", monospace; color: #ffd08a; }
+      .told { display: flex; gap: 14px; margin-top: 14px; }
+      .told div { display: flex; gap: 8px; align-items: center; font-size: 14px; color: #d7f5ec; background: rgba(58,214,180,.1); border: 1px solid rgba(58,214,180,.35); border-radius: 10px; padding: 7px 12px; }
+      .told b { color: var(--teal); }
+      #end { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; padding-left: 170px; background: radial-gradient(1000px 700px at 75% 50%, rgba(59,123,255,.25), transparent 70%), rgba(4,9,21,.92); }
+      #end h1 { font-size: 112px; line-height: 1.02; font-weight: 600; letter-spacing: -.035em; }
+      #end h1 .b { color: #5b93ff; }
+      #end p { margin-top: 34px; font-size: 30px; color: #a9b6d3; }
+      #end .mark { position: absolute; left: 170px; bottom: 110px; display: flex; gap: 14px; align-items: center; font-size: 30px; font-weight: 600; }
+      #end .url { position: absolute; right: 170px; bottom: 116px; font: 22px "Geist Mono", monospace; color: #7d8db2; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="12" data-width="1920" data-height="1080">
+      <div class="clip" id="scene-collision" data-start="0" data-duration="12">
+        <div class="bg" id="bg"></div>
+        <div class="grid" id="grid"></div>
+        <div id="stage">
+          <div id="win">
+            <div class="titlebar">
+              <div class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+              <div class="brand"><svg width="20" height="20" viewBox="0 0 20 20"><g stroke="#5b93ff" stroke-width="1.6" fill="none"><path d="M10 2v16M4 6l6 4 6-4M4 12l6 4 6-4"/></g></svg>CodeTrellis</div>
+              <div class="search">Search architecture…</div>
+              <div class="tabs"><span class="on">Architecture</span><span>Timeline</span><span>Changes</span><span>Plans</span></div>
+            </div>
+            <div class="body">
+              <div class="side">
+                <h6>Workspace</h6>
+                <div class="on">Architecture</div><div>Plan</div><div>Agents <em>3</em></div><div>Changes</div><div>Timeline</div><div>Review</div>
+                <h6 style="margin-top:26px">Project</h6>
+                <div>Files</div><div>Terminals</div><div>Settings</div>
+              </div>
+              <div class="graph">
+                <div class="glabel">Architecture <span class="live">● Live</span></div>
+                <svg id="g" viewBox="0 0 950 560" preserveAspectRatio="xMidYMid meet"></svg>
+              </div>
+              <div class="right">
+                <h5>Agents <b>3 active</b></h5>
+                <div class="agent" id="a1"><div class="av" style="background:var(--claude)">C</div><div><strong>Claude Code</strong><small>feature/payments</small><p>Changing processPayment()</p></div></div>
+                <div class="agent" id="a2"><div class="av" style="background:var(--codex)">X</div><div><strong>Codex</strong><small>feature/billing</small><p>Updating PaymentService</p></div></div>
+                <div class="agent" id="a3"><div class="av" style="background:var(--cursor)">▸</div><div><strong>Cursor</strong><small>main</small><p>Refactoring shared modules</p></div></div>
+                <div class="attn">
+                  <h5>Needs your attention</h5>
+                  <div id="n1"><i style="background:var(--red);color:#fff">1</i>Collision on processPayment()</div>
+                  <div id="n2"><i style="background:var(--amber)">1</i>Breakpoint: billing/</div>
+                </div>
+              </div>
+              <div class="lanes">
+                <div class="lane"><span>Claude Code</span><div class="track"><div class="bar b1" style="left:2%;width:28%;background:var(--claude)"></div><div class="bar b1" style="left:34%;width:22%;background:var(--claude)"></div><div class="bar b1" style="left:60%;width:30%;background:var(--claude)"></div></div></div>
+                <div class="lane"><span>Codex</span><div class="track"><div class="bar b2" style="left:8%;width:20%;background:var(--codex)"></div><div class="bar b2" style="left:32%;width:34%;background:var(--codex)"></div><div class="bar b2" style="left:70%;width:20%;background:var(--codex)"></div></div></div>
+                <div class="lane"><span>Cursor</span><div class="track"><div class="bar b3" style="left:0%;width:16%;background:var(--cursor)"></div><div class="bar b3" style="left:22%;width:40%;background:var(--cursor)"></div><div class="bar b3" style="left:66%;width:24%;background:var(--cursor)"></div></div></div>
+                <div class="axis"><span></span><span>10:00</span><span>11:00</span><span>12:00</span><span>13:00</span><span>14:00</span></div>
+                <div id="scrub"></div>
+              </div>
+            </div>
+          </div>
+          <div id="alert">
+            <div class="t"><svg width="24" height="24" viewBox="0 0 24 24"><path d="M12 3l10 18H2z" fill="none" stroke="#ff7b7e" stroke-width="2" stroke-linejoin="round"/><path d="M12 10v5M12 18v.5" stroke="#ff7b7e" stroke-width="2" stroke-linecap="round"/></svg>Collision detected<span class="sev">High</span></div>
+            <div class="d">Claude Code and Codex are both changing <code>processPayment()</code> in <code>PaymentService.ts</code></div>
+            <div class="told"><div id="t1"><b>✓</b> Claude Code told on its next step</div><div id="t2"><b>✓</b> Codex told on its next step</div></div>
+          </div>
+        </div>
+        <div id="end">
+          <h1 id="e1">They were going to collide.</h1>
+          <h1 id="e2" class="b">CodeTrellis knew first.</h1>
+          <p id="e3">Every agent, told before their work collides.</p>
+          <div class="mark" id="e4"><svg width="34" height="34" viewBox="0 0 20 20"><g stroke="#5b93ff" stroke-width="1.6" fill="none"><path d="M10 2v16M4 6l6 4 6-4M4 12l6 4 6-4"/></g></svg>CodeTrellis</div>
+          <div class="url" id="e5">codetrellis.dev</div>
+        </div>
+      </div>
+    </div>
+    <script>
+      // ── The graph, built deterministically (seeded, no Math.random) ──
+      const NS = 'http://www.w3.org/2000/svg';
+      const svg = document.getElementById('g');
+      const el = (tag, attrs, parent = svg) => { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); parent.appendChild(n); return n; };
+      const N = { api: [470, 90], auth: [250, 230], payments: [700, 230], core: [470, 330], db: [270, 460], shared: [680, 460] };
+      const E = [['api','auth'],['api','payments'],['auth','core'],['payments','core'],['core','db'],['core','shared'],['auth','db'],['payments','shared'],['api','core']];
+      let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      const defs = el('defs', {});
+      const glow = el('filter', { id: 'glow', x: '-50%', y: '-50%', width: '200%', height: '200%' }, defs);
+      el('feGaussianBlur', { stdDeviation: '8', result: 'b' }, glow);
+      const fm = el('feMerge', {}, glow); el('feMergeNode', { in: 'b' }, fm); el('feMergeNode', { in: 'SourceGraphic' }, fm);
+      const sat = el('g', { id: 'sat' });
+      for (const [k, [x, y]] of Object.entries(N)) {
+        for (let i = 0; i < 5; i++) {
+          const a = rnd() * Math.PI * 2, r = 70 + rnd() * 70, sx = x + Math.cos(a) * r, sy = y + Math.sin(a) * r * .8;
+          el('line', { x1: x, y1: y, x2: sx, y2: sy, stroke: '#1f3a5e', 'stroke-width': 1 }, sat);
+          el('circle', { cx: sx, cy: sy, r: 2.6, fill: '#2bb39a', opacity: .8 }, sat);
+        }
+      }
+      const edges = el('g', {});
+      const edgeEls = E.map(([a, b]) => { const [x1, y1] = N[a], [x2, y2] = N[b]; const len = Math.hypot(x2 - x1, y2 - y1);
+        return el('line', { x1, y1, x2, y2, stroke: '#2a6f86', 'stroke-width': 1.6, 'stroke-dasharray': len, 'stroke-dashoffset': len, class: 'edge' }, edges); });
+      const halo = el('circle', { id: 'halo', cx: N.payments[0], cy: N.payments[1], r: 60, fill: 'rgba(246,166,35,0.0)', filter: 'url(#glow)' });
+      const nodeEls = {};
+      for (const [k, [x, y]] of Object.entries(N)) {
+        const w = k.length * 13 + 34;
+        const g = el('g', { class: 'node', id: 'n-' + k, transform: `translate(${x} ${y})` });
+        el('rect', { x: -w / 2, y: -18, width: w, height: 36, rx: 10, fill: '#0b1a2a', stroke: '#3ad6b4', 'stroke-width': 1.6, class: 'nr' }, g);
+        const t = el('text', { x: 0, y: 6, 'text-anchor': 'middle', fill: '#e8eefb', 'font-size': 17, 'font-weight': 500, 'font-family': 'Geist, sans-serif' }, g); t.textContent = k;
+        nodeEls[k] = g;
+      }
+      // Two agents travelling toward payments.
+      const p1 = el('circle', { cx: N.auth[0], cy: N.auth[1], r: 9, fill: '#e98a5c', filter: 'url(#glow)', opacity: 0 });
+      const p2 = el('circle', { cx: N.api[0], cy: N.api[1], r: 9, fill: '#b48cff', filter: 'url(#glow)', opacity: 0 });
+      const l1 = el('text', { x: N.auth[0], y: N.auth[1] - 30, fill: '#e98a5c', 'font-size': 15, 'font-weight': 600, 'font-family': 'Geist, sans-serif', opacity: 0, 'text-anchor': 'middle' }); l1.textContent = 'Claude Code';
+      const l2 = el('text', { x: N.api[0], y: N.api[1] - 30, fill: '#b48cff', 'font-size': 15, 'font-weight': 600, 'font-family': 'Geist, sans-serif', opacity: 0, 'text-anchor': 'middle' }); l2.textContent = 'Codex';
+
+      // ── The timeline: every motion is a tween on one paused timeline ──
+      const tl = gsap.timeline({ paused: true });
+      const ease = 'power3.out';
+      tl.fromTo('#bg', { scale: 1.08 }, { scale: 1, duration: 12, ease: 'none' }, 0);
+      tl.fromTo('#grid', { x: 0, y: 0 }, { x: -64, y: -32, duration: 12, ease: 'none' }, 0);
+      tl.fromTo('#win', { opacity: 0, y: 120, rotationX: 18, rotationY: -12, scale: .9, transformPerspective: 2400 },
+                        { opacity: 1, y: 0, rotationX: 6, rotationY: -6, scale: 1, duration: 1.6, ease: 'expo.out' }, 0.2);
+      tl.to('#win', { rotationX: 0, rotationY: 0, duration: 3.2, ease: 'power2.inOut' }, 1.8);
+      tl.from('.node', { scale: 0, transformOrigin: '50% 50%', opacity: 0, duration: .6, ease: 'back.out(2)', stagger: .09 }, 0.9);
+      tl.to(edgeEls, { attr: { 'stroke-dashoffset': 0 }, duration: .9, ease: 'power2.inOut', stagger: .06 }, 1.2);
+      tl.from('#sat', { opacity: 0, duration: 1.2, ease: 'none' }, 1.6);
+      tl.from(['#a1', '#a2', '#a3'], { x: 40, opacity: 0, duration: .6, ease, stagger: .14 }, 1.5);
+      tl.from('.b1', { scaleX: 0, duration: .8, ease, stagger: .12 }, 2.0);
+      tl.from('.b2', { scaleX: 0, duration: .8, ease, stagger: .12 }, 2.15);
+      tl.from('.b3', { scaleX: 0, duration: .8, ease, stagger: .12 }, 2.3);
+      tl.fromTo('#scrub', { x: 0 }, { x: 498, duration: 9, ease: 'none' }, 2.0);
+      tl.from(['#n1', '#n2'], { opacity: 0, duration: .01 }, 0); // hidden until their moment
+      tl.set(['#n1', '#n2'], { opacity: 0 }, 0);
+      // Agents converge (3.6s–5.6s): Claude auth → core → payments, Codex api → payments.
+      tl.to([p1, l1, p2, l2], { opacity: 1, duration: .3 }, 3.5);
+      tl.to(p1, { attr: { cx: N.core[0], cy: N.core[1] }, duration: .9, ease: 'power1.inOut' }, 3.7);
+      tl.to(l1, { attr: { x: N.core[0], y: N.core[1] - 30 }, duration: .9, ease: 'power1.inOut' }, 3.7);
+      tl.to(p1, { attr: { cx: N.payments[0] - 26, cy: N.payments[1] + 14 }, duration: 1, ease: 'power2.in' }, 4.6);
+      tl.to(l1, { attr: { x: N.payments[0] - 40, y: N.payments[1] + 56 }, duration: 1, ease: 'power2.in' }, 4.6);
+      tl.to(p2, { attr: { cx: N.payments[0] + 26, cy: N.payments[1] - 10 }, duration: 1.7, ease: 'power2.in' }, 3.9);
+      tl.to(l2, { attr: { x: N.payments[0] + 40, y: N.payments[1] - 34 }, duration: 1.7, ease: 'power2.in' }, 3.9);
+      // Camera leans in toward payments.
+      tl.to('#stage', { scale: 1.08, x: -40, y: 10, duration: 2.6, ease: 'power2.inOut' }, 3.6);
+      // Collision (5.6s): payments turns amber, then red, and pulses.
+      tl.to('#n-payments .nr', { attr: { stroke: '#f6a623', fill: '#2a1a06' }, duration: .25 }, 5.55);
+      tl.fromTo(halo, { attr: { r: 30, fill: 'rgba(246,166,35,0.55)' } }, { attr: { r: 90, fill: 'rgba(255,91,94,0.0)' }, duration: .9, ease: 'power2.out', immediateRender: false }, 5.6);
+      tl.fromTo(halo, { attr: { r: 30, fill: 'rgba(255,91,94,0.5)' } }, { attr: { r: 90, fill: 'rgba(255,91,94,0.0)' }, duration: .9, ease: 'power2.out', immediateRender: false }, 6.4);
+      tl.fromTo(halo, { attr: { r: 30, fill: 'rgba(255,91,94,0.45)' } }, { attr: { r: 90, fill: 'rgba(255,91,94,0.0)' }, duration: .9, ease: 'power2.out', immediateRender: false }, 7.2);
+      tl.to('#n-payments .nr', { attr: { stroke: '#ff5b5e' }, duration: .3 }, 6.0);
+      tl.to('#n-payments', { scale: 1.12, transformOrigin: '50% 50%', duration: .25, yoyo: true, repeat: 1 }, 5.6);
+      tl.to('#n1', { opacity: 1, duration: .3 }, 6.0);
+      tl.to('#n2', { opacity: 1, duration: .3 }, 6.2);
+      tl.fromTo('#alert', { opacity: 0, y: -30, scale: .96 }, { opacity: 1, y: 0, scale: 1, duration: .6, ease: 'back.out(1.6)' }, 6.1);
+      tl.from('#t1', { opacity: 0, x: -14, duration: .4, ease }, 7.0);
+      tl.from('#t2', { opacity: 0, x: -14, duration: .4, ease }, 7.35);
+      // Out to the end card (9.4s).
+      tl.to('#stage', { scale: 1.16, opacity: .0, duration: .9, ease: 'power2.in' }, 9.3);
+      tl.fromTo('#end', { opacity: 0 }, { opacity: 1, duration: .6, ease: 'none' }, 9.4);
+      tl.from('#e1', { y: 40, opacity: 0, duration: .8, ease: 'expo.out' }, 9.6);
+      tl.from('#e2', { y: 40, opacity: 0, duration: .8, ease: 'expo.out' }, 9.85);
+      tl.from('#e3', { y: 20, opacity: 0, duration: .7, ease }, 10.3);
+      tl.from(['#e4', '#e5'], { opacity: 0, duration: .7, ease: 'none' }, 10.6);
+      tl.set({}, {}, 12);
+      window.__timelines = window.__timelines || {};
+      window.__timelines['main'] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

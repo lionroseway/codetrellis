@@ -100,6 +100,9 @@ function FileTreeItem({
   return (
     <div>
       <button
+        // The row's own path: two files can share a name (README.md at the
+        // root and in a folder), and the name alone picks whichever is first.
+        data-path={node.path}
         onClick={() => {
           if (isDir && hasChildren) setSidebarExpanded(!sidebarExpanded);
           // Pass the KIND. This sent a bare path for files and directories

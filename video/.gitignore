@@ -1,0 +1,12 @@
+# Everything generated stays out of git: the scripts and compositions are the
+# source, and they make all of it again (see README.md, "What is not in git").
+node_modules/
+captures/
+out/
+.debug/
+renders/
+# Staged per composition by `npm run setup` (libraries, fonts) and
+# `npm run stage` (footage and stills).
+compositions/*/assets/
+compositions/remotion-hero/public/
+compositions/remotion-hero/node_modules/

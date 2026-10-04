@@ -362,6 +362,9 @@ installed here; `fnm exec --using=26 -- <cmd>` or putting
   untested stub it used to be).
 - `src/shared/` — Types shared backend ↔ frontend.
 - `mobile/` — Expo / React Native companion (see `docs/claude/mobile-companion.md`).
+- `video/` — product video made in code: the real app and phone recorded while the
+  demo drives them, composed in HyperFrames. A standalone package, and everything it
+  generates stays out of git (see `video/README.md`).
 - `resources/tree-sitter/` — WASM grammars.
 
 ## Key Conventions

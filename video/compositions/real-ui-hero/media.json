@@ -1,0 +1,8 @@
+{
+  "_note": "The data-media-start times in index.html were cut against these captures as recorded on 2026-10-04 (scenes.json beside each raw.mp4). A new recording moves them: read its scenes.json and shift.",
+  "assets/desktop.mp4": { "from": "captures/parallel-hd/raw.mp4" },
+  "assets/held.jpg": { "still": "captures/parallel-hd/raw.mp4", "at": 67.5 },
+  "assets/cleared.jpg": { "still": "captures/parallel-hd/raw.mp4", "at": 72.5 },
+  "assets/phone.mp4": { "from": "captures/phone-breakpoint/raw.mp4" },
+  "assets/phone-done.png": { "still": "captures/phone-breakpoint/raw.mp4", "at": "end" }
+}

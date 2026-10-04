@@ -1,0 +1,24 @@
+{
+  "name": "codetrellis-video",
+  "private": true,
+  "description": "Product video for codetrellis.dev: real app footage, captured and composed in code. Standalone: its own dependencies, nothing in the app depends on it.",
+  "type": "commonjs",
+  "scripts": {
+    "setup": "node bin/setup.mjs",
+    "capture:desktop": "bash capture/demo.sh parallel-hd --group=parallel --mode=hd",
+    "capture:desktop:smooth": "bash capture/demo.sh parallel-smooth --group=parallel --mode=smooth",
+    "capture:phone": "bash capture/phone.sh breakpoint",
+    "stage": "node bin/stage.mjs",
+    "check": "bash bin/check.sh",
+    "render": "bash bin/render.sh",
+    "render:all": "bash bin/render.sh real-ui-hero && bash bin/render.sh real-footage && bash bin/render.sh collision && bash bin/render.sh remotion-hero"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@ffprobe-installer/ffprobe": "^2.1.2",
+    "@fontsource/geist-mono": "^5.3.0",
+    "@fontsource/geist-sans": "^5.3.0",
+    "gsap": "^3.15.0",
+    "hyperframes": "0.8.116"
+  }
+}

@@ -1,7 +1,13 @@
 # Motion-graphics video for CodeTrellis: research
 
-Researched 2026-10-03, ahead of the website rebuild. Nothing here is built yet; this
-is the groundwork for a pilot. The leaning is **HyperFrames**, for the reasons below.
+Researched 2026-10-03, ahead of the website rebuild. The leaning is **HyperFrames**, for
+the reasons below.
+
+**Since built:** the spike ran on 2026-10-04 and is now [`video/`](../../video/README.md).
+It records the real app while its demo drives it, records the real phone screen, and
+composes both in HyperFrames. Its README has the four results and the workflow. The one
+firm lesson was that motion graphics around **real UI** read as the product, and a drawn
+mock of the app does not.
 
 ## What people mean by "Opus 5.5 makes videos"
 
@@ -49,10 +55,10 @@ launch video or the README. One source, nothing to keep in sync.
 Checked in the Claude Code cloud session that wrote this:
 
 - Available: Node 26, Chromium, the npm registry.
-- **Missing: a real FFmpeg.** The one Playwright bundles (`/opt/pw-browsers/ffmpeg-*`)
-  only encodes VP8 and PNG, not H.264/MP4. The Ubuntu package mirror is reachable, so
-  `apt-get install ffmpeg` is probably a one-liner (untried). On a Mac:
-  `brew install ffmpeg`.
+- **No system FFmpeg, and none needed.** The one Playwright bundles
+  (`/opt/pw-browsers/ffmpeg-*`) only encodes VP8 and PNG. The npm package
+  `@ffmpeg-installer/ffmpeg` ships an FFmpeg with libx264 and installs from the
+  registry, so `video/` uses that and nothing is installed system-wide.
 - Downloads from GitHub releases are blocked there, so anything that fetches binaries
   from them (`ffmpeg-static`, for one) won't install. npm packages do.
 
