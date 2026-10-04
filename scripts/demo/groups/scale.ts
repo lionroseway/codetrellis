@@ -144,22 +144,29 @@ export const scaleGroup: Group = {
         await agents(c);
         await c.call('open_plan', { plan_uid: planUid, split_view: true });
         await c.say('Three agents, one plan', 'Each claims a task in its own line of work. You see who has what, how far along it is, and the files it is touching, as it happens.');
-        await as(c, codex, 'claim_item', { uid: uids.pairs });
-        await c.beat(0.4);
-        await as(c, claude, 'claim_item', { uid: uids.statements });
-        await c.beat(0.4);
-        await as(c, cursor, 'claim_item', { uid: uids.reconcile });
+        // One change at a time, each given a moment, so a person watching
+        // sees it land: the task's status and bar, the Activity feed, the map.
+        if (uids.pairs) await c.call('select_item', { item_uid: uids.pairs, plan_uid: planUid });
         await c.beat(0.6);
+        await as(c, codex, 'claim_item', { uid: uids.pairs });
+        await c.beat(0.8);
         fx.edit('ledger-v2', LEDGER, '// Ledger is an append-only list of entries.', '// Ledger is an append-only list of balanced entry pairs.');
         await as(c, codex, 'update_item_progress', { uid: uids.pairs, percent: 40, message: 'Pairs written; the store still writes singles' });
+        await c.beat(0.8);
+        await as(c, claude, 'claim_item', { uid: uids.statements });
+        await c.beat(0.6);
         fx.edit('statements', STATEMENTS, 'foreach (var entry in _reader.Recent(50))', 'foreach (var entry in _reader.RecentPairs(50))');
         await as(c, claude, 'update_item_progress', { uid: uids.statements, percent: 25, message: 'Reading v2 pairs' });
+        await c.beat(0.6);
+        await as(c, cursor, 'claim_item', { uid: uids.reconcile });
+        await c.beat(0.6);
         fx.edit('reconcile', RECONCILE, 'runs += 1', 'runs += 1\n        // compare against the bank file');
         await as(c, cursor, 'update_item_progress', { uid: uids.reconcile, percent: 15, message: 'Parsing the bank file' });
+        await c.beat(0.6);
         await as(c, codex, 'set_item_blocked', { uid: uids.orders, reason: 'Waiting on security review (PAY-2149)' });
-        await c.beat();
+        await c.beat(0.6);
         await as(c, codex, 'update_item_progress', { uid: uids.pairs, percent: 70, message: 'Store writes pairs too' });
-        await c.beat();
+        await c.beat(1.2);
       },
     },
     {

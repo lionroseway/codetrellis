@@ -27,9 +27,32 @@ const FRAMES = {
   full: { x: 160, y: 90, w: 1600, h: 900, r: 14 },
   'split-text-left': { x: 832, y: 261, w: 992, h: 558, r: 14 },
   'split-text-right': { x: 96, y: 261, w: 992, h: 558, r: 14 },
-  end: { x: 560, y: 760, w: 800, h: 450, r: 14 },
+  phone: { x: 96, y: 234, w: 1088, h: 612, r: 14 },
+  rotate: { x: 0, y: 0, w: 1920, h: 1080, r: 0 },
 };
+/** Layouts with no window: it fades where it is and comes back from there. */
+const HIDDEN = new Set(['terminal', 'strip', 'end']);
 const layoutOf = (b) => (b.layout === 'split' ? `split-text-${b.text ?? 'left'}` : b.layout);
+function frameFor(b, last) {
+  if (HIDDEN.has(b.layout)) return last;
+  if (b.layout === 'mosaic') { const t = b.tiles[0]; return { x: t.x, y: t.y, w: t.w, h: t.h, r: 12 }; }
+  const f = FRAMES[layoutOf(b)];
+  if (!f) throw new Error(`unknown layout ${b.layout}`);
+  return f;
+}
+/** A clip that starts under the move into its beat and runs past its end. */
+function clipTimes(b, prev, last) {
+  const start = +Math.max(b.at - (prev ? PRE : 0), 0).toFixed(2);
+  const dur = +(b.at + b.dur - start + (last ? 0 : PRE + 0.3)).toFixed(2);
+  return { start, dur };
+}
+/** `lead`: how far before its beat the clip starts, so the footage lines up with the beat. */
+function mediaTag(id, m, start, dur, lead = 0, cls = 'clip') {
+  if (m.img) return `<img id="${id}" class="${cls}" src="assets/${m.img}" alt="" data-start="${start}" data-duration="${dur}" />`;
+  const mediaStart = +Math.max((m.start ?? 0) - lead, 0).toFixed(2);
+  return `<video id="${id}" class="${cls}" src="assets/${m.src}" muted playsinline data-start="${start}" data-duration="${dur}" data-media-start="${mediaStart}"></video>`;
+}
+const transcriptFile = path.join(path.dirname(new URL(import.meta.url).pathname), 'assets', 'ci-transcript.json');
 
 /**
  * The camera inside the window: footage point (fx, fy) at the frame's
@@ -54,8 +77,10 @@ const layers = [];
 let n = 0;
 const id = (p) => `${p}${++n}`;
 
+let lastFrame = FRAMES.full;
 beats.forEach((b, i) => {
-  const frame = FRAMES[layoutOf(b)];
+  const frame = frameFor(b, lastFrame);
+  lastFrame = frame;
   const shots = b.shots?.length ? b.shots : [{}];
   const first = cam(frame, shots[0]);
   const prev = beats[i - 1];
@@ -70,6 +95,12 @@ beats.forEach((b, i) => {
     js.push(`tl.to('#frame', { ...${JSON.stringify(frameCss(frame))}, duration: ${MOVE}, ease: 'power3.inOut' }, ${at});`);
     js.push(`tl.to('#cam', { ...${JSON.stringify(first)}, duration: ${MOVE}, ease: 'power3.inOut' }, ${at});`);
   }
+  // The window fades out for a beat with no product on screen, and back.
+  const shown = !HIDDEN.has(b.layout);
+  if (prev && HIDDEN.has(prev.layout) !== !shown) js.push(`tl.to('#frame', { opacity: ${shown ? 1 : 0}, scale: ${shown ? 1 : 0.96}, duration: ${MOVE * 0.8}, ease: 'power2.inOut' }, ${Math.max(b.at - PRE, 0)});`);
+  // A light veil dims the product behind the close.
+  const dim = b.layout === 'rotate';
+  if (prev && (prev.layout === 'rotate') !== dim) js.push(`tl.to('#lveil', { opacity: ${dim ? 1 : 0}, duration: ${MOVE}, ease: 'power2.inOut' }, ${b.at - PRE});`);
   // Camera moves within the beat; with none, a slow push so it never sits still.
   if (shots.length > 1) {
     for (const sh of shots.slice(1)) {
@@ -131,6 +162,88 @@ beats.forEach((b, i) => {
         js.push(`tl.fromTo('#${tid}', { opacity: 0, y: 24, xPercent: -50 }, { opacity: 1, y: 0, xPercent: -50, duration: 0.5, ease: 'expo.out' }, ${inAt});`);
       }
       break;
+    case 'mosaic': {
+      // The window is the first tile; the others are clips of their own.
+      const tiles = b.tiles.slice(1).map((t) => {
+        const tid2 = id('m');
+        const { start, dur } = clipTimes(b, prev, last);
+        const s2 = t.w / (t.region?.fw ?? W);
+        const tx = -(t.region?.fx ?? 0) * s2, ty = -(t.region?.fy ?? 0) * s2;
+        js.push(`tl.fromTo('#${tid2}', { opacity: 0, scale: 0.92 }, { opacity: 1, scale: 1, duration: 0.6, ease: 'expo.out', immediateRender: true }, ${inAt + 0.1 + b.tiles.indexOf(t) * 0.12});`);
+        if (!last) js.push(`tl.to('#${tid2}', { opacity: 0, duration: 0.35, ease: 'power2.in' }, ${outAt});`);
+        return `<div class="tile" id="${tid2}" style="left:${t.x}px;top:${t.y}px;width:${t.w}px;height:${t.h}px"><div class="src" style="transform:translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px) scale(${s2.toFixed(4)})">${mediaTag(id('v'), t, start, dur, b.at - start)}</div>${t.label ? `<span class="label">${esc(t.label)}</span>` : ''}</div>`;
+      }).join('');
+      const t0 = b.tiles[0];
+      layers.push(`<div class="layer" id="${tid}">${tiles}${t0.label ? `<span class="label tile-label" style="left:${t0.x + 14}px;top:${t0.y + t0.h - 44}px">${esc(t0.label)}</span>` : ''}
+        <div class="mtext" style="left:${b.textBox.x}px;top:${b.textBox.y}px;width:${b.textBox.w}px">${b.num ? `<span class="num">${esc(b.num)}</span>` : ''}<h2>${rich(b.title)}</h2>${b.body ? `<p>${rich(b.body)}</p>` : ''}</div></div>`);
+      js.push(`HERO.rise(tl, '#${tid} .mtext > *', ${inAt}, { stagger: 0.1 });`);
+      if (t0.label) js.push(`HERO.rise(tl, '#${tid} .tile-label', ${inAt + 0.2}, { y: 8 });`);
+      break;
+    }
+    case 'terminal': {
+      // Every line is what `codetrellis check` printed in a recorded run.
+      const tr = JSON.parse(fs.readFileSync(transcriptFile, 'utf8'));
+      let tt = inAt + 0.5;
+      const lines = [];
+      tr.steps.forEach((st, k) => {
+        const cid = id('c'), oid = id('o');
+        lines.push(`<span id="${cid}" class="cmd">${esc(st.command)}</span>`);
+        js.push(`tl.fromTo('#${cid}', { clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0% 0 0)', duration: 0.6, ease: 'none', immediateRender: true }, ${tt.toFixed(2)});`);
+        tt += 0.8;
+        const out = st.output.split('\n').map((l) => `<span class="${/✗|Does not conform|not conform/i.test(l) ? 'bad' : /^Conforms/i.test(l) ? 'good' : ''}">${esc(l)}</span>`).join('\n');
+        lines.push(`<span id="${oid}">${out}\n<span class="${st.exit === 0 ? 'good' : 'bad'}">exit ${st.exit}</span>\n</span>`);
+        js.push(`tl.fromTo('#${oid}', { opacity: 0 }, { opacity: 1, duration: 0.25, immediateRender: true }, ${tt.toFixed(2)});`);
+        tt += k === 0 ? (b.holdFail ?? 2.6) : 1;
+      });
+      const recipe = b.recipe ? `<div class="term recipe" style="left:${b.recipe.x}px;top:${b.recipe.y}px;width:${b.recipe.w}px"><div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span>${esc(b.recipe.name)}</span></div><pre>${b.recipe.lines.map((l) => `<span class="${/^\s*#/.test(l) ? 'dim' : ''}">${esc(l)}</span>`).join('\n')}</pre></div>` : '';
+      layers.push(`<div class="layer" id="${tid}" style="inset:0">${recipe}
+        <div class="term run" style="left:${b.box.x}px;top:${b.box.y}px;width:${b.box.w}px"><div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span>${esc(b.bar ?? 'ci')}</span></div><pre>${lines.join('\n')}</pre></div>
+        <div class="statement" style="left:${b.textBox.x}px;width:${b.textBox.w}px"><h2>${rich(b.title)}</h2>${b.body ? `<p>${rich(b.body)}</p>` : ''}</div></div>`);
+      js.push(`HERO.rise(tl, '#${tid} .term.run', ${inAt});`);
+      if (b.recipe) js.push(`HERO.rise(tl, '#${tid} .recipe', ${inAt + (b.recipe.at ?? 0.2)});`);
+      js.push(`HERO.rise(tl, '#${tid} .statement > *', ${inAt + 0.1}, { stagger: 0.1 });`);
+      break;
+    }
+    case 'phone': {
+      const p = b.phone;
+      const { start, dur } = clipTimes(b, prev, last);
+      const pid = id('p');
+      const screen = p.img
+        ? `<img id="${id('i')}" class="clip" src="assets/${p.img}" alt="" data-start="${start}" data-duration="${dur}" />`
+        : `${p.done ? `<img id="${id('i')}" class="clip" src="assets/${p.done}" alt="" data-start="${start}" data-duration="${dur}" />` : ''}<video id="${id('v')}" class="clip" src="assets/${p.src}" muted playsinline data-start="${(start + (p.delay ?? 0.4)).toFixed(2)}" data-duration="${Math.min(dur, p.length ?? dur).toFixed(2)}" data-media-start="${p.start ?? 0}"></video>`;
+      const tap = p.tap ? `<div class="tap" id="${pid}t" style="left:${p.tap.x}px;top:${44 + p.tap.y}px"></div>` : '';
+      if (p.tap) {
+        js.push(`gsap.set('#${pid}t', { scale: 0.4, opacity: 0 });`);
+        js.push(`tl.to('#${pid}t', { opacity: 1, scale: 1, duration: 0.18, ease: 'power2.out' }, ${(start + (p.delay ?? 0.4) + p.tap.at - 0.15).toFixed(2)});`);
+        js.push(`tl.to('#${pid}t', { opacity: 0, scale: 1.6, duration: 0.45, ease: 'power2.out' }, ${(start + (p.delay ?? 0.4) + p.tap.at + 0.05).toFixed(2)});`);
+      }
+      layers.push(`<div class="layer" id="${tid}" style="inset:0">
+        <div class="phone" id="${pid}" style="left:1300px;top:124px"><div class="screen"><div class="sb"><span>9:41</span><span>●●● ▮</span></div><div class="island"></div><div class="pv">${screen}</div>${tap}</div></div>
+        ${b.caption ? `<div class="cap" id="${tid}c"><span class="t">${rich(b.caption)}</span></div>` : ''}</div>`);
+      js.push(`tl.fromTo('#${pid}', { x: 680, rotation: 6 }, { x: 0, rotation: 0, duration: 1.1, ease: 'expo.out', immediateRender: true }, ${inAt - 0.1});`);
+      if (b.caption) js.push(`tl.fromTo('#${tid}c', { opacity: 0, y: 24, xPercent: -50 }, { opacity: 1, y: 0, xPercent: -50, duration: 0.5, ease: 'expo.out' }, ${inAt + 0.4});`);
+      break;
+    }
+    case 'strip':
+      layers.push(`<div class="layer center" id="${tid}"><div class="strip-h">${b.lines.map((l) => `<div class="big small">${rich(l)}</div>`).join('')}</div>
+        ${b.groups.map((g) => `<div class="pills">${g.map((f) => `<span class="pill"><i></i>${esc(f)}</span>`).join('')}</div>`).join('')}</div>`);
+      js.push(`HERO.rise(tl, '#${tid} .strip-h > *', ${inAt}, { stagger: 0.12 });`);
+      js.push(`HERO.rise(tl, '#${tid} .pill', ${inAt + 0.5}, { stagger: 0.06, y: 12 });`);
+      break;
+    case 'rotate': {
+      const each = (b.dur - 1.6 - (b.more ? 1.6 : 0)) / b.lines.length;
+      layers.push(`<div class="layer center" id="${tid}"><div class="big small lead">${rich(b.lead)}</div>
+        <div class="rot">${b.lines.map((l, k) => `<div class="big rline" id="${tid}r${k}">${rich(l)}</div>`).join('')}</div>
+        ${b.more ? `<div class="more">${rich(b.more)}</div>` : ''}</div>`);
+      js.push(`HERO.rise(tl, '#${tid} .lead', ${inAt});`);
+      b.lines.forEach((_, k) => {
+        const t0 = inAt + 0.6 + k * each;
+        js.push(`tl.fromTo('#${tid}r${k}', { opacity: 0, yPercent: 60 }, { opacity: 1, yPercent: 0, duration: 0.45, ease: 'expo.out', immediateRender: true }, ${t0.toFixed(2)});`);
+        if (k < b.lines.length - 1 || b.more) js.push(`tl.to('#${tid}r${k}', { opacity: 0, yPercent: -60, duration: 0.35, ease: 'power2.in' }, ${(t0 + each - 0.35).toFixed(2)});`);
+      });
+      if (b.more) js.push(`HERO.rise(tl, '#${tid} .more', ${(inAt + 0.6 + b.lines.length * each).toFixed(2)});`);
+      break;
+    }
     case 'end':
       layers.push(`<div class="layer center endcard" id="${tid}">
         <div class="endmark"><span class="logo" style="width:96px;height:96px"><img src="assets/logo.png" alt="" /></span>CodeTrellis</div>
@@ -159,9 +272,22 @@ js.push(`gsap.set('#realtag', { opacity: 0 });`);
 if (firstLight) js.push(`tl.to('#realtag', { opacity: 1, duration: 0.5 }, ${firstLight.at});`);
 
 const CSS = `
-#frame { position: absolute; overflow: hidden; background: #0b0f17;
+#frame { position: absolute; overflow: hidden; background: #0b0f17; transform-origin: 50% 50%;
   box-shadow: 0 40px 90px rgba(16,34,80,.28), 0 12px 30px rgba(16,34,80,.16), 0 0 0 1px rgba(11,18,32,.10); }
 #frame .clip { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; display: block; }
+#lveil { position: absolute; inset: 0; opacity: 0; background: linear-gradient(180deg, rgba(246,248,252,.86), rgba(246,248,252,.95)); }
+.mtext { position: absolute; display: flex; flex-direction: column; gap: 18px; }
+.mtext h2 { font-size: 60px; line-height: 1.04; font-weight: 700; letter-spacing: -.035em; text-wrap: balance; }
+.mtext h2 b { color: var(--blue); }
+.mtext p { font-size: 26px; color: var(--sub); line-height: 1.45; }
+.mtext .num { font: 500 18px "Geist Mono", monospace; color: var(--blue-ink); background: var(--blue-soft); border-radius: 9px; padding: 7px 11px; align-self: flex-start; }
+.tile-label { position: absolute; font: 600 17px "Geist", sans-serif; color: #fff; background: rgba(8,12,22,.78); border-radius: 9px; padding: 6px 11px; }
+.rot { position: relative; height: 120px; width: 100%; }
+.rline { position: absolute; left: 0; right: 0; top: 0; opacity: 0; color: var(--blue); }
+.lead { color: var(--ink); }
+.more { font-size: 30px; color: var(--sub); }
+.strip-h { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.term pre span { white-space: pre-wrap; }
 #veil { position: absolute; inset: 0; opacity: 0; background: linear-gradient(180deg, rgba(5,8,15,.62), rgba(5,8,15,.86)); }
 .layer { position: absolute; }
 .center { inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 30px; padding: 0 140px; }
@@ -201,6 +327,7 @@ const html = `<!doctype html>
       <div id="frame"><div class="cam" id="cam">
         ${clips.join('\n        ')}
       </div></div>
+      <div id="lveil"></div>
       <div id="veil"></div>
       <div class="brand" id="brand"><span class="logo" style="width:44px;height:44px"><img src="assets/logo.png" alt="" /></span>CodeTrellis</div>
       ${layers.join('\n      ')}
