@@ -94,6 +94,13 @@ Two scenes need more than the backend: `terminal` needs the `terminal`
 capability granted in Settings → MCP Server, and `graph` needs the window
 open. Run headless and both flag themselves, saying which.
 
+Against a test backend (`NODE_ENV=test` and `CODETRELLIS_ALLOW_HTTP_GRANTS=1`:
+the harnesses, the video captures) the run can hold the capability itself:
+`npm run demo -- --grant=terminal` grants it for the run and puts it back at
+the end, and `npx tsx scripts/grant.ts terminal` grants it on its own. A real
+install refuses both and says where the person turns it on, because granting
+is theirs (`services/grant-guard.ts`).
+
 ---
 
 ## A2. Many agents at once (`parallel`) — *built*

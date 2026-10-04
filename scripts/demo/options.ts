@@ -35,6 +35,12 @@ export interface DemoOptions {
    * runs from source — the same code, against the same running app.
    */
   connector?: string;
+  /**
+   * `--grant=terminal[,capture]`: MCP capabilities to hold for this run, as a
+   * person would turn them on in Settings → MCP Server; put back afterwards.
+   * Only a test backend accepts it (scripts/demo/grant.ts).
+   */
+  grant?: string[];
   list: boolean;
 }
 
@@ -46,6 +52,7 @@ export function parseOptions(argv: string[], repo: string): DemoOptions {
   const has = (name: string) => argv.includes(`--${name}`);
   const pace = (flag('pace') ?? 'normal') as DemoOptions['pace'];
   const groups = flag('group')?.split(',').map((g) => g.trim()).filter(Boolean);
+  const grant = flag('grant')?.split(',').map((g) => g.trim()).filter(Boolean);
   return {
     argv,
     repo,
@@ -61,6 +68,7 @@ export function parseOptions(argv: string[], repo: string): DemoOptions {
     decide: has('decide'),
     personWaitS: Number(flag('person-wait') ?? 180),
     connector: flag('connector'),
+    grant: grant?.length ? grant : undefined,
     list: has('list'),
   };
 }
