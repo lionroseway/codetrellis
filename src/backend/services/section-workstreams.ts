@@ -15,6 +15,9 @@
  */
 
 import type { PlanItem, Workstream } from '@shared/types';
+
+/** What these checks read of a workstream: where it is and its branch. A full `Workstream` is one. */
+export type Place = Pick<Workstream, 'root' | 'branch'>;
 export { worktreeDirFor } from '../../shared/lib/branch-name';
 
 /** A section's branch, and the item it is set on (the item itself, or an ancestor). */
@@ -47,20 +50,20 @@ export function resolveSection(item: PlanItem, getItem: (uid: string) => PlanIte
 }
 
 /** The workstream checked out on a branch: a worktree first, else the branch itself. */
-export function workstreamOfBranch(branch: string, workstreams: readonly Workstream[]): Workstream | null {
+export function workstreamOfBranch<W extends Place>(branch: string, workstreams: readonly W[]): W | null {
   return workstreams.find((w) => w.branch === branch && !w.root.startsWith('branch:'))
     ?? workstreams.find((w) => w.branch === branch)
     ?? null;
 }
 
 /** The branch a caller works on, from its workstream's root; null when unknown or detached. */
-export function branchOfRoot(root: string | null | undefined, workstreams: readonly Workstream[]): string | null {
+export function branchOfRoot(root: string | null | undefined, workstreams: readonly Place[]): string | null {
   if (!root) return null;
   return workstreams.find((w) => w.root === root)?.branch ?? null;
 }
 
 /** A section's place in words: "billing-v2 in /work/app-billing", or the branch alone. */
-export function whereWorked(branch: string, workstreams: readonly Workstream[]): string {
+export function whereWorked(branch: string, workstreams: readonly Place[]): string {
   const w = workstreamOfBranch(branch, workstreams);
   if (w && !w.root.startsWith('branch:')) return `${branch} in ${w.root}`;
   if (w) return `${branch} (checked out in no worktree yet)`;
@@ -77,7 +80,7 @@ export function claimRefusal(
   item: PlanItem,
   section: SectionWorkstream | null,
   callerBranch: string | null,
-  workstreams: readonly Workstream[],
+  workstreams: readonly Place[],
 ): string | null {
   if (!section || section.branch === callerBranch) return null;
   const where = whereWorked(section.branch, workstreams);

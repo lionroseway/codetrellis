@@ -138,4 +138,36 @@ test.describe.serial('One plan, several worktrees', () => {
     expect((await raw('PUT', `/api/items/${uid.billing}/workstream`, { workstream: null })).status).toBe(200);
     expect((await json<{ section: unknown }>('GET', `/api/items/${uid.refunds}/workstream`)).section).toBeNull();
   });
+
+  // The check only asks where each line of work is. It used to measure every
+  // line of work first, so on a checkout with a few hundred branches, each
+  // time main moved, a claim waited longer than the agent did.
+  test('a claim answers promptly on a repository with hundreds of branches', async () => {
+    const base = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { env: ENV }).toString().trim();
+    const now = Math.floor(Date.now() / 1000);
+    let stream = '';
+    for (let i = 0; i < 300; i++) {
+      const body = `export function step${i}(n: number): number {\n  return n + ${i};\n}\n`;
+      const msg = `step ${i}`;
+      stream += `commit refs/heads/many-${i}\ncommitter t <t@x> ${now - i} +0000\n`
+        + `data ${Buffer.byteLength(msg)}\n${msg}\nfrom ${base}\n`
+        + `M 100644 inline src/many-${i}.ts\ndata ${Buffer.byteLength(body)}\n${body}\n`;
+    }
+    execFileSync('git', ['-C', root, 'fast-import', '--quiet'], { input: stream, env: ENV });
+    execFileSync('git', ['-C', root, 'update-ref', 'refs/remotes/origin/teammate', 'refs/heads/many-7'], { env: ENV });
+    await add('many', 'action', 'Tidy the changelog');
+
+    const started = Date.now();
+    const claimed = parsed((await codex.callTool('claim_item', { uid: uid.many })).text);
+    expect(claimed.ok).toBe(true);
+    expect(Date.now() - started).toBeLessThan(3_000);
+
+    // Any branch is a place a section can be given to, a teammate's included.
+    for (const branch of ['many-299', 'origin/teammate']) {
+      const given = await codex.callTool('assign_workstream', { item_uid: uid.billing, workstream: branch });
+      expect(given.isError, given.text).toBeFalsy();
+      expect((await json<{ where: string }>('GET', `/api/items/${uid.refunds}/workstream`)).where).toBe(`${branch} (checked out in no worktree yet)`);
+    }
+    expect((await raw('PUT', `/api/items/${uid.billing}/workstream`, { workstream: null })).status).toBe(200);
+  });
 });

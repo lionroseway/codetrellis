@@ -19,7 +19,7 @@ import { parseReference, formatReference } from '../../../shared/lib/references'
 import { resultWithMeta, authorFromExtra } from '../helpers';
 import { ABOUT_MATERIALS } from '../../services/brief-service';
 import { quoteMaterial } from '../../services/material-reader/quote';
-import { listWorkstreams } from '../../services/workstream-service';
+import { listWorkstreamPlaces } from '../../services/workstream-service';
 import { readProjectSkill, listProjectSkills } from '../../services/skills-service';
 import { recordSkillRead } from '../../services/skill-use-service';
 import { recordMaterialRead } from '../../services/material-footprints';
@@ -782,7 +782,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         branch = cleanBranch(workstream);
         if (!branch || !workstreamOfBranch(branch, workstreams)) {
           const known = [...new Set(workstreams.map((w) => w.branch).filter((b): b is string => Boolean(b)))];
-          return { content: [{ type: 'text' as const, text: `No workstream on a branch named ${JSON.stringify(workstream)}. Known: ${known.join(', ') || 'none'}.` }], isError: true };
+          const shown = known.length > 20 ? `${known.slice(0, 20).join(', ')} and ${known.length - 20} more` : known.join(', ');
+          return { content: [{ type: 'text' as const, text: `No workstream on a branch named ${JSON.stringify(workstream)}. Known: ${shown || 'none'}.` }], isError: true };
         }
       }
       const id = authorFromExtra(deps, extra);
@@ -1862,11 +1863,15 @@ function criterionError(deps: ToolDeps, err: unknown) {
   throw err;
 }
 
-/** Phase 32 C5.1 — the project's workstreams, and the branch this agent works on. */
+/**
+ * Phase 32 C5.1 — where the project's lines of work are, and the branch this
+ * agent works on. Places only, not what each changed: a claim must not wait
+ * on measuring every branch.
+ */
 async function sectionContext(deps: ToolDeps) {
   const root = deps.getActiveProjectPath();
-  let workstreams: Awaited<ReturnType<typeof listWorkstreams>> = [];
-  try { workstreams = root ? await listWorkstreams(root, { includeIdle: true }) : []; } catch { /* no git: no workstreams */ }
+  let workstreams: Awaited<ReturnType<typeof listWorkstreamPlaces>> = [];
+  try { workstreams = root ? await listWorkstreamPlaces(root) : []; } catch { /* no git: no workstreams */ }
   const callerRoot = deps.sessionService.getActiveSessions().find((s) => s.sessionId === deps.sessionId)?.workstreamRoot ?? null;
   return { workstreams, callerBranch: branchOfRoot(callerRoot, workstreams) };
 }

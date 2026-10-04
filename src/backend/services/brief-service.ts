@@ -26,7 +26,7 @@ import { listCriteria } from './criteria-service';
 import { formatReference } from '../../shared/lib/references';
 import { TEXT_EXTS } from '../../shared/lib/locator';
 import type { PlanItem } from '../../shared/types';
-import { listWorkstreams } from './workstream-service';
+import { listWorkstreamPlaces } from './workstream-service';
 import { resolveSection, branchOfRoot, whereWorked } from './section-workstreams';
 import { readSoFar } from './material-footprints';
 import { affectedByOtherWork } from './other-work';
@@ -236,8 +236,8 @@ async function groundingForBrief(itemUid: string) {
 export async function worktreeBlock(item: PlanItem, projectRoot: string | null, workstreamRoot: string | null) {
   const section = resolveSection(item, getItem);
   if (!section) return {};
-  let workstreams: Awaited<ReturnType<typeof listWorkstreams>> = [];
-  try { workstreams = projectRoot ? await listWorkstreams(projectRoot, { includeIdle: true }) : []; } catch { /* no git */ }
+  let workstreams: Awaited<ReturnType<typeof listWorkstreamPlaces>> = [];
+  try { workstreams = projectRoot ? await listWorkstreamPlaces(projectRoot) : []; } catch { /* no git */ }
   const yours = branchOfRoot(workstreamRoot, workstreams) === section.branch;
   return {
     worktree: {

@@ -58,7 +58,7 @@ import { startReplayFrames, pruneFrames, setHeldProject, setFramePublisher, note
 import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
-import { listWorkstreams, setClaudeSessionSource, setSymbolParser, getSymbolParser } from './services/workstream-service';
+import { listWorkstreams, listWorkstreamPlaces, setClaudeSessionSource, setSymbolParser, getSymbolParser } from './services/workstream-service';
 import { resolveSection, cleanBranch, workstreamOfBranch, whereWorked, worktreeDirFor, usableBase } from './services/section-workstreams';
 import { suggestSectionBranch } from '../shared/lib/branch-name';
 import { setWorkstreamChangesListener, setRefsChangedListener, setWorkstreamWatchStartedListener } from './services/workstream-watch-service';
@@ -3007,8 +3007,8 @@ app.get('/api/items/:uid/workstream', async (req, res) => {
   const item = planItemService.getItem(req.params.uid);
   if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
   const root = getActiveProjectPath();
-  let workstreams: Awaited<ReturnType<typeof listWorkstreams>> = [];
-  try { workstreams = root ? await listWorkstreams(root, { includeIdle: true }) : []; } catch { /* no git */ }
+  let workstreams: Awaited<ReturnType<typeof listWorkstreamPlaces>> = [];
+  try { workstreams = root ? await listWorkstreamPlaces(root) : []; } catch { /* no git */ }
   const section = resolveSection(item, planItemService.getItem);
   res.json({
     own: item.workstream ?? null,
@@ -3030,8 +3030,8 @@ app.put('/api/items/:uid/workstream', async (req, res) => {
   let branch: string | null = null;
   if (raw !== null) {
     const root = getActiveProjectPath();
-    let workstreams: Awaited<ReturnType<typeof listWorkstreams>> = [];
-    try { workstreams = root ? await listWorkstreams(root, { includeIdle: true }) : []; } catch { /* no git */ }
+    let workstreams: Awaited<ReturnType<typeof listWorkstreamPlaces>> = [];
+    try { workstreams = root ? await listWorkstreamPlaces(root) : []; } catch { /* no git */ }
     branch = cleanBranch(raw);
     if (!branch || !workstreamOfBranch(branch, workstreams)) {
       res.status(400).json({ error: 'workstream must be the branch of a known workstream, or null' });
