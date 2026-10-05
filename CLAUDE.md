@@ -34,26 +34,36 @@ Deep-dive docs live in `docs/claude/`:
 The team's design docs (vision, UX, plans) live alongside these at the
 `docs/` root — `ARCHITECTURE.md`, `MCP-INTEGRATION.md`, etc.
 
-## Phase 32 — Parallel awareness (in progress on `feat/phase-32`)
+## Phase 33 — Rules and clarity (in progress on `feat/phase-33`)
 
-**Read [`docs/PHASE-32-LOG.md`](docs/PHASE-32-LOG.md) first.** Its
+**Read [`docs/PHASE-33-LOG.md`](docs/PHASE-33-LOG.md) first.** Its
 **Now** block names the current step and the very next action. The work
 is long-running and runs across sessions, so the log, not the
-conversation, is the state. **Now and the checklist are generated.**
-[`docs/PHASE-32-STATUS.yaml`](docs/PHASE-32-STATUS.yaml) holds only intent
+conversation, is the state. The design is
+[`docs/PHASE-33-RULES-AND-CLARITY.md`](docs/PHASE-33-RULES-AND-CLARITY.md)
+(the rulebook, checks anywhere, change control, and the owner's clarity
+reports); the steps are [`docs/PHASE-33-EXECUTION.md`](docs/PHASE-33-EXECUTION.md).
+**Now and the checklist are generated.**
+[`docs/PHASE-33-STATUS.yaml`](docs/PHASE-33-STATUS.yaml) holds only intent
 (steps, titles, order, parts, follow-ups, next action); whether a step is
 building, in review or done, and its PRs, is **read from git and GitHub**
-(its branch `feat/phase-32-<id>-…`, its squash commit `Phase 32 <id>: …
+(its branch `feat/phase-33-<id>-…`, its squash commit `Phase 33 <id>: …
 (#N)`). Edit the YAML and run `npm run status` (it needs
-`git fetch origin feat/phase-32`); `tools/status/status.test.ts` fails when
-the log's items differ from the YAML. Name every step branch and merge
-title that way, or git cannot see the step. Update it at the start and end of every
+`git fetch origin feat/phase-33`; it serves the newest phase, and
+`--phase 32` the last); `tools/status/status.test.ts` fails when a log's
+items differ from its YAML. Name every step branch and merge title that
+way, or git cannot see the step. Update it at the start and end of every
 step, after every decision, before any long command, and at least every
-30 minutes ([`docs/PHASE-32-EXECUTION.md`](docs/PHASE-32-EXECUTION.md)
-§1).
+30 minutes (EXECUTION §1). **The owner follows progress on a page**:
+`npm run status:page` writes it, and it is republished to the artifact
+linked in EXECUTION §1.1 whenever Now changes.
 
-- **Branches:** one step, one branch `feat/phase-32-<step>-<slug>`, one
-  PR into `feat/phase-32`. The phase merges into `main` once, at the end.
+Phase 32 (parallel awareness) is done and in `main` (0.1.18, 0.2.0); its
+log, [`docs/PHASE-32-LOG.md`](docs/PHASE-32-LOG.md), is the record. These
+rules, set in Phase 32, hold for Phase 33 and after:
+
+- **Branches:** one step, one branch `feat/phase-33-<step>-<slug>`, one
+  PR into `feat/phase-33`. The phase merges into `main` once, at the end.
 - **The suite was fully green at the start**, so any failure is ours.
   Never skip, disable or quarantine a test.
 - **Stage 0 verifies what exists** (inventory, tests for everything,

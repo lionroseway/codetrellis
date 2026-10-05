@@ -1,48 +1,75 @@
 /**
- * Phase 32 status: intent written in `docs/PHASE-32-STATUS.yaml`, state read
+ * Phase status: intent written in `docs/PHASE-<n>-STATUS.yaml`, state read
  * from git. The LOG's block is a snapshot of both, so this checks the part
- * that cannot go stale by itself (the items, in the YAML's order), and the
- * pure pieces that read git's words: merge subjects, branch names, and how
- * a written status gives way to git's.
+ * that cannot go stale by itself (the items, in the YAML's order), for every
+ * phase that has a status file, and the pure pieces that read git's words:
+ * merge subjects, branch names, and how a written status gives way to git's.
  */
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { applyToLog, blockOf, intentLines, loadStatus, problems, renderLog, resolve, type Status } from './status';
+import { applyToLog, blockOf, intentLines, loadStatus, phaseFrom, problems, renderLog, resolve, type Status } from './status';
 import { idForBranch, parseMergeSubject, type Facts } from './git-facts';
+import { countLeaves, renderPage } from './page';
 
 const docs = path.resolve(__dirname, '..', '..', 'docs');
+const phases = fs.readdirSync(docs).map((f) => /^PHASE-(\d+)-STATUS\.yaml$/.exec(f)?.[1]).filter(Boolean).map(Number);
 
-test('docs/PHASE-32-LOG.md lists the items docs/PHASE-32-STATUS.yaml does, in its order', () => {
-  const status = loadStatus(fs.readFileSync(path.join(docs, 'PHASE-32-STATUS.yaml'), 'utf8'));
-  const block = blockOf(fs.readFileSync(path.join(docs, 'PHASE-32-LOG.md'), 'utf8'));
-  assert.ok(block, 'docs/PHASE-32-LOG.md has no status block');
-  assert.deepEqual(intentLines(block), intentLines(renderLog(status, null)), 'the LOG\'s checklist differs from the YAML — run `npm run status` and commit it');
-  assert.match(block, /Read from git at `origin\/feat\/phase-32` `[0-9a-f]{7}`/, 'the block says which commit its states were read at');
+test('every phase with a status file has one', () => {
+  assert.ok(phases.includes(32) && phases.includes(33), `found phases ${phases.join(', ')}`);
+});
+
+for (const phase of phases) {
+  test(`docs/PHASE-${phase}-LOG.md lists the items docs/PHASE-${phase}-STATUS.yaml does, in its order`, () => {
+    const status = loadStatus(fs.readFileSync(path.join(docs, `PHASE-${phase}-STATUS.yaml`), 'utf8'), phase);
+    const block = blockOf(fs.readFileSync(path.join(docs, `PHASE-${phase}-LOG.md`), 'utf8'), phase);
+    assert.ok(block, `docs/PHASE-${phase}-LOG.md has no status block`);
+    assert.deepEqual(intentLines(block), intentLines(renderLog(status, null, phase)), 'the LOG\'s checklist differs from the YAML — run `npm run status` and commit it');
+    assert.match(block, new RegExp(`Read from git at \`origin/feat/phase-${phase}\` \`[0-9a-f]{7}\``), 'the block says which commit its states were read at');
+  });
+}
+
+test('the phase is the one asked for, else the newest with a status file', () => {
+  const files = ['PHASE-32-LOG.md', 'PHASE-32-STATUS.yaml', 'PHASE-33-STATUS.yaml', 'PHASE-9-STATUS.yaml', 'README.md'];
+  assert.equal(phaseFrom(['node', 'run.ts'], files), 33);
+  assert.equal(phaseFrom(['node', 'run.ts', '--phase', '32'], files), 32);
+  assert.throws(() => phaseFrom(['node', 'run.ts', '--phase', 'x'], files), /phase number/);
+  assert.throws(() => phaseFrom(['node', 'run.ts'], ['README.md']), /No docs/);
+});
+
+test('Phase 33 reads its own subjects and branches, and not Phase 32\'s', () => {
+  const known = new Set(['S1', 'R2', 'G6', '0.1']);
+  assert.deepEqual(parseMergeSubject('Phase 33 S1: one import per plan per burst (#360)', known, 33), { ids: ['S1'], pr: 360 });
+  assert.deepEqual(parseMergeSubject('Phase 33 0.1: baseline (#351)', known, 33), { ids: ['0.1'], pr: 351 });
+  assert.equal(parseMergeSubject('Phase 32 S1: not this phase (#200)', known, 33), null);
+  // Phase 32's D and E tracks were invisible to the old A–C pattern.
+  assert.deepEqual(parseMergeSubject('Phase 32 E6: the done-when (#320)', new Set(['E6']), 32), { ids: ['E6'], pr: 320 });
+  assert.equal(idForBranch('origin/feat/phase-33-g6-open-restores', [...known], 33), 'G6');
+  assert.equal(idForBranch('feat/phase-32-r2-x', [...known], 33), null);
 });
 
 const ids = ['A4', 'A4.1', 'A5', 'A5.1', 'B6.4', 'B6.4b', 'B7', 'B7.4', 'B7.5', '0.4c-1', 'HD1'];
 
 test('a merge subject names its steps and PR, in both forms the history uses', () => {
   const known = new Set(ids);
-  assert.deepEqual(parseMergeSubject('Phase 32 B7.4: the decision on a spec change is a person\'s (#245)', known), { ids: ['B7.4'], pr: 245 });
-  assert.deepEqual(parseMergeSubject('Phase 32 A5 refined, and A5.1: branch reviews get their dependencies back (#222)', known), { ids: ['A5', 'A5.1'], pr: 222 });
-  assert.deepEqual(parseMergeSubject('feat(phase-32): A4.1 — every agent knows its workstream (#146)', known), { ids: ['A4.1'], pr: 146 });
-  assert.deepEqual(parseMergeSubject('Phase 32 HD1: a project\'s diff is its own (#207)', known), { ids: ['HD1'], pr: 207 });
+  assert.deepEqual(parseMergeSubject('Phase 32 B7.4: the decision on a spec change is a person\'s (#245)', known, 32), { ids: ['B7.4'], pr: 245 });
+  assert.deepEqual(parseMergeSubject('Phase 32 A5 refined, and A5.1: branch reviews get their dependencies back (#222)', known, 32), { ids: ['A5', 'A5.1'], pr: 222 });
+  assert.deepEqual(parseMergeSubject('feat(phase-32): A4.1 — every agent knows its workstream (#146)', known, 32), { ids: ['A4.1'], pr: 146 });
+  assert.deepEqual(parseMergeSubject('Phase 32 HD1: a project\'s diff is its own (#207)', known, 32), { ids: ['HD1'], pr: 207 });
   // A merge that names no step, or a step not in the file, says nothing.
-  assert.equal(parseMergeSubject('Phase 32: our own late export no longer undoes an agent\'s claim (#244)', known), null);
-  assert.equal(parseMergeSubject('Phase 32 B9.9: not a step here (#999)', known), null);
-  assert.equal(parseMergeSubject('Graph: refit the view when the layout changes (#175)', known), null);
+  assert.equal(parseMergeSubject('Phase 32: our own late export no longer undoes an agent\'s claim (#244)', known, 32), null);
+  assert.equal(parseMergeSubject('Phase 32 B9.9: not a step here (#999)', known, 32), null);
+  assert.equal(parseMergeSubject('Graph: refit the view when the layout changes (#175)', known, 32), null);
 });
 
 test('a branch belongs to the longest step id that starts its name', () => {
-  assert.equal(idForBranch('origin/feat/phase-32-b6-4b-timeline-follows', ids), 'B6.4b');
-  assert.equal(idForBranch('feat/phase-32-b6-4-stack-tab', ids), 'B6.4');
-  assert.equal(idForBranch('feat/phase-32-0-4c-1-plans', ids), '0.4c-1');
-  assert.equal(idForBranch('feat/phase-32-fix-self-write-reimport', ids), null);
-  assert.equal(idForBranch('main', ids), null);
+  assert.equal(idForBranch('origin/feat/phase-32-b6-4b-timeline-follows', ids, 32), 'B6.4b');
+  assert.equal(idForBranch('feat/phase-32-b6-4-stack-tab', ids, 32), 'B6.4');
+  assert.equal(idForBranch('feat/phase-32-0-4c-1-plans', ids, 32), '0.4c-1');
+  assert.equal(idForBranch('feat/phase-32-fix-self-write-reimport', ids, 32), null);
+  assert.equal(idForBranch('main', ids, 32), null);
 });
 
 const status = (): Status => ({
@@ -81,7 +108,7 @@ test('git\'s facts win; a part-done parent is building; what git cannot see stay
   // A PR the title already names is not repeated.
   assert.deepEqual(hd1.prs, []);
 
-  const md = renderLog(status(), facts());
+  const md = renderLog(status(), facts(), 32);
   assert.match(md, /\| \*\*In flight\*\* \| B7\.5 in review \(#247\) on `feat\/phase-32-b7-5-held-edits`; #250 in review on `feat\/phase-32-fix-x` \|/);
   assert.match(md, /\| \*\*Last merged\*\* \| B7\.4 \(#245, `e0a0a49`\) \|/);
   assert.match(md, /^- \[ \] B7 Conferring — building$/m);
@@ -105,5 +132,21 @@ test('only todo or done can be written; an id twice, a missing Now field and a b
 });
 
 test('a LOG without the markers is refused, not overwritten', () => {
-  assert.throws(() => applyToLog('# Log\n\nno block here\n', status(), null), /no status block/);
+  assert.throws(() => applyToLog('# Log\n\nno block here\n', status(), null, 32), /no status block/);
+});
+
+test('the progress page counts the steps that are work, says each state in words, and escapes what it is given', () => {
+  const s = status();
+  s.sections[0].goal = 'Agents & people <confer>';
+  const [items] = resolve(s, facts());
+  // B7 has three parts (one done, one in review, one to do); the follow-up and HD1 are done.
+  assert.deepEqual(countLeaves(items), { done: 3, in_review: 1, building: 0, todo: 1, total: 5 });
+  const html = renderPage(s, facts(), 32, new Date('2026-10-05T09:30:00Z'));
+  assert.match(html, /^<title>Phase 32 Progress<\/title>/);
+  assert.match(html, /<b>3<\/b> of 5 steps done/);
+  assert.match(html, /◐ In review/);
+  assert.match(html, /Agents &amp; people &lt;confer&gt;/);
+  assert.doesNotMatch(html, /<confer>/);
+  assert.match(html, /href="https:\/\/github.com\/lionroseway\/codetrellis\/pull\/247"/);
+  assert.match(html, /Generated 2026-10-05 09:30 UTC/);
 });
