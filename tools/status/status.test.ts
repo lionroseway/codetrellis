@@ -10,33 +10,42 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { applyToLog, blockOf, intentLines, loadStatus, phaseFrom, problems, renderLog, resolve, type Status } from './status';
+import { applyToLog, blockOf, intentLines, loadStatus, phaseDocs, phaseFrom, problems, renderLog, resolve, type PhaseDocs, type Status } from './status';
 import { idForBranch, parseMergeSubject, type Facts } from './git-facts';
 import { countLeaves, renderPage } from './page';
+import { statusFiles } from './run';
 
-const docs = path.resolve(__dirname, '..', '..', 'docs');
-const phases = fs.readdirSync(docs).map((f) => /^PHASE-(\d+)-STATUS\.yaml$/.exec(f)?.[1]).filter(Boolean).map(Number);
+const root = path.resolve(__dirname, '..', '..');
+const phases = phaseDocs(statusFiles(root));
+const P32: PhaseDocs = { phase: 32, status: 'docs/PHASE-32-STATUS.yaml', log: 'docs/PHASE-32-LOG.md' };
 
-test('every phase with a status file has one', () => {
-  assert.ok(phases.includes(32) && phases.includes(33), `found phases ${phases.join(', ')}`);
+test('the phases are found in both layouts: Phase 32 beside the other docs, Phase 33 in its own folder', () => {
+  assert.deepEqual(phases.filter((d) => d.phase >= 32).slice(0, 2), [P32, { phase: 33, status: 'docs/phase-33/STATUS.yaml', log: 'docs/phase-33/LOG.md' }]);
 });
 
-for (const phase of phases) {
-  test(`docs/PHASE-${phase}-LOG.md lists the items docs/PHASE-${phase}-STATUS.yaml does, in its order`, () => {
-    const status = loadStatus(fs.readFileSync(path.join(docs, `PHASE-${phase}-STATUS.yaml`), 'utf8'), phase);
-    const block = blockOf(fs.readFileSync(path.join(docs, `PHASE-${phase}-LOG.md`), 'utf8'), phase);
-    assert.ok(block, `docs/PHASE-${phase}-LOG.md has no status block`);
-    assert.deepEqual(intentLines(block), intentLines(renderLog(status, null, phase)), 'the LOG\'s checklist differs from the YAML — run `npm run status` and commit it');
-    assert.match(block, new RegExp(`Read from git at \`origin/feat/phase-${phase}\` \`[0-9a-f]{7}\``), 'the block says which commit its states were read at');
+for (const docs of phases) {
+  test(`${docs.log} lists the items ${docs.status} does, in its order`, () => {
+    const status = loadStatus(fs.readFileSync(path.join(root, docs.status), 'utf8'), docs.status);
+    const block = blockOf(fs.readFileSync(path.join(root, docs.log), 'utf8'), docs);
+    assert.ok(block, `${docs.log} has no status block`);
+    assert.deepEqual(intentLines(block), intentLines(renderLog(status, null, docs)), 'the LOG\'s checklist differs from the YAML — run `npm run status` and commit it');
+    assert.match(block, new RegExp(`Read from git at \`origin/feat/phase-${docs.phase}\` \`[0-9a-f]{7}\``), 'the block says which commit its states were read at');
   });
 }
 
+test('only a phase status file is a phase, in either layout', () => {
+  assert.deepEqual(phaseDocs(['docs/phase-34/STATUS.yaml', 'docs/PHASE-9-STATUS.yaml', 'docs/PHASE-32-LOG.md', 'docs/phase-34/LOG.md', 'docs/README.md']), [
+    { phase: 9, status: 'docs/PHASE-9-STATUS.yaml', log: 'docs/PHASE-9-LOG.md' },
+    { phase: 34, status: 'docs/phase-34/STATUS.yaml', log: 'docs/phase-34/LOG.md' },
+  ]);
+});
+
 test('the phase is the one asked for, else the newest with a status file', () => {
-  const files = ['PHASE-32-LOG.md', 'PHASE-32-STATUS.yaml', 'PHASE-33-STATUS.yaml', 'PHASE-9-STATUS.yaml', 'README.md'];
-  assert.equal(phaseFrom(['node', 'run.ts'], files), 33);
-  assert.equal(phaseFrom(['node', 'run.ts', '--phase', '32'], files), 32);
-  assert.throws(() => phaseFrom(['node', 'run.ts', '--phase', 'x'], files), /phase number/);
-  assert.throws(() => phaseFrom(['node', 'run.ts'], ['README.md']), /No docs/);
+  assert.equal(phaseFrom(['node', 'run.ts'], [9, 32, 33]), 33);
+  assert.equal(phaseFrom(['node', 'run.ts', '--phase', '32'], [9, 32, 33]), 32);
+  assert.throws(() => phaseFrom(['node', 'run.ts', '--phase', 'x'], [32, 33]), /phase number/);
+  assert.throws(() => phaseFrom(['node', 'run.ts', '--phase', '40'], [32, 33]), /no status file/);
+  assert.throws(() => phaseFrom(['node', 'run.ts'], []), /No phase status file/);
 });
 
 test('Phase 33 reads its own subjects and branches, and not Phase 32\'s', () => {
@@ -108,7 +117,7 @@ test('git\'s facts win; a part-done parent is building; what git cannot see stay
   // A PR the title already names is not repeated.
   assert.deepEqual(hd1.prs, []);
 
-  const md = renderLog(status(), facts(), 32);
+  const md = renderLog(status(), facts(), P32);
   assert.match(md, /\| \*\*In flight\*\* \| B7\.5 in review \(#247\) on `feat\/phase-32-b7-5-held-edits`; #250 in review on `feat\/phase-32-fix-x` \|/);
   assert.match(md, /\| \*\*Last merged\*\* \| B7\.4 \(#245, `e0a0a49`\) \|/);
   assert.match(md, /^- \[ \] B7 Conferring — building$/m);
@@ -132,7 +141,7 @@ test('only todo or done can be written; an id twice, a missing Now field and a b
 });
 
 test('a LOG without the markers is refused, not overwritten', () => {
-  assert.throws(() => applyToLog('# Log\n\nno block here\n', status(), null, 32), /no status block/);
+  assert.throws(() => applyToLog('# Log\n\nno block here\n', status(), null, P32), /no status block/);
 });
 
 test('the progress page counts the steps that are work, says each state in words, and escapes what it is given', () => {
@@ -141,7 +150,7 @@ test('the progress page counts the steps that are work, says each state in words
   const [items] = resolve(s, facts());
   // B7 has three parts (one done, one in review, one to do); the follow-up and HD1 are done.
   assert.deepEqual(countLeaves(items), { done: 3, in_review: 1, building: 0, todo: 1, total: 5 });
-  const html = renderPage(s, facts(), 32, new Date('2026-10-05T09:30:00Z'));
+  const html = renderPage(s, facts(), P32, new Date('2026-10-05T09:30:00Z'));
   assert.match(html, /^<title>Phase 32 Progress<\/title>/);
   assert.match(html, /<b>3<\/b> of 5 steps done/);
   assert.match(html, /◐ In review/);

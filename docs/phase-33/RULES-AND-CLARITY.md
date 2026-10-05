@@ -1,8 +1,10 @@
 # Phase 33 — Rules and clarity
 
 > The design. How it is run, step by step, is
-> [PHASE-33-EXECUTION.md](PHASE-33-EXECUTION.md); where it stands is
-> [PHASE-33-LOG.md](PHASE-33-LOG.md).
+> [EXECUTION.md](EXECUTION.md); where it stands is
+> [LOG.md](LOG.md). How agent checks run with nobody to talk to, the review
+> features, and how checks are shown are in
+> [AGENT-CHECKS-AND-REVIEW.md](AGENT-CHECKS-AND-REVIEW.md).
 
 Phase 32 made CodeTrellis aware of parallel work. Phase 33 makes it the
 **quality layer agents work inside**. The team writes its architecture
@@ -396,6 +398,11 @@ Control" disclosures).
   skill.
 - **Advisory by default.** Exit 0.
 
+The full design of agent checks (the orchestrator, passes, the contract
+that makes questions, permission prompts and remiss behaviour impossible
+headless, and bringing your own agent locally) is
+[AGENT-CHECKS-AND-REVIEW.md](AGENT-CHECKS-AND-REVIEW.md) §1.
+
 ### 5.5 Graduation
 
 - When agent checks raise the same kind of finding twice, they propose a
@@ -414,6 +421,13 @@ Control" disclosures).
   - a selected file lists the rules that cover it;
   - "show this suite" fades everything else.
 - **Settings keeps only on/off switches.**
+- **What the checks say has a view too:**
+  - the Checks view, beside the Rules view, for runs from anywhere;
+  - findings in the graph, the code gutter, the inspector and the brief;
+  - one renderer for the words, shared by the terminal, the pull request
+    and the app.
+
+  All of this is in [AGENT-CHECKS-AND-REVIEW.md](AGENT-CHECKS-AND-REVIEW.md) §3.
 
 ---
 

@@ -1,18 +1,19 @@
 # Phase 33 — Execution plan
 
 > Step by step, PR by PR. Progress lives in
-> [PHASE-33-LOG.md](PHASE-33-LOG.md). **Read that first** when picking the
-> work up. The design is [PHASE-33-RULES-AND-CLARITY.md](PHASE-33-RULES-AND-CLARITY.md).
+> [LOG.md](LOG.md). **Read that first** when picking the
+> work up. The design is [RULES-AND-CLARITY.md](RULES-AND-CLARITY.md) and
+> [AGENT-CHECKS-AND-REVIEW.md](AGENT-CHECKS-AND-REVIEW.md).
 
 ---
 
 ## 1. How the work is run
 
-Phase 33 runs exactly as Phase 32 did ([PHASE-32-EXECUTION.md](PHASE-32-EXECUTION.md)
+Phase 33 runs exactly as Phase 32 did ([PHASE-32-EXECUTION.md](../PHASE-32-EXECUTION.md)
 §1), with the phase number changed. In brief:
 
 - **The log is the source of truth.**
-  - `docs/PHASE-33-STATUS.yaml` holds intent: steps, titles, order, parts,
+  - `docs/phase-33/STATUS.yaml` holds intent: steps, titles, order, parts,
     the next action and blockers.
   - `npm run status` reads each step's state from git and GitHub, and
     writes the log's Now and Checklist.
@@ -119,14 +120,19 @@ rulebook's breadth.
    undermines everything after.
 4. **G6, G5, G3, G4.** Opening restores a plan, the inspector lists plan
    items, edge toggles, full screen. Small and visible.
-5. **R4–R5, C1–C3.** Strength, package rules; scoped checks, SARIF,
-   recipes, debt.
+5. **R4–R5, C8, C1–C3.** Strength and package rules. Then the one
+   renderer, so every output after it shares the words. Then scoped checks,
+   SARIF, recipes and debt.
 6. **G1–G2.** The visual vocabulary and the legend. They come before rules
    are drawn, so rules join one vocabulary.
-7. **G7–G8.** The Rules view and rules on the graph.
+7. **C7, G7–G10.** Check runs as records. The Rules view, rules on the
+   graph, the Checks view, and findings where the code is.
 8. **R6–R9.** Symbol, call, folder and guide rules.
-9. **C4–C6.** Agent checks, locally then in CI, then graduation.
-10. **Z.** Docs, phase review, into `main`, release.
+9. **C4, C4b, C5, C6.** Agent checks locally, your own agent locally, then
+   in CI, then graduation.
+10. **Track V**, the review features the owner picks: V1–V3 first, then
+    V4–V5 once agent checks exist, then V6–V8.
+11. **Z.** Docs, phase review, into `main`, release.
 
 The checklist in the log is grouped by track; this list is the order.
 Now's next action always names the next step in this order.
@@ -334,24 +340,50 @@ Done when:
 - fixing one passes and lowers the count;
 - raising the baseline fails.
 
-**C4 Agent checks, locally.** `codetrellis review`:
+**C4 Agent checks, locally: the orchestrator.** `codetrellis review`,
+designed in AGENT-CHECKS-AND-REVIEW §1:
 - `--endpoint`, `--model`, `--auth env:VAR | oidc:<provider>`;
 - `--skills <dir>`;
 - the same scopes as `check`.
 
-Context: the diff, rules in scope, gate results, the claimed task's
-criteria, and system docs. The reviewing agent has read-only file tools
-and no shell or network. Findings are data, printed or as SARIF. Each run
-is recorded (model, endpoint, skill hashes).
+The orchestrator assembles the bundle, runs passes (each an isolated
+session with one skill and one scope), checks citations, and records the
+run.
+
+Every pass runs under the contract (§1.2 there):
+- tools are an allowlist: read, search, list, and CodeTrellis's `read`
+  tools — no shell, network, write or ask;
+- it must end by calling `report`;
+- budgets on turns, tokens, time and tool calls;
+- untrusted text is passed as data;
+- refused calls are recorded.
+
+The outcome is `pass`, `findings`, `inconclusive` or `error`.
 
 Done when:
 - it runs against an Anthropic endpoint and an OpenAI-compatible one
   (a local stub in tests);
-- a prompt-injection fixture in the diff cannot make it run a command or
-  reveal an environment variable.
+- a pass that asks a question yields a `question` finding and the run
+  completes;
+- a pass that never reports ends `inconclusive` after one retry;
+- a pass that exhausts its budget ends `inconclusive: budget`;
+- a finding citing lines not in the diff is dropped and counted;
+- a prompt-injection fixture cannot make it run a command, reveal an
+  environment variable, or call a tool off the allowlist (the attempt is
+  recorded).
+
+**C4b Bring your own agent, locally.**
+- `get_review_bundle` gives an interactive agent the same bundle.
+- `report_review` takes the same schema.
+- The orchestrator verifies the citations either way.
+- Both tools get `read` in `TOOL_CAPABILITIES`, and tests.
+
+Done when Claude Code, connected through the stdio connector, reviews a
+fixture change and its grounded findings land as a check run.
 
 **C5 Agent checks in CI.**
 - The same command in CI.
+- The optional verify pass: a second agent tries to refute each finding.
 - A GitHub adapter posts review comments with a token the model never
   sees.
 - OIDC to Bedrock, Vertex and Azure.
@@ -364,6 +396,33 @@ advisory.
 `propose_rule` at `guide`, through R3.
 
 Done when a repeated fixture finding produces one proposal, not two.
+
+**C7 Check runs are records that travel.** Every check, deterministic or
+agent, from the CLI, CI, the app or MCP, is a run. A run records:
+- where and by whom;
+- the scope;
+- the rulebook's commit;
+- the outcome;
+- its findings and their marks.
+
+With shared task state on, runs are written to `.codetrellis/runs/checks/`
+and read after a pull, as test runs are (Phase 32 D1.5a).
+
+Done when a run made in CI appears in a teammate's app after a pull, with
+where it ran.
+
+**C8 One renderer.**
+- `src/shared/lib/check-words.ts` writes every rule and finding in words.
+- The terminal, markdown and SARIF render from it, and the app and phone
+  use the same words.
+- The terminal layout is AGENT-CHECKS-AND-REVIEW §3.1: grouped by suite,
+  the summary first, the fix after →, glyph and word, no colour when not
+  a terminal, the exit code in words.
+
+Done when:
+- one fixture run renders identically in words in all four formats
+  (snapshot tests);
+- `NO_COLOR` and a pipe give plain text.
 
 ### Track G: graph and clarity
 
@@ -450,6 +509,57 @@ Done when:
 
 Done when a breaching import is drawn and named on the graph, and the
 legend explains it.
+
+**G9 The Checks view.** One workspace with the Rules view, in two tabs:
+the rules, and what the checks say.
+- Run any check at any scope, deterministic or agent.
+- The runs, from anywhere, marked with where they ran.
+- Open a run.
+- Compare two runs: new, fixed, unchanged.
+
+Done when:
+- the owner runs the payments suite from the app and sees the same
+  findings the CLI printed;
+- a CI run appears beside it.
+
+**G10 Findings where the code is.**
+- The graph: the breaching edge, and a mark on nodes with findings.
+- The code: gutter marks in CodePreview and the diff view, with the
+  finding on hover.
+- The inspector: rules covering the file and its open findings, beside G5's
+  plan items.
+- The brief: the latest run over the task's files.
+- The phone: runs that block or ask, in Needs you.
+
+Done when a single finding can be reached from each of those places, and
+each place links to the others (browser tests).
+
+### Track V: review (proposed; the owner chooses)
+
+Designed in AGENT-CHECKS-AND-REVIEW §2. Each step starts only when the
+owner has chosen it; the choice is a decision in the log.
+
+- **V1 What this change does to the architecture.** A structural diff at
+  the top of the review: imports between folders, new packages, new
+  cross-system calls, rules touched.
+  Done when a fixture change's review names each.
+- **V2 Review in order of risk.** Files ordered by dependents, rule scope,
+  test grounding and other work, each with its reason.
+  Done when the order is stable and explained in a test.
+- **V3 Re-review only what changed.** Each reviewer's last commit is
+  remembered; later pushes show only what moved, and which findings a push
+  addressed.
+- **V4 Questions go to the author.** Agent-check questions become review
+  questions, answered in the app, on the phone, or through MCP.
+- **V5 Useful or wrong.** A mark on every finding, recorded. Suppression of
+  repeated wrong ones, visible and undoable. Graduation counts useful
+  ones.
+- **V6 Did it do what the task said.** Criteria results and planned
+  against actual footprint in the review.
+- **V7 Suggested reviewers.** From suite ownership and recent changes;
+  shown, never assigned.
+- **V8 The review record.** Runs, findings, marks and questions in the
+  signed sign-off pack.
 
 ### Stage Z: close
 

@@ -1,8 +1,8 @@
 # Phase 33 status — the Now block and the checklist, as data.
 #
 # Hand-edited. `npm run status` writes the Now and Checklist sections of
-# docs/PHASE-33-LOG.md from this file and git; `npm run status:page` also
-# writes the progress page (docs/PHASE-33-EXECUTION.md §1.1). A unit test
+# docs/phase-33/LOG.md from this file and git; `npm run status:page` also
+# writes the progress page (docs/phase-33/EXECUTION.md §1.1). A unit test
 # fails when the LOG's items differ from these. The dated entries stay prose
 # in the LOG. See tools/status/.
 #
@@ -18,7 +18,7 @@
 now:
   step: "Setup: Phase 33 docs, status tooling for any phase, the progress page"
   status: "The owner asked (2026-10-05) for a Phase 33 run the way Phase 32 was: the rulebook and checks anywhere, the reload freeze, a colour legend, graph edge toggles and full screen, plan items in the inspector, and opening a plan that shows it. The integration branch is cut; the setup PR carries the docs and tooling"
-  next: "Merge the setup PR into feat/phase-33; then 0.1 Baseline on feat/phase-33-0-1-baseline"
+  next: "The owner reviews the setup PR (docs in docs/phase-33/, the design's open questions, which Track V features to take); merge it into feat/phase-33; then 0.1 Baseline on feat/phase-33-0-1-baseline"
   blockers: "None. Open questions for the owner are in the design doc §8; none blocks Stage 0 or Track S"
   updated: 2026-10-05
 sections:
@@ -80,11 +80,17 @@ sections:
       - id: C3
         title: Debt ratchet (existing breaches may only fall)
       - id: C4
-        title: Agent checks locally (`codetrellis review`, your endpoint, model and credential; no shell)
+        title: "Agent checks locally: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes)"
+      - id: C4b
+        title: Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified)
       - id: C5
-        title: Agent checks in CI (host adapter, OIDC, cost dial)
+        title: Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass)
       - id: C6
         title: Graduation (a repeated finding proposes a rule)
+      - id: C7
+        title: Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran
+      - id: C8
+        title: "One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words"
   - title: "Track G: graph and clarity"
     goal: Every colour means one thing and is explained; the graph can be focused; selecting a file shows its plans; opening a plan shows it; rules are seen where the code is.
     items:
@@ -104,6 +110,29 @@ sections:
         title: The Rules view (its own workspace, not Settings)
       - id: G8
         title: Rules on the graph (breaches drawn, rules for the selected file)
+      - id: G9
+        title: The Checks view (run any check from the app, CI runs beside local ones, compare runs)
+      - id: G10
+        title: Findings where the code is (graph, code gutter, inspector, brief, phone)
+  - title: "Track V: review (proposed; the owner chooses)"
+    goal: Review that starts from what a change does to the architecture and what it would cost to get wrong. Proposed in AGENT-CHECKS-AND-REVIEW §2; only what the owner picks is built.
+    items:
+      - id: V1
+        title: What this change does to the architecture (structural diff at the top of every review)
+      - id: V2
+        title: Review in order of risk (dependents, rule scope, test grounding, other work)
+      - id: V3
+        title: Re-review only what changed since each reviewer's last look
+      - id: V4
+        title: Agent-check questions go to the author (app, phone, MCP)
+      - id: V5
+        title: Mark a finding useful or wrong (suppression and graduation learn from it)
+      - id: V6
+        title: Did the change do what the task said (criteria and footprint in the review)
+      - id: V7
+        title: Suggested reviewers from suite ownership (shown, never assigned)
+      - id: V8
+        title: The review record in the sign-off pack (runs, findings, marks, questions)
   - title: "Stage Z: close"
     goal: Documented, walked by the owner on a packaged build, merged and released.
     items:

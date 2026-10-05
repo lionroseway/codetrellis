@@ -13,7 +13,7 @@
  */
 
 import type { Facts } from './git-facts';
-import { flatten, resolve, type ItemStatus, type Resolved, type Status } from './status';
+import { flatten, resolve, type ItemStatus, type PhaseDocs, type Resolved, type Status } from './status';
 
 const esc = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -69,7 +69,8 @@ function itemHtml(it: Resolved): string {
     + `<span class="what">${id}${follow}<span class="title">${inline(it.title)}</span>${prs}</span>${parts}</li>`;
 }
 
-export function renderPage(s: Status, facts: Facts | null, phase: number, now: Date): string {
+export function renderPage(s: Status, facts: Facts | null, docs: PhaseDocs, now: Date): string {
+  const { phase } = docs;
   const resolved = resolve(s, facts);
   const all = countLeaves(resolved.flat());
   const flat = flatten(s, resolved);
@@ -157,7 +158,7 @@ footer { color: var(--muted); font-size: 0.85rem; }
     </dl>
   </section>
 ${sections}
-  <footer>${readAt}. Generated ${esc(now.toISOString().slice(0, 16).replace('T', ' '))} UTC from <code>docs/PHASE-${phase}-STATUS.yaml</code> by <code>npm run status -- --page</code>.</footer>
+  <footer>${readAt}. Generated ${esc(now.toISOString().slice(0, 16).replace('T', ' '))} UTC from <code>${esc(docs.status)}</code> by <code>npm run status -- --page</code>.</footer>
 </div>
 `;
 }

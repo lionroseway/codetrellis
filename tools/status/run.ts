@@ -12,41 +12,49 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { allIds, applyToLog, loadStatus, phaseFrom } from './status';
+import { allIds, applyToLog, loadStatus, phaseDocs, phaseFrom } from './status';
 import { readFacts } from './git-facts';
 import { renderPage } from './page';
 
+/** Every phase status file under docs/, in either layout, repository-relative. */
+export function statusFiles(root: string): string[] {
+  const docs = path.join(root, 'docs');
+  const flat = fs.readdirSync(docs).filter((f) => /^PHASE-\d+-STATUS\.yaml$/.test(f)).map((f) => `docs/${f}`);
+  const folders = fs.readdirSync(docs).filter((d) => /^phase-\d+$/.test(d) && fs.existsSync(path.join(docs, d, 'STATUS.yaml'))).map((d) => `docs/${d}/STATUS.yaml`);
+  return [...flat, ...folders];
+}
+
 async function main(): Promise<void> {
   const root = path.resolve(__dirname, '..', '..');
-  const docs = path.join(root, 'docs');
-  const phase = phaseFrom(process.argv, fs.readdirSync(docs));
-  const logName = `docs/PHASE-${phase}-LOG.md`;
-  const logPath = path.join(root, logName);
-  const status = loadStatus(fs.readFileSync(path.join(docs, `PHASE-${phase}-STATUS.yaml`), 'utf8'), phase);
+  const all = phaseDocs(statusFiles(root));
+  const phase = phaseFrom(process.argv, all.map((d) => d.phase));
+  const docs = all.find((d) => d.phase === phase)!;
+  const logPath = path.join(root, docs.log);
+  const status = loadStatus(fs.readFileSync(path.join(root, docs.status), 'utf8'), docs.status);
   const facts = await readFacts(root, allIds(status), phase, { github: !process.argv.includes('--offline') });
   const log = fs.readFileSync(logPath, 'utf8');
-  const next = applyToLog(log, status, facts, phase);
+  const next = applyToLog(log, status, facts, docs);
 
   if (process.argv.includes('--check')) {
     if (next !== log) {
-      console.error(`${logName} is behind git (${facts.base} ${facts.baseSha}): run \`npm run status\` and commit it`);
+      console.error(`${docs.log} is behind git (${facts.base} ${facts.baseSha}): run \`npm run status\` and commit it`);
       process.exit(1);
     }
-    console.log(`${logName} matches the YAML and git (${facts.base} ${facts.baseSha})`);
+    console.log(`${docs.log} matches the YAML and git (${facts.base} ${facts.baseSha})`);
     return;
   }
   if (next !== log) {
     fs.writeFileSync(logPath, next);
-    console.log(`Wrote the status block in ${logName} (${facts.base} ${facts.baseSha}, ${facts.source})`);
+    console.log(`Wrote the status block in ${docs.log} (${facts.base} ${facts.baseSha}, ${facts.source})`);
   } else {
-    console.log(`${logName} already matches`);
+    console.log(`${docs.log} already matches`);
   }
   if (process.argv.includes('--page')) {
     const out = path.join(root, 'out', 'status', `phase-${phase}.html`);
     fs.mkdirSync(path.dirname(out), { recursive: true });
-    fs.writeFileSync(out, renderPage(status, facts, phase, new Date()));
-    console.log(`Wrote the progress page to ${path.relative(root, out)}; publish it to the progress artifact (docs/PHASE-${phase}-EXECUTION.md §1)`);
+    fs.writeFileSync(out, renderPage(status, facts, docs, new Date()));
+    console.log(`Wrote the progress page to ${path.relative(root, out)}; publish it to the progress artifact (the phase's EXECUTION §1.1)`);
   }
 }
 
-void main().catch((err) => { console.error(err instanceof Error ? err.message : err); process.exit(1); });
+if (require.main === module) void main().catch((err) => { console.error(err instanceof Error ? err.message : err); process.exit(1); });

@@ -36,15 +36,15 @@ The team's design docs (vision, UX, plans) live alongside these at the
 
 ## Phase 33 — Rules and clarity (in progress on `feat/phase-33`)
 
-**Read [`docs/PHASE-33-LOG.md`](docs/PHASE-33-LOG.md) first.** Its
+**Read [`docs/phase-33/LOG.md`](docs/phase-33/LOG.md) first.** Its
 **Now** block names the current step and the very next action. The work
 is long-running and runs across sessions, so the log, not the
 conversation, is the state. The design is
-[`docs/PHASE-33-RULES-AND-CLARITY.md`](docs/PHASE-33-RULES-AND-CLARITY.md)
+[`docs/phase-33/RULES-AND-CLARITY.md`](docs/phase-33/RULES-AND-CLARITY.md)
 (the rulebook, checks anywhere, change control, and the owner's clarity
-reports); the steps are [`docs/PHASE-33-EXECUTION.md`](docs/PHASE-33-EXECUTION.md).
+reports); the steps are [`docs/phase-33/EXECUTION.md`](docs/phase-33/EXECUTION.md).
 **Now and the checklist are generated.**
-[`docs/PHASE-33-STATUS.yaml`](docs/PHASE-33-STATUS.yaml) holds only intent
+[`docs/phase-33/STATUS.yaml`](docs/phase-33/STATUS.yaml) holds only intent
 (steps, titles, order, parts, follow-ups, next action); whether a step is
 building, in review or done, and its PRs, is **read from git and GitHub**
 (its branch `feat/phase-33-<id>-…`, its squash commit `Phase 33 <id>: …
