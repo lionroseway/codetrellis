@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Merging the built steps, in order; building C5 |
-| **Status** | G6 in review (opening a plan shows it); 0.3 merged (#364); C4 built; C5 building |
-| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
-| **Last merged** | 0.3 (#364, `37145f2`) |
-| **Next action** | Merge G6 when CI is green, then replay G5 |
+| **Stage / step** | Merging the built steps, in order |
+| **Status** | G5 in review (a file's plans in the inspector); G6 merged (#365); C5, C6 and Z1 built |
+| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | G6 (#365, `2b13e80`) |
+| **Next action** | Merge G5 when CI is green, then replay G3 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-06 |
 
-> Read from git at `origin/feat/phase-33` `37145f2`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `2b13e80`, with open PRs from GitHub.
 
 ---
 
@@ -42,6 +42,7 @@
 - [x] Follow-up: A new advisory (MCP SDK, GHSA-6qxp-vccf-f47h) failed the production audit on every branch: SDK 1.32.1 (into `main`) (#355)
 - [ ] Follow-up: With many worktrees of one repository, `listWorkstreams` takes ~10 s and six parallel asks for it fill the browser's connections, so the graph waits behind them: share one answer
 - [ ] Follow-up: Call rules read HTTP and SQL callsites; no extractor finds subprocess commands or environment variables yet, so those calls cannot be ruled on
+- [ ] Follow-up: Rebalance the browser shards: chromium 2/3 runs 185 tests in about 25 minutes, the others about 7
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
@@ -71,7 +72,7 @@
 - [ ] C4 Agent checks locally on the user's own agent: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes) — building
 - [ ] C4b Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified) — building
 - [ ] C5 Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass) — building
-- [ ] C6 Graduation (a repeated finding proposes a rule)
+- [ ] C6 Graduation (a repeated finding proposes a rule) — building
 - [ ] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran — building
 - [ ] C8 One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words — building
 
@@ -81,7 +82,7 @@
 - [ ] G3 Edge toggles (imports, cross-system, symbol links) — building
 - [ ] G4 Graph full screen and back; hidden panes leave no gap — building
 - [ ] G5 Selecting a file lists the plans and tasks that touch it — building
-- [ ] G6 Opening a plan always shows it, from a chip too — building
+- [x] G6 Opening a plan always shows it, from a chip too (#365)
 - [ ] G7 The Rules view (its own workspace, not Settings) — building
 - [ ] G8 Rules on the graph (breaches drawn, rules for the selected file) — building
 - [ ] G9 The Checks view (run any check from the app, CI runs beside local ones, compare runs) — building
@@ -94,7 +95,7 @@
 - [ ] V6 Did the change do what the task said (only when it is linked to a task) — building
 
 ### Stage Z: close
-- [ ] Z1 Docs: `docs/claude/rules.md`, CLI and MCP references, the change-control security rule
+- [ ] Z1 Docs: `docs/claude/rules.md`, CLI and MCP references, the change-control security rule — building
 - [ ] Z2 Phase review on a packaged build
 - [ ] Z3 Into `main` and release
 
@@ -202,6 +203,33 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-06 — G6 merged (#365); G5 in review; C5, C6 and Z1 built
+
+- **G6 merged** (#365), green on every CI job.
+- **G5: selecting a file shows the plans that touch it.** The inspector
+  lists each plan and task that names the file, under the file's name. Each
+  task shows its state as a glyph and a word, and who holds it, and opens its
+  plan at that task. A cluster says how many of the open plan's tasks touch
+  each of its files. Before, this was only a count, behind View source.
+- **C5 built: the review in CI.**
+  - `--verify` adds a second pass that tries to refute each finding; what it
+    refutes is dropped, with why.
+  - SARIF, markdown and JSON output, all from one run.
+  - Signing in through Bedrock, Vertex or Azure via the CI's own OIDC step.
+  - An optional comment on the pull request, with a token the model never
+    sees.
+  - A recipe with a cost setting: auto, on request, or off.
+  - This repo's own advisory workflow, run on request with the
+    `codetrellis-review` label.
+- **C6 built: graduation.** A problem two reviews both report (the same
+  `topic`) becomes a proposed `guide` rule, once, for a person to decide.
+- **Z1 built: docs.** `docs/claude/rules.md`, and two security rules in
+  CLAUDE.md: rules change only through a person, and a reviewing agent is
+  held by code, not by its prompt.
+- G6's CI took 25 minutes because one browser shard runs 185 tests while the
+  others finish in about 7 minutes. Logged as a follow-up: rebalance the
+  shards.
 
 ### 2026-10-06 — 0.3 merged (#364); G6 in review; C4 built; C5 building
 
