@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
-| **Status** | G4 in review (graph full screen, no gap for a hidden panel); G3 merged (#368); browser shards balanced (#367) |
-| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G4 building on `feat/phase-33-g4-full-screen`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | G3 (#368, `45482a3`) |
-| **Next action** | Merge G4 when CI is green, then replay G1 |
+| **Status** | G1 in review (one visual vocabulary); G4 merged (#369); the page's screens in review (#370) |
+| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs`; #370 in review on `feat/phase-33-fu-page-shots` |
+| **Last merged** | G4 (#369, `b9dc515`) |
+| **Next action** | Merge G1 and #370 when CI is green, then replay G2 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-06 |
 
-> Read from git at `origin/feat/phase-33` `45482a3`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `b9dc515`, with open PRs from GitHub.
 
 ---
 
@@ -81,7 +81,7 @@
 - [ ] G1 One visual vocabulary (colour, glyph, dash, words) with a guard test — building
 - [ ] G2 The legend on the graph, plan canvas, file tree and Timeline — building
 - [x] G3 Edge toggles (imports, cross-system, symbol links) (#368)
-- [ ] G4 Graph full screen and back; hidden panes leave no gap — building
+- [x] G4 Graph full screen and back; hidden panes leave no gap (#369)
 - [x] G5 Selecting a file lists the plans and tasks that touch it (#366)
 - [x] G6 Opening a plan always shows it, from a chip too (#365)
 - [ ] G7 The Rules view (its own workspace, not Settings) — building
@@ -204,6 +204,28 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-06 — G4 merged (#369); G1 in review; screens on the page (#370)
+
+- **G4 merged** (#369): the graph full screen and back.
+- **G1: one visual vocabulary.** Every state has one colour, one glyph, one
+  dash and one word, held in `lib/visual-language.ts`. The graph, the
+  Explorer, the plan tree, the status badges, the Stack tab, the plan-diff
+  panels and the Timeline all read from it. The colour clashes the audit
+  found are gone: green no longer also means "function", violet no longer
+  "interface", and modified is orange everywhere because amber means "needs
+  you". Two tests hold it: one for the vocabulary's rules, and one that
+  forbids literal colours in graph components.
+- Checked before review on the replayed code: unit 2073 passing; browser 554
+  chromium and 231 serial passing. The one failure, the PDF viewer's page 2,
+  fails the same way locally on the base and passes in CI.
+- **#370 puts the screens on this page**: a "See it" section with the eight
+  views Phase 33 added. It also fixes three flakes the new shard neighbours
+  exposed:
+  - the plan workspace's Escape key, which raced a keypress (`useLayoutEffect`);
+  - the recent-projects spec, which swapped the open project under another
+    spec, so it now runs serially;
+  - the workstream watcher's unit test, which now waits for the watcher.
 
 ### 2026-10-06 — G3 merged (#368), the shards balanced (#367); G4 in review
 

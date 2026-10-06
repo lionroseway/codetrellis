@@ -9,6 +9,7 @@ import { usePlayForwardStore } from '../../stores/play-forward-store';
 import { planOverlapLines } from '../../lib/play-forward';
 import { PlayForwardStart } from './PlayForwardBar';
 import type { Stack, StackPlan, StackTask, StackDependency } from '@shared/types';
+import { taskState, TONES } from '../../lib/visual-language';
 
 /**
  * The Stack tab (Phase 32 B6.4, observability spec §5, JOURNEYS H1): every
@@ -38,14 +39,6 @@ import type { Stack, StackPlan, StackTask, StackDependency } from '@shared/types
 
 const REFRESH_MS = 30_000;
 
-const STATUS_DOT: Record<string, string> = {
-  done: 'bg-green-400',
-  skipped: 'bg-foreground-subtle',
-  in_progress: 'bg-accent',
-  assigned: 'bg-accent/60',
-  blocked: 'bg-red-400',
-  pending: 'bg-white/20',
-};
 
 export function StackTab() {
   const root = useProjectStore((s) => s.root);
@@ -290,7 +283,9 @@ function TaskLine({ task, planUid, depth }: { task: StackTask; planUid: string; 
     <div data-testid="stack-task" className="px-2 py-0.5" style={{ paddingLeft: 28 + depth * 14 }}>
       <div className="flex items-center gap-1.5">
         {task.kind === 'action'
-          ? <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[task.status ?? 'pending'] ?? STATUS_DOT.pending}`} title={task.status ?? ''} />
+          // The task's state as a glyph in its tone, not a dot whose colour is
+          // the only carrier: assigned and in progress were two blues (G1).
+          ? <span className={`w-2.5 shrink-0 text-center text-[9px] leading-none ${TONES[taskState(task.status).tone].text}`} title={taskState(task.status).word}>{taskState(task.status).glyph}</span>
           : <span className="w-1.5 shrink-0 text-foreground-subtle">·</span>}
         <button
           className={`truncate text-left hover:underline ${task.kind === 'action' ? 'text-foreground' : 'text-foreground-muted'}`}

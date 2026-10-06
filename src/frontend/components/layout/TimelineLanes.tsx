@@ -24,27 +24,28 @@ import { useReplayState } from '../../stores/replay-store';
 import { hhmm, hitsAsOf, signalsAsOf } from '../../lib/replay';
 import { buildLanes, position, type LaneMark } from '../../lib/timeline-lanes';
 import type { AgentTurn } from '../../lib/agent-turns';
+import { identityTone, LANE, TONES } from '../../lib/visual-language';
 
-// U+FE0E asks for the text form of ⚠, so it takes the severity's colour
-// instead of rendering as a yellow emoji whatever the severity.
-const GLYPH: Record<LaneMark['kind'], string> = {
-  turn: '●', edit: '✎', signal: '⚠\uFE0E', commit: '◆', merge: '⧫', 'check-pass': '✓', 'check-fail': '✗',
-  pause: '⏸\uFE0E', breach: '⊘',
-};
+// Glyphs and words from the visual vocabulary (Phase 33 G1). A commit is ◉:
+// ◆ means unplanned everywhere else. U+FE0E asks for the text form of ⚠ and
+// ⏸, so they take the severity's colour instead of rendering as an emoji.
+const textForm = (kind: LaneMark['kind']) => (kind === 'signal' || kind === 'pause' ? '\uFE0E' : '');
+const GLYPH = Object.fromEntries(
+  (Object.keys(LANE) as Array<LaneMark['kind']>).map((k) => [k, `${LANE[k].glyph}${textForm(k)}`]),
+) as Record<LaneMark['kind'], string>;
 
-const NAME: Record<LaneMark['kind'], string> = {
-  turn: 'turn', edit: 'edit', signal: 'signal', commit: 'commit', merge: 'merge', 'check-pass': 'checks passed', 'check-fail': 'checks failed',
-  pause: 'paused at a breakpoint', breach: 'breach',
-};
+const NAME = Object.fromEntries(
+  (Object.keys(LANE) as Array<LaneMark['kind']>).map((k) => [k, LANE[k].word]),
+) as Record<LaneMark['kind'], string>;
 
 function markClass(m: LaneMark): string {
-  if (m.kind === 'breach') return 'text-danger';
-  if (m.kind === 'pause') return m.waiting ? 'text-warning' : 'text-foreground-muted';
-  if (m.kind === 'signal') return m.severity === 'high' ? 'text-danger' : m.severity === 'medium' ? 'text-warning' : 'text-foreground-subtle';
-  if (m.kind === 'check-fail' || m.error) return 'text-danger';
-  if (m.kind === 'check-pass') return 'text-success';
-  if (m.kind === 'commit' || m.kind === 'merge') return 'text-foreground';
-  return m.kind === 'edit' ? 'text-accent' : 'text-foreground-muted';
+  if (m.kind === 'breach') return TONES[LANE.breach.tone].text;
+  if (m.kind === 'pause') return m.waiting ? TONES[LANE.pause.tone].text : 'text-foreground-muted';
+  if (m.kind === 'signal') return m.severity === 'high' ? TONES.blocked.text : m.severity === 'medium' ? TONES.attention.text : 'text-foreground-subtle';
+  if (m.kind === 'check-fail' || m.error) return TONES[LANE['check-fail'].tone].text;
+  if (m.kind === 'check-pass') return TONES[LANE['check-pass'].tone].text;
+  if (m.kind === 'commit' || m.kind === 'merge') return TONES[LANE.commit.tone].text;
+  return m.kind === 'edit' ? TONES[LANE.edit.tone].text : 'text-foreground-muted';
 }
 
 function markTitle(m: LaneMark): string {
@@ -110,7 +111,7 @@ export function TimelineLanes({
             >
               <span className="truncate font-mono">{lane.label}</span>
               {lane.root && sections.get(lane.label)?.length ? (
-                <span className="truncate text-[9px] text-sky-300/80 not-italic" data-testid="lane-sections">{sections.get(lane.label)!.join(', ')}</span>
+                <span className={`truncate text-[9px] not-italic ${identityTone(lane.label).text}`} data-testid="lane-sections">{sections.get(lane.label)!.join(', ')}</span>
               ) : null}
             </span>
             <div className="relative flex-1 h-4 border-b border-white/[0.06]">

@@ -3,6 +3,7 @@ import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, t
 import type { Node, Edge } from '@xyflow/react';
 import type { ViewDepth, ProjectionData, TrellisMode } from '../../shared/types';
 import { getNodeDimensions, type GraphNodeVisualData } from './graph-visuals';
+import { edgeVisual } from './visual-language';
 
 export type LayoutMode = 'map' | 'tree';
 
@@ -1087,7 +1088,11 @@ function appendCrossSystemEdges(result: { nodes: Node[]; edges: Edge[] }, xs: De
     if (seen.has(key)) continue;
     seen.add(key);
 
-    const tint = protocolTint(e.protocol || 'http');
+    // One colour for every protocol (Phase 33 G1): the protocol is in the
+    // edge's label, in words. ImportEdge draws from the vocabulary; this
+    // style only matters to anything that reads the edge without it.
+    const xs = edgeVisual('cross_system');
+    const tint = xs.color;
     result.edges.push({
       id: `xs:${e.protocol}:${sourceNodeId}->${targetNodeId}:${e.label || ''}`,
       source: sourceNodeId,
@@ -1097,7 +1102,7 @@ function appendCrossSystemEdges(result: { nodes: Node[]; edges: Edge[] }, xs: De
       style: {
         stroke: tint,
         strokeWidth: 1.5,
-        strokeDasharray: '4 3',
+        strokeDasharray: xs.dashArray,
       },
       label: e.label,
       labelStyle: { fontSize: 9, fill: '#a8a8b0' },
@@ -1109,16 +1114,6 @@ function appendCrossSystemEdges(result: { nodes: Node[]; edges: Edge[] }, xs: De
         symbolCount: 1,
       },
     });
-  }
-}
-
-function protocolTint(protocol: string): string {
-  switch (protocol) {
-    case 'http': return 'rgba(167, 139, 250, 0.65)';     // purple
-    case 'sql': return 'rgba(251, 191, 36, 0.65)';        // amber
-    case 'subprocess': return 'rgba(34, 211, 238, 0.65)'; // cyan
-    case 'env': return 'rgba(148, 163, 184, 0.55)';       // slate
-    default: return 'rgba(148, 163, 184, 0.5)';
   }
 }
 

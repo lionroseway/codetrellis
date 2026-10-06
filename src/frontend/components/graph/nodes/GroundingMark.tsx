@@ -5,12 +5,10 @@
  * and as a glyph, never colour alone.
  */
 
-const TONE: Record<string, string> = {
-  failing: 'border-red-400/70 bg-[#2a0b0b] text-red-300',
-  stale: 'border-amber-400/70 bg-[#2a1f08] text-amber-300',
-  passing: 'border-emerald-400/60 bg-[#06221a] text-emerald-300',
-  untested: 'border-white/15 bg-[#11151c] text-zinc-400',
-};
+import { GRAPH_MARK } from '../../../lib/visual-language';
+
+/** Failing red, older amber, passing green, none grey: `TESTS` in the vocabulary. */
+const TONE = GRAPH_MARK.tests;
 
 export function GroundingMark({ grounding }: { grounding?: unknown }) {
   if (!grounding || typeof grounding !== 'object') return null;

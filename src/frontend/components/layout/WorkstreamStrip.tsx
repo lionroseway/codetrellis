@@ -6,6 +6,7 @@ import { usePlanStore } from '../../stores/plan-store';
 import { useToastStore } from '../../stores/toast-store';
 import { useUiStore } from '../../stores/ui-store';
 import { agentBadge, formatLastSeen } from './ConnectedAgents';
+import { gitLetterText } from '../../lib/visual-language';
 import { stripWorkstreams, chipsThatFit, chipLabel, shapeWords, sharedNote, shortFolder, changeWords, statusLetter, symbolSummary, signatureLines, signatureWords, signalsFor, chipSeverity, signalWords, intentLines, MAX_LISTED_FILES } from '../../lib/workstream-strip';
 import type { AwarenessSignal, Workstream } from '@shared/types';
 import { singleFlight } from '../../lib/single-flight';
@@ -414,7 +415,7 @@ function WorkstreamDetail({ ws, signals, onReview }: { ws: Workstream; signals: 
   );
 }
 
-const LETTER_TINT = { A: 'text-success', M: 'text-warning', D: 'text-danger', R: 'text-accent' } as const;
+const LETTER_TINT = { A: gitLetterText('A'), M: gitLetterText('M'), D: gitLetterText('D'), R: gitLetterText('R') } as const;
 
 /** What the workstream has changed since it branched, most of it at a glance. */
 function ChangedFiles({ ws }: { ws: Workstream }) {

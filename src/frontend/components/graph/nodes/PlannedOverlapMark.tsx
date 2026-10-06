@@ -1,3 +1,5 @@
+import { GRAPH_MARK, MARKS } from '../../../lib/visual-language';
+
 /**
  * A planned overlap on a node while playing forward (Phase 32 B9.2,
  * observability spec §7): "zones that will form if the plans go ahead are
@@ -11,7 +13,7 @@ export function PlannedOverlapMark({ planned }: { planned?: unknown }) {
   if (typeof p.title !== 'string') return null;
   const quiet = p.sequenced === true;
   const serious = p.serious === true;
-  const ring = quiet ? 'border-violet-300/30' : serious ? 'border-violet-300' : 'border-violet-400/80';
+  const ring = quiet ? GRAPH_MARK.plannedOverlapRing.quiet : serious ? GRAPH_MARK.plannedOverlapRing.serious : GRAPH_MARK.plannedOverlapRing.normal;
   return (
     <>
       <span aria-hidden className={`pointer-events-none absolute -inset-1 z-10 rounded-[26px] border-2 border-dashed ${ring}`} />
@@ -23,10 +25,10 @@ export function PlannedOverlapMark({ planned }: { planned?: unknown }) {
         aria-label={p.title}
         role="img"
         className={`absolute -top-2.5 left-4 z-10 flex h-5 items-center gap-1 rounded-full border px-1.5 text-[10px] leading-none ${
-          quiet ? 'border-violet-300/30 bg-[#140f24] text-violet-300/60' : 'border-violet-400/80 bg-[#1a1030] text-violet-200'
+          quiet ? GRAPH_MARK.plannedOverlapBadge.quiet : GRAPH_MARK.plannedOverlapBadge.normal
         }`}
       >
-        ◇ {typeof p.count === 'number' && p.count > 1 ? `${p.count} planned overlaps` : 'planned overlap'}
+        {MARKS.plannedOverlap.glyph} {typeof p.count === 'number' && p.count > 1 ? `${p.count} planned overlaps` : 'planned overlap'}
       </span>
     </>
   );

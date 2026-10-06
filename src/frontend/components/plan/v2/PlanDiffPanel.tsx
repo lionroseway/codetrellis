@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   GitCompare, FileText, Hash, ArrowRight, RefreshCw, ChevronRight,
-  Plus, Pencil, Trash, Move, CircleSlash, CheckCircle2, AlertTriangle, Loader2, Eye,
+  Plus, Pencil, Trash, Move, Diamond, CheckCircle2, AlertTriangle, Loader2, Eye,
 } from 'lucide-react';
+import { chipClass, INTENT, OPERATION, TONES, type StateVisual } from '../../../lib/visual-language';
 import { usePlanItemsStore } from '../../../stores/plan-items-store';
 import { useProjectStore } from '../../../stores/project-store';
 import { openFileAt, absoluteFilePath } from '../../../lib/open-file-at';
@@ -279,12 +280,21 @@ const OPERATION_ICON: Record<ChangeOperation, typeof Plus> = {
   move: Move,
 };
 
+// Git's tones for a file operation (Phase 33 G1): modify was the accent blue
+// and move amber, both of which mean states.
 const OPERATION_TINT: Record<ChangeOperation, string> = {
-  add:    'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30',
-  modify: 'bg-accent/10 text-accent border border-accent/30',
-  remove: 'bg-red-500/10 text-red-300 border border-red-500/30',
-  move:   'bg-amber-500/10 text-amber-300 border border-amber-500/30',
+  add:    `border ${chipClass(OPERATION.add.tone)}`,
+  modify: `border ${chipClass(OPERATION.modify.tone)}`,
+  remove: `border ${chipClass(OPERATION.remove.tone)}`,
+  move:   `border ${chipClass(OPERATION.move.tone)}`,
 };
+
+const driftTint = (state: StateVisual, Icon: typeof Eye) => ({
+  Icon,
+  activeBg: TONES[state.tone].bg,
+  activeText: TONES[state.tone].text,
+  activeBorder: TONES[state.tone].border,
+});
 
 const DRIFT_LABEL: Record<ChangeDriftStatus, string> = {
   planned: 'planned',
@@ -300,34 +310,11 @@ const DRIFT_TINT: Record<ChangeDriftStatus, {
   activeText: string;
   activeBorder: string;
 }> = {
-  planned: {
-    Icon: Eye,
-    activeBg: 'bg-white/[0.05]',
-    activeText: 'text-foreground-muted',
-    activeBorder: 'border-white/[0.12]',
-  },
-  in_progress: {
-    Icon: Loader2,
-    activeBg: 'bg-accent/15',
-    activeText: 'text-accent',
-    activeBorder: 'border-accent/30',
-  },
-  satisfied: {
-    Icon: CheckCircle2,
-    activeBg: 'bg-emerald-500/15',
-    activeText: 'text-emerald-300',
-    activeBorder: 'border-emerald-500/30',
-  },
-  missing: {
-    Icon: AlertTriangle,
-    activeBg: 'bg-red-500/15',
-    activeText: 'text-red-300',
-    activeBorder: 'border-red-500/30',
-  },
-  unexpected: {
-    Icon: CircleSlash,
-    activeBg: 'bg-amber-500/15',
-    activeText: 'text-amber-300',
-    activeBorder: 'border-amber-500/30',
-  },
+  // Missing ▲ and unexpected ◆ are both drift; they were red and amber here,
+  // and the Proposed tab had them the other way round.
+  planned: driftTint(INTENT.planned, Eye),
+  in_progress: driftTint(INTENT.in_progress, Loader2),
+  satisfied: driftTint(INTENT.landed, CheckCircle2),
+  missing: driftTint(INTENT.missing, AlertTriangle),
+  unexpected: driftTint(INTENT.unplanned, Diamond),
 };

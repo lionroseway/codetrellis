@@ -15,6 +15,7 @@ import { usePlanItemsStore } from '../../stores/plan-items-store';
 import { usePlanStore } from '../../stores/plan-store';
 import { useUiStore } from '../../stores/ui-store';
 import { useToastStore } from '../../stores/toast-store';
+import { GRAPH_CHROME } from '../../lib/visual-language';
 import type { FileSpec } from '@shared/types';
 
 export function SelectionActionBar() {
@@ -177,7 +178,7 @@ export function SelectionActionBar() {
       className="fixed z-[60] pointer-events-auto animate-in fade-in slide-in-from-bottom-2 duration-150"
       style={{ left: clampedX, top: clampedY }}
     >
-      <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/[0.10] bg-[#0c0e1a]/95 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+      <div className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/[0.10] ${GRAPH_CHROME.actionBar} backdrop-blur-xl`}>
         {/* Count badge */}
         <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/10 border border-accent/20 text-accent text-xs font-medium">
           <FileText size={12} />

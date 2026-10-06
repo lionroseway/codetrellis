@@ -8,6 +8,7 @@ import { usePlanStore } from '../../stores/plan-store';
 import type { FileTreeNode, ProposedChange } from '@shared/types';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ProjectGitStatus } from '../../stores/project-store';
+import { GIT, INTENT, LANGUAGE, languageOf, TASK, TONES, type StateVisual } from '../../lib/visual-language';
 
 type SidebarGitState = 'staged' | 'unstaged' | 'untracked' | 'deleted';
 const SIDEBAR_DIRTY_STATE_CLEAR_CONFIRMATIONS = 3;
@@ -25,12 +26,16 @@ type PlanFileState = 'planned' | 'in_progress' | 'satisfied' | 'diverged' | 'unp
 
 interface PlanFileChange { target: string; state: PlanFileState }
 
+// From the visual vocabulary (Phase 33 G1), so a file reads the same here as
+// on the graph: in progress is blue as everywhere else (it was amber here),
+// and diverged is drift's fuchsia with ▲ (it was rose).
+const planMeta = (state: StateVisual, legend: string) => ({ glyph: state.glyph, tone: TONES[state.tone].text, legend });
 const PLAN_META: Record<PlanFileState, { glyph: string; tone: string; legend: string }> = {
-  planned:     { glyph: '◇', tone: 'text-violet-300',  legend: 'Planned' },
-  in_progress: { glyph: '◐', tone: 'text-amber-300',   legend: 'In progress' },
-  satisfied:   { glyph: '✓', tone: 'text-emerald-300', legend: 'Aligned' },
-  diverged:    { glyph: '▲', tone: 'text-rose-300',    legend: 'Diverged' },
-  unplanned:   { glyph: '◆', tone: 'text-fuchsia-300', legend: 'Unplanned' },
+  planned:     planMeta(INTENT.planned, 'Planned'),
+  in_progress: planMeta(TASK.in_progress, 'In progress'),
+  satisfied:   planMeta(INTENT.landed, 'Aligned'),
+  diverged:    planMeta(INTENT.missing, 'Diverged'),
+  unplanned:   planMeta(INTENT.unplanned, 'Unplanned'),
 };
 // Severity order — picks a directory's dominant tone and orders the legend.
 const PLAN_ORDER: PlanFileState[] = ['diverged', 'unplanned', 'in_progress', 'planned', 'satisfied'];
@@ -55,14 +60,11 @@ function normalizePlanTarget(target: string): string {
 function getFileIcon(node: FileTreeNode) {
   if (node.type === 'package') return <Package size={13} className="text-accent shrink-0 drop-shadow-[0_0_3px_rgba(59,130,246,0.4)]" />;
   if (node.type === 'directory') return null;
-  switch (node.language) {
-    case 'typescript': return <FileCode size={13} className="text-blue-400 shrink-0" />;
-    case 'javascript': return <FileCode size={13} className="text-yellow-400 shrink-0" />;
-    case 'json': return <FileJson size={13} className="text-zinc-400 shrink-0" />;
-    case 'css': return <FileCode size={13} className="text-purple-400 shrink-0" />;
-    case 'python': return <FileCode size={13} className="text-green-400 shrink-0" />;
-    default: return <FileText size={13} className="text-zinc-500 shrink-0" />;
-  }
+  // One language map for the tree and the graph; it colours the icon only.
+  const tint = languageOf(node.language).icon;
+  if (node.language === 'json') return <FileJson size={13} className={`${tint} shrink-0`} />;
+  if (node.language && node.language in LANGUAGE && node.language !== 'markdown') return <FileCode size={13} className={`${tint} shrink-0`} />;
+  return <FileText size={13} className={`${tint} shrink-0`} />;
 }
 
 function FileTreeItem({
@@ -165,21 +167,21 @@ function FileTreeItem({
             {isDir && stateCounts && hasAnyCounts(stateCounts) && (
               <span className="flex items-center gap-1">
                 {stateCounts.unstaged > 0 && (
-                  <span className="text-[10px] font-semibold text-orange-300">{stateCounts.unstaged}M</span>
+                  <span className={`text-[10px] font-semibold ${TONES[GIT.unstaged.tone].text}`} title={`${stateCounts.unstaged} ${GIT.unstaged.word}`}>{stateCounts.unstaged}{GIT.unstaged.glyph}</span>
                 )}
                 {stateCounts.untracked > 0 && (
-                  <span className="text-[10px] font-semibold text-emerald-300">{stateCounts.untracked}U</span>
+                  <span className={`text-[10px] font-semibold ${TONES[GIT.untracked.tone].text}`} title={`${stateCounts.untracked} ${GIT.untracked.word}`}>{stateCounts.untracked}{GIT.untracked.glyph}</span>
                 )}
                 {stateCounts.staged > 0 && (
-                  <span className="text-[10px] font-semibold text-sky-300">{stateCounts.staged}A</span>
+                  <span className={`text-[10px] font-semibold ${TONES[GIT.staged.tone].text}`} title={`${stateCounts.staged} ${GIT.staged.word}`}>{stateCounts.staged}{GIT.staged.glyph}</span>
                 )}
                 {stateCounts.deleted > 0 && (
-                  <span className="text-[10px] font-semibold text-red-300">{stateCounts.deleted}D</span>
+                  <span className={`text-[10px] font-semibold ${TONES[GIT.deleted.tone].text}`} title={`${stateCounts.deleted} ${GIT.deleted.word}`}>{stateCounts.deleted}{GIT.deleted.glyph}</span>
                 )}
               </span>
             )}
             {!isDir && fileMarker && (
-              <span className={`text-[11px] font-semibold ${fileMarker.color}`}>{fileMarker.label}</span>
+              <span className={`text-[11px] font-semibold ${fileMarker.color}`} title={fileMarker.word}>{fileMarker.label}</span>
             )}
           </div>
         )}
@@ -524,10 +526,10 @@ function hasAnyPlanCounts(counts: Record<PlanFileState, number>): boolean {
 
 function getTreeToneClass(states: SidebarGitState[], isSelected: boolean): string {
   if (isSelected || states.length === 0) return '';
-  if (states.includes('untracked')) return 'text-emerald-100/95 bg-emerald-500/6';
-  if (states.includes('deleted')) return 'text-red-100/95 bg-red-500/6';
-  if (states.includes('staged')) return 'text-sky-100/95 bg-sky-500/6';
-  if (states.includes('unstaged')) return 'text-orange-100/95 bg-orange-500/6';
+  if (states.includes('untracked')) return TONES[GIT.untracked.tone].row;
+  if (states.includes('deleted')) return TONES[GIT.deleted.tone].row;
+  if (states.includes('staged')) return TONES[GIT.staged.tone].row;
+  if (states.includes('unstaged')) return TONES[GIT.unstaged.tone].row;
   return '';
 }
 
@@ -702,11 +704,16 @@ function hasAnyCounts(counts: Record<SidebarGitState, number>): boolean {
   return counts.staged > 0 || counts.unstaged > 0 || counts.untracked > 0 || counts.deleted > 0;
 }
 
-function getPrimaryMarker(states: SidebarGitState[]): { label: string; color: string } | null {
-  if (states.includes('deleted')) return { label: 'D', color: 'text-red-300' };
-  if (states.includes('untracked')) return { label: 'U', color: 'text-emerald-300' };
-  if (states.includes('unstaged')) return { label: 'M', color: 'text-orange-300' };
-  if (states.includes('staged')) return { label: 'A', color: 'text-sky-300' };
+/**
+ * The file's one git letter. Staged is ● (in the index), not "A": "A" means
+ * added, as it does in the Changes panel (audit collision 15).
+ */
+function getPrimaryMarker(states: SidebarGitState[]): { label: string; color: string; word: string } | null {
+  const marker = (s: StateVisual) => ({ label: s.glyph, color: TONES[s.tone].text, word: s.word });
+  if (states.includes('deleted')) return marker(GIT.deleted);
+  if (states.includes('untracked')) return marker(GIT.untracked);
+  if (states.includes('unstaged')) return marker(GIT.unstaged);
+  if (states.includes('staged')) return marker(GIT.staged);
   return null;
 }
 

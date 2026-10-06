@@ -50,6 +50,8 @@ import { useAwarenessStore } from '../../stores/awareness-store';
 import { OverlaysMenu } from '../graph/OverlaysMenu';
 import { EdgesMenu } from '../graph/EdgesMenu';
 import { visibleEdges } from '../../lib/graph-edge-kinds';
+import { minimapNodeColor } from '../../lib/graph-visuals';
+import { chipClass, TONES } from '../../lib/visual-language';
 import { openFileAt } from '../../lib/open-file-at';
 import { workCountsByFile, workCountLabel, collisionFiles, projectPrefix, fileGrounding, clusterGrounding, type GroundingMapView } from '../../lib/graph-overlays';
 
@@ -1240,7 +1242,7 @@ export function MainCanvas() {
         <AutoFitView nodes={nodes} layout={layoutMode} />
         <Background color="rgba(59,130,246,0.06)" gap={24} size={1} />
         <Controls className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)] [&>button]:!bg-transparent [&>button]:!border-white/[0.06] [&>button]:!text-zinc-400 [&>button:hover]:!bg-white/[0.06] [&>button:hover]:!text-zinc-200" />
-        <MiniMap className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)]" nodeColor="rgba(59,130,246,0.6)" maskColor="rgba(0,0,0,0.8)" />
+        <MiniMap className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)]" nodeColor={minimapNodeColor} maskColor="rgba(0,0,0,0.8)" />
         {/* One row across the top of the canvas: what changed on the left,
             the view controls on the right. They used to be two Panels that
             knew nothing of each other, so the controls wrapped leftwards
@@ -1278,10 +1280,12 @@ export function MainCanvas() {
               {/* Trellis mode selector */}
               <div className="flex shrink-0 items-center bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-lg p-0.5 shadow-[0_0_10px_rgba(0,0,0,0.3)]">
                 {([
-                  { mode: 'live' as const, icon: Radio, label: 'Live', color: 'text-green-400' },
-                  { mode: 'current' as const, icon: Camera, label: 'Baseline', color: 'text-blue-400' },
-                  { mode: 'planned' as const, icon: Target, label: 'Planned', color: 'text-amber-400' },
-                  { mode: 'diff' as const, icon: GitCompare, label: 'Diff', color: 'text-violet-400' },
+                  // A view mode is not a state: the word and the icon say which,
+                  // and only Live (happening now) and Planned borrow a state's tone.
+                  { mode: 'live' as const, icon: Radio, label: 'Live', color: TONES.active.text },
+                  { mode: 'current' as const, icon: Camera, label: 'Baseline', color: 'text-zinc-100' },
+                  { mode: 'planned' as const, icon: Target, label: 'Planned', color: TONES.planned.text },
+                  { mode: 'diff' as const, icon: GitCompare, label: 'Diff', color: 'text-zinc-100' },
                 ] as const).map(({ mode, icon: Icon, label, color }) => (
                   <button
                     key={mode}
@@ -2045,28 +2049,28 @@ function DiffSummary({
           {/* Plan alignment — planned and diff modes */}
           {(isDiff || isPlanned) && planSummary && (
             <div className="flex flex-wrap items-center gap-1.5">
-              {chip(planSummary.onTrack, 'on track', 'border-emerald-300/18 bg-emerald-500/10 text-emerald-100')}
-              {chip(planSummary.planned, 'planned', 'border-blue-300/18 bg-blue-500/10 text-blue-100')}
-              {chip(planSummary.pending, 'pending', 'border-amber-300/18 bg-amber-500/10 text-amber-100')}
-              {chip(planSummary.unexpected, 'unexpected', 'border-fuchsia-300/18 bg-fuchsia-500/10 text-fuchsia-100')}
+              {chip(planSummary.onTrack, '✓ on track', chipClass('done'))}
+              {chip(planSummary.planned, '◇ planned', chipClass('planned'))}
+              {chip(planSummary.pending, '○ pending', chipClass('idle'))}
+              {chip(planSummary.unexpected, '◆ unexpected', chipClass('drift'))}
             </div>
           )}
 
           {/* Files against the baseline — not in planned mode, where alignment leads */}
           {diff && !isPlanned && (
             <div className="flex flex-wrap items-center gap-1.5">
-              {chip(diff.addedFiles.length, 'added', 'border-emerald-300/18 bg-emerald-500/10 text-emerald-100')}
-              {chip(diff.modifiedFiles.length, 'modified', 'border-amber-300/18 bg-amber-500/10 text-amber-100')}
-              {chip(diff.removedFiles.length, 'removed', 'border-white/10 bg-white/[0.04] text-zinc-200')}
+              {chip(diff.addedFiles.length, 'added', chipClass('added'))}
+              {chip(diff.modifiedFiles.length, 'modified', chipClass('modified'))}
+              {chip(diff.removedFiles.length, 'removed', chipClass('deleted'))}
             </div>
           )}
 
           {/* Git — live and diff modes only */}
           {gitStatus && !isPlanned && trellisMode !== 'current' && (
             <div className="flex flex-wrap items-center gap-1.5">
-              {chip(gitStatus.staged.length, 'staged', 'border-sky-300/18 bg-sky-500/10 text-sky-100')}
-              {chip(gitStatus.unstaged.length, 'not staged', 'border-orange-300/18 bg-orange-500/10 text-orange-100')}
-              {chip(gitStatus.untracked.length, 'new to git', 'border-emerald-300/18 bg-emerald-500/10 text-emerald-100')}
+              {chip(gitStatus.staged.length, 'staged', chipClass('index'))}
+              {chip(gitStatus.unstaged.length, 'not staged', chipClass('modified'))}
+              {chip(gitStatus.untracked.length, 'new to git', chipClass('added'))}
             </div>
           )}
         </div>

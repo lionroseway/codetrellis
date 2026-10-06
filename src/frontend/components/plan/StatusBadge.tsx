@@ -1,15 +1,14 @@
+import { PLAN_STATUS, TASK, TONES, type StateVisual } from '../../lib/visual-language';
+
+/**
+ * Plan and task statuses in the visual vocabulary (Phase 33 G1): review is
+ * planned's violet (it was amber, which means "needs you"), approved and
+ * assigned are a brighter grey (they were a second blue beside in progress).
+ */
+const style = (s: StateVisual) => `${TONES[s.tone].text} ${TONES[s.tone].bg} ${TONES[s.tone].border}`;
 const STATUS_STYLES: Record<string, string> = {
-  draft: 'text-zinc-400 bg-zinc-500/10 border-zinc-500/20',
-  review: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-  approved: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
-  in_progress: 'text-accent bg-accent/10 border-accent/20',
-  completed: 'text-green-400 bg-green-500/10 border-green-500/20',
-  archived: 'text-zinc-500 bg-zinc-600/10 border-zinc-600/20',
-  pending: 'text-zinc-400 bg-zinc-500/10 border-zinc-500/20',
-  assigned: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
-  done: 'text-green-400 bg-green-500/10 border-green-500/20',
-  blocked: 'text-red-400 bg-red-500/10 border-red-500/20',
-  skipped: 'text-zinc-500 bg-zinc-600/10 border-zinc-600/20',
+  ...Object.fromEntries(Object.entries(PLAN_STATUS).map(([k, s]) => [k, style(s)])),
+  ...Object.fromEntries(Object.entries(TASK).map(([k, s]) => [k, style(s)])),
 };
 
 export function StatusBadge({ status }: { status: string }) {

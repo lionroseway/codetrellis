@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import {
   ChevronDown, ChevronRight, FileText, Zap, Plus, MoreHorizontal,
-  CheckCircle2, Circle, Loader2, Ban, SkipForward, User, History, Trash2,
+  CheckCircle2, Circle, Loader2, Square, SkipForward, User, History, Trash2,
   GripVertical, Eye, EyeOff,
 } from 'lucide-react';
 import { usePlanItemsStore, buildItemTree } from '../../../stores/plan-items-store';
@@ -14,14 +14,17 @@ import { usePlanGitStates, GIT_STATE_TONE, gitStateTitle, type PlanItemGitState 
 import { usePlanStatus } from '../../../lib/plan-status';
 import { statusLine, type ItemStatus } from '@shared/lib/item-status';
 import { gitStateChip, sourceWords } from '@shared/lib/git-state-words';
+import { TASK, TONES } from '../../../lib/visual-language';
 
+// Task states from the visual vocabulary (Phase 33 G1). Assigned is no
+// longer a second blue beside in progress; blocked is ■, not the ⊘ a breach uses.
 const STATUS_ICON: Record<TaskStatus, { Icon: typeof Circle; tint: string }> = {
-  pending: { Icon: Circle, tint: 'text-zinc-500' },
-  assigned: { Icon: User, tint: 'text-blue-400' },
-  in_progress: { Icon: Loader2, tint: 'text-accent animate-spin' },
-  done: { Icon: CheckCircle2, tint: 'text-green-400 drop-shadow-[0_0_3px_rgba(34,197,94,0.5)]' },
-  blocked: { Icon: Ban, tint: 'text-red-400' },
-  skipped: { Icon: SkipForward, tint: 'text-zinc-500' },
+  pending: { Icon: Circle, tint: TONES[TASK.pending.tone].text },
+  assigned: { Icon: User, tint: TONES[TASK.assigned.tone].text },
+  in_progress: { Icon: Loader2, tint: `${TONES[TASK.in_progress.tone].text} animate-spin` },
+  done: { Icon: CheckCircle2, tint: `${TONES[TASK.done.tone].text} drop-shadow-[0_0_3px_rgba(34,197,94,0.5)]` },
+  blocked: { Icon: Square, tint: `${TONES[TASK.blocked.tone].text} fill-current` },
+  skipped: { Icon: SkipForward, tint: TONES[TASK.skipped.tone].text },
 };
 
 type DropPosition = 'above' | 'below' | 'inside';

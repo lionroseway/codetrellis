@@ -148,7 +148,7 @@ test.describe('Timeline lanes', () => {
     await page.screenshot({ path: path.join(OUT, 'timeline-lanes-panel.png') });
   });
 
-  test('B2.2: ◆ each lane\'s commits, ⧫ a merge, ✓ / ✗ criteria decided and checked on the lane of the work', async ({ page }) => {
+  test('B2.2: ◉ each lane\'s commits, ⧫ a merge, ✓ / ✗ criteria decided and checked on the lane of the work', async ({ page }) => {
     await serve(page, CHECKS, COMMITS);
     await gotoWithProject(page);
     await page.getByRole('button', { name: /^Timeline( \d+)?$/ }).click();
