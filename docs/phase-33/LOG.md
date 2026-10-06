@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | R4 Every rule has a strength: block, warn or guide |
-| **Status** | R2 merged (#358): the gate judges with the base branch's rules, so deleting a rule and breaking it fails. R4 in review: block fails the check, warn is said and passes, guide is never checked; a new rule starts at warn and an old one reads as block. G10 (findings where the code is) is built and waiting its turn |
-| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; R3 building on `feat/phase-33-r3-change-control`; R4 building on `feat/phase-33-r4-strength`; R5 building on `feat/phase-33-r5-package-rules`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
-| **Last merged** | R2 (#358, `38f4d56`) |
-| **Next action** | Merge R4, then R3 (change control), C1, C2, C3 |
+| **Stage / step** | R3 Change control: a loosening is previewed, confirmed and signed |
+| **Status** | R4 merged (#359): every rule has a strength. R3 in review: every rule change is previewed against the code; a loosening is confirmed, signed as the person and checked by CI against the base's keys; agents propose, a person decides. Built ahead: R9 (guide rules in scope) and R6 (symbol rules) |
+| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; R3 building on `feat/phase-33-r3-change-control`; R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
+| **Last merged** | R4 (#359, `ea3772b`) |
+| **Next action** | Merge R3, then C1 (scoped checks), C2 (SARIF), C3 (the debt ratchet) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-06 |
 
-> Read from git at `origin/feat/phase-33` `38f4d56`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `ea3772b`, with open PRs from GitHub.
 
 ---
 
@@ -56,12 +56,12 @@
 - [x] R1 Rules live in `.codetrellis/rules/<suite>.yaml` (moved from config.json by a person's confirm) (#356)
 - [x] R2 CI judges with the base branch's rules; a rulebook change is its own finding (#358)
 - [ ] R3 Change control: preview the effect, a person confirms, loosening is signed, `propose_rule` for agents — building
-- [ ] R4 Strength: block, warn, guide (exit codes, `--strict`, signals) — building
+- [x] R4 Strength: block, warn, guide (exit codes, `--strict`, signals) (#359)
 - [ ] R5 Package rules across all eleven languages (only the wrapper imports `stripe`) — building
-- [ ] R6 Symbol rules (who may import a named export, through re-exports)
+- [ ] R6 Symbol rules (who may import a named export, through re-exports) — building
 - [ ] R7 Call rules (HTTP hosts, commands, tables, env)
 - [ ] R8 Folder rules (what files in a folder are)
-- [ ] R9 Guide rules in scope (the brief, `get_brief`, drift names the rule)
+- [ ] R9 Guide rules in scope (the brief, `get_brief`, drift names the rule) — building
 
 ### Track C: checks anywhere
 - [ ] C1 Scoped checks (`--suite`, `--rule`, `--path`; MCP and REST alike) — building
@@ -201,6 +201,34 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-06 — R4 merged (#359); R3 in review; R9 and R6 built
+
+- **R4 merged** (#359), green on every CI job.
+- **R3: change control** (design §4). Every rule change can be previewed
+  against the code (`POST /api/rules/:id/preview`): what it allows, what it
+  forbids, what breaks it today. A loosening (a rule stopped, its strength
+  lowered, its paths or exceptions widened) is refused until the person
+  confirms it, then signed as them (git's SSH key or the device key) into
+  `.codetrellis/rules/approvals/`. CI passes a loosening only with an
+  approval for exactly that change, made on or after the merge base, that
+  verifies against keys on the base branch: a branch cannot add a key and use
+  it. Agents propose (`propose_rule`); no tool writes a rule; a person accepts
+  or rejects in the app. Replayed onto the phase branch, as R4 was.
+- **R9 built: guide rules in scope.** The drift signal names the rules about
+  the files it reached, guides included, in its words, the digest and the
+  Awareness tab; a task's brief (G10) lists the rules over its files, over MCP
+  and the CLI. `ruleCovers` is shared, so the overlay, the inspector and drift
+  agree on what a rule is about.
+- **R6 built: symbol rules.** `kind: symbol` keeps one export to the files in
+  `only`: `src/payments/charge.ts#createCharge`. Importing it through a barrel
+  counts (re-exports are followed to where it is defined), as does a namespace
+  import. The gate, the rules view, change control, REST, `propose_rule` and
+  the Rules view's form all take it.
+- **The evolution spec** (`e2e/inspector/evolution.spec.ts`, the follow-up
+  above) fails every time in a fresh clone of this container, before and
+  after G10: the diff editor's lazy chunk never arrives ("Loading the diff
+  editor…"). It passes in CI on every PR. Still to find.
 
 ### 2026-10-06 — R2 merged (#358); R4 in review; G10 built
 
