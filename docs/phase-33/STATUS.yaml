@@ -17,8 +17,8 @@
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
   step: "0.1 Baseline"
-  status: "Setup merged (#346), with the sprintf-js audit fix (#347, into main) carried. Measuring every suite on Node 26.10.0 from a clean npm ci --ignore-scripts (as CI installs), in a 4-core cloud container"
-  next: "Record typecheck, the lint warning count, test:unit, test:phone, test:harness and the browser suite in the log's Baseline; any failure is ours to fix before 0.2"
+  status: "Measured on Node 26 (see the Baseline). Three serial browser failures were ours and are fixed: a spec that leaked a plan, and awareness parsing every remote branch's files before answering. 15 later steps are built on their branches, each tested, waiting to merge in order"
+  next: "Merge 0.1, then 0.2, S1 and S2, one PR at a time, each green in CI before the next"
   blockers: "None"
   updated: 2026-10-06
 sections:
