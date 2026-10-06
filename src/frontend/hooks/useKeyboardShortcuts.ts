@@ -9,6 +9,8 @@ import { useTerminalStore } from '../stores/terminal-store';
  * - Cmd+1/2/3: Switch depth (Package/File/Symbol)
  * - Cmd+B: Toggle sidebar
  * - Cmd+J: Toggle agent panel
+ * - Cmd+I: Toggle the inspector (Phase 33 G4)
+ * - Cmd+Shift+F: Graph full screen and back (Phase 33 G4)
  * - Cmd+\: Toggle split view (workspace + graph)
  * - Cmd+`: Toggle terminal panel
  * - Cmd+Shift+C: Toggle the code-first surface (Phase 26)
@@ -46,6 +48,18 @@ export function useKeyboardShortcuts() {
       if (meta && e.key === 'j') {
         e.preventDefault();
         useUiStore.getState().toggleAgentPanel();
+      }
+
+      if (meta && !e.shiftKey && (e.key === 'i' || e.key === 'I')) {
+        e.preventDefault();
+        useUiStore.getState().toggleInspector();
+      }
+
+      // Cmd+Shift+F — the graph full screen: the sidebar, the inspector and
+      // the plan panel go, and come back as they were.
+      if (meta && e.shiftKey && (e.key === 'F' || e.key === 'f')) {
+        e.preventDefault();
+        useUiStore.getState().toggleFullScreen();
       }
 
       // Cmd+\ — toggle split view (plan workspace + graph side by side)

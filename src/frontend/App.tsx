@@ -103,6 +103,10 @@ export function App() {
   const inspectorExpanded = useUiStore((s) => s.inspectorExpanded);
   const workspaceMode = useUiStore((s) => s.workspaceMode);
   const planPanelVisible = useUiStore((s) => s.agentPanelVisible);
+  // G4 — a hidden panel's pane collapses too. The panels return null when
+  // hidden, and without `visible` their panes kept their width, empty.
+  const sidebarVisible = useUiStore((s) => s.sidebarVisible);
+  const inspectorVisible = useUiStore((s) => s.inspectorVisible);
   const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
   const splitView = useUiStore((s) => s.splitView);
   const activePlanUid = usePlanStore((s) => s.activePlanUid);
@@ -275,7 +279,7 @@ export function App() {
             the clicks meant for whatever lay under them: on macOS's metrics,
             code mode's Diff button. */}
         <Allotment className="absolute inset-0 z-0" ref={horizontalRef}>
-          <Allotment.Pane preferredSize={SIDEBAR_DEFAULT} minSize={180} maxSize={400}>
+          <Allotment.Pane preferredSize={SIDEBAR_DEFAULT} minSize={180} maxSize={400} visible={sidebarVisible}>
             <Sidebar />
           </Allotment.Pane>
           <Allotment.Pane>
@@ -299,7 +303,7 @@ export function App() {
               </Allotment.Pane>
             </Allotment>
           </Allotment.Pane>
-          <Allotment.Pane preferredSize={INSPECTOR_DEFAULT} minSize={220}>
+          <Allotment.Pane preferredSize={INSPECTOR_DEFAULT} minSize={220} visible={inspectorVisible}>
             <InspectorPanel />
           </Allotment.Pane>
         </Allotment>
@@ -333,7 +337,7 @@ export function App() {
         {workspaceMode === 'code' && (
           <div className="absolute inset-0 z-30 bg-background">
             <Allotment>
-              <Allotment.Pane preferredSize={SIDEBAR_DEFAULT} minSize={180} maxSize={400}>
+              <Allotment.Pane preferredSize={SIDEBAR_DEFAULT} minSize={180} maxSize={400} visible={sidebarVisible}>
                 <Sidebar />
               </Allotment.Pane>
               <Allotment.Pane>
