@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Setup PR into feat/phase-33; the owner's decisions recorded |
-| **Status** | The owner answered the open questions (2026-10-06): rules as YAML suites; loosening signed with the device key; agent checks free, on the user's own agent, model and key, built by driving the user's agent rather than writing one; no CI host first; review features V1, V2, V3 and V6; the name agent checks; go ahead |
-| **In flight** | nothing open |
+| **Stage / step** | 0.1 Baseline |
+| **Status** | Measured on Node 26 (see the Baseline). Three serial browser failures were ours and are fixed: a spec that leaked a plan, and awareness parsing every remote branch's files before answering. 15 later steps are built on their branches, each tested, waiting to merge in order |
+| **In flight** | 0.1 in review (#350) on `feat/phase-33-0-1-baseline`; 0.2 building on `feat/phase-33-0-2-reload-storm`; 0.3 building on `feat/phase-33-0-3-colour-audit`; S1 building on `feat/phase-33-s1-one-import-per-burst`; S2 building on `feat/phase-33-s2-window-takes-a-burst`; R1 building on `feat/phase-33-r1-rule-files`; R2 building on `feat/phase-33-r2-base-rules`; R3 building on `feat/phase-33-r3-change-control`; R4 building on `feat/phase-33-r4-strength`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan` |
 | **Last merged** | — |
-| **Next action** | Merge the setup PR into feat/phase-33; then 0.1 Baseline on feat/phase-33-0-1-baseline (Node 26, clean npm ci --ignore-scripts, every suite) |
+| **Next action** | Merge 0.1, then 0.2, S1 and S2, one PR at a time, each green in CI before the next |
 | **Blockers** | None |
 | **Last updated** | 2026-10-06 |
 
-> Read from git at `origin/feat/phase-33` `5fb23f4`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `81db781`, with open PRs from GitHub.
 
 ---
 
@@ -34,26 +34,27 @@
 
 ### Setup
 - [x] Integration branch `feat/phase-33` cut from `main` (`5fb23f4`)
-- [ ] Status tooling serves any phase (and reads Phase 32's D and E steps, which the old pattern missed)
-- [ ] The progress page, generated from the status (`npm run status:page`) and published as an artifact
-- [ ] Design, execution plan, status and this log
-- [ ] CLAUDE.md points every session here
+- [x] Status tooling serves any phase (and reads Phase 32's D and E steps, which the old pattern missed) (#346)
+- [x] The progress page, generated from the status (`npm run status:page`) and published as an artifact (#346)
+- [x] Design, execution plan, status and this log (#346)
+- [x] CLAUDE.md points every session here (#346)
+- [x] Follow-up: A new advisory (sprintf-js, GHSA-hp3w-g68c-fv3c) failed the production audit on every branch: kept out of the tree by an override (into `main`) (#347)
 
 ### Stage 0: ground truth
-- [ ] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count)
-- [ ] 0.2 Measure the plan reload storm in a harness test (imports, broadcasts, response time)
-- [ ] 0.3 Colour audit (every colour, its meaning and where), the draft visual vocabulary
+- [ ] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350) — in review
+- [ ] 0.2 Measure the plan reload storm in a harness test (imports, broadcasts, response time) — building
+- [ ] 0.3 Colour audit (every colour, its meaning and where), the draft visual vocabulary — building
 
 ### Track S: quiet under load
-- [ ] S1 One import per plan per burst (the watcher coalesces)
-- [ ] S2 The window takes a burst as one (one refetch, one toast)
+- [ ] S1 One import per plan per burst (the watcher coalesces) — building
+- [ ] S2 The window takes a burst as one (one refetch, one toast) — building
 - [ ] S3 Under load end to end (200 files, 5 plans; the owner's real `git pull`)
 
 ### Track R: the rulebook
-- [ ] R1 Rules live in `.codetrellis/rules/<suite>.yaml` (moved from config.json by a person's confirm)
-- [ ] R2 CI judges with the base branch's rules; a rulebook change is its own finding
-- [ ] R3 Change control: preview the effect, a person confirms, loosening is signed, `propose_rule` for agents
-- [ ] R4 Strength: block, warn, guide (exit codes, `--strict`, signals)
+- [ ] R1 Rules live in `.codetrellis/rules/<suite>.yaml` (moved from config.json by a person's confirm) — building
+- [ ] R2 CI judges with the base branch's rules; a rulebook change is its own finding — building
+- [ ] R3 Change control: preview the effect, a person confirms, loosening is signed, `propose_rule` for agents — building
+- [ ] R4 Strength: block, warn, guide (exit codes, `--strict`, signals) — building
 - [ ] R5 Package rules across all eleven languages (only the wrapper imports `stripe`)
 - [ ] R6 Symbol rules (who may import a named export, through re-exports)
 - [ ] R7 Call rules (HTTP hosts, commands, tables, env)
@@ -61,9 +62,9 @@
 - [ ] R9 Guide rules in scope (the brief, `get_brief`, drift names the rule)
 
 ### Track C: checks anywhere
-- [ ] C1 Scoped checks (`--suite`, `--rule`, `--path`; MCP and REST alike)
-- [ ] C2 SARIF output, host-neutral; recipes are examples for any CI (no host first)
-- [ ] C3 Debt ratchet (existing breaches may only fall)
+- [ ] C1 Scoped checks (`--suite`, `--rule`, `--path`; MCP and REST alike) — building
+- [ ] C2 SARIF output, host-neutral; recipes are examples for any CI (no host first) — building
+- [ ] C3 Debt ratchet (existing breaches may only fall) — building
 - [ ] C4 Agent checks locally on the user's own agent: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes)
 - [ ] C4b Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified)
 - [ ] C5 Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass)
@@ -72,12 +73,12 @@
 - [ ] C8 One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words
 
 ### Track G: graph and clarity
-- [ ] G1 One visual vocabulary (colour, glyph, dash, words) with a guard test
+- [ ] G1 One visual vocabulary (colour, glyph, dash, words) with a guard test — building
 - [ ] G2 The legend on the graph, plan canvas, file tree and Timeline
-- [ ] G3 Edge toggles (imports, cross-system, symbol links)
-- [ ] G4 Graph full screen and back; hidden panes leave no gap
-- [ ] G5 Selecting a file lists the plans and tasks that touch it
-- [ ] G6 Opening a plan always shows it, from a chip too
+- [ ] G3 Edge toggles (imports, cross-system, symbol links) — building
+- [ ] G4 Graph full screen and back; hidden panes leave no gap — building
+- [ ] G5 Selecting a file lists the plans and tasks that touch it — building
+- [ ] G6 Opening a plan always shows it, from a chip too — building
 - [ ] G7 The Rules view (its own workspace, not Settings)
 - [ ] G8 Rules on the graph (breaches drawn, rules for the selected file)
 - [ ] G9 The Checks view (run any check from the app, CI runs beside local ones, compare runs)
@@ -100,9 +101,35 @@
 
 ## Baseline
 
-To be recorded by 0.1 on Node 26 from a clean `npm ci`: typecheck, the
-lint warning count, `test:unit`, `test:harness`, the browser suite and
-`test:phone`.
+Measured by 0.1 on 2026-10-06 at `feat/phase-33` (`81db781`), on Node
+26.10.0 and npm 11.19.1, from `npm ci --ignore-scripts` plus
+`patch-package` (as CI installs), in a 4-core cloud container.
+
+| Suite | Result | Time |
+|---|---|---|
+| `npm run typecheck` | clean | 25 s |
+| `npm run lint` | 0 errors, **306 warnings** | |
+| `npm run test:unit` | 1,993 tests: 1,989 pass, 0 fail, 4 skipped | 72 s |
+| `npm run test:phone` | 39 pass | 13 s |
+| `npm run test:harness` | 1,262 tests: 1,254 pass; 2 fail and 6 did not run, all in two files that need `ssh-keygen`, which this container lacked. With `openssh-client` installed, both files pass (25 of 25) | 46.8 min |
+| Browser, `chromium` | 556 pass | 36.6 min, 2 workers |
+| Browser, `serial` | 219 pass, **3 fail** (`e2e/plan/play-forward.spec.ts`), fixed in 0.1, below | 16.9 min |
+
+The suite was green at the start, so the three failures were ours:
+
+- **A spec left its plan behind.** `e2e/inspector/add-to-plan.spec.ts`
+  made a plan on `validators.ts` and never removed it, so play-forward,
+  run after it in the same pass, saw a three-way planned overlap. CI's
+  serial shards happened to keep the two apart. It now cleans up.
+- **Awareness took 7–10 s to answer**, so B9.3b timed out on "Checking
+  for overlaps…". With twenty `feat/phase-33-*` branches of forty files
+  each on the remote, every listing parsed every branch's changed files
+  for symbols before answering; the branches' own budget (HD4b) stopped
+  short of that. One listing now parses at most 60 files and warms the
+  rest in the background, telling the window when they are ready
+  (`branch-symbols-budget.test.ts`). Real users with many pushed branches
+  would have hit the same wait. The 108 awareness, workstream and branch
+  harness tests pass with it.
 
 ## Decisions
 
@@ -172,6 +199,47 @@ lint warning count, `test:unit`, `test:harness`, the browser suite and
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-06 — 0.1 Baseline measured; two of our bugs fixed
+
+- Every suite measured on Node 26 (the Baseline above). Two harness files
+  need `ssh-keygen`; the container lacked it, and they pass with it.
+- Three serial browser failures in play-forward, from two bugs of ours,
+  both fixed on the 0.1 branch: a spec that leaked its plan, and an
+  awareness listing that parsed every remote branch's files before it
+  answered (now inside a budget, the rest warmed in the background).
+- Built ahead on their own branches while the suites ran, each with its
+  tests, and queued to merge one PR at a time: 0.2, S1, S2, R1, R2, R4,
+  R3 (a: signed approval of a loosening, checked against the base's keys;
+  b: `propose_rule`), C1 (scoped checks), C2 (SARIF and recipes for any
+  host), C3 (debt ratchet, building), 0.3 (colour audit, shown on its own
+  page), G1 (one visual vocabulary), G3 (edge toggles), G4 (full screen),
+  G5 (the inspector lists a file's plans) and G6 (opening a plan shows it).
+- Decision (R4): a rule written before strength existed reads as `block`,
+  what every rule did then; only new rules start at `warn`, so no rule gets
+  weaker unasked.
+- Decision (R3): the shared "Waiting on you" inbox does not list rule
+  proposals yet; they are in Settings → Architecture rules until the Rules
+  view (G7) gives them a home.
+
+### 2026-10-06 — Setup merged; 0.1 started
+
+- **#347 into `main`.** A moderate advisory published today against
+  `sprintf-js` (GHSA-hp3w-g68c-fv3c, every version affected) failed
+  `npm audit --omit=dev` on every branch. It reached production only through
+  `mammoth` → `argparse@1`, and only `mammoth`'s CLI uses `argparse`. An npm
+  override gives `mammoth` `argparse` 2, so `sprintf-js` leaves the
+  production tree.
+  - The lockfile change is only `mammoth`'s two nested entries. npm also
+    wanted to resync the root `bin` and `better-sqlite3`'s
+    `hasInstallScript`; I left those out, and `npm ci` accepts the result.
+  - Found on the way: with `node_modules` absent, `npm install
+    --package-lock-only` (npm 10 and 11 alike) leaves an override
+    unapplied. A full install applies it.
+- **#346 merged into `feat/phase-33`** (`81db781`), carrying the same fix,
+  and green on all 20 checks.
+- **0.1 started** on `feat/phase-33-0-1-baseline`, on Node 26.10.0 (npm
+  11.19.1).
 
 ### 2026-10-05 — Its own folder; agent checks, review and rendering designed
 
