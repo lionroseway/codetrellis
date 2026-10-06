@@ -18,6 +18,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Gate } from './conformity';
+import { findingLine } from '../shared/lib/check-words';
 
 type Level = 'error' | 'warning' | 'note';
 
@@ -53,7 +54,11 @@ const INFO = 'https://codetrellis.dev';
 
 /** The line that imports `target` in `source`'s text, 1-based; null when no import line names it. */
 export function importLine(text: string, target: string): number | null {
-  const base = path.posix.basename(target).replace(/\.[^.]+$/, '');
+  // A package (R5) is named as the code names it: `npm:stripe` is `stripe`, `go:github.com/x/y` is `y`.
+  const pkg = /^(npm|pypi|go|cargo|maven|nuget|gem|composer|swift):(.+)$/.exec(target);
+  const base = pkg
+    ? (pkg[1] === 'go' ? path.posix.basename(pkg[2]) : pkg[2])
+    : path.posix.basename(target).replace(/\.[^.]+$/, '');
   if (!base) return null;
   const word = new RegExp(`(^|[^A-Za-z0-9_])${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^A-Za-z0-9_]|$)`);
   const importish = /^\s*(import\b|from\b|export\b.*\bfrom\b|use\b|using\b|require\b|#include\b|package\b)|\brequire\s*\(|\bimport\s*\(/;
@@ -99,7 +104,8 @@ export function toSarif(
     const text = opts.read(file);
     results.push({
       ruleId: `rule/${id}`, level,
-      message: { text: `${file} now imports ${imports}, which the rule “${str(r.words)}” forbids${str(r.because) ? `: ${str(r.because)}` : ''}` },
+      // C8: the finding's own line, as every surface says it, and what to do after →.
+      message: { text: `${findingLine({ path: file, imports, words: str(r.words) ?? id, because: str(r.because) ?? '' })}${str(r.fix) ? ` → ${str(r.fix)}` : ''}` },
       locations: [at(file, text === null ? null : importLine(text, imports))],
       partialFingerprints: { 'codetrellis/import': `${id}:${file}>${imports}` },
     });

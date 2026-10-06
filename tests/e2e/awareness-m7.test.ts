@@ -44,6 +44,20 @@ const ADDED = 'from app.config import DATABASE_URL\n';
 const NOTICE = '── CodeTrellis awareness ──';
 const RULE = 'services/api/app/routes/ may not import services/api/app/config.py';
 const BECAUSE = 'routes read settings through the app';
+/** The gate's finding (C8: with its suite, its fix, and where in the file). */
+const FOUND = (strength: string) => ({
+  path: USERS, imports: CONFIG, rule: 'routes-not-config', words: RULE, because: BECAUSE, strength,
+  suite: 'architecture', fix: null, line: expect.any(Number), text: ADDED.trim(),
+});
+/** The terminal's lines for it: under its suite and rule, where it is, then what to do. */
+const FOUND_TEXT = (since: string) => new RegExp([
+  `^Does not conform \\(1 changed file since ${since}\\):`, '',
+  'architecture {2}✗ 1 blocks', '',
+  ` {2}✗ routes-not-config {3}${RULE.replace(/[.]/g, '\\.')}`,
+  ` {6}${USERS.replace(/[.]/g, '\\.')}:\\d+ imports ${CONFIG.replace(/[.]/g, '\\.')} {3}${ADDED.trim().replace(/[.]/g, '\\.')}`,
+  ` {6}→ ${BECAUSE}`, '',
+  '1 finding blocks this change \\(exit 3\\)\\.$',
+].join('\n'));
 
 interface Gate {
   ok: boolean; says: string[]; files: number; rules: Array<{ path: string; imports: string; rule: string; words: string; because: string; strength: string }>; rulesNote?: string;
@@ -63,7 +77,7 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
   const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', env: { ...process.env, ...ENV } }).trim();
   const ct = (...args: string[]) => {
     const r = spawnSync(process.execPath, [BIN, ...args, '--data-dir', h.fixture.dataDir], {
-      cwd: root, env: { ...(process.env as Record<string, string>), ...ENV, CLAUDECODE: '1', CODETRELLIS_AGENT: '', GITHUB_BASE_REF: '' }, encoding: 'utf8', timeout: 120_000,
+      cwd: root, env: { ...(process.env as Record<string, string>), ...ENV, CLAUDECODE: '1', CODETRELLIS_AGENT: '', FORCE_COLOR: '', GITHUB_BASE_REF: '' }, encoding: 'utf8', timeout: 120_000,
     });
     return { code: r.status, out: r.stdout.trim(), err: r.stderr.trim() };
   };
@@ -154,12 +168,12 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
       const g = JSON.parse(r.out) as Gate;
       expect(g.ok).toBe(false);
       // The import of db.py was there before the branch: not the branch's.
-      expect(g.rules).toEqual([{ path: USERS, imports: CONFIG, rule: 'routes-not-config', words: RULE, because: BECAUSE, strength: 'block' }]);
+      expect(g.rules).toEqual([FOUND('block')]);
       expect(g.rulesNote).toBeUndefined();
 
       const words = ct('check', '--base', main);
       expect(words.code).toBe(3);
-      expect(words.out).toBe(`Does not conform (1 changed file since ${main}):\n  ✗ ${USERS} now imports ${CONFIG}, which the rule “${RULE}” forbids: ${BECAUSE}`);
+      expect(words.out).toMatch(FOUND_TEXT(main));
 
       // C2: the same finding as SARIF, at the line that imports it, for any host to show.
       const sarif = ct('check', '--base', main, '--format', 'sarif');
@@ -194,7 +208,7 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
       expect(r.code, r.err || r.out).toBe(3);
       const g = JSON.parse(r.out) as Gate;
       // Judged by main's rules: the import is still a breach.
-      expect(g.rules).toEqual([{ path: USERS, imports: CONFIG, rule: 'routes-not-config', words: RULE, because: BECAUSE, strength: 'block' }]);
+      expect(g.rules).toEqual([FOUND('block')]);
       // And the rule's removal is a finding of its own, first.
       expect(g.rulebook).toEqual([expect.objectContaining({ rule: 'routes-not-config', change: 'removed', effect: 'loosens' })]);
       expect(g.says[0]).toMatch(/^✗ This change removes the rule “services\/api\/app\/routes\/ may not import services\/api\/app\/config\.py” \(routes-not-config\)(: \d+ imports? it forbade become allowed)?\. Loosening a rule needs a person's approval in the app\.$/);
@@ -233,7 +247,7 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
       expect(g.notes).toEqual([expect.stringMatching(/^⚠ This change adds the rule “packages\/web\/ may not import services\/api\/app\/” \(web-not-api-internals\).*It is checked once it is on the base branch\.$/)]);
       const words = ct('check', '--base', main);
       expect(words.code).toBe(0);
-      expect(words.out.split('\n')[1]).toMatch(/^ {2}⚠ This change adds the rule/);
+      expect(words.out).toMatch(/\n\nrulebook\n {2}⚠ This change adds the rule/);
     } finally {
       git(root, 'checkout', '-q', '-f', main);
     }
@@ -256,11 +270,11 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
       expect(r.code, r.err || r.out).toBe(0);
       const g = JSON.parse(r.out) as Gate;
       expect(g.ok).toBe(true);
-      expect(g.rules).toEqual([{ path: USERS, imports: CONFIG, rule: 'routes-not-config', words: RULE, because: BECAUSE, strength: 'warn' }]);
+      expect(g.rules).toEqual([FOUND('warn')]);
       expect(g.notes).toEqual([`⚠ ${USERS} now imports ${CONFIG}, which the rule “${RULE}” forbids: ${BECAUSE} (the rule warns; it does not fail the check)`]);
       const strict = ct('check', '--base', 'base-warn', '--strict');
       expect(strict.code, strict.err || strict.out).toBe(3);
-      expect(strict.out).toBe(`Does not conform (1 changed file since base-warn):\n  ✗ ${USERS} now imports ${CONFIG}, which the rule “${RULE}” forbids: ${BECAUSE}`);
+      expect(strict.out).toMatch(FOUND_TEXT('base-warn'));
 
       git(root, 'checkout', '-q', '-f', main);
       atStrength('guide');
@@ -332,7 +346,7 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
 
       const payments = ct('check', '--base', 'c1-base', '--suite', 'payments');
       expect(payments.code, payments.err || payments.out).toBe(0);
-      expect(payments.out).toBe('Conforms to suite payments: 1 changed file since c1-base. They add no import those rules forbid, and loosen none of them.');
+      expect(payments.out).toMatch(/^Conforms to suite payments: 1 changed file since c1-base\. They add no import those rules forbid, and loosen none of them\.\n\npayments {2}✓ \d+ rules? holds?\n\nNothing blocks this change \(exit 0\)\.$/);
 
       const named = ct('check', '--base', 'c1-base', '--rule', 'routes-not-config', '--json');
       expect(named.code, named.err || named.out).toBe(3);

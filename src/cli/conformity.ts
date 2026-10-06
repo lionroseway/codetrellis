@@ -14,6 +14,8 @@
 
 import { execFileSync } from 'node:child_process';
 import type { Agent } from './agent';
+import { renderMarkdown, renderText, type CheckResult, type CheckedRule, type RuleFinding, type RulebookFinding } from '../shared/lib/check-words';
+import { importLine } from './sarif';
 
 const git = (root: string, args: string[]): string | null => {
   try {
@@ -76,6 +78,8 @@ export interface Gate {
   rulesNote?: string;
   /** C1: what part of the rulebook was checked, when not all of it. */
   scope?: string;
+  /** C8: the rules judged by, so a suite can say how many hold. */
+  checked?: CheckedRule[];
 }
 
 /** `check_changes` over this work's files, as the agent. */
@@ -97,18 +101,40 @@ export async function gate(agent: Agent, root: string, changed: Changed, strict 
     rulebook: list('rulebook'), notes: list('notes').filter((n): n is string => typeof n === 'string'),
     ...(typeof j.rules_note === 'string' ? { rulesNote: j.rules_note } : {}),
     ...(typeof j.scope === 'string' ? { scope: j.scope } : {}),
+    ...(Array.isArray(j.checked) ? { checked: j.checked as CheckedRule[] } : {}),
   };
 }
 
-/** The gate in words: one line saying what was checked, then one per finding. */
-export function gateWords(g: Gate): string {
-  const what = `${g.files} changed file${g.files === 1 ? '' : 's'}${g.base ? ` since ${g.base}` : ''}`;
-  const note = (g.notes.length ? `\n${g.notes.map((n) => `  ${n}`).join('\n')}` : '') + (g.rulesNote ? `\n${g.rulesNote}` : '');
-  // C1: a scoped check answers only its rules' question, in its own words.
-  if (g.scope) {
-    if (g.ok) return `Conforms to ${g.scope}: ${what}. They add no import those rules forbid, and loosen none of them.${note}`;
-    return [`Does not conform to ${g.scope} (${what}):`, ...g.says.map((s) => `  ${s}`)].join('\n') + note;
-  }
-  if (g.ok) return `Conforms: ${what}. No breakpoint holds them, none of their tests fail or are older than the code, no done task fails its checks, no doc that describes them is stale, they add no import an architecture rule forbids, and they loosen no rule.${note}`;
-  return [`Does not conform (${what}):`, ...g.says.map((s) => `  ${s}`)].join('\n') + note;
+/**
+ * The gate in words (C8, `check-words.ts`): grouped by suite, the summary
+ * first, the fix after →, the exit code last. `read` finds each import's
+ * line and text; `color` is for a terminal that wants it.
+ */
+export function gateWords(g: Gate, opts: { color?: boolean; read?: (rel: string) => string | null } = {}): string {
+  return renderText(withPlaces(g, opts.read), { color: opts.color });
+}
+
+/** The gate as a pull request comment or a job summary (`--format markdown`). */
+export function gateMarkdown(g: Gate, read?: (rel: string) => string | null): string {
+  return renderMarkdown(withPlaces(g, read));
+}
+
+/** Each rule finding with where in its file it is, when the file can be read. */
+export function withPlaces(g: Gate, read?: (rel: string) => string | null): CheckResult {
+  const rules = (g.rules as RuleFinding[]).map((r) => {
+    const text = read ? read(r.path) : null;
+    const line = text === null ? null : importLine(text, r.imports);
+    return { ...r, line, text: line ? text!.split('\n')[line - 1] : null };
+  });
+  return { ...g, rules, rulebook: g.rulebook as RulebookFinding[] };
+}
+
+/**
+ * Whether to colour: a terminal, and nobody said not to (`NO_COLOR`,
+ * https://no-color.org, or `--no-color`). A pipe or a CI log gets plain text.
+ */
+export function wantsColor(stream: { isTTY?: boolean }, env: NodeJS.ProcessEnv, noColorFlag = false): boolean {
+  if (noColorFlag || (env.NO_COLOR !== undefined && env.NO_COLOR !== '')) return false;
+  if (env.FORCE_COLOR !== undefined && env.FORCE_COLOR !== '' && env.FORCE_COLOR !== '0') return true;
+  return stream.isTTY === true && env.TERM !== 'dumb';
 }

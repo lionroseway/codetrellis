@@ -135,6 +135,41 @@ Over those files, the `check_changes` tool reports:
 | ⚠ A system doc that describes a changed file was verified before it changed | the doc's stamp and `git diff <stamp>` over the working tree |
 | ✗ A changed file adds an import an architecture rule forbids | the team's rules in `.codetrellis/rules/<suite>.yaml` (A7; Phase 33 R1 moved them out of `.codetrellis/config.json`, where any still there count until a person moves them), each changed file's imports now against the branch's merge base, which the CLI passes as `base`; an import already there before the branch is the rule's to list, not this change's |
 
+### What it says, and where (Phase 33 C8)
+
+Every finding is written in words once, in `src/shared/lib/check-words.ts`,
+and the terminal, `--format markdown`, `--format sarif` and `--format json`
+render from it, so the words never differ between them:
+
+```
+Does not conform (3 changed files since main):
+
+payments  ✗ 2 block
+
+  ✗ stripe-via-wrapper   only packages/web/src/payments.ts may import npm:stripe: The wrapper sets idempotency keys and retries.
+      packages/web/src/api.ts:1 imports npm:stripe   import Stripe from 'stripe';
+      → use packages/web/src/payments.ts instead
+
+also
+  ■ packages/web/src/api.ts: sam@acme.test set a breakpoint on it; ask them before changing it
+
+2 findings block this change (exit 3).
+```
+
+- The summary first; then by suite (with how many rules block, warn and
+  hold), then rule, then the place, with the import's own line.
+- What to do on its own line after →: the files a package rule allows,
+  the doors an imports rule leaves, else the rule's reason.
+- The rulebook's changes, then everything else (`also`: breakpoints,
+  tests, tasks, docs, the baseline), then notes.
+- The exit code, in words, last.
+- Glyph and word, never colour alone. Colour only in a terminal; a pipe, a
+  CI log, `NO_COLOR` or `--no-color` gets plain text, the same words.
+  `FORCE_COLOR` asks for colour where there is no terminal.
+- `--format markdown` is the same content for a pull request comment or a
+  job summary; `--format json` carries each finding's suite, fix, line and
+  import text as data.
+
 ### Part of the rulebook (Phase 33 C1)
 
 ```

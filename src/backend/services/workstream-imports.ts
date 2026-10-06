@@ -18,6 +18,7 @@ import { parseVirtualFile } from './ast-parser';
 import { getAllFileHashes, getImportResolutionContext, resolutionContextRoot } from './database';
 import { getResolverForLanguage } from './resolvers';
 import { packageEntry } from '../../shared/lib/package-entry';
+import { ruleFix } from '../../shared/lib/check-words';
 import { showAtAsync } from './branch-workstreams';
 import { baseContent, currentContent } from './workstream-symbols';
 import { checkEdges, ruleStatement, rulesOf } from './architecture-rules';
@@ -130,6 +131,9 @@ export async function ruleImports(projectRoot: string, files: readonly string[],
   const byId = new Map(rules.map((r) => [r.id, r]));
   return checkEdges(rules, edges).map((b) => {
     const rule = byId.get(b.rule)!;
-    return { path: b.from, imports: b.to, rule: rule.id, words: ruleStatement({ ...rule, except: [] }), because: rule.because, strength: rule.strength === 'block' ? 'block' : 'warn' };
+    return {
+      path: b.from, imports: b.to, rule: rule.id, words: ruleStatement({ ...rule, except: [] }), because: rule.because, strength: rule.strength === 'block' ? 'block' : 'warn',
+      suite: rule.suite ?? 'architecture', fix: ruleFix(rule),
+    };
   });
 }
