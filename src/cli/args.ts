@@ -160,6 +160,12 @@ which; text, or --json):
   codetrellis rules baseline                   record each rule's breaches now; the check then fails on
                                                any it does not list, and the file may only shrink
   codetrellis report-tests <junit.xml>         tell CodeTrellis how the tests went
+  codetrellis review [--agent claude-code] [--model <m>] [--endpoint <url>] [--auth env:<VAR>]
+                     [--skills <dir>] [--suite <s> | --rule <id> | --path <p>] [--base <ref>] [--task <uid>]
+                     [--max-turns <n>] [--timeout <s>] [--max-tool-calls <n>] [--fail-on block,error] [--json]
+                                               your own agent reviews the change, headless, with no shell,
+                                               files or web; each finding must cite the diff, and each pass
+                                               is kept as a check run. Advisory: exit 3 only with --fail-on
 
 Changing and committing the plan:
 

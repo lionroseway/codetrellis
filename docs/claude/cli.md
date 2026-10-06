@@ -338,6 +338,61 @@ The review is a check run like any other (C7), marked with the agent's name,
 and advisory: it never fails the check. The Checks view opens it into what
 held, each with where it is and what to do, and what was dropped.
 
+## Agent checks: `codetrellis review` (Phase 33 C4)
+
+The same review, run headless on your own agent CLI, model and key, for a
+terminal or a pipeline. CodeTrellis never holds a model key and never pays for
+a call; it builds no agent of its own.
+
+```
+codetrellis review --auth env:ANTHROPIC_API_KEY                 # Claude Code's print mode
+codetrellis review --agent codex --model gpt-5 --auth env:OPENAI_API_KEY
+codetrellis review --agent codex --endpoint http://localhost:8000/v1 --model qwen3-coder --auth env:LOCAL_KEY
+codetrellis review --skills .codetrellis/review-skills --suite payments --fail-on block
+```
+
+Each pass is one skill (each `*.md` in `--skills`, or a folder's `SKILL.md`;
+a built-in one when none is named) over the scope (`--suite`, `--rule`,
+`--path`, `--base`, `--task`), and is kept as its own check run.
+
+What the agent is held to, by its CLI's own settings (`src/cli/review-adapters.ts`):
+
+- **No built-in tools**: no shell, no reading or writing files, no web.
+  Claude Code runs with `--tools ""`; Codex runs with the shell tool, web
+  search and images off and a read-only sandbox.
+- **One MCP server**, the review sink (`codetrellis review-sink`), and its two
+  tools pre-approved: `report_review`, and `read_change_file` (a changed file
+  whole, nothing else). Anything else is denied without asking, and every
+  refused call is kept on the run.
+- **An empty folder and a scrubbed environment**: the repository's agent
+  settings, hooks and instructions are out of reach. The only credential it
+  gets is the one `--auth env:VAR` names; with a key, Claude Code also runs
+  `--bare`. Without `--auth` it uses your Claude Code login.
+- **The change as data**: the bundle is the message, marked as data; the
+  instructions are only the contract and the skill. A file whose name says it
+  holds a secret (`.env`, a private key, `.npmrc`) is withheld from the bundle
+  even when git does not ignore it.
+- **Budgets**: `--max-turns` (Claude Code), `--max-tool-calls` (the sink
+  refuses past it) and `--timeout` (the process is stopped). Reaching one ends
+  the pass `inconclusive: budget`.
+- **It must report.** A run that ends without reporting is retried once; a
+  run that ends asking a question, with nobody to ask, keeps the question as
+  a finding.
+
+The report is checked by the same code as an interactive agent's (C4b): a
+finding off the diff, misquoted, or naming a rule not in scope is dropped
+with why. The outcome is `pass`, `findings`, `inconclusive` or `error` (the
+CLI missing, the key refused; the key is scrubbed from what is kept).
+
+**Advisory by default**: exit 0. `--fail-on block` exits 3 when a finding is on
+a block-strength rule, `--fail-on error` when a pass could not run.
+
+**A bare model endpoint** (no agent CLI) runs through Codex with
+`--endpoint`: Codex is open source, takes any provider serving the Responses
+API, and can be held to the contract, so nothing new is built for it. An
+endpoint serving only Chat Completions is not supported by Codex, and so not
+here.
+
 ## Test runs that travel (D1.5a)
 
 With task state shared, each new run reported (`report-tests`) is also
@@ -366,4 +421,4 @@ run with `codetrellis commit`. One that only gates needs neither.
 | 0 | Done; conforms |
 | 1 | Refused (a tool said no, or CodeTrellis is not running) |
 | 2 | Usage (a bad flag, a `--base` that is not a commit) |
-| 3 | Held (`check <path>`), not answered yet (`request`), or does not conform (`check`, `status`); a rule's breach makes it 3 only at `block`, or at `warn` with `--strict` |
+| 3 | Held (`check <path>`), not answered yet (`request`), or does not conform (`check`, `status`); a rule's breach makes it 3 only at `block`, or at `warn` with `--strict`; `review` only with `--fail-on` |
