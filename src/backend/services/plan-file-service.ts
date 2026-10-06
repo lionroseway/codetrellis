@@ -64,6 +64,7 @@ import type {
  * and need their own writes ignored by the same watcher.
  */
 import { stampSelfWrite, wasJustWrittenByUs } from './self-write-tracker';
+import { burst, type Burst } from './burst';
 import { getEffectiveDefaultVisibility } from './project-config-service';
 import { getPlansFolder, plansHome, PlansFolderError, projectOfPlansHome } from './plans-home';
 import { heldByAnotherCheckout } from './checkout-identity';
@@ -1142,6 +1143,15 @@ const watcherReady = new Map<string, Promise<void>>();
 const PLAN_WATCHER_READY_TIMEOUT_MS = 10_000;
 /** How long after a folder appears the watcher looks in it for files it was not told about (bug 26). */
 const NEW_FOLDER_SWEEP_MS = 500;
+/**
+ * A plan changed on disk is imported once its changes go quiet for this long
+ * (Phase 33 S1), so a burst of N files costs one import, not N. Short enough
+ * that a single edit still lands at once to a person.
+ */
+const PLAN_IMPORT_QUIET_MS = 250;
+/** …and at least this often while a burst keeps going, so a long one is never starved. */
+const PLAN_IMPORT_MAX_WAIT_MS = 1000;
+const importBursts = new Map<string, Burst<string, string>>();
 
 export function startPlanFileWatcher(projectRoot: string): Promise<void> {
   if (watchersByProject.has(projectRoot)) {
@@ -1174,6 +1184,31 @@ export function startPlanFileWatcher(projectRoot: string): Promise<void> {
     // just won't get auto-sync.
     console.warn('[Auto-sync] Could not pre-create plans dir:', err);
   }
+
+  // One import per plan per burst of changes (Phase 33 S1). Idempotent —
+  // upsert by UID. The whole plan directory is imported rather than the
+  // changed files because tasks / phases reference each other (phaseUid) and
+  // a single file can't be safely upserted in isolation if its parent is
+  // missing.
+  const imports = burst<string, string>((planDir, files) => {
+    if (watchersByProject.get(projectRoot) !== watcher) return; // closed meanwhile
+    try {
+      const result = importPlan(planDir);
+      try {
+        const { broadcast } = _lazy____server;
+        broadcast('plan-imported', {
+          planUid: result.plan.uid,
+          source: 'file-watcher',
+          planDir,
+          files: files.length,
+          warnings: result.warnings,
+        });
+      } catch { /* ignore */ }
+    } catch (err) {
+      console.warn(`[Auto-sync] Failed to re-import ${planDir}:`, err);
+    }
+  }, { quietMs: PLAN_IMPORT_QUIET_MS, maxWaitMs: PLAN_IMPORT_MAX_WAIT_MS });
+  importBursts.set(projectRoot, imports);
 
   const watcher = watchTree(plansRoot, {
     ignoreInitial: true,
@@ -1279,24 +1314,12 @@ export function startPlanFileWatcher(projectRoot: string): Promise<void> {
       return;
     }
 
-    // Re-import. Idempotent — upsert by UID. We import the whole plan
-    // directory rather than just the changed file because tasks /
-    // phases reference each other (phaseUid) and a single file can't
-    // be safely upserted in isolation if its parent is missing.
-    try {
-      const result = importPlan(planDir);
-      try {
-        const { broadcast } = _lazy____server;
-        broadcast('plan-imported', {
-          planUid: result.plan.uid,
-          source: 'file-watcher',
-          planDir,
-          warnings: result.warnings,
-        });
-      } catch { /* ignore */ }
-    } catch (err) {
-      console.warn(`[Auto-sync] Failed to re-import ${planDir}:`, err);
-    }
+    // Re-import, once per burst (Phase 33 S1). A pull that touches 40 files
+    // of one plan used to import the whole plan 40 times on this thread and
+    // broadcast 40 times, and the window refetched and toasted for each:
+    // the owner's freeze. The plan's changes are gathered and it is imported
+    // once they go quiet (see `PLAN_IMPORT_QUIET_MS`).
+    imports.add(planDir, filePath);
   };
 
   watcher.on('all', (event, filePath) => {
@@ -1339,6 +1362,9 @@ export function stopPlanFileWatcher(projectRoot: string): void {
     watchersByProject.delete(projectRoot);
     watcherReady.delete(projectRoot);
   }
+  // A burst gathered for a watcher that is going is dropped, not imported.
+  importBursts.get(projectRoot)?.cancel();
+  importBursts.delete(projectRoot);
 }
 
 function findContainingPlanDir(filePath: string, plansRoot: string): string | null {
