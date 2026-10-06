@@ -472,6 +472,34 @@ export const SCHEMA_PLANS_CORE = `
     PRIMARY KEY (project_root, writer)
   );
 
+  -- Phase 33 C7: every rule check is a run (not Phase 31's criterion check_runs). This device's runs (mine = 1) and
+  -- teammates' latest, read from their check-run records in the plans folder
+  -- (.codetrellis/runs/checks/). Teammates' are forgotten when sharing is off.
+  CREATE TABLE IF NOT EXISTS rule_check_runs (
+    project_root TEXT NOT NULL,
+    id TEXT NOT NULL,
+    mine INTEGER NOT NULL,
+    writer TEXT NOT NULL,
+    counter INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    by_author TEXT NOT NULL,
+    by_type TEXT NOT NULL,
+    ran_in TEXT NOT NULL,
+    commit_sha TEXT,
+    dirty TEXT NOT NULL,
+    base TEXT,
+    rulebook TEXT,
+    scope TEXT,
+    strict INTEGER NOT NULL,
+    outcome TEXT NOT NULL,
+    says TEXT NOT NULL,
+    findings TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    verdict TEXT,
+    PRIMARY KEY (project_root, id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_rule_check_runs_at ON rule_check_runs(project_root, at);
+
   CREATE TABLE IF NOT EXISTS task_record_device_key (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     public_key TEXT NOT NULL,

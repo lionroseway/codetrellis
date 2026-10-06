@@ -211,6 +211,8 @@ export function SharedTaskStateSection() {
         </div>
       )}
 
+      {status && <CheckRuns root={root} />}
+
       {status && (
         <div className="rounded border border-white/[0.06] bg-white/[0.02] p-3 space-y-2 text-[12px]" data-testid="shared-state-signing">
           <div className="text-foreground-subtle text-[11px] uppercase tracking-wider">Signing</div>
@@ -274,6 +276,58 @@ export function SharedTaskStateSection() {
         device key, trusted above. Nothing is sent from this machine: git, or the folder&apos;s sync, carries the files.
       </p>
       {error && <p className="text-[12px] text-red-300" role="alert" data-testid="shared-state-error">{error}</p>}
+    </div>
+  );
+}
+
+interface CheckRunRow { id: string; mine: boolean; who: string; ranIn: string; commit: string | null; at: number; outcome: { ok: boolean; blocks: number; warns: number }; verified: boolean; words: string }
+
+/**
+ * Phase 33 C7 — the check runs: this device's and, with task state shared,
+ * each teammate's latest, CI's among them, saying where each ran. The Checks
+ * view (G9) opens and compares them; this lists them where sharing is set.
+ */
+function CheckRuns({ root }: { root: string }) {
+  const [runs, setRuns] = useState<CheckRunRow[] | null>(null);
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/check-runs?project=${encodeURIComponent(root)}&limit=10`);
+      if (res.ok) setRuns(((await res.json()) as { runs: CheckRunRow[] }).runs);
+    } catch { /* the list stays as it was */ }
+  }, [root]);
+  useEffect(() => {
+    void load();
+    const again = () => { void load(); };
+    window.addEventListener('check-runs-changed', again);
+    window.addEventListener('shared-task-state-changed', again);
+    return () => {
+      window.removeEventListener('check-runs-changed', again);
+      window.removeEventListener('shared-task-state-changed', again);
+    };
+  }, [load]);
+  if (!runs) return null;
+  return (
+    <div className="rounded border border-white/[0.06] bg-white/[0.02] p-3 space-y-2 text-[12px]" data-testid="shared-check-runs">
+      <div className="text-foreground-subtle text-[11px] uppercase tracking-wider">Check runs</div>
+      <p className="text-foreground-muted leading-relaxed">
+        Every check, from an agent, the command line or CI. With task state shared, each device&apos;s latest is written with it, so a check in CI shows here after you pull, saying where it ran.
+      </p>
+      {runs.length === 0
+        ? <p className="text-foreground-muted" data-testid="shared-check-runs-empty">No check has run in this project yet.</p>
+        : (
+          <ul className="space-y-1" data-testid="shared-check-runs-list">
+            {runs.map((r) => (
+              <li key={r.id} className="flex items-baseline justify-between gap-3 text-[11px]" data-testid="shared-check-run" title={r.words}>
+                <span className="text-foreground min-w-0 truncate">
+                  {r.who} <span className="text-foreground-muted">in {r.ranIn} · {r.commit ? <code className="font-mono">{r.commit.slice(0, 7)}</code> : 'no commit'} · {new Date(r.at).toLocaleString()}</span>
+                </span>
+                <span className={`shrink-0 ${r.outcome.ok ? 'text-emerald-300' : 'text-red-300'}`}>
+                  {r.outcome.ok ? '✓ conforms' : `✗ ${r.outcome.blocks} ${r.outcome.blocks === 1 ? 'blocks' : 'block'}`}{r.verified ? '' : ' · unverified'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
     </div>
   );
 }

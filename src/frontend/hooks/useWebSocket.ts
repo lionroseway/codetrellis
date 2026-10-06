@@ -462,6 +462,10 @@ export function useWebSocket() {
           if (type === 'tests-reported') {
             window.dispatchEvent(new CustomEvent('tests-reported', { detail: payload }));
           }
+          // Phase 33 C7 — a teammate's check run arrived after a pull, or sharing went off.
+          if (type === 'check-runs-changed') {
+            window.dispatchEvent(new CustomEvent('check-runs-changed', { detail: payload }));
+          }
           // Phase 32 C3.1 — sharing task state through the project's files turned on or off.
           if (type === 'shared-task-state-changed') {
             window.dispatchEvent(new CustomEvent('shared-task-state-changed', { detail: payload }));

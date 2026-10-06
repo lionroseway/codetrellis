@@ -28,6 +28,11 @@ import { holdsProject } from '../../services/replay-frames';
 import { importersOf, type Importer } from '../../services/importers';
 import { enforceEdit, editView } from '../../services/code-breakpoints';
 import { checkChanges } from '../../services/conformity-gate';
+import { listCheckRuns, recordCheckRun } from '../../services/check-runs';
+import { codeAt } from '../../services/task-records/test-runs';
+import { writerId, writerName } from '../../services/task-records/shared-state';
+import { findingLine } from '../../../shared/lib/check-words';
+import { authorFromExtra } from '../helpers';
 import { ruleImports } from '../../services/workstream-imports';
 import { rulesAt } from '../../services/rules-at';
 import { changeWords, diffRules, type RuleChange } from '../../services/rule-changes';
@@ -353,8 +358,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
         'tests that fail or are older than the code, a task marked done whose criterion check now fails, and a system doc ' +
         'that describes a changed file and was verified before it changed, and an import a changed file adds across one ' +
         'of the team\'s architecture rules (with the rule and why). A rule at block fails; one at warn is said in notes ' +
-        'unless strict; a guide is not checked. ok is true when there is nothing to act on. Read only: ' +
-        'nothing is recorded and no breakpoint is hit. CodeTrellis runs no tests; it reads the reports handed over.',
+        'unless strict; a guide is not checked. ok is true when there is nothing to act on. Nothing in the plans changes ' +
+        'and no breakpoint is hit; the check itself is kept as a check run (list_check_runs), shared with teammates where task ' +
+        'state is. CodeTrellis runs no tests; it reads the reports handed over.',
       inputSchema: {
         paths: z.array(z.string().min(1).max(500)).max(500).describe('The changed files, relative to the repository root.'),
         base: z.string().max(200).optional().describe(
@@ -365,9 +371,11 @@ export function register(server: McpServer, deps: ToolDeps): void {
         path: z.string().max(500).optional().describe('Check only the rules about these paths (comma-separated, like src/payments/).'),
         strict: z.boolean().optional().describe(
           'Fail on a rule at warn as well as one at block. By default a warn rule\'s breach is said in notes and the change still conforms.'),
+        ran_in: z.string().max(80).optional().describe(
+          'Where this check runs, in words, for the run\'s record: the CLI says "GitHub Actions", "a terminal". Omit from a session.'),
       },
     },
-    async ({ paths, base, project_path, strict, suite, rule, path: scopePath }) => {
+    async ({ paths, base, project_path, strict, suite, rule, path: scopePath, ran_in }, extra: any) => {
       const scope = parseScope({ suite, rule, path: scopePath });
       const root = project_path ?? deps.getActiveProjectPath();
       if (!root) return noProject;
@@ -422,10 +430,25 @@ export function register(server: McpServer, deps: ToolDeps): void {
         }
       }
       const c = await checkChanges(root, paths, (uid) => deps.criterionLoop.checkCriterion(uid), (files) => ruleImports(root, files, since, judgeBy ?? (scope ? scopeRules(rulesOf(root), scope) : undefined)), rulebook, notes, strict === true, scope !== null, ratchetFound);
+      // C7: every check is a run, kept with where it ran and by whom; shared where task state is.
+      const by = authorFromExtra(deps, extra);
+      const failing = new Set(c.says);
+      const code = codeAt(root);
+      const findings = c.rules.map((r) => ({
+        rule: r.rule, suite: r.suite ?? 'architecture', path: r.path, imports: r.imports, strength: r.strength,
+        failing: failing.has(`✗ ${findingLine(r)}`), words: r.words, fix: r.fix ?? null,
+      }));
+      const runId = recordCheckRun({
+        projectRoot: root, at: Date.now(), by, ranIn: ran_in?.trim() || `${by.author}'s session`,
+        commit: code.commit, dirty: code.dirty, base: base ?? null, rulebook: judgeBy ? since : null,
+        scope: scope ? scopeWords(scope) : null, strict: strict === true,
+        outcome: { ok: c.ok, files: c.files.length, blocks: c.says.length, warns: findings.filter((f) => !f.failing).length },
+        says: c.says.slice(0, 200), findings: findings.slice(0, 1000),
+      }, { writer: writerId(), name: writerName(root) });
       return {
         _meta: { summary: c.ok ? `Checked ${c.files.length} changed file${c.files.length === 1 ? '' : 's'}: conforms` : `Checked ${c.files.length} changed files: ${c.says.length} to act on` },
         content: [{ type: 'text' as const, text: JSON.stringify({
-          ok: c.ok, says: c.says, files: c.files.length,
+          ok: c.ok, says: c.says, files: c.files.length, run: runId,
           breakpoints: c.breakpoints, tests: c.tests,
           criteria: c.criteria.map((x) => ({ item_uid: x.itemUid, task: x.task, criterion: x.criterion, findings: x.findings })),
           docs: c.docs.map((d) => ({ uid: d.uid, title: d.title, slug: d.slug, verified_at: d.verifiedAt, files: d.files })),
@@ -438,6 +461,30 @@ export function register(server: McpServer, deps: ToolDeps): void {
           ...(scope ? { scope: scopeWords(scope) } : {}),
           ...(c.rulesChecked ? {} : { rules_note: 'The architecture rules were not checked: this project\'s imports are not loaded here. Open the project, or run `codetrellis start` in it.' }),
         }, null, 2) }],
+      };
+    },
+  );
+
+  // Phase 33 C7 — the check runs: this device's, and teammates' read from the plans folder.
+  server.registerTool(
+    'list_check_runs',
+    {
+      description:
+        'The check runs in a project, newest first: every check_changes or `codetrellis check`, here and (where task state is shared) ' +
+        'each teammate\'s latest, including CI\'s. Each says where it ran, by whom, at which commit, against which base, the outcome, ' +
+        'and its findings by rule. Read only.',
+      inputSchema: {
+        project_path: z.string().optional().describe('Absolute path of an opened project. Defaults to the active project.'),
+        limit: z.number().int().min(1).max(200).optional().describe('How many, newest first. Defaults to 20.'),
+      },
+    },
+    async ({ project_path, limit }) => {
+      const root = project_path ?? deps.getActiveProjectPath();
+      if (!root) return noProject;
+      const runs = listCheckRuns(root, limit ?? 20);
+      return {
+        _meta: { summary: `${runs.length} check run${runs.length === 1 ? '' : 's'}` },
+        content: [{ type: 'text' as const, text: JSON.stringify({ runs }, null, 2) }],
       };
     },
   );

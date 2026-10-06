@@ -17,8 +17,8 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 302 | 300 | 0 | 0 | 217 | 0 |
-| MCP tools | 214 | 214 | 0 | 0 | 185 | 0 |
+| REST routes | 304 | 302 | 0 | 0 | 217 | 0 |
+| MCP tools | 215 | 215 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
 | Frontend components | 142 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 38 | n/a | n/a | n/a | 0 | 0 |
@@ -29,11 +29,11 @@ records that — but "✗ none" is proof of a gap.
 | Domain | REST | MCP | RPC | Components | Mobile | Settings |
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 25 | 12 | 10 | 0 | 0 | 0 |
-| 0.4b Graph | 26 | 15 | 8 | 17 | 0 | 0 |
+| 0.4b Graph | 28 | 15 | 8 | 17 | 0 | 0 |
 | 0.4c Plans and items | 120 | 63 | 29 | 64 | 0 | 0 |
 | 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 4 | 0 | 0 |
-| 0.4f Channels and presence | 6 | 13 | 7 | 1 | 0 | 0 |
+| 0.4f Channels and presence | 6 | 14 | 7 | 1 | 0 | 0 |
 | 0.4g Agents and MCP | 31 | 33 | 10 | 38 | 0 | 0 |
 | 0.4h Drift, governance, review | 13 | 28 | 9 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
@@ -43,12 +43,12 @@ records that — but "✗ none" is proof of a gap.
 
 ## MCP tools: registry vs capability matrix
 
-- Registered by the server: **214**
-- Rows in `TOOL_CAPABILITIES`: **214**
+- Registered by the server: **215**
+- Rows in `TOOL_CAPABILITIES`: **215**
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (302)
+## REST routes (304)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -75,10 +75,12 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
 | a | `POST /api/git/fetch` |  | ✗ none | 2 |  |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 217 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 218 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `DELETE /api/rules/:id` |  | ✗ none | 3 |  |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
+| b | `GET /api/check-runs` |  | ✗ none | 1 |  |  |  |
+| b | `GET /api/check-runs/:id` |  | ✗ none | 1 |  |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
 | b | `GET /api/cross-system` |  | ✗ none | 6 | ✓ 0.4b: the fixture's six pairings, before and after changes (cross-system) |  |  |
 | b | `GET /api/dependencies` |  | ✗ none | 4 | ✓ 0.4b: edges after scan (smoke, cross-system) |  |  |
@@ -102,7 +104,7 @@ records that — but "✗ none" is proof of a gap.
 | b | `POST /api/rules/move-from-config` |  | ✗ none | 1 |  |  |  |
 | b | `POST /api/rules/proposals/:uid/decide` |  | ✗ none | 1 |  |  |  |
 | b | `POST /api/trellis/capture` |  | ✗ none | 3 | ✓ 0.4b: (baselines) |  |  |
-| b | `PUT /api/rules/:id` |  | ✗ none | 7 |  |  |  |
+| b | `PUT /api/rules/:id` |  | ✗ none | 8 |  |  |  |
 | c | `DELETE /api/attachments/:uid` |  | ✗ none | 1 | ✓ 0.4c-2: removes; unknown 404 (item-surface) |  |  |
 | c | `DELETE /api/comments/:uid` |  | ✗ none | 1 | ✓ 0.4c-2: removes a reply from the thread (item-surface) |  |  |
 | c | `DELETE /api/items/:uid` |  | ✗ none | 2 | ✓ 0.4c: exercised by agent-loop, criteria-signoff, drift-review-tools, full-loop, +5 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -346,7 +348,7 @@ records that — but "✗ none" is proof of a gap.
 | k | `PUT /api/review-host` |  | ✗ none | 2 |  |  |  |
 | k | `PUT /api/review-host/token` |  | ✗ none | 2 |  |  |  |
 | k | `PUT /api/settings` |  | 1 | 28 | ✓ 0.4k: partial saves keep siblings (nested too), hosts normalised, windows told; every field checked, a bad value 400 with the reason and nothing stored (settings-surface); phone-safe subset from the phone (phone-channels-projects) |  |  |
-| k | `PUT /api/shared-task-state` |  | ✗ none | 4 |  |  |  |
+| k | `PUT /api/shared-task-state` |  | ✗ none | 5 |  |  |  |
 | l | `DELETE /api/system-docs/:uid` |  | ✗ none | 2 | ✓ 0.4j: removed, desktop told; unknown 404 not ok:false (phone-terminals-sysdocs) |  |  |
 | l | `GET /api/system-docs` |  | ✗ none | 4 | ✓ 0.4l: same as list_system_docs; outside a project refused (sysdocs-intake, phone-terminals-sysdocs) |  |  |
 | l | `GET /api/system-docs/:uid` |  | ✗ none | 2 | ✓ 0.4j: the doc; unknown 404 (phone-terminals-sysdocs) — rest of system docs in 0.4l |  |  |
@@ -355,7 +357,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `POST /api/system-docs/:uid/verify` |  | ✗ none | 2 | ✓ 0.4l: re-stamped at HEAD after a commit, freshness clears, desktop told; unknown 404 (sysdocs-intake) |  |  |
 | l | `PUT /api/system-docs/:uid` |  | ✗ none | 2 | ✓ 0.4l: named fields only, author from how it arrived — the body cannot name one (sysdocs-intake); bug 47 |  |  |
 
-## MCP tools (214)
+## MCP tools (215)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -466,12 +468,13 @@ records that — but "✗ none" is proof of a gap.
 | f | `await_decision` | presence · read | ✗ none | 8 |  |  |  |
 | f | `await_user_input` | presence · write | ✗ none | 1 | ✓ 0.4f: gets the reply; a newer question supersedes an older wait at once (presence-channels; bug 25) |  |  |
 | f | `check_breakpoint` | presence · read | ✗ none | 2 |  |  |  |
-| f | `check_changes` | presence · read | ✗ none | 1 |  |  |  |
+| f | `check_changes` | presence · read | ✗ none | 2 |  |  |  |
 | f | `dismiss_channel_event` | channel · write | ✗ none | 1 | ✓ 0.4f: dismissed, broadcast, gone from the open list; unknown an error (presence-channels) |  |  |
 | f | `dismiss_presence` | presence · write | ✗ none | 1 | ✓ 0.4f: clears every card and releases waiters (presence-channels; bug 25) |  |  |
 | f | `get_channel_thread` | channel · read | ✗ none | 2 | ✓ 0.4f: same order as REST (presence-channels, cdev-channels) |  |  |
 | f | `get_line_changes` | presence · read | ✗ none | 2 |  |  |  |
 | f | `list_channel_events` | channel · read | ✗ none | 5 | ✓ 0.4f: status filter excludes dismissed; pulled events appear (presence-channels; bug 26) |  |  |
+| f | `list_check_runs` | presence · read | ✗ none | 1 |  |  |  |
 | f | `post_channel_event` | channel · write | ✗ none | 7 | ✓ 0.4f: threads with responds_to, exported to the plan folder (presence-channels, cdev-channels) |  |  |
 | f | `present` | presence · write | ✗ none | 2 | ✓ 0.4f: card posted, broadcast, attributed to the agent (presence-channels) |  |  |
 | f | `resolve_channel_event` | channel · write | ✗ none | 2 | ✓ 0.4f: resolved in DB and YAML (cdev-channels) |  |  |
