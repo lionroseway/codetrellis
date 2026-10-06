@@ -30,7 +30,11 @@ const CONFIG_WHERE = '.codetrellis/config.json';
 
 /** Rules still in `.codetrellis/config.json`, where Phase 32 kept them. */
 export function rulesInConfig(projectRoot: string): ArchitectureRule[] {
-  return getProjectConfig(projectRoot).rules ?? [];
+  // Read through the parser again: the config's cache holds a write as it
+  // was given, so a rule written before R4 would have no strength here.
+  return (getProjectConfig(projectRoot).rules ?? [])
+    .map((r) => parseArchitectureRule(r).rule)
+    .filter((r): r is ArchitectureRule => r !== null);
 }
 
 /** The suites' rules, then any from the config whose id no suite uses. Pure. */
@@ -71,7 +75,11 @@ export function setRule(projectRoot: string, raw: Record<string, unknown>, by: s
   const existing = rulesOf(projectRoot).find((r) => r.id === raw.id);
   const suite = raw.suite === undefined || raw.suite === '' ? existing?.suite ?? DEFAULT_SUITE : raw.suite;
   if (!isSuiteName(suite)) throw new RuleError('suite must be a short name, like payments');
-  const { rule: parsed, problems } = parseArchitectureRule({ ...raw, since: existing?.since ?? new Date(now).toISOString(), by });
+  // A new rule starts at warn (R4): a blocking rule with false positives
+  // costs more trust than it earns. A changed rule keeps its strength unless
+  // this names one.
+  const strength = raw.strength ?? existing?.strength ?? 'warn';
+  const { rule: parsed, problems } = parseArchitectureRule({ ...raw, strength, since: existing?.since ?? new Date(now).toISOString(), by });
   if (!parsed) throw new RuleError(problems.join('; '));
   const rule: ArchitectureRule = { ...parsed, suite };
   writeSuite(projectRoot, suite, suiteRules(projectRoot, suite).filter((r) => r.id !== rule.id).concat(rule));
@@ -116,13 +124,16 @@ export function moveRulesFromConfig(projectRoot: string): string[] {
  */
 export function rulesView(projectRoot: string, edges: Array<{ from: string; to: string }> | null): RuleView[] {
   return rulesOf(projectRoot).map((rule) => {
-    const breaches = edges ? checkEdges([rule], edges) : null;
+    // A guide is read, not checked (R4): it has no breaches to count.
+    const breaches = edges && rule.strength !== 'guide' ? checkEdges([rule], edges) : null;
     return {
       rule,
       where: whereOf(rule),
       words: ruleWords(rule),
       breaches,
-      breachWords: breaches === null
+      breachWords: rule.strength === 'guide'
+        ? 'A guide: shown to agents whose work touches it, never checked'
+        : breaches === null
         ? 'Open this project to see what breaks it today'
         : breaches.length === 0 ? 'Nothing breaks this today' : `${breaches.length} ${breaches.length === 1 ? 'import breaks' : 'imports break'} this today`,
     };

@@ -117,6 +117,27 @@ Over those files, the `check_changes` tool reports:
 | ⚠ A system doc that describes a changed file was verified before it changed | the doc's stamp and `git diff <stamp>` over the working tree |
 | ✗ A changed file adds an import an architecture rule forbids | the team's rules in `.codetrellis/rules/<suite>.yaml` (A7; Phase 33 R1 moved them out of `.codetrellis/config.json`, where any still there count until a person moves them), each changed file's imports now against the branch's merge base, which the CLI passes as `base`; an import already there before the branch is the rule's to list, not this change's |
 
+### How hard a rule holds (Phase 33 R4)
+
+Every rule has a `strength`:
+
+| Strength | In the check | To agents | Signal |
+|---|---|---|---|
+| ■ `block` | ✗ fails it, exit 3 | told on their next call | high |
+| ⚠ `warn` | said in the notes; exit 0 | told | medium |
+| ○ `guide` | not checked | shown when their work touches it | none |
+
+`--strict` (`codetrellis check --strict`, `status --strict`, or `strict`
+on `check_changes`) makes a rule at warn fail the check like one at block.
+
+**A new rule starts at warn**: a blocking rule with false positives costs
+more trust than it earns, so a team raises it to block once it is clean. A
+rule written before strength existed has none, and reads as `block`, which
+is what every rule did then; no existing rule gets weaker without a person
+saying so. Lowering a rule's strength is loosening it (R2): from block to
+warn, the imports that break it would no longer fail CI, and the check says
+so until a person approves it.
+
 What a runner can and cannot see: plans, task records, criteria and system
 docs arrive with the checkout; test results arrive with the report the job
 hands over. **Breakpoints do not**: they are a person's, set in their own
@@ -158,4 +179,4 @@ run with `codetrellis commit`. One that only gates needs neither.
 | 0 | Done; conforms |
 | 1 | Refused (a tool said no, or CodeTrellis is not running) |
 | 2 | Usage (a bad flag, a `--base` that is not a commit) |
-| 3 | Held (`check <path>`), not answered yet (`request`), or does not conform (`check`, `status`) |
+| 3 | Held (`check <path>`), not answered yet (`request`), or does not conform (`check`, `status`); a rule's breach makes it 3 only at `block`, or at `warn` with `--strict` |

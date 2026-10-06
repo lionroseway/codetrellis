@@ -49,6 +49,8 @@ test.describe.serial('Architecture rules', () => {
     const [view] = await rules();
     expect(view.where).toBe('.codetrellis/rules/architecture.yaml');
     expect(view.rule.suite).toBe('architecture');
+    // A new rule starts at warn (R4): it is said, and CI passes, until a person makes it block.
+    expect(view.rule.strength).toBe('warn');
     expect(view.words).toBe('services/api/app/routes/ may not import services/api/app/db.py: routes go through the service layer');
     expect(view.breaches?.map((b) => b.from).sort()).toEqual(['services/api/app/routes/orders.py', 'services/api/app/routes/users.py']);
     expect(view.breaches?.every((b) => b.to === 'services/api/app/db.py')).toBe(true);

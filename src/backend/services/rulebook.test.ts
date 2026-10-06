@@ -13,7 +13,7 @@ const put = (root: string, rel: string, text: string) => {
 };
 
 const rule = (id: string, extra: Partial<ArchitectureRule> = {}): ArchitectureRule => ({
-  id, from: 'web/', mayNotImport: 'db/', except: [], because: 'web talks to db through the API', since: '2026-10-06T00:00:00.000Z', by: 'Saif', ...extra,
+  id, from: 'web/', mayNotImport: 'db/', except: [], because: 'web talks to db through the API', since: '2026-10-06T00:00:00.000Z', by: 'Saif', strength: 'block', ...extra,
 });
 
 test('a suite file is read with its rules, each knowing its suite', () => {
@@ -115,4 +115,23 @@ test('a rules folder that is a link out of the project is not read, and not writ
   assert.deepEqual(readRulebook(root).suites, []);
   assert.throws(() => writeSuite(root, 'architecture', [rule('a')]));
   assert.equal(fs.existsSync(path.join(outside, 'architecture.yaml')), false, 'nothing written outside the project');
+});
+
+test('a rule\'s strength is read; none means block, as it did before strength existed; a wrong one is refused (R4)', () => {
+  const { suite, problems } = parseSuite('s', [
+    'rules:',
+    '  - {id: old, from: web/, mayNotImport: db/}',
+    '  - {id: soft, from: web/, mayNotImport: api/, strength: warn}',
+    '  - {id: words, from: lib/, mayNotImport: ui/, strength: guide}',
+    '  - {id: bad, from: x/, mayNotImport: y/, strength: maybe}',
+  ].join('\n'));
+  assert.deepEqual(suite?.rules.map((r) => [r.id, r.strength]), [['old', 'block'], ['soft', 'warn'], ['words', 'guide']]);
+  assert.match(problems[0], /rule "bad": strength must be block, warn or guide/);
+});
+
+test('a suite is written with each rule\'s strength, so it reads back the same', () => {
+  const root = project();
+  writeSuite(root, 'architecture', [rule('a', { strength: 'warn' }), rule('b', { strength: 'guide' })]);
+  assert.match(fs.readFileSync(path.join(root, `${RULES_DIR}/architecture.yaml`), 'utf-8'), /strength: warn/);
+  assert.deepEqual(readRulebook(root).suites[0].rules.map((r) => r.strength), ['warn', 'guide']);
 });

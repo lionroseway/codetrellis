@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useProjectStore } from '../../stores/project-store';
-import type { RuleView } from '../../../shared/types/architecture-rules';
+import { RULE_STRENGTHS, type RuleStrength, type RuleView } from '../../../shared/types/architecture-rules';
+
+/** R4 — each strength in a glyph and words, never colour alone. */
+const STRENGTH_GLYPH: Record<RuleStrength, string> = { block: '■', warn: '⚠', guide: '○' };
+const STRENGTH_WORDS: Record<RuleStrength, string> = {
+  block: 'fails the check in CI, and tells agents at once',
+  warn: 'said in the check and to agents; CI passes',
+  guide: 'shown to agents whose work touches it; never checked',
+};
 
 /**
  * Settings → Architecture rules (Phase 32 A7.1; awareness spec M7).
@@ -27,6 +35,8 @@ export function ArchitectureRulesSection() {
   const [mayNotImport, setMayNotImport] = useState('');
   const [except, setExcept] = useState('');
   const [because, setBecause] = useState('');
+  // R4 — a new rule starts at warn: said, and CI passes, until it is made to block.
+  const [strength, setStrength] = useState<RuleStrength>('warn');
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -79,8 +89,9 @@ export function ArchitectureRulesSection() {
     const ok = await call('PUT', id, {
       from: from.trim(), mayNotImport: mayNotImport.trim(), because: because.trim(),
       except: except.split(',').map((s) => s.trim()).filter(Boolean),
+      strength,
     });
-    if (ok) { setFrom(''); setMayNotImport(''); setExcept(''); setBecause(''); setOpen(id); }
+    if (ok) { setFrom(''); setMayNotImport(''); setExcept(''); setBecause(''); setStrength('warn'); setOpen(id); }
   };
 
   return (
@@ -117,7 +128,12 @@ export function ArchitectureRulesSection() {
             <div key={v.rule.id} className="px-3 py-2" data-testid="rule">
               <div className="flex items-baseline justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-foreground font-mono" data-testid="rule-words">{v.words}</div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-foreground font-mono" data-testid="rule-words">{v.words}</span>
+                    <span className="shrink-0 text-[10.5px] text-foreground-muted" data-testid="rule-strength" title={STRENGTH_WORDS[v.rule.strength]}>
+                      {STRENGTH_GLYPH[v.rule.strength]} {v.rule.strength}
+                    </span>
+                  </div>
                   <div className="text-[11px] text-foreground-muted">
                     {v.breaches && v.breaches.length > 0 ? (
                       <button type="button" className="text-amber-300 hover:underline" onClick={() => setOpen(open === v.rule.id ? null : v.rule.id)} data-testid="rule-breach-words">
@@ -164,6 +180,16 @@ export function ArchitectureRulesSection() {
           <span className="text-foreground-muted">Because</span>
           <input className={inputCls.replace(' font-mono', '')} value={because} onChange={(e) => setBecause(e.target.value)} placeholder="web talks to db through the API" data-testid="rule-because" />
         </label>
+        <fieldset className="space-y-1" data-testid="rule-strength-choice">
+          <legend className="text-foreground-muted">How hard it holds</legend>
+          {RULE_STRENGTHS.map((k) => (
+            <label key={k} className="flex items-baseline gap-2">
+              <input type="radio" name="rule-strength" value={k} checked={strength === k} onChange={() => setStrength(k)} data-testid={`rule-strength-${k}`} />
+              <span className="text-foreground">{STRENGTH_GLYPH[k]} {k}</span>
+              <span className="text-[11px] text-foreground-subtle">{STRENGTH_WORDS[k]}</span>
+            </label>
+          ))}
+        </fieldset>
         <p className="text-[11px] text-foreground-subtle">A folder ends in /; a pattern may use * within a name and ** across folders, like src/**/ui/**.</p>
         <button type="button" onClick={() => { void save(); }} disabled={busy || !from.trim() || !mayNotImport.trim()} data-testid="rule-save"
           className="px-3 py-1 rounded text-[12px] bg-accent/20 text-foreground hover:bg-accent/30 disabled:opacity-40">

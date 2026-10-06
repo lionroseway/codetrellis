@@ -4,8 +4,8 @@
  * A pull request cannot change the rules that judge it: the gate judges with
  * the base branch's rules, and reports the difference between the base's
  * rulebook and the branch's as its own finding. Loosening — a rule removed,
- * or a rule's paths or exceptions changed in a way not proven to only
- * tighten — needs a person (R3 signs it); tightening is reported and never
+ * its strength lowered (R4), or its paths or exceptions changed in a way not
+ * proven to only tighten — needs a person (R3 signs it); tightening is reported and never
  * blocks; a reworded reason is listed.
  *
  * Pure: two lists of rules and the project's import edges in, the changes
@@ -13,7 +13,7 @@
  * what it would allow ("3 imports it forbade become allowed").
  */
 
-import type { ArchitectureRule } from '../../shared/types/architecture-rules';
+import type { ArchitectureRule, RuleStrength } from '../../shared/types/architecture-rules';
 import { checkEdges } from './architecture-rule';
 
 export type RuleEffect = 'loosens' | 'tightens' | 'reworded';
@@ -53,6 +53,15 @@ function textEffect(base: ArchitectureRule, head: ArchitectureRule): RuleEffect 
   return 'loosens';
 }
 
+/** R4: block holds hardest, then warn; a guide checks nothing. Lowering one loosens it. */
+const RANK: Record<RuleStrength, number> = { guide: 0, warn: 1, block: 2 };
+function strengthEffect(base: ArchitectureRule, head: ArchitectureRule): RuleEffect | 'same' {
+  const d = RANK[head.strength] - RANK[base.strength];
+  return d === 0 ? 'same' : d > 0 ? 'tightens' : 'loosens';
+}
+
+const stated = (r: ArchitectureRule) => `“${r.from} may not import ${r.mayNotImport}${r.except.length ? ` (except ${r.except.join(', ')})` : ''}”`;
+
 export function diffRules(base: readonly ArchitectureRule[], head: readonly ArchitectureRule[], edges: readonly Edge[]): RuleChange[] {
   const out: RuleChange[] = [];
   const before = new Map(base.map((r) => [r.id, r]));
@@ -69,7 +78,8 @@ export function diffRules(base: readonly ArchitectureRule[], head: readonly Arch
       continue;
     }
     const text = textEffect(b, h);
-    if (text === 'same') {
+    const strength = strengthEffect(b, h);
+    if (text === 'same' && strength === 'same') {
       if (b.because !== h.because) {
         out.push({ rule: id, change: 'changed', effect: 'reworded', allowed: [], forbidden: [], words: `· This change rewords why the rule ${id} exists.` });
       }
@@ -77,10 +87,25 @@ export function diffRules(base: readonly ArchitectureRule[], head: readonly Arch
     }
     const was = breaches(b, edges);
     const now = breaches(h, edges);
+    if (text === 'same') {
+      // Only the strength moved: the same imports break it, and what changes is what they do.
+      const n = was.length;
+      out.push(strength === 'loosens'
+        ? {
+          rule: id, change: 'changed', effect: 'loosens', allowed: b.strength === 'block' ? was : [], forbidden: [],
+          words: `✗ This change lowers the rule ${id} from ${b.strength} to ${h.strength}${n && b.strength === 'block' ? `: ${imports(n)} that break it would no longer fail CI` : ''}. Loosening a rule needs a person's approval in the app.`,
+        }
+        : {
+          rule: id, change: 'changed', effect: 'tightens', allowed: [], forbidden: h.strength === 'block' ? now : [],
+          words: `⚠ This change raises the rule ${id} from ${b.strength} to ${h.strength}${now.length && h.strength === 'block' ? `: ${imports(now.length)} already in the code would fail CI` : ''}.`,
+        });
+      continue;
+    }
     const allowed = minus(was, now);
     const forbidden = minus(now, was);
-    const effect: RuleEffect = text === 'loosens' || allowed.length > 0 ? 'loosens' : 'tightens';
-    const what = `“${b.from} may not import ${b.mayNotImport}${b.except.length ? ` (except ${b.except.join(', ')})` : ''}” to “${h.from} may not import ${h.mayNotImport}${h.except.length ? ` (except ${h.except.join(', ')})` : ''}”`;
+    const effect: RuleEffect = text === 'loosens' || strength === 'loosens' || allowed.length > 0 ? 'loosens' : 'tightens';
+    const at = (r: ArchitectureRule) => (b.strength === h.strength ? '' : ` at ${r.strength}`);
+    const what = `${stated(b)}${at(b)} to ${stated(h)}${at(h)}`;
     out.push({
       rule: id, change: 'changed', effect, allowed, forbidden,
       words: effect === 'loosens'
@@ -94,7 +119,7 @@ export function diffRules(base: readonly ArchitectureRule[], head: readonly Arch
     const forbidden = breaches(h, edges);
     out.push({
       rule: id, change: 'added', effect: 'tightens', allowed: [], forbidden,
-      words: `⚠ This change adds the rule “${h.from} may not import ${h.mayNotImport}” (${id})${forbidden.length ? `: ${imports(forbidden.length)} already in the code would break it` : ''}. It is checked once it is on the base branch.`,
+      words: `⚠ This change adds the rule “${h.from} may not import ${h.mayNotImport}” (${id}) at ${h.strength}${forbidden.length ? `: ${imports(forbidden.length)} already in the code would break it` : ''}. It is checked once it is on the base branch.`,
     });
   }
   return out;

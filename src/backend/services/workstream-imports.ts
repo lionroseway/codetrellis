@@ -119,6 +119,6 @@ export async function ruleImports(projectRoot: string, files: readonly string[],
   const byId = new Map(rules.map((r) => [r.id, r]));
   return checkEdges(rules, edges).map((b) => {
     const rule = byId.get(b.rule)!;
-    return { path: b.from, imports: b.to, rule: rule.id, words: `${rule.from} may not import ${rule.mayNotImport}`, because: rule.because };
+    return { path: b.from, imports: b.to, rule: rule.id, words: `${rule.from} may not import ${rule.mayNotImport}`, because: rule.because, strength: rule.strength === 'block' ? 'block' : 'warn' };
   });
 }

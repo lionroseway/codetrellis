@@ -16,7 +16,7 @@ export interface Parsed {
 }
 
 /** Flags that never take a value, so `--json foo` keeps `foo` as an argument. */
-const SWITCHES = new Set(['json', 'help', 'no-wait', 'quiet', 'share-task-state', 'top', 'page']);
+const SWITCHES = new Set(['json', 'help', 'no-wait', 'quiet', 'share-task-state', 'top', 'page', 'strict']);
 
 export function parseArgs(argv: readonly string[]): Parsed {
   const flags: Record<string, string | true> = {};
@@ -147,9 +147,11 @@ which; text, or --json):
   codetrellis brief <task>                     what the task needs
   codetrellis awareness                        what overlaps your work
   codetrellis check <path>                     before an edit: overlaps, and whether a breakpoint holds it
-  codetrellis check [--base <ref>]             does this work conform? exit 3 when a breakpoint holds a
+  codetrellis check [--base <ref>] [--strict]  does this work conform? exit 3 when a breakpoint holds a
                                                changed file, its tests fail or are older than the code, a
-                                               done task fails its checks, or a doc describing it is stale
+                                               done task fails its checks, a doc describing it is stale,
+                                               it adds an import a rule at block forbids, or it loosens a
+                                               rule; a rule at warn is said and passes (--strict: it fails)
   codetrellis report-tests <junit.xml>         tell CodeTrellis how the tests went
 
 Changing and committing the plan:
@@ -159,7 +161,7 @@ Changing and committing the plan:
   codetrellis plan edit <task> [--title <text>] [--body <text>]
   codetrellis plan move <task> (--under <task> | --top) [--position N]
   codetrellis commit [-m <subject>]            commits only CodeTrellis's own files (.codetrellis/)
-  codetrellis status [--base <ref>]            plans, what is under way, blocked, and waiting on you,
+  codetrellis status [--base <ref>] [--strict] plans, what is under way, blocked, and waiting on you,
                                                and whether this work conforms (exit 3 when not)
 
   <task> is a uid, or its first characters ("6cb8cf43", "task 6cb8cf43").

@@ -43,7 +43,7 @@ test.describe.serial('Rule signals', () => {
     root = h.fixture.projectPath;
     await h.client.scanProject(root);
     for (const [id, body] of [
-      ['routes-not-config', { from: 'services/api/app/routes/', mayNotImport: 'services/api/app/config.py', because: 'routes read settings through the app' }],
+      ['routes-not-config', { from: 'services/api/app/routes/', mayNotImport: 'services/api/app/config.py', because: 'routes read settings through the app', strength: 'block' }],
       ['routes-not-db', { from: 'services/api/app/routes/', mayNotImport: 'services/api/app/db.py', because: 'routes go through the service layer' }],
     ] as const) {
       const res = await h.client.raw('PUT', `/api/rules/${id}?${q()}`, body);
