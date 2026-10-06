@@ -20,7 +20,7 @@
 |---|---|
 | **Stage / step** | 0.2 Measure the plan reload storm |
 | **Status** | 0.1 merged (#350). Measured: 1, 10 and 50 changed task files give 1, 10 and 50 whole-plan imports and broadcasts, and the backend's slowest answer during the burst grows to 1.9 s at 50 (idle 3–5 ms) |
-| **In flight** | 0.2 building on `feat/phase-33-0-2-reload-storm`; 0.3 building on `feat/phase-33-0-3-colour-audit`; S1 building on `feat/phase-33-s1-one-import-per-burst`; S2 building on `feat/phase-33-s2-window-takes-a-burst`; R1 building on `feat/phase-33-r1-rule-files`; R2 building on `feat/phase-33-r2-base-rules`; R3 building on `feat/phase-33-r3-change-control`; R4 building on `feat/phase-33-r4-strength`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan` |
+| **In flight** | 0.2 in review (#351) on `feat/phase-33-0-2-reload-storm`; 0.3 building on `feat/phase-33-0-3-colour-audit`; S1 building on `feat/phase-33-s1-one-import-per-burst`; S2 building on `feat/phase-33-s2-window-takes-a-burst`; R1 building on `feat/phase-33-r1-rule-files`; R2 building on `feat/phase-33-r2-base-rules`; R3 building on `feat/phase-33-r3-change-control`; R4 building on `feat/phase-33-r4-strength`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan` |
 | **Last merged** | 0.1 (#350, `30c5289`) |
 | **Next action** | Merge 0.2, then S1 (one import per plan per burst) and S2 (the window takes a burst as one) |
 | **Blockers** | None |
@@ -42,7 +42,7 @@
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
-- [ ] 0.2 Measure the plan reload storm in a harness test (imports, broadcasts, response time) — building
+- [ ] 0.2 Measure the plan reload storm in a harness test (imports, broadcasts, response time) (#351) — in review
 - [ ] 0.3 Colour audit (every colour, its meaning and where), the draft visual vocabulary — building
 
 ### Track S: quiet under load
