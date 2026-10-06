@@ -2,6 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { useProjectStore } from '../../stores/project-store';
 import { RULE_STRENGTHS, type RuleStrength, type RuleView } from '../../../shared/types/architecture-rules';
 
+interface Preview { change: { effect: string; allowed: unknown[] } | null; words: string; needsConfirm: boolean }
+type Pending =
+  | { kind: 'stop'; id: string; words: string; allowed: number }
+  | { kind: 'set'; id: string; body: Record<string, unknown>; words: string; allowed: number };
+
 /** R4 — each strength in a glyph and words, never colour alone. */
 const STRENGTH_GLYPH: Record<RuleStrength, string> = { block: '■', warn: '⚠', guide: '○' };
 const STRENGTH_WORDS: Record<RuleStrength, string> = {
@@ -37,6 +42,7 @@ export function ArchitectureRulesSection() {
   const [because, setBecause] = useState('');
   // R4 — a new rule starts at warn: said, and CI passes, until it is made to block.
   const [strength, setStrength] = useState<RuleStrength>('warn');
+  const [pending, setPending] = useState<Pending | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -61,12 +67,12 @@ export function ArchitectureRulesSection() {
     return () => window.removeEventListener('rules-changed', run);
   }, [reload]);
 
-  const call = async (method: 'PUT' | 'DELETE' | 'POST', id: string, body?: unknown): Promise<boolean> => {
+  const call = async (method: 'PUT' | 'DELETE' | 'POST', id: string, body?: unknown, query = ''): Promise<boolean> => {
     if (!root) return false;
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/rules/${encodeURIComponent(id)}?project=${encodeURIComponent(root)}`, {
+      const res = await fetch(`/api/rules/${encodeURIComponent(id)}?project=${encodeURIComponent(root)}${query}`, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -82,17 +88,72 @@ export function ArchitectureRulesSection() {
     }
   };
 
+  // R3 — what a change would do, before it is made. A loosening waits for the
+  // person to confirm it, having read what it allows; the app then signs it.
+  const preview = async (id: string, body: Record<string, unknown>): Promise<Preview | null> => {
+    if (!root) return null;
+    try {
+      const res = await fetch(`/api/rules/${encodeURIComponent(id)}/preview?project=${encodeURIComponent(root)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      if (!res.ok) { setError(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `Server returned ${res.status}`); return null; }
+      return (await res.json()) as Preview;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      return null;
+    }
+  };
+
+  const stop = async (id: string) => {
+    const p = await preview(id, { remove: true });
+    if (p) setPending({ kind: 'stop', id, words: p.words, allowed: p.change?.allowed.length ?? 0 });
+  };
+
+  const confirm = async () => {
+    if (!pending) return;
+    const ok = pending.kind === 'stop'
+      ? await call('DELETE', pending.id, undefined, '&confirm=1')
+      : await call('PUT', pending.id, { ...pending.body, confirm: true });
+    if (ok && pending.kind === 'set') { setFrom(''); setMayNotImport(''); setExcept(''); setBecause(''); setStrength('warn'); setOpen(pending.id); }
+    setPending(null);
+  };
+
   if (!root) return <p className="text-[12px] text-foreground-muted">Open a project to write down its architecture rules.</p>;
 
   const save = async () => {
     const id = slug(`${from}-not-${mayNotImport}`) || 'rule';
-    const ok = await call('PUT', id, {
+    const body = {
       from: from.trim(), mayNotImport: mayNotImport.trim(), because: because.trim(),
       except: except.split(',').map((s) => s.trim()).filter(Boolean),
       strength,
-    });
+    };
+    // A rule that already exists and would hold less tightly: shown first, then confirmed.
+    const p = await preview(id, body);
+    if (!p) return;
+    if (p.needsConfirm) { setPending({ kind: 'set', id, body, words: p.words, allowed: p.change?.allowed.length ?? 0 }); return; }
+    const ok = await call('PUT', id, body);
     if (ok) { setFrom(''); setMayNotImport(''); setExcept(''); setBecause(''); setStrength('warn'); setOpen(id); }
   };
+
+  const confirmPanel = pending && (
+    <div className="rounded border border-red-300/30 bg-red-500/[0.06] px-3 py-2 space-y-2 text-[12px]" role="alertdialog" aria-label="Confirm loosening a rule" data-testid="rule-confirm-panel">
+      <p className="text-foreground" data-testid="rule-confirm-words">{pending.words}</p>
+      <p className="text-[11px] text-foreground-muted">
+        Confirming makes the change and signs your approval with your key, beside the rules in <span className="font-mono">.codetrellis/rules/approvals/</span>.
+        CI accepts it only if that key is already listed on the base branch.
+      </p>
+      <div className="flex gap-2">
+        <button type="button" disabled={busy} onClick={() => { void confirm(); }} data-testid="rule-confirm"
+          className="px-2.5 py-0.5 rounded text-[11.5px] bg-red-500/20 text-foreground hover:bg-red-500/30 disabled:opacity-40">
+          {pending.kind === 'stop' ? 'Stop it, signed as you' : 'Loosen it, signed as you'}
+        </button>
+        <button type="button" onClick={() => setPending(null)} data-testid="rule-cancel"
+          className="px-2.5 py-0.5 rounded text-[11.5px] bg-white/[0.06] text-foreground hover:bg-white/[0.1]">
+          Keep it as it is
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-4" data-testid="rules-section">
@@ -146,11 +207,12 @@ export function ArchitectureRulesSection() {
                     {v.where ? <span className="font-mono" data-testid="rule-where"> · {v.where}</span> : null}
                   </div>
                 </div>
-                <button type="button" disabled={busy} onClick={() => { void call('DELETE', v.rule.id); }} data-testid="rule-stop"
+                <button type="button" disabled={busy} onClick={() => { void stop(v.rule.id); }} data-testid="rule-stop"
                   className="shrink-0 px-2 py-0.5 rounded text-[11.5px] bg-white/[0.06] text-foreground hover:bg-white/[0.1] disabled:opacity-40">
                   Stop
                 </button>
               </div>
+              {pending?.kind === 'stop' && pending.id === v.rule.id && <div className="mt-2">{confirmPanel}</div>}
               {open === v.rule.id && v.breaches && v.breaches.length > 0 && (
                 <ul className="mt-1.5 space-y-0.5 font-mono text-[11px] text-foreground-muted" data-testid="rule-breaches">
                   {v.breaches.map((b) => <li key={`${b.from}>${b.to}`} data-testid="rule-breach">{b.from} → {b.to}</li>)}
@@ -196,6 +258,7 @@ export function ArchitectureRulesSection() {
           Add rule
         </button>
       </div>
+      {pending?.kind === 'set' && confirmPanel}
       {error && <p className="text-[12px] text-red-300" role="alert" data-testid="rule-error">{error}</p>}
     </div>
   );

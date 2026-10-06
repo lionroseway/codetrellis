@@ -138,6 +138,37 @@ saying so. Lowering a rule's strength is loosening it (R2): from block to
 warn, the imports that break it would no longer fail CI, and the check says
 so until a person approves it.
 
+### A loosening carries a person's approval (Phase 33 R3)
+
+The check judges a branch by its base's rules (R2), so removing a rule, or
+lowering its strength, does not let the branch's own imports through: the
+change to the rulebook is its own finding, and a loosening fails it.
+
+It passes only with a person's approval, made in the app. Changing a rule
+there shows first what the change does against the code (what becomes
+allowed, what becomes forbidden, what breaks it today); a loosening then
+waits for the person to confirm it. Confirmed, it is signed with their key
+(git's SSH key when git signing uses one, namespace
+`codetrellis-rule-change`; else their device key) and written beside the
+suites as `.codetrellis/rules/approvals/<rule>-<hash>.yaml`, to commit with
+the change.
+
+The check accepts an approval only when:
+
+- it is for exactly this change: the same rule, the base's terms before,
+  the branch's after (paths, exceptions and strength);
+- it was made on or after the merge base, so an old approval cannot be
+  carried into a new change;
+- it verifies against keys **on the base**: git's allowed signers as the
+  base has them (when that file is in the repository), or a device key
+  introduced under `.codetrellis/keys/` on the base. A pull request cannot
+  add a key and use it in the same change.
+
+An approved loosening is said as a note (`✓ … Sam approved it in the app,
+signed`) and passes; one whose approval does not count says why. No agent
+can change a rule through CodeTrellis; one that edits the files directly is
+caught by the same check.
+
 What a runner can and cannot see: plans, task records, criteria and system
 docs arrive with the checkout; test results arrive with the report the job
 hands over. **Breakpoints do not**: they are a person's, set in their own

@@ -17,7 +17,7 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 297 | 295 | 0 | 0 | 217 | 0 |
+| REST routes | 298 | 296 | 0 | 0 | 217 | 0 |
 | MCP tools | 212 | 212 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
 | Frontend components | 139 | n/a | n/a | n/a | 0 | 23 |
@@ -29,7 +29,7 @@ records that — but "✗ none" is proof of a gap.
 | Domain | REST | MCP | RPC | Components | Mobile | Settings |
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 25 | 12 | 10 | 0 | 0 | 0 |
-| 0.4b Graph | 23 | 15 | 8 | 15 | 0 | 0 |
+| 0.4b Graph | 24 | 15 | 8 | 15 | 0 | 0 |
 | 0.4c Plans and items | 120 | 61 | 29 | 64 | 0 | 0 |
 | 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 4 | 0 | 0 |
@@ -48,7 +48,7 @@ records that — but "✗ none" is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (297)
+## REST routes (298)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -77,7 +77,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `POST /api/git/fetch` |  | ✗ none | 2 |  |  |  |
 | a | `POST /api/project/scan` |  | ✗ none | 212 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
-| b | `DELETE /api/rules/:id` |  | ✗ none | 2 |  |  |  |
+| b | `DELETE /api/rules/:id` |  | ✗ none | 3 |  |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
 | b | `GET /api/cross-system` |  | ✗ none | 6 | ✓ 0.4b: the fixture's six pairings, before and after changes (cross-system) |  |  |
@@ -97,6 +97,7 @@ records that — but "✗ none" is proof of a gap.
 | b | `GET /api/trellis/:id` |  | ✗ none | 2 | ✓ 0.4b: includes the branch (baselines) |  |  |
 | b | `GET /api/trellis/:id/diff` |  | ✗ none | 2 | ✓ 0.4b: empty at capture; then the new file and its edge, live; 404 unknown (baselines) |  |  |
 | b | `GET /api/trellis/snapshots` |  | ✗ none | 1 | ✓ 0.4b: lists the capture (baselines) |  |  |
+| b | `POST /api/rules/:id/preview` |  | ✗ none | 1 |  |  |  |
 | b | `POST /api/rules/move-from-config` |  | ✗ none | 1 |  |  |  |
 | b | `POST /api/trellis/capture` |  | ✗ none | 3 | ✓ 0.4b: (baselines) |  |  |
 | b | `PUT /api/rules/:id` |  | ✗ none | 5 |  |  |  |

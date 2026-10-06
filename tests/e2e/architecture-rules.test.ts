@@ -81,6 +81,27 @@ test.describe.serial('Architecture rules', () => {
     expect(JSON.parse(fine.answer)).toMatchObject({ conformant: true, violations: [] });
   });
 
+  test('R3: a change is previewed against the code before it is made: what it allows, what it forbids, whether it needs confirming', async () => {
+    const preview = async (id: string, body: Record<string, unknown>) => {
+      const r = await h.client.raw('POST', `/api/rules/${id}/preview?project=${encodeURIComponent(root)}`, body);
+      expect(r.status, await r.clone().text()).toBe(200);
+      return (await r.json()) as { change: { effect: string; allowed: unknown[]; forbidden: unknown[] } | null; words: string; breaches: number | null; needsConfirm: boolean };
+    };
+    // Made a guide: the two imports that break it would no longer be checked.
+    const guide = await preview('routes-not-db', { from: 'services/api/app/routes/', mayNotImport: 'services/api/app/db.py', strength: 'guide' });
+    expect(guide).toMatchObject({ needsConfirm: true, change: { effect: 'loosens' } });
+    expect(guide.words).toMatch(/^✗ This change lowers the rule routes-not-db from warn to guide\. Loosening a rule needs a person's approval in the app\.$/);
+    // A new rule tightens: it says what already breaks it, and needs no confirming.
+    const added = await preview('orders-not-db', { from: 'services/api/app/routes/orders.py', mayNotImport: 'services/api/app/db.py' });
+    expect(added).toMatchObject({ needsConfirm: false, breaches: 1, change: { effect: 'tightens', forbidden: [{ from: 'services/api/app/routes/orders.py', to: 'services/api/app/db.py' }] } });
+    // The same rule again changes nothing about how code is judged.
+    expect((await preview('routes-not-db', { from: 'services/api/app/routes/', mayNotImport: 'services/api/app/db.py', because: 'routes go through the service layer' })).words)
+      .toBe('This changes nothing about how code is judged.');
+    // Nothing was written by looking.
+    expect((await rules()).map((v) => v.rule.id).sort()).toEqual(['routes-not-db', 'web-not-services']);
+    expect((await h.client.raw('POST', `/api/rules/nope/preview?project=${encodeURIComponent(root)}`, { remove: true })).status).toBe(404);
+  });
+
   test('an agent\'s list_rules is the window\'s answer', async () => {
     const r = await agent.callTool('list_rules', { project_path: root });
     expect(r.isError, r.text).toBeFalsy();
@@ -96,7 +117,17 @@ test.describe.serial('Architecture rules', () => {
     expect(((await bad.json()) as { error: string }).error).toBe('from may not climb out of the project; mayNotImport must be a folder or a pattern, like web/');
     expect((await h.client.raw('DELETE', `/api/rules/nope?project=${encodeURIComponent(root)}`)).status).toBe(404);
 
-    expect((await h.client.raw('DELETE', `/api/rules/web-not-services?project=${encodeURIComponent(root)}`)).status).toBe(200);
+    // R3: stopping a rule loosens it, so it is previewed and then confirmed, never by default.
+    const unconfirmed = await h.client.raw('DELETE', `/api/rules/web-not-services?project=${encodeURIComponent(root)}`);
+    expect(unconfirmed.status).toBe(409);
+    expect(await unconfirmed.json()).toMatchObject({ needsConfirm: true, words: expect.stringMatching(/^✗ This change removes the rule “packages\/web\/ may not import services\/” \(web-not-services\)/) });
+    expect((await rules()).map((v) => v.rule.id).sort()).toEqual(['routes-not-db', 'web-not-services']);
+    const stopped = await h.client.raw('DELETE', `/api/rules/web-not-services?project=${encodeURIComponent(root)}&confirm=1`);
+    expect(stopped.status, await stopped.clone().text()).toBe(200);
+    // Signed as the person, and written beside the suites for CI to check against the base's keys.
+    const { approval } = (await stopped.json()) as { approval: { file: string; how: string; as: string } };
+    expect(approval.file).toMatch(/^\.codetrellis\/rules\/approvals\/web-not-services-[0-9a-f]{12}\.yaml$/);
+    expect(fs.existsSync(path.join(root, approval.file))).toBe(true);
     expect((await rules()).map((v) => v.rule.id)).toEqual(['routes-not-db']);
     const suite = yaml.parse(fs.readFileSync(path.join(root, '.codetrellis', 'rules', 'architecture.yaml'), 'utf8')) as { rules: Array<{ id: string }> };
     expect(suite.rules.map((r) => r.id)).toEqual(['routes-not-db']);

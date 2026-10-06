@@ -25,6 +25,7 @@ test.describe('Settings → Architecture rules', () => {
   test('a rule written for the team says what already breaks it, and is stopped', async ({ page }) => {
     const rules: Array<Record<string, unknown>> = [];
     const puts: Array<{ id: string; body: Record<string, unknown> }> = [];
+    const deletes: Array<string | null> = [];
     await page.route((url) => url.pathname.startsWith('/api/rules'), async (route) => {
       const req = route.request();
       const { pathname } = new URL(req.url());
@@ -41,6 +42,13 @@ test.describe('Settings → Architecture rules', () => {
         });
       }
       const id = decodeURIComponent(pathname.split('/')[3] ?? '');
+      // R3: the preview, before anything is written.
+      if (req.method() === 'POST' && pathname.endsWith('/preview')) {
+        const body = req.postDataJSON() as Record<string, unknown>;
+        return route.fulfill({ json: body.remove
+          ? { change: { effect: 'loosens', allowed: [{ from: 'web/legacy/report.ts', to: 'db/client.ts' }] }, words: `✗ This change removes the rule “web/ may not import db/” (${id}): 1 import it forbade become allowed. Loosening a rule needs a person's approval in the app.`, needsConfirm: true }
+          : { change: { effect: 'tightens', allowed: [] }, words: '⚠ This change adds the rule', needsConfirm: false } });
+      }
       if (req.method() === 'PUT') {
         const body = req.postDataJSON() as Record<string, unknown>;
         puts.push({ id, body });
@@ -48,6 +56,7 @@ test.describe('Settings → Architecture rules', () => {
         return route.fulfill({ json: { rule: rules.at(-1) } });
       }
       if (req.method() === 'DELETE') {
+        deletes.push(new URL(req.url()).searchParams.get('confirm'));
         rules.splice(rules.findIndex((r) => r.id === id), 1);
         return route.fulfill({ json: { removed: id } });
       }
@@ -83,8 +92,19 @@ test.describe('Settings → Architecture rules', () => {
     await expect(section.getByTestId('rule-from')).toHaveValue('');
     await section.getByTestId('rules-list').screenshot({ path: path.join(OUT, 'rules-settings-rule.png') });
 
+    // R3: stopping it loosens it, so the app shows what that allows and waits.
     await section.getByTestId('rule-stop').click();
+    const panel = section.getByTestId('rule-confirm-panel');
+    await expect(panel.getByTestId('rule-confirm-words')).toHaveText('✗ This change removes the rule “web/ may not import db/” (web-not-db): 1 import it forbade become allowed. Loosening a rule needs a person\'s approval in the app.');
+    await panel.screenshot({ path: path.join(OUT, 'rules-settings-confirm-stop.png') });
+    await panel.getByTestId('rule-cancel').click();
+    await expect(panel).toHaveCount(0);
+    await expect(section.getByTestId('rule')).toHaveCount(1);
+    expect(deletes).toEqual([]);
+    await section.getByTestId('rule-stop').click();
+    await section.getByTestId('rule-confirm').click();
     await expect(section.getByTestId('rule')).toHaveCount(0);
+    expect(deletes).toEqual(['1']);
   });
 
   test('a rule the backend refuses says why', async ({ page }) => {

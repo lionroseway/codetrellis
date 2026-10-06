@@ -36,7 +36,7 @@ export interface RuleImport {
   strength: 'block' | 'warn';
 }
 export type { RuleChange } from './rule-changes';
-import type { RuleChange } from './rule-changes';
+import { changeWords, type RuleChange } from './rule-changes';
 
 /** The imports these changed files add across the rules, or null when they could not be read (injected). */
 export type RuleChecker = (files: readonly string[]) => RuleImport[] | null | Promise<RuleImport[] | null>;
@@ -103,7 +103,8 @@ export async function checkChanges(
   const said = [...notes];
 
   // The rulebook first (R2): a change that loosens a rule is the first thing a reviewer must see.
-  for (const c of rulebook) (c.effect === 'loosens' ? says : said).push(c.words);
+  // R3: a loosening a person approved, signed, is said and does not fail.
+  for (const c of rulebook) (c.effect === 'loosens' && !c.approval?.ok ? says : said).push(changeWords(c));
 
   const breakpoints: HeldFile[] = [];
   const code = listBreakpoints().filter((b) => b.kind === 'code' && b.projectRoot === root);
