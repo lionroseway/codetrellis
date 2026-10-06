@@ -18,8 +18,8 @@ import { listWorktreesAsync, type Worktree } from './worktree-service';
 import { getActiveSessions } from './session-service';
 import { getIntent } from './intent-service';
 import { getChanges, isWatchedFolder, syncWorkstreamWatchers, watchRefs } from './workstream-watch-service';
-import { withSymbolChanges, type SymbolParser } from './workstream-symbols';
-import { branchWorkstreamsOf, showAtAsync } from './branch-workstreams';
+import { uncachedSymbolFiles, withSymbolChanges, type SymbolParser } from './workstream-symbols';
+import { branchWorkstreamsOf, notifyBranchesWarmed, showAtAsync } from './branch-workstreams';
 import { getEffectiveSensorConfig } from './project-config-service';
 import { listTrustedRoots } from './trusted-roots';
 import { gitAsync } from './git-env';
@@ -308,7 +308,27 @@ async function branchWorkstreams(repo: string, mainBranch: string | null, mainRe
   }
   const checkedOut = new Set(worktrees.map((w) => w.branch).filter((b): b is string => !!b));
   const out: Workstream[] = [];
+  // Symbols are parsed inside a budget too (Phase 33 0.1). The branches'
+  // own listing has one (HD4b), but every branch's changed files were then
+  // parsed before answering: twenty branches of forty files each made the
+  // window's first read of awareness take 7 s, and over 10 s under load.
+  // A branch whose files would overrun the budget is listed with what is
+  // parsed so far, and the rest are parsed in the background; the window is
+  // told when they are ready, as for the branches themselves.
+  let symbolBudget = INLINE_SYMBOL_FILES;
+  const later: Array<{ changes: WorkstreamChanges; atCommit: { head: string; read: (rel: string) => Promise<string | null> } }> = [];
   for (const b of await branchWorkstreamsOf(repo, { mainBranch, mainRef, checkedOut, windowDays })) {
+    const atCommit = { head: b.head, read: (rel: string) => showAtAsync(repo, b.head, rel) };
+    let changes = b.changes;
+    if (symbolParser) {
+      const pending = uncachedSymbolFiles(repo, b.changes, atCommit);
+      if (pending <= symbolBudget) {
+        symbolBudget -= pending;
+        changes = await withSymbolChanges(repo, b.changes, symbolParser, atCommit);
+      } else {
+        later.push({ changes: b.changes, atCommit });
+      }
+    }
     out.push({
       root: `branch:${b.short}`,
       ref: b.ref,
@@ -317,13 +337,35 @@ async function branchWorkstreams(repo: string, mainBranch: string | null, mainRe
       main: false,
       shape: 'branch' as const,
       agents: [],
-      changes: symbolParser
-        ? await withSymbolChanges(repo, b.changes, symbolParser, { head: b.head, read: (rel) => showAtAsync(repo, b.head, rel) })
-        : b.changes,
+      changes,
       idle: b.changes.files.length === 0,
     });
   }
+  warmBranchSymbols(repo, later);
   return out;
+}
+
+/** Changed files one listing parses for branch workstreams before it answers. */
+export const INLINE_SYMBOL_FILES = 60;
+const symbolWarming = new Map<string, Promise<void>>();
+
+/** Settles when no branch's symbols are being parsed for `repo` (tests). */
+export function branchSymbolsWarmed(repo: string): Promise<void> {
+  return symbolWarming.get(repo) ?? Promise.resolve();
+}
+
+function warmBranchSymbols(repo: string, jobs: Array<{ changes: WorkstreamChanges; atCommit: { head: string; read: (rel: string) => Promise<string | null> } }>): void {
+  if (!symbolParser || jobs.length === 0 || symbolWarming.has(repo)) return;
+  const parse = symbolParser;
+  const run = (async () => {
+    // One branch after another: parsing shares the backend's thread, and
+    // withSymbolChanges already yields after each file.
+    for (const j of jobs) await withSymbolChanges(repo, j.changes, parse, j.atCommit).catch(() => undefined);
+  })().finally(() => {
+    symbolWarming.delete(repo);
+    notifyBranchesWarmed(repo);
+  });
+  symbolWarming.set(repo, run);
 }
 
 const canonicalPath = (p: string): string => {
