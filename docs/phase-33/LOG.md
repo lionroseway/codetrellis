@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | C1 Scoped checks: a suite, a rule or a path |
-| **Status** | R3 merged (#360): change control is in. C1 in review: check one suite, named rules, or the rules about a path, on the CLI, over MCP and REST. Built ahead: R9, R6 and R7 (call rules: only the clients may call api.stripe.com) |
-| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
-| **Last merged** | R3 (#360, `e3d04b8`) |
-| **Next action** | Merge C1, then C2 (SARIF and CI recipes), C3 (the debt ratchet), 0.3 |
+| **Stage / step** | C2 SARIF and recipes for any CI host |
+| **Status** | C1 merged (#361): scoped checks are in. C2 in review: the check as SARIF 2.1.0 on the changed lines, and recipes for GitHub, GitLab, Azure, Bitbucket and Jenkins. Built ahead: R9, R6, R7 and R8 (folder rules) |
+| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
+| **Last merged** | C1 (#361, `f7dc55a`) |
+| **Next action** | Merge C2, then C3 (the debt ratchet), 0.3, G6 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-06 |
 
-> Read from git at `origin/feat/phase-33` `e3d04b8`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `f7dc55a`, with open PRs from GitHub.
 
 ---
 
@@ -61,11 +61,11 @@
 - [ ] R5 Package rules across all eleven languages (only the wrapper imports `stripe`) — building
 - [ ] R6 Symbol rules (who may import a named export, through re-exports) — building
 - [ ] R7 Call rules (HTTP hosts, commands, tables, env) — building
-- [ ] R8 Folder rules (what files in a folder are)
+- [ ] R8 Folder rules (what files in a folder are) — building
 - [ ] R9 Guide rules in scope (the brief, `get_brief`, drift names the rule) — building
 
 ### Track C: checks anywhere
-- [ ] C1 Scoped checks (`--suite`, `--rule`, `--path`; MCP and REST alike) — building
+- [x] C1 Scoped checks (`--suite`, `--rule`, `--path`; MCP and REST alike) (#361)
 - [ ] C2 SARIF output, host-neutral; recipes are examples for any CI (no host first) — building
 - [ ] C3 Debt ratchet (existing breaches may only fall) — building
 - [ ] C4 Agent checks locally on the user's own agent: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes)
@@ -202,6 +202,25 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-06 — C1 merged (#361); C2 in review; R8 built
+
+- **C1 merged** (#361), green on every CI job.
+- **C2: the check as SARIF, and recipes for any CI host.** `codetrellis
+  check --format sarif` writes each finding at its line (a rule's breach at
+  its import): an error at block, a warning at warn, an approved loosening a
+  note, validated against the SARIF 2.1.0 schema vendored under
+  `tools/sarif/`. No host comes first: `docs/recipes/check.sh` is the whole
+  job, and the GitLab, Azure, Bitbucket and Jenkins recipes only call it.
+  This repository's CI uploads its own SARIF to code scanning (the upload
+  cannot fail the job; the words step decides it).
+- **R8 built: folder rules.** `kind: folder` says what a folder's files are
+  (named `*-service.ts`, of kinds, one export each) with a `guide` that is
+  shown and never checked. This repository's own services convention is
+  written and checked in a unit test. The gate judges the files a change adds
+  or renames; old ones are the rule's debt. Rule signals for the newer kinds
+  now say what the file does ("src/api.ts calls api.stripe.com/v1/charges")
+  instead of "imports npm:stripe from **".
 
 ### 2026-10-06 — R3 merged (#360); C1 in review; R7 built
 

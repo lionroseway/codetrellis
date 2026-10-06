@@ -114,6 +114,10 @@ jobs:
   desktop:
     name: Desktop (typecheck + build)
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    permissions:
+      contents: read
+      # Phase 33 C2: the conformity check's SARIF, shown on the changed lines.
+      security-events: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -189,12 +193,24 @@ jobs:
       # this pull request's change does not conform: a changed file whose
       # tests fail or are older than the code, a done task whose criterion
       # check fails, or a system doc describing a changed file gone stale.
+      # Phase 33 C2: also as SARIF, uploaded below so GitHub shows each
+      # finding on the line it is about. The words step decides the job.
       - name: CodeTrellis conformity
         if: github.event_name == 'pull_request' && always() && steps.unit.outcome != 'skipped'
         run: |
           node bin/codetrellis.mjs start --quiet
           node bin/codetrellis.mjs report-tests test-results/unit.xml
+          node bin/codetrellis.mjs check --format sarif > codetrellis.sarif || true
           node bin/codetrellis.mjs check
+
+      - name: Upload the conformity SARIF
+        # A fork's pull request has no write token: the check above still gates it.
+        if: github.event_name == 'pull_request' && always() && hashFiles('codetrellis.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: codetrellis.sarif
+          category: codetrellis
 
       - name: Stop CodeTrellis
         if: always()

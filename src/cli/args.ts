@@ -152,6 +152,7 @@ which; text, or --json):
                                                done task fails its checks, a doc describing it is stale,
                                                it adds an import a rule at block forbids, or it loosens a
                                                rule; a rule at warn is said and passes (--strict: it fails)
+  codetrellis check --format sarif             the same, as SARIF 2.1.0 for any CI host (or text, json)
   codetrellis check --suite <s> | --rule <id> | --path <p>
                                                only those rules (comma-separated): one suite's, named
                                                rules, or the rules about a path

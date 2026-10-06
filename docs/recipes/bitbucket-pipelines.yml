@@ -1,0 +1,15 @@
+# CodeTrellis in Bitbucket Pipelines (Phase 33 C2): a step for bitbucket-pipelines.yml.
+# check.sh does the work and keeps the SARIF as an artifact.
+pipelines:
+  pull-requests:
+    '**':
+      - step:
+          name: CodeTrellis conformity
+          image: node:26
+          clone:
+            depth: full
+          script:
+            - export CODETRELLIS_JUNIT=test-results/junit.xml
+            - sh docs/recipes/check.sh
+          artifacts:
+            - codetrellis.sarif
