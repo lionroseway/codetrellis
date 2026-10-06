@@ -177,8 +177,18 @@ export function edgesIfLoaded(
   // Files importing files, then files importing outside packages (R5), which
   // only package rules read, then the named exports symbol rules name (R6).
   const rules = [...rulesOf(projectRoot), ...alsoRules];
-  return [...edges(), ...packages(), ...symbolEdgesOfGraph(projectRoot, rules), ...callEdgesOfGraph(rules)]
+  return [...edges(), ...packages(), ...symbolEdgesOfGraph(projectRoot, rules), ...callEdgesOfGraph(rules), ...fileFactsOfGraph(rules)]
     .map((e) => ({ from: e.sourceRelative, to: e.targetRelative }));
+}
+
+/** Each scanned file's own fact (R8), when a folder rule would read them. */
+function fileFactsOfGraph(rules: readonly ArchitectureRule[]): Array<{ sourceRelative: string; targetRelative: string }> {
+  if (!rules.some((r) => r.kind === 'folder')) return [];
+  try {
+    return (require('./database') as typeof import('./database')).getFileFacts();
+  } catch {
+    return [];
+  }
 }
 
 /** The calls the scanned code makes (R7), when a call rule would read them. */

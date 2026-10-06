@@ -123,7 +123,7 @@ test('a symbol rule is refused without a file and a name, without who may, with 
   assert.match(problems({ symbol: '../a.ts#b', only: ['a/'] }), /climb out/);
   assert.match(problems({ symbol: 'a.ts#b' }), /only must list/);
   assert.match(problems({ symbol: 'a.ts#b', only: ['a/'], except: ['c.ts'] }), /no except/);
-  assert.match(parseArchitectureRule({ id: 'x', kind: 'nonsense' }).problems.join(' '), /imports, package, symbol or calls/);
+  assert.match(parseArchitectureRule({ id: 'x', kind: 'nonsense' }).problems.join(' '), /imports, package, symbol, calls or folder/);
 });
 
 test('only the named files may import the export, directly, through a barrel or as a namespace; the module that defines it may', () => {

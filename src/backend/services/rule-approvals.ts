@@ -50,12 +50,14 @@ const COMMIT = /^[0-9a-f]{40}$/;
 export interface RuleTerms {
   from: string; mayNotImport: string; except: string[]; strength: RuleStrength;
   /** A package rule's (R5); absent for an imports rule, so approvals signed before R5 still read the same. */
-  kind?: 'package' | 'symbol' | 'calls'; only?: string[];
+  kind?: 'package' | 'symbol' | 'calls' | 'folder'; only?: string[];
+  files?: string[]; kinds?: string[]; exports?: 'one';
 }
 
 export function ruleTerms(r: ArchitectureRule | null | undefined): RuleTerms | null {
   if (!r) return null;
   const terms: RuleTerms = { from: r.from, mayNotImport: r.mayNotImport, except: [...r.except].sort(), strength: r.strength };
+  if (r.kind === 'folder') return { ...terms, kind: 'folder', files: [...(r.files ?? [])].sort(), kinds: [...(r.kinds ?? [])].sort(), ...(r.exports ? { exports: r.exports } : {}) };
   return r.kind === 'package' || r.kind === 'symbol' || r.kind === 'calls' ? { ...terms, kind: r.kind, only: [...(r.only ?? [])].sort() } : terms;
 }
 

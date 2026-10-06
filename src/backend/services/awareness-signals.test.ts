@@ -395,3 +395,14 @@ describe('rule (A7.2)', () => {
     assert.deepEqual([at('warn'), at('block'), at()], ['medium', 'high', 'high']);
   });
 });
+
+describe('rule signals in the check\'s words for every kind (Phase 33 R5–R8)', () => {
+  test('a package, call or folder rule says what the file now does, not "imports … from **"', () => {
+    const stripe = { id: 'stripe-via-wrapper', kind: 'package' as const, from: '**', mayNotImport: 'npm:stripe', only: ['src/pay.ts'], except: [], because: 'keys', strength: 'block' as const };
+    const d = computeSignals([ws('/r/billing', 'billing-v2', [file('src/api.ts')], { ruleBreaches: [{ rule: stripe, edges: [{ from: 'src/api.ts', to: 'npm:stripe' }] }] })]);
+    assert.equal(d[0].summary, '`billing-v2`: src/api.ts imports npm:stripe, which the rule “only src/pay.ts may import npm:stripe” forbids: keys');
+    const calls = { ...stripe, id: 'stripe-api', kind: 'calls' as const, mayNotImport: 'http:api.stripe.com' };
+    const c = computeSignals([ws('/r/billing', 'billing-v2', [file('src/api.ts')], { ruleBreaches: [{ rule: calls, edges: [{ from: 'src/api.ts', to: 'http:api.stripe.com/v1/charges' }] }] })]);
+    assert.match(c[0].summary, /^`billing-v2`: src\/api\.ts calls api\.stripe\.com\/v1\/charges, which the rule “only src\/pay\.ts may call api\.stripe\.com” forbids/);
+  });
+});

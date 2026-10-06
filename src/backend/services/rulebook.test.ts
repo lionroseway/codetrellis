@@ -173,3 +173,18 @@ test('a call rule is written the way a person writes one, and reads back the sam
   assert.match(text, /kind: calls\n\s+calls: http:api.stripe.com\n\s+only:\n\s+- src\/payments\//);
   assert.deepEqual(readRulebook(root).suites[0].rules[0], stripeApi);
 });
+
+test('a folder rule is written the way the design writes it, and reads back the same (R8)', () => {
+  const root = project();
+  const services: ArchitectureRule = {
+    id: 'services-are-services', kind: 'folder', from: 'src/backend/services/', mayNotImport: '', files: ['*-service.ts'], exports: 'one',
+    guide: 'One service per file, named for its domain; pure helpers go in lib/.',
+    except: [], because: '', since: '2026-10-06T00:00:00.000Z', by: '', strength: 'warn', suite: 'conventions',
+  };
+  writeSuite(root, 'conventions', [services]);
+  const text = fs.readFileSync(path.join(root, RULES_DIR, 'conventions.yaml'), 'utf-8');
+  assert.match(text, /kind: folder\n\s+folder: src\/backend\/services\/\n\s+files: "\*-service.ts"\n\s+exports: one/);
+  assert.match(text, /guide: One service per file/);
+  assert.doesNotMatch(text, /mayNotImport|from:/);
+  assert.deepEqual(readRulebook(root).suites[0].rules[0], services);
+});

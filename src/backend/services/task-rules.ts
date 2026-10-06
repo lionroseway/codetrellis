@@ -22,7 +22,8 @@ import { ruleCovers } from '../../shared/lib/rule-pattern';
 export interface TaskRules {
   /** The task's files, project-relative. */
   files: string[];
-  in_scope: Array<{ rule: string; suite: string; strength: string; words: string; because: string }>;
+  /** Each rule over its files, with a folder rule's guide (R8) where it has one. */
+  in_scope: Array<{ rule: string; suite: string; strength: string; words: string; because: string; guide?: string }>;
   /** What the latest check run found in the task's files, or null when no check has run. */
   latest_run: {
     id: string; who: string; ran_in: string; at: string;
@@ -63,7 +64,7 @@ export function taskRules(item: Pick<PlanItem, 'fileSpecs' | 'scopePath'>, proje
     // The rules that judge its files: an imports rule over them; a package or
     // symbol rule over the files of its own language (npm:stripe is not about a .py file).
     .filter((r) => files.some((f) => inPattern(r.from, f) && (r.kind !== 'package' && r.kind !== 'symbol' && r.kind !== 'calls' ? true : ruleCovers(r, f))))
-    .map((r) => ({ rule: r.id, suite: r.suite ?? 'architecture', strength: r.strength, words: ruleStatement(r), because: r.because }));
+    .map((r) => ({ rule: r.id, suite: r.suite ?? 'architecture', strength: r.strength, words: ruleStatement(r), because: r.because, ...(r.guide ? { guide: r.guide } : {}) }));
   const open = openFindings(listCheckRuns(projectRoot), files);
   const latest_run = open && {
     id: open.run.id, who: open.run.who, ran_in: open.run.ranIn, at: new Date(open.run.at).toISOString(),

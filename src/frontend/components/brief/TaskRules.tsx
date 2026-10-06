@@ -7,7 +7,7 @@ import { reachWords } from '../../../shared/lib/check-words';
 
 interface TaskRulesBody {
   files: string[];
-  in_scope: Array<{ rule: string; suite: string; strength: string; words: string; because: string }>;
+  in_scope: Array<{ rule: string; suite: string; strength: string; words: string; because: string; guide?: string }>;
   latest_run: {
     id: string; who: string; ran_in: string; at: string;
     findings: Array<{ rule: string; path: string; imports: string; failing: boolean; words: string; fix: string | null }>;
@@ -79,7 +79,10 @@ export function TaskRules({ taskUid }: { taskUid: string }) {
           {body.in_scope.map((r) => (
             <li key={r.rule} className="flex items-baseline gap-2" data-testid="brief-rule">
               <span className="text-foreground-subtle shrink-0" title={r.strength}>{STRENGTH_GLYPH[r.strength] ?? ''} {r.strength}</span>
-              <span className="text-foreground min-w-0">{r.words}{r.because && <span className="text-foreground-subtle">: {r.because}</span>}</span>
+              <span className="text-foreground min-w-0">
+                {r.words}{r.because && <span className="text-foreground-subtle">: {r.because}</span>}
+                {r.guide && <span className="block text-foreground-muted" data-testid="brief-rule-guide">{r.guide}</span>}
+              </span>
             </li>
           ))}
         </ul>

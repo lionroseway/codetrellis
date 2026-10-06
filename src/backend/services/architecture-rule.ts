@@ -9,6 +9,7 @@ import { RULE_STRENGTHS, type ArchitectureRule, type RuleBreach, type RuleStreng
 import { isPackageEntry, packageMatches, packageProblem } from '../../shared/lib/package-entry';
 import { isSymbolEntry, splitSymbol, symbolMatches, symbolProblem } from '../../shared/lib/symbol-entry';
 import { callMatches, callProblem, callWords, isCallEntry, normaliseCall } from '../../shared/lib/call-entry';
+import { folderProblem, folderWords, isFileFact } from '../../shared/lib/folder-entry';
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const MAX_BECAUSE = 200;
@@ -28,8 +29,9 @@ export function parseArchitectureRule(raw: unknown): { rule: ArchitectureRule | 
   if (r.kind === 'package') return parsePackageRule(r);
   if (r.kind === 'symbol') return parseSymbolRule(r);
   if (r.kind === 'calls') return parseCallRule(r);
+  if (r.kind === 'folder') return parseFolderRule(r);
   const problems: string[] = [];
-  if (r.kind !== undefined && r.kind !== 'imports') problems.push('kind must be imports, package, symbol or calls');
+  if (r.kind !== undefined && r.kind !== 'imports') problems.push('kind must be imports, package, symbol, calls or folder');
   if (typeof r.id !== 'string' || !ID_RE.test(r.id)) problems.push('id must be a short slug, like web-not-db');
   const fromProblem = patternProblem('from', r.from);
   if (fromProblem) problems.push(fromProblem);
@@ -169,6 +171,46 @@ function parseCallRule(r: Record<string, unknown>): { rule: ArchitectureRule | n
   };
 }
 
+const MAX_GUIDE = 1000;
+
+/**
+ * A folder rule (Phase 33 R8): `folder` and what its files are: named to
+ * `files` (a pattern or a list), of `kinds` (extensions), and `exports: one`.
+ * `guide` is the judgement half, in prose, never checked.
+ */
+function parseFolderRule(r: Record<string, unknown>): { rule: ArchitectureRule | null; problems: string[] } {
+  const problems: string[] = [];
+  if (typeof r.id !== 'string' || !ID_RE.test(r.id)) problems.push('id must be a short slug, like services-are-services');
+  const folder = r.folder ?? r.from;
+  const folderProblemWords = patternProblem('folder', folder);
+  if (folderProblemWords) problems.push(folderProblemWords);
+  const list = (v: unknown): string[] | null => (v === undefined ? [] : typeof v === 'string' ? [v] : Array.isArray(v) && v.every((x) => typeof x === 'string') ? v as string[] : null);
+  const files = list(r.files);
+  if (files === null || files.some((f) => !f.trim() || f.includes('/'))) problems.push('files must be name patterns, like *-service.ts');
+  const kinds = list(r.kinds);
+  if (kinds === null || kinds.some((k) => !/^[a-z0-9]+$/i.test(k.replace(/^\./, '')))) problems.push('kinds must be file extensions, like ts');
+  if (r.exports !== undefined && r.exports !== 'one') problems.push('exports may only be one');
+  if (!problems.length && (files ?? []).length === 0 && (kinds ?? []).length === 0 && r.exports === undefined) problems.push('a folder rule says what its files are: files, kinds or exports');
+  if (r.guide !== undefined && (typeof r.guide !== 'string' || r.guide.length > MAX_GUIDE)) problems.push(`guide must be words, at most ${MAX_GUIDE} characters`);
+  commonProblems(r, problems);
+  if (problems.length > 0) return { rule: null, problems };
+  return {
+    rule: {
+      id: r.id as string,
+      kind: 'folder',
+      from: normalise(folder as string),
+      mayNotImport: '',
+      ...(files!.length ? { files: files!.map((f) => f.trim()) } : {}),
+      ...(kinds!.length ? { kinds: kinds!.map((k) => k.replace(/^\./, '').toLowerCase()) } : {}),
+      ...(r.exports === 'one' ? { exports: 'one' as const } : {}),
+      ...(typeof r.guide === 'string' && r.guide.trim() ? { guide: r.guide.trim() } : {}),
+      except: [],
+      ...common(r),
+    },
+    problems: [],
+  };
+}
+
 function commonProblems(r: Record<string, unknown>, problems: string[]): void {
   if (r.because !== undefined && (typeof r.because !== 'string' || r.because.length > MAX_BECAUSE)) problems.push(`because must be words, at most ${MAX_BECAUSE} characters`);
   if (r.strength !== undefined && !RULE_STRENGTHS.includes(r.strength as RuleStrength)) problems.push('strength must be block, warn or guide');
@@ -221,13 +263,17 @@ export function breaks(rule: ArchitectureRule, from: string, to: string): boolea
     if (from === splitSymbol(rule.mayNotImport)!.file) return false;
     return inPattern(rule.from, from) && !(rule.only ?? []).some((o) => inPattern(o, from));
   }
+  if (rule.kind === 'folder') {
+    // R8: `to` is a file's own fact; the rule judges the files in its folder.
+    return isFileFact(to) && inPattern(rule.from, from) && folderProblem(rule, to) !== null;
+  }
   if (rule.kind === 'calls') {
     // R7: `to` is a call the code makes; only the rule's own files may make it.
     if (!isCallEntry(to) || !callMatches(rule.mayNotImport, to)) return false;
     return inPattern(rule.from, from) && !(rule.only ?? []).some((o) => inPattern(o, from));
   }
-  // An outside package, a named export or a call is no file in a folder.
-  if (isPackageEntry(to) || isSymbolEntry(to) || isCallEntry(to)) return false;
+  // An outside package, a named export, a call or a file's fact is no file in a folder.
+  if (isPackageEntry(to) || isSymbolEntry(to) || isCallEntry(to) || isFileFact(to)) return false;
   if (!inPattern(rule.from, from) || inPattern(rule.mayNotImport, from)) return false;
   if (!inPattern(rule.mayNotImport, to)) return false;
   return !rule.except.some((e) => inPattern(e, to));
@@ -238,7 +284,11 @@ export function checkEdges(rules: ArchitectureRule[], edges: Array<{ from: strin
   const out: RuleBreach[] = [];
   for (const rule of rules) {
     if (rule.strength === 'guide') continue;
-    for (const e of edges) if (breaks(rule, e.from, e.to)) out.push({ rule: rule.id, from: e.from, to: e.to });
+    for (const e of edges) {
+      if (!breaks(rule, e.from, e.to)) continue;
+      // R8: a folder rule's breach says what is wrong with the file.
+      out.push({ rule: rule.id, from: e.from, to: rule.kind === 'folder' ? `folder:${folderProblem(rule, e.to)}` : e.to });
+    }
   }
   return out;
 }
@@ -249,12 +299,13 @@ export function checkEdges(rules: ArchitectureRule[], edges: Array<{ from: strin
  * "only src/payments/index.ts may import npm:stripe" ("in src/, only …"
  * when it applies to a folder).
  */
-export function ruleStatement(rule: Pick<ArchitectureRule, 'kind' | 'from' | 'mayNotImport' | 'except' | 'only'>): string {
+export function ruleStatement(rule: Pick<ArchitectureRule, 'kind' | 'from' | 'mayNotImport' | 'except' | 'only'> & Partial<Pick<ArchitectureRule, 'files' | 'kinds' | 'exports'>>): string {
   const except = rule.except.length > 0 ? ` (except ${rule.except.join(', ')})` : '';
   if (rule.kind === 'package') {
     const where = rule.from && rule.from !== '**' ? `in ${rule.from}, ` : '';
     return `${where}only ${(rule.only ?? []).join(', ')} may import ${rule.mayNotImport}${except}`;
   }
+  if (rule.kind === 'folder') return folderWords(rule.from, rule);
   if (rule.kind === 'calls') {
     const where = rule.from && rule.from !== '**' ? `in ${rule.from}, ` : '';
     return `${where}only ${(rule.only ?? []).join(', ')} may ${rule.mayNotImport.startsWith('sql:') ? 'use' : 'call'} ${callWords(rule.mayNotImport)}`;
