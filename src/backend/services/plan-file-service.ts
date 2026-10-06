@@ -64,7 +64,7 @@ import type {
  * and need their own writes ignored by the same watcher.
  */
 import { stampSelfWrite, wasJustWrittenByUs } from './self-write-tracker';
-import { burst, type Burst } from './burst';
+import { burst, type Burst } from '../../shared/lib/burst';
 import { getEffectiveDefaultVisibility } from './project-config-service';
 import { getPlansFolder, plansHome, PlansFolderError, projectOfPlansHome } from './plans-home';
 import { heldByAnotherCheckout } from './checkout-identity';

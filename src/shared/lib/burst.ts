@@ -1,5 +1,7 @@
 /**
  * Phase 33 S1 — a burst of changes is handled once (design §6.1, principle 7).
+ * Shared: the backend gathers a plan's file changes with it (S1), the window
+ * its plan-imported broadcasts (S2).
  *
  * Things that arrive in a burst (a `git pull` touching 40 files of one plan)
  * are gathered per key and handed over together: once nothing new has
