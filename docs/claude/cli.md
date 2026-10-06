@@ -287,6 +287,19 @@ signed as every record is, and a device removes its own older ones.
 app lists the job's run beside the person's own, unverified until they
 trust the job's key. Turned off, teammates' runs are forgotten here.
 
+## The Checks view (Phase 33 G9)
+
+The same check runs from the app: the Rules view's **Checks** tab picks a
+scope (everything, a suite, a rule, or a path) and a base, and **Run check**
+calls `POST /api/check-runs` (`{base?, suite?, rule?, path?, strict?}`). That
+is `check_changes`'s own code (`services/change-check.ts`), so the app, an
+agent and `codetrellis check` cannot disagree; the run is kept saying it ran
+in "the app". The tab lists every run, the app's, the terminal's, agents' and
+CI's once pulled, filterable to failing, mine or CI. A run opens into its
+findings in the one renderer's words, each with its fix, a link to the file on
+the graph and to its code; two runs compare into what is new, what was fixed
+and what is unchanged.
+
 ## Test runs that travel (D1.5a)
 
 With task state shared, each new run reported (`report-tests`) is also

@@ -12,53 +12,14 @@
  * the plan changing is not a change to conform.
  */
 
-import { execFileSync } from 'node:child_process';
 import type { Agent } from './agent';
 import { renderMarkdown, renderText, type CheckResult, type CheckedRule, type RuleFinding, type RulebookFinding } from '../shared/lib/check-words';
 import { importLine } from './sarif';
 
-const git = (root: string, args: string[]): string | null => {
-  try {
-    return execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-  } catch {
-    return null;
-  }
-};
-const lines = (s: string | null) => (s ?? '').split('\n').map((x) => x.trim()).filter(Boolean);
-
-/** The ref this work branched from, by the order above, or null. */
-export function baseRef(root: string, given: string | undefined, env: NodeJS.ProcessEnv): string | null {
-  const exists = (ref: string) => git(root, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]) !== null;
-  if (given) return exists(given) ? given : null;
-  if (env.GITHUB_BASE_REF && exists(`origin/${env.GITHUB_BASE_REF}`)) return `origin/${env.GITHUB_BASE_REF}`;
-  const head = git(root, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'])?.trim();
-  if (head && exists(head)) return head;
-  for (const ref of ['origin/main', 'origin/master']) if (exists(ref)) return ref;
-  return null;
-}
-
-export interface Changed {
-  base: string | null;
-  since: string | null;
-  files: string[];
-  /** The rules changed too (a suite file, or the config that held rules before Phase 33 R1): checked even with no other file. */
-  rulebook: boolean;
-}
-
-/** Files this work changed: since the base's merge base, and not committed yet. */
-export function changedFiles(root: string, given: string | undefined, env: NodeJS.ProcessEnv): Changed {
-  if (given && baseRef(root, given, env) === null) throw new Error(`${given} is not a commit in this repository (a shallow clone? use fetch-depth: 0)`);
-  const base = baseRef(root, given, env);
-  const since = base ? git(root, ['merge-base', base, 'HEAD'])?.trim() || null : null;
-  const out = new Set<string>([
-    ...(since ? lines(git(root, ['diff', '--name-only', since, 'HEAD'])) : []),
-    ...lines(git(root, ['diff', '--name-only', 'HEAD'])),
-    ...lines(git(root, ['ls-files', '--others', '--exclude-standard'])),
-  ]);
-  const files = [...out].filter((f) => !f.startsWith('.codetrellis/')).sort();
-  const rulebook = [...out].some((f) => f.startsWith('.codetrellis/rules/') || f === '.codetrellis/config.json');
-  return { base, since, files, rulebook };
-}
+// The work's changed files, since its base: one implementation, the backend's,
+// so the Checks view (G9) and the pipeline check the same files.
+export { baseRef, changedFiles, type Changed } from '../backend/services/work-changes';
+import type { Changed } from '../backend/services/work-changes';
 
 export interface Gate {
   ok: boolean;

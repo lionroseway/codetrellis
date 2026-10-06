@@ -99,6 +99,8 @@ import { lastMark, markReviewed, sinceLastLook } from './services/review-marks';
 import { taskMarkdown, taskOutcome } from './services/review-task';
 import { inScope, parseScope, scopeWords } from './services/rule-scope';
 import { getCheckRun, listCheckRuns } from './services/check-runs';
+import { checkTheChange } from './services/change-check';
+import { changedFiles } from './services/work-changes';
 import { debtByRule, ruleHistory, suiteSummaries } from './services/rules-overview';
 import { decideRuleProposal, getRuleProposal, listRuleProposals } from './services/rule-proposals';
 import { writerId as taskRecordWriterId } from './services/task-records/shared-state';
@@ -2891,6 +2893,28 @@ app.get('/api/check-runs', (req, res) => {
   if (!projectRoot) return;
   const limit = Number(req.query.limit ?? 50);
   res.json({ runs: listCheckRuns(projectRoot, Number.isFinite(limit) ? limit : 50) });
+});
+
+// Phase 33 G9 — run a check from the app: the same check `codetrellis check`
+// runs, over this work's changed files since its base, at any scope, kept
+// as a run like every other.
+app.post('/api/check-runs', async (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const given = typeof b.base === 'string' && b.base.trim() ? b.base.trim() : undefined;
+  if (given !== undefined && !isSafeGitRef(given)) { res.status(400).json({ error: 'base must be a commit or a branch name' }); return; }
+  let changed;
+  try { changed = changedFiles(projectRoot, given, {}); } catch (err) { res.status(400).json({ error: (err as Error).message }); return; }
+  const person = personFrom(req);
+  const r = await checkTheChange({
+    root: projectRoot, paths: changed.files.slice(0, 500), ...(changed.since ? { base: changed.since } : {}), strict: b.strict === true,
+    scope: { suite: b.suite, rule: b.rule, path: b.path },
+    by: person, ranIn: person.authorType === 'human' ? 'the app' : 'the local API',
+    activeProject: getActiveProjectPath(), checkCriterion: (uid) => criterionLoop.checkCriterion(uid),
+  });
+  if ('error' in r) { res.status(400).json({ error: r.error }); return; }
+  res.json({ ...r.result, base: changed.base });
 });
 
 app.get('/api/check-runs/:id', (req, res) => {
