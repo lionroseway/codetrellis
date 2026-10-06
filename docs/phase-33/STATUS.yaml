@@ -17,8 +17,8 @@
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
   step: "Merging the built steps, in order"
-  status: "G5 in review (a file's plans in the inspector); G6 merged (#365); C5, C6 and Z1 built"
-  next: "Merge G5 when CI is green, then replay G3"
+  status: "G3 in review (each kind of edge can be turned off); G5 merged (#366); the shard follow-up in review (#367)"
+  next: "Merge #367 and G3 when CI is green, then replay G4"
   blockers: "None"
   updated: 2026-10-06
 sections:
@@ -58,6 +58,8 @@ sections:
       - title: "Call rules read HTTP and SQL callsites; no extractor finds subprocess commands or environment variables yet, so those calls cannot be ruled on"
         followUp: true
       - title: "Rebalance the browser shards: chromium 2/3 runs 185 tests in about 25 minutes, the others about 7"
+        followUp: true
+      - title: "Four browser specs fail in a local clone with many fetched branches and pass in CI (evolution, play-forward, navigate_to Awareness, signal-to-lines): find why"
         followUp: true
   - title: "Stage 0: ground truth"
     goal: Numbers to measure against, the freeze measured, and every colour the app draws written down.
