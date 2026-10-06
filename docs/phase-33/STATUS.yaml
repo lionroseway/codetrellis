@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "C2 SARIF and recipes for any CI host"
-  status: "C1 merged (#361): scoped checks are in. C2 in review: the check as SARIF 2.1.0 on the changed lines, and recipes for GitHub, GitLab, Azure, Bitbucket and Jenkins. Built ahead: R9, R6, R7 and R8 (folder rules)"
-  next: "Merge C2, then C3 (the debt ratchet), 0.3, G6"
+  step: "Merging the built steps, in order"
+  status: "C3 in review (old breaches may only fall); C2 merged (#362); C4b built"
+  next: "Merge C3 when CI is green, then replay 0.3"
   blockers: "None"
   updated: 2026-10-06
 sections:

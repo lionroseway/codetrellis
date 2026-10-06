@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | C2 SARIF and recipes for any CI host |
-| **Status** | C1 merged (#361): scoped checks are in. C2 in review: the check as SARIF 2.1.0 on the changed lines, and recipes for GitHub, GitLab, Azure, Bitbucket and Jenkins. Built ahead: R9, R6, R7 and R8 (folder rules) |
-| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
-| **Last merged** | C1 (#361, `f7dc55a`) |
-| **Next action** | Merge C2, then C3 (the debt ratchet), 0.3, G6 |
+| **Stage / step** | Merging the built steps, in order |
+| **Status** | C3 in review (old breaches may only fall); C2 merged (#362); C4b built |
+| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C3 building on `feat/phase-33-c3-debt-ratchet`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
+| **Last merged** | C2 (#362, `10bf4d2`) |
+| **Next action** | Merge C3 when CI is green, then replay 0.3 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-06 |
 
-> Read from git at `origin/feat/phase-33` `f7dc55a`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `10bf4d2`, with open PRs from GitHub.
 
 ---
 
@@ -66,10 +66,10 @@
 
 ### Track C: checks anywhere
 - [x] C1 Scoped checks (`--suite`, `--rule`, `--path`; MCP and REST alike) (#361)
-- [ ] C2 SARIF output, host-neutral; recipes are examples for any CI (no host first) — building
+- [x] C2 SARIF output, host-neutral; recipes are examples for any CI (no host first) (#362)
 - [ ] C3 Debt ratchet (existing breaches may only fall) — building
 - [ ] C4 Agent checks locally on the user's own agent: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes)
-- [ ] C4b Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified)
+- [ ] C4b Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified) — building
 - [ ] C5 Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass)
 - [ ] C6 Graduation (a repeated finding proposes a rule)
 - [ ] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran — building
@@ -202,6 +202,24 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-06 — C2 merged (#362); C3 in review; C4b built
+
+- **C2 merged** (#362), green on every CI job.
+- **C3: old breaches may only fall.** `codetrellis rules baseline` writes
+  each rule's breaches today to `.codetrellis/rules/baseline.yaml`. With one
+  on the base, the check judges the whole tree against it: a breach it does
+  not list fails, a rule with fewer says so, and a change that adds an entry
+  for a rule the base already baselined fails. A baseline never excuses an
+  import the change adds.
+- **C4b built: your own agent reviews the change.** Claude Code (or any
+  client) asks `get_review_bundle` for the change as numbered lines, marked
+  as data, with the rules about it and what the check found, and reports
+  once with `report_review`. Code checks every citation against the lines
+  it was shown: a finding off the diff, misquoted, or naming a rule not in
+  scope is dropped with why, never shown. An instruction planted in the code
+  is reported as suspicious, not followed. The review is an advisory check
+  run, opened in the Checks view.
 
 ### 2026-10-06 — C1 merged (#361); C2 in review; R8 built
 
