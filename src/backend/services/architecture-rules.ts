@@ -33,11 +33,15 @@ export function rulesInConfig(projectRoot: string): ArchitectureRule[] {
   return getProjectConfig(projectRoot).rules ?? [];
 }
 
+/** The suites' rules, then any from the config whose id no suite uses. Pure. */
+export function combineRules(fromSuites: readonly ArchitectureRule[], fromConfig: readonly ArchitectureRule[]): ArchitectureRule[] {
+  const ids = new Set(fromSuites.map((r) => r.id));
+  return [...fromSuites, ...fromConfig.filter((r) => !ids.has(r.id))];
+}
+
 /** Every rule: the suites', then any still in the config whose id no suite uses. */
 export function rulesOf(projectRoot: string): ArchitectureRule[] {
-  const fromSuites = readRulebook(projectRoot).suites.flatMap((s) => s.rules);
-  const ids = new Set(fromSuites.map((r) => r.id));
-  return [...fromSuites, ...rulesInConfig(projectRoot).filter((r) => !ids.has(r.id))];
+  return combineRules(readRulebook(projectRoot).suites.flatMap((s) => s.rules), rulesInConfig(projectRoot));
 }
 
 /** Why a suite file or rule was not read, for the window to say. */

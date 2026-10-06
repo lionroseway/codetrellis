@@ -107,25 +107,15 @@ function suiteNames(projectRoot: string): string[] {
 
 const cache = new Map<string, { key: string; book: Rulebook }>();
 
-/** Every suite in the project, read fresh when any file changed since the last read. */
-export function readRulebook(projectRoot: string): Rulebook {
-  const names = suiteNames(projectRoot);
-  const stamps = names.map((n) => {
-    try { const st = fs.statSync(path.join(projectRoot, suiteFile(n))); return `${n}:${st.size}:${st.mtimeMs}`; } catch { return `${n}:?`; }
-  });
-  const key = stamps.join('|');
-  const hit = cache.get(projectRoot);
-  if (hit && hit.key === key) return hit.book;
-
+/**
+ * A rulebook from suite texts, by name: the folder's, or a commit's (R2).
+ * Pure. An id two suites share is kept in the first, with why.
+ */
+export function rulebookFrom(files: ReadonlyArray<{ name: string; text: string }>): Rulebook {
   const suites: Suite[] = [];
   const problems: string[] = [];
   const ids = new Map<string, string>(); // rule id → the suite that has it
-  for (const name of names) {
-    let text: string;
-    try { text = readTextWithin(projectRoot, suiteFile(name), 'rule suite'); } catch (err) {
-      problems.push(`${suiteFile(name)} could not be read: ${(err as Error).message}`);
-      continue;
-    }
+  for (const { name, text } of [...files].sort((a, b) => a.name.localeCompare(b.name))) {
     const parsed = parseSuite(name, text);
     problems.push(...parsed.problems);
     if (!parsed.suite) continue;
@@ -137,7 +127,28 @@ export function readRulebook(projectRoot: string): Rulebook {
     });
     suites.push({ ...parsed.suite, rules: kept });
   }
-  const book = { suites, problems };
+  return { suites, problems };
+}
+
+/** Every suite in the project, read fresh when any file changed since the last read. */
+export function readRulebook(projectRoot: string): Rulebook {
+  const names = suiteNames(projectRoot);
+  const stamps = names.map((n) => {
+    try { const st = fs.statSync(path.join(projectRoot, suiteFile(n))); return `${n}:${st.size}:${st.mtimeMs}`; } catch { return `${n}:?`; }
+  });
+  const key = stamps.join('|');
+  const hit = cache.get(projectRoot);
+  if (hit && hit.key === key) return hit.book;
+
+  const files: Array<{ name: string; text: string }> = [];
+  const unread: string[] = [];
+  for (const name of names) {
+    try { files.push({ name, text: readTextWithin(projectRoot, suiteFile(name), 'rule suite') }); } catch (err) {
+      unread.push(`${suiteFile(name)} could not be read: ${(err as Error).message}`);
+    }
+  }
+  const read = rulebookFrom(files);
+  const book = { suites: read.suites, problems: [...unread, ...read.problems] };
   cache.set(projectRoot, { key, book });
   return book;
 }

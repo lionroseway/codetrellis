@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | R1 Rules live in .codetrellis/rules/*.yaml |
-| **Status** | S3 merged (#354): Track S is done; the owner's Mac run with a real git pull is still to do. A new MCP SDK advisory (GHSA-6qxp-vccf-f47h) failed every branch's audit: fixed in S3 and in main (#355). R1 in review: rules in committed suite files, the Phase 32 config rules still counting until a person moves them |
-| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; R1 building on `feat/phase-33-r1-rule-files`; R2 building on `feat/phase-33-r2-base-rules`; R3 building on `feat/phase-33-r3-change-control`; R4 building on `feat/phase-33-r4-strength`; R5 building on `feat/phase-33-r5-package-rules`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
-| **Last merged** | S3 (#354, `775917e`) |
-| **Next action** | Merge R1, then R2 (CI judges with the base branch's rules), R4 and R3 |
+| **Stage / step** | R2 CI judges a change with its base branch's rules |
+| **Status** | R1 merged (#356): rules live in committed suite files. The MCP SDK fix is in main (#355). R2 in review: the gate reads the rules at its base, so a pull request that deletes a rule and adds the import it forbade fails, saying it loosens the rule |
+| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; R2 building on `feat/phase-33-r2-base-rules`; R3 building on `feat/phase-33-r3-change-control`; R4 building on `feat/phase-33-r4-strength`; R5 building on `feat/phase-33-r5-package-rules`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
+| **Last merged** | R1 (#356, `e739aff`) |
+| **Next action** | Merge R2, then R4 (strength: block, warn, guide) and R3 (change control) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-06 |
 
-> Read from git at `origin/feat/phase-33` `775917e`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `e739aff`, with open PRs from GitHub.
 
 ---
 
@@ -51,7 +51,7 @@
 - [x] S3 Under load end to end (200 files, 5 plans; the owner's real `git pull`) (#354)
 
 ### Track R: the rulebook
-- [ ] R1 Rules live in `.codetrellis/rules/<suite>.yaml` (moved from config.json by a person's confirm) — building
+- [x] R1 Rules live in `.codetrellis/rules/<suite>.yaml` (moved from config.json by a person's confirm) (#356)
 - [ ] R2 CI judges with the base branch's rules; a rulebook change is its own finding — building
 - [ ] R3 Change control: preview the effect, a person confirms, loosening is signed, `propose_rule` for agents — building
 - [ ] R4 Strength: block, warn, guide (exit codes, `--strict`, signals) — building
@@ -81,8 +81,8 @@
 - [ ] G6 Opening a plan always shows it, from a chip too — building
 - [ ] G7 The Rules view (its own workspace, not Settings) — building
 - [ ] G8 Rules on the graph (breaches drawn, rules for the selected file) — building
-- [ ] G9 The Checks view (run any check from the app, CI runs beside local ones, compare runs)
-- [ ] G10 Findings where the code is (graph, code gutter, inspector, brief, phone)
+- [ ] G9 The Checks view (run any check from the app, CI runs beside local ones, compare runs) — building
+- [ ] G10 Findings where the code is (graph, code gutter, inspector, brief, phone) — building
 
 ### Track V: review (the owner's picks)
 - [ ] V1 What this change does to the architecture (structural diff at the top of every review) — building
@@ -199,6 +199,24 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-06 — R1 merged (#356); R2 in review
+
+- **R1 merged** (#356), green on every CI job. The MCP SDK fix is in
+  `main` too (#355), so the advisory no longer fails any branch.
+- **R2: CI judges a change with its base branch's rules** (design §1.2).
+  Found while planning: the gate ignored changes under `.codetrellis/` and
+  read the rules from the branch it judged, so a pull request could delete
+  a rule and add the import it forbade, and pass. `check_changes` now reads
+  the rulebook at its base through git (`services/rules-at.ts`) and
+  compares it with the branch's (`services/rule-changes.ts`): a loosening
+  fails the gate, first in the list; a tightening or a reworded reason is a
+  note. A base whose rules cannot be read says so and uses the branch's own.
+  The M7 harness test commits the rule on main, as a team keeps it, and
+  shows a branch that deletes it and adds the import failing.
+- **Built ahead and waiting to merge, in order:** R4, R3, C1, C2, C3, 0.3,
+  G6, G5, G3, G4, G1, G2, V1, V2, V3, V6, R5, C8, C7, G7, G8, G9. G10
+  (findings where the code is) is being built.
 
 ### 2026-10-06 — S3 merged (#354), Track S done; R1 in review
 

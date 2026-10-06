@@ -35,7 +35,13 @@ export function baseRef(root: string, given: string | undefined, env: NodeJS.Pro
   return null;
 }
 
-export interface Changed { base: string | null; since: string | null; files: string[] }
+export interface Changed {
+  base: string | null;
+  since: string | null;
+  files: string[];
+  /** The rules changed too (a suite file, or the config that held rules before Phase 33 R1): checked even with no other file. */
+  rulebook: boolean;
+}
 
 /** Files this work changed: since the base's merge base, and not committed yet. */
 export function changedFiles(root: string, given: string | undefined, env: NodeJS.ProcessEnv): Changed {
@@ -48,7 +54,8 @@ export function changedFiles(root: string, given: string | undefined, env: NodeJ
     ...lines(git(root, ['ls-files', '--others', '--exclude-standard'])),
   ]);
   const files = [...out].filter((f) => !f.startsWith('.codetrellis/')).sort();
-  return { base, since, files };
+  const rulebook = [...out].some((f) => f.startsWith('.codetrellis/rules/') || f === '.codetrellis/config.json');
+  return { base, since, files, rulebook };
 }
 
 export interface Gate {
@@ -61,13 +68,19 @@ export interface Gate {
   criteria: unknown[];
   docs: unknown[];
   rules: unknown[];
+  /** What the change does to the rulebook (Phase 33 R2). */
+  rulebook: unknown[];
+  /** Said, but not a reason to fail: a rule added or tightened, a reason reworded. */
+  notes: string[];
   /** Set when the rules could not be checked, and why. */
   rulesNote?: string;
 }
 
 /** `check_changes` over this work's files, as the agent. */
 export async function gate(agent: Agent, root: string, changed: Changed): Promise<Gate | { error: string }> {
-  if (changed.files.length === 0) return { ok: true, says: [], files: 0, base: changed.base, breakpoints: [], tests: [], criteria: [], docs: [], rules: [] };
+  // Nothing changed, not even the rules: nothing to check. A change to the
+  // rules alone is still checked (Phase 33 R2): it could loosen one.
+  if (changed.files.length === 0 && !changed.rulebook) return { ok: true, says: [], files: 0, base: changed.base, breakpoints: [], tests: [], criteria: [], docs: [], rules: [], rulebook: [], notes: [] };
   // The merge base, so an import that was already there is not this work's (A7.3).
   const a = await agent.call('check_changes', { paths: changed.files.slice(0, 500), project_path: root, ...(changed.since ? { base: changed.since } : {}) });
   if (a.isError) return { error: a.text };
@@ -76,6 +89,7 @@ export async function gate(agent: Agent, root: string, changed: Changed): Promis
   return {
     ok: j.ok === true, says: list('says') as string[], files: changed.files.length, base: changed.base,
     breakpoints: list('breakpoints'), tests: list('tests'), criteria: list('criteria'), docs: list('docs'), rules: list('rules'),
+    rulebook: list('rulebook'), notes: list('notes').filter((n): n is string => typeof n === 'string'),
     ...(typeof j.rules_note === 'string' ? { rulesNote: j.rules_note } : {}),
   };
 }
@@ -83,7 +97,7 @@ export async function gate(agent: Agent, root: string, changed: Changed): Promis
 /** The gate in words: one line saying what was checked, then one per finding. */
 export function gateWords(g: Gate): string {
   const what = `${g.files} changed file${g.files === 1 ? '' : 's'}${g.base ? ` since ${g.base}` : ''}`;
-  const note = g.rulesNote ? `\n${g.rulesNote}` : '';
-  if (g.ok) return `Conforms: ${what}. No breakpoint holds them, none of their tests fail or are older than the code, no done task fails its checks, no doc that describes them is stale, and they add no import an architecture rule forbids.${note}`;
+  const note = (g.notes.length ? `\n${g.notes.map((n) => `  ${n}`).join('\n')}` : '') + (g.rulesNote ? `\n${g.rulesNote}` : '');
+  if (g.ok) return `Conforms: ${what}. No breakpoint holds them, none of their tests fail or are older than the code, no done task fails its checks, no doc that describes them is stale, they add no import an architecture rule forbids, and they loosen no rule.${note}`;
   return [`Does not conform (${what}):`, ...g.says.map((s) => `  ${s}`)].join('\n') + note;
 }

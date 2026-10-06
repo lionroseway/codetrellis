@@ -21,6 +21,7 @@ import { showAtAsync } from './branch-workstreams';
 import { baseContent, currentContent } from './workstream-symbols';
 import { checkEdges, rulesOf } from './architecture-rules';
 import type { RuleImport } from './conformity-gate';
+import type { ArchitectureRule } from '../../shared/types/architecture-rules';
 
 export interface ImportEdge { from: string; to: string }
 
@@ -104,9 +105,11 @@ export function importsReadableFor(projectRoot: string): boolean {
  * The gate's question (A7.3): which imports do these changed files, in the
  * project's own folder, add across its rules since `base` (a commit)? Null
  * when the project's imports cannot be read here; empty when it has no rules.
+ * `rules` are the ones to judge by: the base's (Phase 33 R2), else the
+ * project's own.
  */
-export async function ruleImports(projectRoot: string, files: readonly string[], base: string | null): Promise<RuleImport[] | null> {
-  const rules = rulesOf(projectRoot);
+export async function ruleImports(projectRoot: string, files: readonly string[], base: string | null, judgeBy?: readonly ArchitectureRule[]): Promise<RuleImport[] | null> {
+  const rules = judgeBy ? [...judgeBy] : rulesOf(projectRoot);
   if (rules.length === 0) return [];
   if (!importsReadableFor(projectRoot)) return null;
   const edges = await importsAdded(projectRoot, {

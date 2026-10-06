@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "R1 Rules live in .codetrellis/rules/*.yaml"
-  status: "S3 merged (#354): Track S is done; the owner's Mac run with a real git pull is still to do. A new MCP SDK advisory (GHSA-6qxp-vccf-f47h) failed every branch's audit: fixed in S3 and in main (#355). R1 in review: rules in committed suite files, the Phase 32 config rules still counting until a person moves them"
-  next: "Merge R1, then R2 (CI judges with the base branch's rules), R4 and R3"
+  step: "R2 CI judges a change with its base branch's rules"
+  status: "R1 merged (#356): rules live in committed suite files. The MCP SDK fix is in main (#355). R2 in review: the gate reads the rules at its base, so a pull request that deletes a rule and adds the import it forbade fails, saying it loosens the rule"
+  next: "Merge R2, then R4 (strength: block, warn, guide) and R3 (change control)"
   blockers: "None"
   updated: 2026-10-06
 sections:

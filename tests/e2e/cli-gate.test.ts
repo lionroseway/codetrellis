@@ -132,7 +132,7 @@ test.describe.serial('codetrellis in sessions and pipelines', () => {
     git('commit', '-qam', 'Strict exports');
     const text = ct('check', '--base', base);
     expect(text.code, text.err).toBe(0);
-    expect(text.out).toBe(`Conforms: 1 changed file since ${base}. No breakpoint holds them, none of their tests fail or are older than the code, no done task fails its checks, no doc that describes them is stale, and they add no import an architecture rule forbids.`);
+    expect(text.out).toBe(`Conforms: 1 changed file since ${base}. No breakpoint holds them, none of their tests fail or are older than the code, no done task fails its checks, no doc that describes them is stale, they add no import an architecture rule forbids, and they loosen no rule.`);
   });
 
   test('a breakpoint Sam set on a changed file fails it, and nothing is held by the check', async () => {

@@ -13,6 +13,11 @@
  * `codetrellis check` against main fails (exit 3) naming the import and the
  * rule. The routes' import of db.py, there before the branch, is not the
  * branch's. With the import taken out, the gate passes.
+ *
+ * Phase 33 R2: the pipeline judges with the base branch's rules, so the rule
+ * is committed on main, as a team keeps it. A branch that deletes the rule
+ * and adds the import it forbade still fails, and says it loosens the rule;
+ * a branch that only adds a rule passes, and says so.
  */
 
 import fs from 'node:fs';
@@ -32,7 +37,10 @@ const NOTICE = '── CodeTrellis awareness ──';
 const RULE = 'services/api/app/routes/ may not import services/api/app/config.py';
 const BECAUSE = 'routes read settings through the app';
 
-interface Gate { ok: boolean; says: string[]; files: number; rules: Array<{ path: string; imports: string; rule: string; words: string; because: string }>; rulesNote?: string }
+interface Gate {
+  ok: boolean; says: string[]; files: number; rules: Array<{ path: string; imports: string; rule: string; words: string; because: string }>; rulesNote?: string;
+  rulebook: Array<{ rule: string; change: string; effect: string; words: string }>; notes: string[];
+}
 
 test.describe.serial('M7: the team\'s architecture, kept by every agent and the pipeline', () => {
   test.setTimeout(240_000);
@@ -74,6 +82,9 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
       from: 'services/api/app/routes/', mayNotImport: CONFIG, because: BECAUSE,
     });
     expect(res.status, await res.clone().text()).toBe(200);
+    // The team's rule is committed on main (R2: the pipeline judges by the base's rules).
+    git(root, 'add', '.codetrellis/rules');
+    git(root, 'commit', '-qm', 'Rule: routes read settings through the app');
     exportsTree = `${root}-exports-v2`;
     authTree = `${root}-auth-fix`;
     git(root, 'worktree', 'add', '-q', exportsTree, '-b', 'exports-v2');
@@ -149,6 +160,63 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
       expect((JSON.parse(fixed.out) as Gate).rules).toEqual([]);
     } finally {
       git(root, 'checkout', '-q', main);
+    }
+  });
+
+  test('R2: a branch that deletes the rule and adds the import it forbade still fails, and says it loosens the rule', async () => {
+    git(root, 'checkout', '-qb', 'quiet-loosening', main);
+    try {
+      const suite = path.join(root, '.codetrellis', 'rules', 'architecture.yaml');
+      fs.writeFileSync(suite, 'suite: architecture\nrules: []\n');
+      edit(root, USERS, 'from app.db import', `${ADDED}from app.db import`);
+      git(root, 'commit', '-qam', 'Drop the routes rule and read the URL directly');
+
+      const r = ct('check', '--base', main, '--json');
+      expect(r.code, r.err || r.out).toBe(3);
+      const g = JSON.parse(r.out) as Gate;
+      // Judged by main's rules: the import is still a breach.
+      expect(g.rules).toEqual([{ path: USERS, imports: CONFIG, rule: 'routes-not-config', words: RULE, because: BECAUSE }]);
+      // And the rule's removal is a finding of its own, first.
+      expect(g.rulebook).toEqual([expect.objectContaining({ rule: 'routes-not-config', change: 'removed', effect: 'loosens' })]);
+      expect(g.says[0]).toMatch(/^✗ This change removes the rule “services\/api\/app\/routes\/ may not import services\/api\/app\/config\.py” \(routes-not-config\)(: \d+ imports? it forbade become allowed)?\. Loosening a rule needs a person's approval in the app\.$/);
+
+      // A change to the rules alone is checked too.
+      git(root, 'checkout', '-q', main);
+      git(root, 'checkout', '-qb', 'only-the-rule', main);
+      fs.writeFileSync(suite, 'suite: architecture\nrules: []\n');
+      git(root, 'commit', '-qam', 'Drop the routes rule');
+      const only = ct('check', '--base', main, '--json');
+      expect(only.code, only.err || only.out).toBe(3);
+      expect((JSON.parse(only.out) as Gate).rulebook.map((c) => c.effect)).toEqual(['loosens']);
+    } finally {
+      git(root, 'checkout', '-q', '-f', main);
+    }
+  });
+
+  test('R2: a branch that only adds a rule passes, and says the rule it adds', async () => {
+    git(root, 'checkout', '-qb', 'new-rule', main);
+    try {
+      fs.writeFileSync(path.join(root, '.codetrellis', 'rules', 'web.yaml'), [
+        'suite: web',
+        'rules:',
+        '  - id: web-not-api-internals',
+        '    from: packages/web/',
+        '    mayNotImport: services/api/app/',
+        '    because: the web app calls the API over HTTP',
+      ].join('\n'));
+      git(root, 'add', '.codetrellis/rules/web.yaml');
+      git(root, 'commit', '-qm', 'Rule: the web app calls the API over HTTP');
+      const r = ct('check', '--base', main, '--json');
+      expect(r.code, r.err || r.out).toBe(0);
+      const g = JSON.parse(r.out) as Gate;
+      expect(g.ok).toBe(true);
+      expect(g.rulebook).toEqual([expect.objectContaining({ rule: 'web-not-api-internals', change: 'added', effect: 'tightens' })]);
+      expect(g.notes).toEqual([expect.stringMatching(/^⚠ This change adds the rule “packages\/web\/ may not import services\/api\/app\/” \(web-not-api-internals\).*It is checked once it is on the base branch\.$/)]);
+      const words = ct('check', '--base', main);
+      expect(words.code).toBe(0);
+      expect(words.out.split('\n')[1]).toMatch(/^ {2}⚠ This change adds the rule/);
+    } finally {
+      git(root, 'checkout', '-q', '-f', main);
     }
   });
 });

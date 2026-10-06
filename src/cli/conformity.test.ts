@@ -51,10 +51,10 @@ test('the base: --base, else the pull request\'s base in GitHub Actions, else or
 });
 
 test('the gate in words: what was checked, then one line per finding', () => {
-  const base = { files: 3, base: 'origin/main', breakpoints: [], tests: [], criteria: [], docs: [], rules: [] };
+  const base = { files: 3, base: 'origin/main', breakpoints: [], tests: [], criteria: [], docs: [], rules: [], rulebook: [], notes: [] };
   assert.equal(
     gateWords({ ...base, ok: true, says: [] }),
-    'Conforms: 3 changed files since origin/main. No breakpoint holds them, none of their tests fail or are older than the code, no done task fails its checks, no doc that describes them is stale, and they add no import an architecture rule forbids.',
+    'Conforms: 3 changed files since origin/main. No breakpoint holds them, none of their tests fail or are older than the code, no done task fails its checks, no doc that describes them is stale, they add no import an architecture rule forbids, and they loosen no rule.',
   );
   assert.equal(
     gateWords({ ...base, files: 1, ok: false, says: ['src/a.ts: ✗ 1 of 2 tests failing'] }),
@@ -65,5 +65,23 @@ test('the gate in words: what was checked, then one line per finding', () => {
     gateWords({ ...base, files: 1, ok: false, says: ['✗ web/reports.ts now imports db/client.ts, which the rule “web/ may not import db/” forbids: web talks to db through the API'] }),
     'Does not conform (1 changed file since origin/main):\n  ✗ web/reports.ts now imports db/client.ts, which the rule “web/ may not import db/” forbids: web talks to db through the API',
   );
-  assert.match(gateWords({ ...base, ok: true, says: [], rulesNote: 'The architecture rules were not checked.' }), /forbids\.\nThe architecture rules were not checked\.$/);
+  assert.match(gateWords({ ...base, ok: true, says: [], rulesNote: 'The architecture rules were not checked.' }), /loosen no rule\.\nThe architecture rules were not checked\.$/);
+  // Phase 33 R2: a rule added or tightened is said, and does not fail the gate.
+  assert.equal(
+    gateWords({ ...base, ok: true, says: [], notes: ['⚠ This change adds the rule “api/ may not import db/” (api-not-db). It is checked once it is on the base branch.'] }).split('\n')[1],
+    '  ⚠ This change adds the rule “api/ may not import db/” (api-not-db). It is checked once it is on the base branch.',
+  );
+});
+
+test('a change to the rules alone is still a change to check (Phase 33 R2)', () => {
+  const { root, git, write } = repo();
+  git('checkout', '-qb', 'sam/loosen');
+  write('.codetrellis/rules/architecture.yaml', 'rules: []\n');
+  const c = changedFiles(root, 'main', {});
+  assert.deepEqual(c.files, [], 'still not a file of the work');
+  assert.equal(c.rulebook, true);
+  write('.codetrellis/plans/exports/plan.yaml', 'title: Exports\n');
+  const { root: other, write: w2 } = repo();
+  w2('.codetrellis/plans/exports/plan.yaml', 'title: Exports\n');
+  assert.equal(changedFiles(other, undefined, {}).rulebook, false, 'a plan changing is not the rules changing');
 });
