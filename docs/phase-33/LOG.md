@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
-| **Status** | G3 in review (each kind of edge can be turned off); G5 merged (#366); the shard follow-up in review (#367) |
-| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs`; #367 in review on `feat/phase-33-fu-browser-shards` |
-| **Last merged** | G5 (#366, `08a4bfc`) |
-| **Next action** | Merge #367 and G3 when CI is green, then replay G4 |
+| **Status** | G4 in review (graph full screen, no gap for a hidden panel); G3 merged (#368); browser shards balanced (#367) |
+| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G4 building on `feat/phase-33-g4-full-screen`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | G3 (#368, `45482a3`) |
+| **Next action** | Merge G4 when CI is green, then replay G1 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-06 |
 
-> Read from git at `origin/feat/phase-33` `08a4bfc`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `45482a3`, with open PRs from GitHub.
 
 ---
 
@@ -42,7 +42,7 @@
 - [x] Follow-up: A new advisory (MCP SDK, GHSA-6qxp-vccf-f47h) failed the production audit on every branch: SDK 1.32.1 (into `main`) (#355)
 - [ ] Follow-up: With many worktrees of one repository, `listWorkstreams` takes ~10 s and six parallel asks for it fill the browser's connections, so the graph waits behind them: share one answer
 - [ ] Follow-up: Call rules read HTTP and SQL callsites; no extractor finds subprocess commands or environment variables yet, so those calls cannot be ruled on
-- [ ] Follow-up: Rebalance the browser shards: chromium 2/3 runs 185 tests in about 25 minutes, the others about 7
+- [x] Follow-up: Rebalance the browser shards: chromium 2/3 runs 185 tests in about 25 minutes, the others about 7 (#367)
 - [ ] Follow-up: Four browser specs fail in a local clone with many fetched branches and pass in CI (evolution, play-forward, navigate_to Awareness, signal-to-lines): find why
 
 ### Stage 0: ground truth
@@ -80,7 +80,7 @@
 ### Track G: graph and clarity
 - [ ] G1 One visual vocabulary (colour, glyph, dash, words) with a guard test — building
 - [ ] G2 The legend on the graph, plan canvas, file tree and Timeline — building
-- [ ] G3 Edge toggles (imports, cross-system, symbol links) — building
+- [x] G3 Edge toggles (imports, cross-system, symbol links) (#368)
 - [ ] G4 Graph full screen and back; hidden panes leave no gap — building
 - [x] G5 Selecting a file lists the plans and tasks that touch it (#366)
 - [x] G6 Opening a plan always shows it, from a chip too (#365)
@@ -204,6 +204,23 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-06 — G3 merged (#368), the shards balanced (#367); G4 in review
+
+- **G3 merged** (#368), and the **shard follow-up** (#367). Browser CI shards
+  now take 7 to 12 minutes, against 25 for the slowest before.
+- **G4: the graph full screen, and no gap where a panel was.** A full-screen
+  control (and a shortcut) gives the graph the whole window and brings
+  everything back as it was. A hidden side panel no longer leaves an empty
+  gutter, and a panel shown again comes back at the width it had.
+- Checked before review: every graph, layout, keyboard, sidebar and
+  review-regression browser spec passes on the replayed code (39 chromium, 88
+  serial).
+- The local-only failures follow-up, narrowed: in a shallow clone with one
+  branch the four specs pass, so they need a repository with many branches.
+  `/api/awareness` answers at once and `listWorkstreams` takes about 1.3 s on
+  the 36-branch clone, so the stall is elsewhere in what the Awareness tab
+  and the code view's workstreams gutter ask for.
 
 ### 2026-10-06 — G5 merged (#366); G3 in review; the browser shards balanced
 

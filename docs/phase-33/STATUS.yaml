@@ -17,8 +17,8 @@
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
   step: "Merging the built steps, in order"
-  status: "G3 in review (each kind of edge can be turned off); G5 merged (#366); the shard follow-up in review (#367)"
-  next: "Merge #367 and G3 when CI is green, then replay G4"
+  status: "G4 in review (graph full screen, no gap for a hidden panel); G3 merged (#368); browser shards balanced (#367)"
+  next: "Merge G4 when CI is green, then replay G1"
   blockers: "None"
   updated: 2026-10-06
 sections:
@@ -59,6 +59,9 @@ sections:
         followUp: true
       - title: "Rebalance the browser shards: chromium 2/3 runs 185 tests in about 25 minutes, the others about 7"
         followUp: true
+        status: done
+        prs:
+          - 367
       - title: "Four browser specs fail in a local clone with many fetched branches and pass in CI (evolution, play-forward, navigate_to Awareness, signal-to-lines): find why"
         followUp: true
   - title: "Stage 0: ground truth"
