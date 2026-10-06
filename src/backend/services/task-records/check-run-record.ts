@@ -21,6 +21,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { canonicalJson, parseSignature, type RecordSignature } from './signing';
 import type { SignedPart } from './record';
 import { isRunPath } from './run-record';
+import { parseAgentReview, type AgentReview } from '../../../shared/lib/agent-review';
 
 /** Signed into every check-run record, so one can never be read as another kind. */
 const KIND = 'check-run';
@@ -73,6 +74,8 @@ export interface CheckRunRecord {
   /** Every line that failed it, as the gate says them. */
   says: string[];
   findings: CheckRunFinding[];
+  /** C4b: an agent's review, when the run is one; absent from a rule check. */
+  review?: AgentReview;
 }
 
 export const MAX_CHECK_RUN_BYTES = 512 * 1024;
@@ -91,6 +94,8 @@ function bodyOf(r: CheckRunRecord) {
     by: r.by, ranIn: r.ranIn, commit: r.commit, dirty: r.dirty, base: r.base, rulebook: r.rulebook, scope: r.scope, strict: r.strict,
     outcome: r.outcome, says: r.says,
     findings: r.findings.map((f) => ({ rule: f.rule, suite: f.suite, path: f.path, imports: f.imports, strength: f.strength, failing: f.failing, words: f.words, fix: f.fix })),
+    // Only when present, so a rule check's record (and its signature) is as before.
+    ...(r.review ? { review: r.review } : {}),
   };
 }
 
@@ -150,6 +155,7 @@ export function parseCheckRun(source: string): { record: CheckRunRecord; signed:
       outcome: { ok: o.ok === true, files: count(o.files), blocks: count(o.blocks), warns: count(o.warns) },
       says: (Array.isArray(r.says) ? r.says : []).map((s) => text(s, 1000)).filter((s): s is string => !!s).slice(0, MAX_SAYS),
       findings,
+      ...(parseAgentReview(r.review) ? { review: parseAgentReview(r.review)! } : {}),
     },
   };
 }

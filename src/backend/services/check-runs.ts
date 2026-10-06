@@ -14,6 +14,7 @@ import { getDb } from './database';
 import { markDirty } from './persistence';
 import type { CheckRunRecord, CheckRunFinding, CheckRunOutcome } from './task-records/check-run-record';
 import { outcomeWords } from './task-records/check-run-record';
+import { parseAgentReview, reviewWords, type AgentReview } from '../../shared/lib/agent-review';
 
 /** A run as this device made it, before it has a writer or counter. */
 export type NewCheckRun = Omit<CheckRunRecord, 'writer' | 'name' | 'counter'> & { projectRoot: string };
@@ -38,6 +39,8 @@ export interface CheckRun {
   outcome: CheckRunOutcome;
   says: string[];
   findings: CheckRunFinding[];
+  /** C4b: an agent's review, when the run is one. */
+  review: AgentReview | null;
   at: number;
   /** One line: "ci for Build bot in GitHub Actions at a1b2c3d: ✗ 2 block". */
   words: string;
@@ -72,11 +75,11 @@ export function recordCheckRun(run: NewCheckRun, me = { writer: 'this-device', n
 
 function insert(projectRoot: string, id: string, mine: boolean, r: CheckRunRecord, verdict: Record<string, unknown> | null): void {
   getDb().run(
-    `INSERT OR REPLACE INTO rule_check_runs (project_root, id, mine, writer, counter, name, by_author, by_type, ran_in, commit_sha, dirty, base, rulebook, scope, strict, outcome, says, findings, at, verdict)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO rule_check_runs (project_root, id, mine, writer, counter, name, by_author, by_type, ran_in, commit_sha, dirty, base, rulebook, scope, strict, outcome, says, findings, at, verdict, review)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [projectRoot, id, mine ? 1 : 0, r.writer, r.counter, r.name, r.by.author, r.by.authorType, r.ranIn, r.commit, JSON.stringify(r.dirty),
       r.base, r.rulebook, r.scope, r.strict ? 1 : 0, JSON.stringify(r.outcome), JSON.stringify(r.says), JSON.stringify(r.findings), r.at,
-      verdict ? JSON.stringify(verdict) : null],
+      verdict ? JSON.stringify(verdict) : null, r.review ? JSON.stringify(r.review) : null],
   );
 }
 
@@ -102,7 +105,7 @@ export function forgetTeammateCheckRuns(q: { projectRoot?: string; writer?: stri
   return n;
 }
 
-const COLS = 'id, mine, writer, counter, name, by_author, by_type, ran_in, commit_sha, dirty, base, rulebook, scope, strict, outcome, says, findings, at, verdict';
+const COLS = 'id, mine, writer, counter, name, by_author, by_type, ran_in, commit_sha, dirty, base, rulebook, scope, strict, outcome, says, findings, at, verdict, review';
 
 function rowToRun(r: unknown[]): CheckRun {
   const mine = Number(r[1]) === 1;
@@ -117,6 +120,7 @@ function rowToRun(r: unknown[]): CheckRun {
     base: (r[10] as string | null) ?? null, rulebook: (r[11] as string | null) ?? null, scope: (r[12] as string | null) ?? null,
     strict: Number(r[13]) === 1, outcome: parse(r[14], { ok: false, files: 0, blocks: 0, warns: 0 }),
     says: parse<string[]>(r[15], []), findings: parse<CheckRunFinding[]>(r[16], []), at: Number(r[17]),
+    review: parseAgentReview(parse<unknown>(r[19], null)),
   };
   return { ...run, words: runWords(run) };
 }
@@ -126,7 +130,9 @@ export function runWords(r: Omit<CheckRun, 'words'>): string {
   const at = r.commit ? ` at ${r.commit.slice(0, 7)}` : '';
   const against = r.base ? `, against ${r.base}` : '';
   const scope = r.scope ? `, ${r.scope}` : '';
-  return `${r.who} in ${r.ranIn}${at}${against}${scope}: ${outcomeWords(r.outcome)}${r.verified ? '' : ` (unverified: ${r.why ?? 'not signed'})`}`;
+  // C4b: an agent's review says what it found, in its own words.
+  const said = r.review ? `${r.review.agent}'s review: ${reviewWords(r.review)}` : outcomeWords(r.outcome);
+  return `${r.who} in ${r.ranIn}${at}${against}${scope}: ${said}${r.verified ? '' : ` (unverified: ${r.why ?? 'not signed'})`}`;
 }
 
 /** The runs in a project, newest first: this device's and teammates'. */

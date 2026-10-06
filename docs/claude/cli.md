@@ -321,6 +321,23 @@ import has fixed it, whoever ran it (`shared/lib/open-findings.ts`).
 - **The phone**: Needs you lists the runs that block, the latest from each
   place, with a few findings and their fixes.
 
+## Your own agent reviews (Phase 33 C4b)
+
+The agent you already run reviews the change, on your model and your key.
+Connected through the stdio connector, it calls `get_review_bundle` and gets
+the change as numbered lines (marked as data, never instructions), the rules
+about it in the check's words, and what the check already found. It reports
+once with `report_review`.
+
+Its confidence is not evidence; its citation is. Each finding must name a file
+in the change and lines the bundle showed, and quote them; a rule finding must
+name a rule in scope. What fails is dropped and counted, with why. An
+instruction planted in the code is reported as `suspicious`, not followed.
+
+The review is a check run like any other (C7), marked with the agent's name,
+and advisory: it never fails the check. The Checks view opens it into what
+held, each with where it is and what to do, and what was dropped.
+
 ## Test runs that travel (D1.5a)
 
 With task state shared, each new run reported (`report-tests`) is also

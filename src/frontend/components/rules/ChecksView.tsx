@@ -6,11 +6,14 @@ import { absoluteFilePath, openFileAt } from '../../lib/open-file-at';
 import { compareRuns, type ComparedFinding } from '../../../shared/lib/check-compare';
 import { ATTENTION, chipClass } from '../../lib/visual-language';
 import { reachWords } from '../../../shared/lib/check-words';
+import { reviewWords, type AgentFinding, type AgentReview } from '../../../shared/lib/agent-review';
 
 interface Finding extends ComparedFinding { suite: string }
 interface Run {
   id: string; mine: boolean; who: string; verified: boolean; ranIn: string; commit: string | null; base: string | null; scope: string | null;
   outcome: { ok: boolean; files: number; blocks: number; warns: number }; says: string[]; findings: Finding[]; at: number; words: string;
+  /** C4b: an agent's review, when the run is one. */
+  review?: AgentReview | null;
 }
 interface Suite { suite: string }
 
@@ -19,6 +22,12 @@ type Filter = 'all' | 'failing' | 'mine' | 'ci';
 
 /** A run's outcome in a glyph and words (G1): never colour alone. */
 function outcomeOf(r: Run): { glyph: string; tone: string; words: string } {
+  // C4b: a review says what it found, in its own words and glyph.
+  if (r.review) {
+    const words = reviewWords(r.review);
+    const tone = r.review.outcome === 'error' ? 'text-red-300' : r.review.outcome === 'findings' ? 'text-amber-300' : r.review.outcome === 'pass' ? 'text-emerald-300' : 'text-foreground-muted';
+    return { glyph: words.slice(0, 1), tone, words: words.slice(2) };
+  }
   if (!r.outcome.ok) return { glyph: '✗', tone: 'text-red-300', words: `${r.outcome.blocks} ${r.outcome.blocks === 1 ? 'blocks' : 'block'}` };
   if (r.outcome.warns) return { glyph: '⚠', tone: 'text-amber-300', words: `conforms · ${r.outcome.warns} ${r.outcome.warns === 1 ? 'warns' : 'warn'}` };
   return { glyph: '✓', tone: 'text-emerald-300', words: 'conforms' };
@@ -154,7 +163,7 @@ export function ChecksView() {
                 </p>
               </header>
 
-              <Findings findings={opened.findings} root={root} />
+              {opened.review ? <ReviewFindings review={opened.review} root={root} /> : <Findings findings={opened.findings} root={root} />}
 
               {opened.says.filter((s) => !/ now imports .*, which the rule “/.test(s)).length > 0 && (
                 <section className="space-y-1" data-testid="check-run-also">
@@ -225,6 +234,56 @@ function Findings({ findings, root }: { findings: Finding[]; root: string }) {
           ))}
         </section>
       ))}
+    </div>
+  );
+}
+
+const KIND_GLYPH: Record<AgentFinding['kind'], { glyph: string; tone: string }> = {
+  rule: { glyph: '✗', tone: 'text-red-300' },
+  bug: { glyph: '✗', tone: 'text-red-300' },
+  risk: { glyph: '⚠', tone: 'text-amber-300' },
+  question: { glyph: '?', tone: 'text-sky-300' },
+  suspicious: { glyph: '⚑', tone: 'text-fuchsia-300' },
+};
+
+/**
+ * Phase 33 C4b — an agent's review: who reviewed and its outcome, each
+ * finding that held with where it is and what to do, and what was dropped,
+ * with why. Only grounded findings are findings; the rest are said, apart.
+ */
+function ReviewFindings({ review, root }: { review: AgentReview; root: string }) {
+  return (
+    <div className="space-y-3" data-testid="check-review">
+      <p className="text-foreground" data-testid="check-review-words">{review.agent}&apos;s review: {reviewWords(review)}</p>
+      {review.findings.length === 0 && review.outcome === 'pass' && <p className="text-emerald-300">✓ It found nothing to raise in the change.</p>}
+      {review.findings.map((f, i) => (
+        <div key={i} className="rounded border border-white/[0.06] bg-white/[0.02] px-3 py-2 space-y-1" data-testid="check-review-finding" data-kind={f.kind}>
+          <div className="flex items-baseline gap-2">
+            <span className={KIND_GLYPH[f.kind].tone}>{KIND_GLYPH[f.kind].glyph}</span>
+            <span className="text-foreground-muted">{f.kind}{f.rule ? ` · ${f.rule}` : ''}</span>
+            {f.path && (
+              <button type="button" className="font-mono text-sky-300/90 hover:underline text-[11px]" data-testid="check-review-where"
+                onClick={() => { void openFileAt(absoluteFilePath(root, f.path!), f.start ?? undefined); }}>
+                {f.path}{f.start ? `:${f.start}${f.end && f.end !== f.start ? `–${f.end}` : ''}` : ''}
+              </button>
+            )}
+          </div>
+          <p className="text-foreground">{f.says}</p>
+          {f.quote && <pre className="font-mono text-[11px] text-foreground-muted whitespace-pre-wrap">{f.quote}</pre>}
+          {f.fix && <p className="text-foreground-muted">→ {f.fix}</p>}
+        </div>
+      ))}
+      {review.dropped.length > 0 && (
+        <details className="text-foreground-muted" data-testid="check-review-dropped">
+          <summary className="cursor-pointer">{review.dropped.length} not grounded in the change, and dropped</summary>
+          <ul className="mt-1 space-y-0.5 pl-4">
+            {review.dropped.map((d, i) => <li key={i}>{d.says} <span className="text-foreground-subtle">({d.why})</span></li>)}
+          </ul>
+        </details>
+      )}
+      {review.refused.length > 0 && (
+        <p className="text-foreground-muted" data-testid="check-review-refused">It reached for what it may not use: {review.refused.join(', ')}.</p>
+      )}
     </div>
   );
 }

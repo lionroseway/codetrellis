@@ -254,6 +254,9 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   check_breakpoint: 'read',
   check_changes: 'read',
   list_check_runs: 'read',
+  // Phase 33 C4b: a review bundle, and a review reported and kept as a check run, as check_changes keeps one.
+  get_review_bundle: 'read',
+  report_review: 'read',
   // Another workstream's changed lines, from git (B3.1): the repository, not an agent's words.
   get_line_changes: 'read',
 
