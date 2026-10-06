@@ -8,6 +8,9 @@ import { useUiStore, type SelectedNodeKind, type SelectedNodeMeta } from '../../
 import { useProjectStore } from '../../stores/project-store';
 import { usePlanStore } from '../../stores/plan-store';
 import { CodePreview, type FileContent } from '../inspector/CodePreview';
+import { FilePlans } from '../inspector/FilePlans';
+import { usePlanItemsStore } from '../../stores/plan-items-store';
+import { taskCountsByFile } from '../../lib/file-plan-touches';
 /**
  * Phase 26 — the diff editor is lazy.
  *
@@ -161,7 +164,10 @@ function ClusterView({
   meta: SelectedNodeMeta;
   onOpenFile: (path: string) => void;
 }) {
-  const files = meta.files || [];
+  const files = useMemo(() => meta.files || [], [meta.files]);
+  // G5 — how many of the open plan's tasks touch each file in the cluster.
+  const itemsByUid = usePlanItemsStore((s) => s.itemsByUid);
+  const taskCounts = useMemo(() => taskCountsByFile(files, Object.values(itemsByUid)), [files, itemsByUid]);
 
   return (
     <div className="p-3 space-y-3">
@@ -175,7 +181,14 @@ function ClusterView({
         {meta.description && (
           <p className="text-[10.5px] text-foreground-muted leading-relaxed">{meta.description}</p>
         )}
-        <div className="text-[10px] text-foreground-subtle mt-1.5">{files.length} file{files.length === 1 ? '' : 's'}</div>
+        <div className="text-[10px] text-foreground-subtle mt-1.5">
+          {files.length} file{files.length === 1 ? '' : 's'}
+          {taskCounts.size > 0 && (
+            <span data-testid="cluster-plan-count" className="text-accent">
+              {' · '}{taskCounts.size} touched by the open plan
+            </span>
+          )}
+        </div>
       </div>
 
       <div>
@@ -197,6 +210,11 @@ function ClusterView({
               <span className="ml-auto text-[9px] text-foreground-subtle/60 truncate max-w-[120px]">
                 {relPath.replace(/\/[^/]+$/, '')}
               </span>
+              {taskCounts.has(relPath) && (
+                <span data-testid="cluster-file-tasks" className="shrink-0 text-[9px] text-accent" title="Tasks in the open plan that touch this file">
+                  {taskCounts.get(relPath)} task{taskCounts.get(relPath) === 1 ? '' : 's'}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -301,6 +319,8 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
         </div>
         <p className="text-[10.5px] text-foreground-subtle font-mono break-all">{nodeId}</p>
       </div>
+
+      <FilePlans overlay={overlay} />
 
       <button
         onClick={loadCode}
