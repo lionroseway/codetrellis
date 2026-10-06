@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | R2 CI judges a change with its base branch's rules |
-| **Status** | R1 merged (#356): rules live in committed suite files. The MCP SDK fix is in main (#355). R2 in review: the gate reads the rules at its base, so a pull request that deletes a rule and adds the import it forbade fails, saying it loosens the rule |
-| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; R2 building on `feat/phase-33-r2-base-rules`; R3 building on `feat/phase-33-r3-change-control`; R4 building on `feat/phase-33-r4-strength`; R5 building on `feat/phase-33-r5-package-rules`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
-| **Last merged** | R1 (#356, `e739aff`) |
-| **Next action** | Merge R2, then R4 (strength: block, warn, guide) and R3 (change control) |
+| **Stage / step** | R4 Every rule has a strength: block, warn or guide |
+| **Status** | R2 merged (#358): the gate judges with the base branch's rules, so deleting a rule and breaking it fails. R4 in review: block fails the check, warn is said and passes, guide is never checked; a new rule starts at warn and an old one reads as block. G10 (findings where the code is) is built and waiting its turn |
+| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; R3 building on `feat/phase-33-r3-change-control`; R4 building on `feat/phase-33-r4-strength`; R5 building on `feat/phase-33-r5-package-rules`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
+| **Last merged** | R2 (#358, `38f4d56`) |
+| **Next action** | Merge R4, then R3 (change control), C1, C2, C3 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-06 |
 
-> Read from git at `origin/feat/phase-33` `e739aff`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `38f4d56`, with open PRs from GitHub.
 
 ---
 
@@ -39,6 +39,8 @@
 - [x] Design, execution plan, status and this log (#346)
 - [x] CLAUDE.md points every session here (#346)
 - [x] Follow-up: A new advisory (sprintf-js, GHSA-hp3w-g68c-fv3c) failed the production audit on every branch: kept out of the tree by an override (into `main`) (#347)
+- [x] Follow-up: A new advisory (MCP SDK, GHSA-6qxp-vccf-f47h) failed the production audit on every branch: SDK 1.32.1 (into `main`) (#355)
+- [ ] Follow-up: With many worktrees of one repository, `listWorkstreams` takes ~10 s and six parallel asks for it fill the browser's connections, so the graph waits behind them: share one answer
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
@@ -52,7 +54,7 @@
 
 ### Track R: the rulebook
 - [x] R1 Rules live in `.codetrellis/rules/<suite>.yaml` (moved from config.json by a person's confirm) (#356)
-- [ ] R2 CI judges with the base branch's rules; a rulebook change is its own finding — building
+- [x] R2 CI judges with the base branch's rules; a rulebook change is its own finding (#358)
 - [ ] R3 Change control: preview the effect, a person confirms, loosening is signed, `propose_rule` for agents — building
 - [ ] R4 Strength: block, warn, guide (exit codes, `--strict`, signals) — building
 - [ ] R5 Package rules across all eleven languages (only the wrapper imports `stripe`) — building
@@ -199,6 +201,29 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-06 — R2 merged (#358); R4 in review; G10 built
+
+- **R2 merged** (#358), green on every CI job.
+- **R4: every rule has a strength** (design §3.2). `block` fails the check
+  (exit 3) and raises a high signal; `warn` is said in the notes, passes,
+  and raises a medium one; `guide` is never checked. `--strict` makes warn
+  fail too. A new rule starts at warn; one written before strength existed
+  reads as block, which is what it did then, so no rule gets weaker unasked.
+  Lowering a strength is loosening (R2). Replayed onto the phase branch
+  rather than merged: it was built on R2's commit before the squash.
+- **G10 built: findings where the code is.** The latest run's findings, on
+  their lines in the code and the diff (a ⊘, the finding on hover, a click to
+  the run), in the inspector, in a task's brief and the Brief (its rules and
+  the latest run over its files), and on the phone's Needs you. A package rule
+  is now about the files of its own ecosystem: `npm:stripe` was being listed
+  against Python files.
+- **Follow-up, found testing G10:** with many worktrees of one repository
+  (33 here), `listWorkstreams` takes about 10 s, and the window asks for it
+  six times at once (workstreams, source control, comparands). That fills the
+  browser's six connections, and the graph's own request waits behind them:
+  the canvas says "Building dependency graph" until they finish. Not G10's;
+  a cache or a single shared request would fix it.
 
 ### 2026-10-06 — R1 merged (#356); R2 in review
 
