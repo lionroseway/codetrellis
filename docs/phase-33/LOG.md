@@ -200,6 +200,24 @@ The suite was green at the start, so the three failures were ours:
 
 ## Entries
 
+### 2026-10-06 — 0.1 merged (#350); 0.2 measures the storm
+
+- **0.1 merged** (#350), green on every CI job. With both fixes the
+  serial browser project passes in full (222 of 222) in a clean clone.
+- **0.2: the reload storm, measured** (`tests/e2e/plan-reload-storm.test.ts`).
+  One plan's task files changed at once, as a pull does:
+
+  | Files changed | `plan-imported` broadcasts | Slowest answer during the burst (idle 3–5 ms) |
+  |---|---|---|
+  | 1 | 1 | 14 ms |
+  | 10 | 10 | 141 ms |
+  | 50 | 50 | 1,896 ms |
+
+  One whole-plan import and one broadcast per changed file: the backend
+  stops answering for about two seconds at 50 files, and the window, which
+  refetches and toasts once per broadcast, does fifty of each. That is the
+  freeze the owner saw. The test asserts today's numbers; S1 tightens it.
+
 ### 2026-10-06 — 0.1 Baseline measured; two of our bugs fixed
 
 - Every suite measured on Node 26 (the Baseline above). Two harness files

@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "0.1 Baseline"
-  status: "Measured on Node 26 (see the Baseline). Three serial browser failures were ours and are fixed: a spec that leaked a plan, and awareness parsing every remote branch's files before answering. 15 later steps are built on their branches, each tested, waiting to merge in order"
-  next: "Merge 0.1, then 0.2, S1 and S2, one PR at a time, each green in CI before the next"
+  step: "0.2 Measure the plan reload storm"
+  status: "0.1 merged (#350). Measured: 1, 10 and 50 changed task files give 1, 10 and 50 whole-plan imports and broadcasts, and the backend's slowest answer during the burst grows to 1.9 s at 50 (idle 3–5 ms)"
+  next: "Merge 0.2, then S1 (one import per plan per burst) and S2 (the window takes a burst as one)"
   blockers: "None"
   updated: 2026-10-06
 sections:
