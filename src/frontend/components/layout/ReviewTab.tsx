@@ -30,6 +30,8 @@ interface LineReview {
   otherWork: OtherWorkInFlight | null;
   unplannedEdges: Array<{ source: string; target: string }>;
   comparison: { diff: { addedFiles: string[]; modifiedFiles: string[]; removedFiles: string[] } };
+  /** Phase 33 V1: what the change does to the architecture, one sentence each. */
+  architecture?: { words: string[] };
 }
 
 export function ReviewTab() {
@@ -157,6 +159,17 @@ function LineDetail({ line, base, root }: { line: ReviewQueueLine; base: string 
   const other = review.otherWork;
   return (
     <div className="px-8 pb-2 space-y-2" data-testid="review-line-detail">
+      {/* V1 — what the change does to the architecture, before anything else. */}
+      {review.architecture && (
+        <section data-testid="review-architecture">
+          <h4 className="text-[10px] uppercase tracking-wide text-foreground-subtle mb-0.5">What this change does to the architecture</h4>
+          {review.architecture.words.length === 0
+            ? <div className="text-foreground-subtle">No imports between folders, outside packages, cross-system calls or rules change.</div>
+            : review.architecture.words.map((w) => (
+              <div key={w} className={w.startsWith('✗') ? 'text-red-300' : 'text-foreground-muted'} data-testid="review-architecture-line">{w}</div>
+            ))}
+        </section>
+      )}
       <section>
         <h4 className="text-[10px] uppercase tracking-wide text-foreground-subtle mb-0.5">Other work in flight</h4>
         {!other || other.entries.length === 0

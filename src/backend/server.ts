@@ -83,7 +83,7 @@ import { fetchRemotes, listBranches, startRemoteKeeper } from './services/git-br
 import { fileHistory, FileHistoryError } from './services/file-history';
 import { recordedKnowledge, isProjectRelativePath } from './services/commit-attribution';
 import { lineHistory, LineHistoryError } from './services/line-history';
-import { reviewPlan, renderReviewMarkdown } from './services/plan-review-service';
+import { reviewPlan, renderReviewMarkdown, withArchitecture } from './services/plan-review-service';
 import { reviewQueue } from './services/review-queue-service';
 import { buildStack } from './services/stack-service';
 import { buildPlayForward } from './services/play-forward';
@@ -94,12 +94,13 @@ import { rulesView, setRule as setArchitectureRule, removeRule as removeArchitec
 import type { RuleChange } from './services/rule-changes';
 import { previewChange, previewJson, type RulePreview } from './services/rule-preview';
 import { signRuleChange } from './services/rule-approvals';
+import { architectureMarkdown, architectureOf } from './services/review-architecture';
 import { inScope, parseScope, scopeWords } from './services/rule-scope';
 import { decideRuleProposal, getRuleProposal, listRuleProposals } from './services/rule-proposals';
 import { writerId as taskRecordWriterId } from './services/task-records/shared-state';
 import type { ArchitectureRule } from '../shared/types/architecture-rules';
 import { startRecurringScheduler } from './services/recurring-scheduler';
-import { buildPrDraft } from './services/pr-draft-service';
+import { draftArchitecture, buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
 import { sealPack, checkSeal } from './services/pack-seal';
 import { buildEvidence, sealEvidence, renderEvidenceHtml, verifyEvidence, evidenceFromText, EvidenceError, decisionsBetween } from './services/evidence';
@@ -4647,17 +4648,20 @@ app.get('/api/compare', (req, res) => {
   res.json(result.result);
 });
 
-app.get('/api/plans/:uid/pr-draft', (req, res) => {
+app.get('/api/plans/:uid/pr-draft', async (req, res) => {
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
   // Read-only: this never touches the repository. The agent does the git
   // and opens the PR with its own credentials; we supply the body it
   // cannot write.
+  const before = req.query.before as string | undefined;
+  const after = req.query.after as string | undefined;
   const result = buildPrDraft({
     planUid: req.params.uid,
     projectPath,
-    before: req.query.before as string | undefined,
-    after: req.query.after as string | undefined,
+    before,
+    after,
+    architecture: await draftArchitecture(projectPath, before, after),
   });
   if (!result.ok) { res.status(404).json(result); return; }
   res.json(result.draft);
@@ -4745,7 +4749,7 @@ app.post('/api/play-forward/overlaps/:id/:action', (req, res) => {
   }
 });
 
-app.get('/api/plans/:uid/review', (req, res) => {
+app.get('/api/plans/:uid/review', async (req, res) => {
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
   const result = reviewPlan({
@@ -4755,11 +4759,26 @@ app.get('/api/plans/:uid/review', (req, res) => {
     after: req.query.after as string | undefined,
   });
   if (!result.ok) { res.status(404).json(result); return; }
+  // V1 — what the change does to the architecture, at the top.
+  const review = await withArchitecture(result.review, projectPath);
   if (req.query.format === 'markdown') {
-    res.type('text/markdown').send(renderReviewMarkdown(result.review));
+    res.type('text/markdown').send(renderReviewMarkdown(review));
     return;
   }
-  res.json(result.review);
+  res.json(review);
+});
+
+// Phase 33 V1 — the architecture section with no plan: between two commits.
+app.get('/api/review/architecture', async (req, res) => {
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  const base = typeof req.query.base === 'string' ? req.query.base : '';
+  const head = typeof req.query.head === 'string' && req.query.head ? req.query.head : 'HEAD';
+  if (!base || !isSafeGitRef(base) || !isSafeGitRef(head)) { res.status(400).json({ error: 'base (and head, default HEAD) must be commits or branch names' }); return; }
+  const a = await architectureOf(projectPath, base, head);
+  if ('error' in a) { res.status(400).json(a); return; }
+  if (req.query.format === 'markdown') { res.type('text/markdown').send(architectureMarkdown(a)); return; }
+  res.json(a);
 });
 
 // --- Budgets (Phase 23) ---

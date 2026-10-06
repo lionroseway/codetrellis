@@ -117,7 +117,7 @@ const REST_DOMAINS: Record<string, DomainKey> = {
   artefacts: 'e',
   channels: 'f', presence: 'f', 'screenshot-response': 'f',
   agent: 'g', 'agent-events': 'g', record: 'g', evidence: 'g', 'source-control': 'g', breakpoints: 'g', 'breakpoint-hits': 'g', mcp: 'g', sessions: 'g', sensors: 'g', workstreams: 'g', awareness: 'g',
-  baseline: 'h', comparands: 'h', compare: 'h', conflicts: 'h', freeze: 'h', 'review-queue': 'h',
+  baseline: 'h', comparands: 'h', compare: 'h', conflicts: 'h', freeze: 'h', 'review-queue': 'h', review: 'h',
   terminals: 'i', audio: 'i',
   pairing: 'j', peers: 'j', sync: 'j',
   settings: 'k', updates: 'k', logs: 'k', power: 'k', 'review-host': 'k', 'shared-task-state': 'k', 'plans-folder': 'k',

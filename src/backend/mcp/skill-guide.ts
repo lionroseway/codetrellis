@@ -764,6 +764,7 @@ says so.
 |------|-------------|
 | \`review_plan(plan_uid, project_path, before?, after?)\` | Per item: what landed, what is missing, and which changed files no item claimed |
 | \`get_pr_draft(plan_uid, project_path, before?, after?)\` | A PR title and body with the tickets and the review folded in |
+| \`review_change(base, head?, project_path?, format?)\` | What a change does to the architecture, no plan needed: imports between folders, outside packages, HTTP calls, routes and SQL, rules it crosses or loosens. Read it before the text diff |
 | \`get_review_queue(project_path)\` | Every line of work with plan items: criteria, blast radius, unplanned dependencies, open overlaps, whether it is ready, and a suggested merge order with the reason for each place |
 
 Both reviews carry "Other work in flight": the overlaps with other lines of

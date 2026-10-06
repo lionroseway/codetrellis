@@ -1,3 +1,4 @@
+import { architectureOf, type ArchitectureChange } from './review-architecture';
 import { execFileSync } from 'node:child_process';
 import { assertSafeGitRef } from './git-safety';
 import { getPlan } from './plan-service';
@@ -94,6 +95,8 @@ export function buildPrDraft(params: {
   projectPath: string;
   before?: string;
   after?: string;
+  /** Phase 33 V1: what the change does to the architecture, worked out by the caller (it reads git asynchronously). */
+  architecture?: ArchitectureChange;
 }): { ok: true; draft: PrDraft } | { ok: false; error: string } {
   const plan = getPlan(params.planUid);
   if (!plan) return { ok: false, error: `Plan ${params.planUid} not found` };
@@ -163,7 +166,7 @@ export function buildPrDraft(params: {
   });
 
   if (review.ok) {
-    lines.push(renderReviewMarkdown(review.review));
+    lines.push(renderReviewMarkdown(params.architecture ? { ...review.review, architecture: params.architecture } : review.review));
     if (review.review.summary.unclaimedCount > 0) {
       warnings.push(
         `${review.review.summary.unclaimedCount} changed file(s) are not claimed by any plan item.`,
@@ -200,4 +203,17 @@ export function buildPrDraft(params: {
       warnings,
     },
   };
+}
+
+/**
+ * The architecture of a draft's change (V1), when both sides name commits:
+ * `commit:<ref>`. For a draft against live work there is none.
+ */
+export async function draftArchitecture(projectPath: string, before?: string, after?: string): Promise<ArchitectureChange | undefined> {
+  const commit = (spec?: string) => (spec?.startsWith('commit:') ? spec.slice('commit:'.length) : null);
+  const base = commit(before);
+  const head = commit(after);
+  if (!base || !head) return undefined;
+  const a = await architectureOf(projectPath, base, head);
+  return 'error' in a ? undefined : a;
 }

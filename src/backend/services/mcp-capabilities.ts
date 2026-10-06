@@ -218,6 +218,8 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   list_rules: 'read',
   // Phase 33 R3: proposes only; a person decides in the app. No tool writes a rule.
   propose_rule: 'write',
+  // Phase 33 V1: what a change does to the architecture, between two commits. Read only.
+  review_change: 'read',
   get_spec_links: 'read',
   list_spec_proposals: 'read',
   reply_to_spec_proposal: 'write',
