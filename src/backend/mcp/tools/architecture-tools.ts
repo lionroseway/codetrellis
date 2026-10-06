@@ -8,6 +8,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { breachWords, checkEdges, edgesIfLoaded, findRule, proposedRule, RuleError, rulesOf, rulesView } from '../../services/architecture-rules';
 import { previewChange, previewJson } from '../../services/rule-preview';
+import { parseScope, scopeRules } from '../../services/rule-scope';
 import { addRuleProposal } from '../../services/rule-proposals';
 import { authorFromExtra } from '../helpers';
 
@@ -81,7 +82,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
     {
       description:
         'Check proposed imports before you write them: whether each would cross one of the team\'s architecture rules ' +
-        '("web/ may not import db/", kept in .codetrellis/config.json, with why), or create a direct two-file cycle. ' +
+        '("web/ may not import db/", kept in .codetrellis/rules/<suite>.yaml, with why), or create a direct two-file cycle. ' +
+        'suite, rule or path limits it to part of the rulebook. ' +
         'A clean result means no rule is broken and no direct cycle made; list_rules shows the rules.',
       inputSchema: {
         proposed_imports: z.array(z.object({
@@ -89,9 +91,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
           importing: z.string().describe('File being imported (absolute, or relative to the project root)'),
         })).describe('List of proposed import relationships to check'),
         project_path: z.string().optional().describe('An opened project. Omit for the one open in the app.'),
+        suite: z.string().max(500).optional().describe('Check only these suites\' rules (comma-separated, like payments).'),
+        rule: z.string().max(500).optional().describe('Check only these rules, by id (comma-separated).'),
+        path: z.string().max(500).optional().describe('Check only the rules about these paths (comma-separated).'),
       },
     },
-    async ({ proposed_imports, project_path }) => {
+    async ({ proposed_imports, project_path, suite, rule: ruleIds, path: scopePath }) => {
       const root = project_path ?? deps.getActiveProjectPath();
       const edges = deps.getDependencyEdges();
       const edgeSet = new Set(edges.map((e) => `${e.sourceRelative}->${e.targetRelative}`));
@@ -105,7 +110,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       };
 
       // Phase 32 A7.1 — the team's rules, checked first: they are the ones a person wrote down.
-      const rules = root ? rulesOf(root) : [];
+      const rules = root ? scopeRules(rulesOf(root), parseScope({ suite, rule: ruleIds, path: scopePath })) : [];
       for (const imp of proposed_imports) {
         const from = rel(imp.from);
         const to = rel(imp.importing);

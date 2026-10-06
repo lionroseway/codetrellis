@@ -303,4 +303,42 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
       fs.rmSync(keysDir, { recursive: true, force: true });
     }
   });
+
+  test('C1: `check --suite`, `--rule` and `--path` judge only those rules', async () => {
+    try {
+      // A payments suite beside the team's architecture suite, on the base.
+      git(root, 'checkout', '-qB', 'c1-base', main);
+      fs.writeFileSync(path.join(root, '.codetrellis', 'rules', 'payments.yaml'), [
+        'suite: payments', 'rules:',
+        '  - id: web-not-payments', '    from: packages/web/', '    mayNotImport: services/payments/', '    strength: block',
+      ].join('\n'));
+      git(root, 'add', '.codetrellis/rules/payments.yaml');
+      git(root, 'commit', '-qm', 'A payments suite');
+      // The branch breaks the architecture suite's rule, not the payments one.
+      git(root, 'checkout', '-qB', 'c1-branch');
+      edit(root, USERS, 'from app.db import', `${ADDED}from app.db import`);
+      git(root, 'commit', '-qam', 'Read the URL directly');
+
+      const payments = ct('check', '--base', 'c1-base', '--suite', 'payments');
+      expect(payments.code, payments.err || payments.out).toBe(0);
+      expect(payments.out).toBe('Conforms to suite payments: 1 changed file since c1-base. They add no import those rules forbid, and loosen none of them.');
+
+      const named = ct('check', '--base', 'c1-base', '--rule', 'routes-not-config', '--json');
+      expect(named.code, named.err || named.out).toBe(3);
+      expect((JSON.parse(named.out) as Gate).rules.map((r) => r.rule)).toEqual(['routes-not-config']);
+
+      const about = ct('check', '--base', 'c1-base', '--path', 'packages/web/');
+      expect(about.code, about.err || about.out).toBe(0);
+      expect(about.out).toMatch(/^Conforms to rules about packages\/web\/: /);
+      expect(ct('check', '--base', 'c1-base', '--path', 'services/api/app/routes/users.py').code).toBe(3);
+
+      // The window's list takes the same scope.
+      const listed = (await (await h.client.raw('GET', `/api/rules?project=${encodeURIComponent(root)}&suite=payments`)).json()) as { rules: Array<{ rule: { id: string } }>; scope: string };
+      expect(listed).toMatchObject({ scope: 'suite payments' });
+      expect(listed.rules.map((v) => v.rule.id)).toEqual(['web-not-payments']);
+    } finally {
+      git(root, 'checkout', '-q', '-f', main);
+      fs.rmSync(path.join(root, '.codetrellis', 'rules', 'payments.yaml'), { force: true });
+    }
+  });
 });

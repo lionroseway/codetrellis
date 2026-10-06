@@ -97,6 +97,8 @@ export async function checkChanges(
   notes: readonly string[] = [],
   /** `--strict`: a rule at warn fails the gate like one at block (R4). */
   strict = false,
+  /** C1: a check of part of the rulebook judges only those rules; breakpoints, tests, tasks and docs are not its question. */
+  scoped = false,
 ): Promise<Conformity> {
   const files = cleanChanged(changed);
   const says: string[] = [];
@@ -107,7 +109,7 @@ export async function checkChanges(
   for (const c of rulebook) (c.effect === 'loosens' && !c.approval?.ok ? says : said).push(changeWords(c));
 
   const breakpoints: HeldFile[] = [];
-  const code = listBreakpoints().filter((b) => b.kind === 'code' && b.projectRoot === root);
+  const code = scoped ? [] : listBreakpoints().filter((b) => b.kind === 'code' && b.projectRoot === root);
   for (const f of files) {
     for (const b of code) {
       if (!codeCovers(b.target, f)) continue;
@@ -126,7 +128,7 @@ export async function checkChanges(
   }
 
   const tests: TestTrouble[] = [];
-  for (const f of files) {
+  for (const f of scoped ? [] : files) {
     let g;
     try { g = groundingOf(root, f); } catch { continue; } // deleted, or not a file
     if (g.state === 'failing' || g.state === 'stale') {
@@ -136,7 +138,7 @@ export async function checkChanges(
   }
 
   const criteria: FailingCriterion[] = [];
-  for (const plan of listPlans(root)) {
+  for (const plan of scoped ? [] : listPlans(root)) {
     if (plan.status === 'archived') continue;
     for (const item of listItemSummaries(plan.uid)) {
       if (item.status !== 'done') continue;
@@ -153,7 +155,7 @@ export async function checkChanges(
   const docs: StaleDoc[] = [];
   const seen = new Map<string, StaleDoc>();
   const diffs = new Map<string, Set<string> | null>();
-  for (const f of files) {
+  for (const f of scoped ? [] : files) {
     for (const ref of findDocsByReferencedFile(root, f)) {
       const doc = getSystemDoc(ref.uid);
       if (!doc?.capturedAgainstCommit || !(doc.references.files ?? []).some((x) => x.replace(/^\.\/+/, '') === f)) continue;

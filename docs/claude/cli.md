@@ -117,6 +117,21 @@ Over those files, the `check_changes` tool reports:
 | ⚠ A system doc that describes a changed file was verified before it changed | the doc's stamp and `git diff <stamp>` over the working tree |
 | ✗ A changed file adds an import an architecture rule forbids | the team's rules in `.codetrellis/rules/<suite>.yaml` (A7; Phase 33 R1 moved them out of `.codetrellis/config.json`, where any still there count until a person moves them), each changed file's imports now against the branch's merge base, which the CLI passes as `base`; an import already there before the branch is the rule's to list, not this change's |
 
+### Part of the rulebook (Phase 33 C1)
+
+```
+codetrellis check --suite payments          # one suite's rules
+codetrellis check --rule stripe-via-wrapper # named rules
+codetrellis check --path src/payments/      # the rules about a path
+```
+
+Each takes a comma-separated list, and scopes given together all apply. A
+scoped check judges only those rules (the imports the change adds across
+them, and what it does to them), not breakpoints, tests, tasks or docs, and
+says what it checked: `Conforms to suite payments: …`. The same scopes are
+`suite`, `rule` and `path` on `check_changes` and `check_conformity`, and on
+`GET /api/rules`.
+
 ### How hard a rule holds (Phase 33 R4)
 
 Every rule has a `strength`:

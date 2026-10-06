@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | R3 Change control: a loosening is previewed, confirmed and signed |
-| **Status** | R4 merged (#359): every rule has a strength. R3 in review: every rule change is previewed against the code; a loosening is confirmed, signed as the person and checked by CI against the base's keys; agents propose, a person decides. Built ahead: R9 (guide rules in scope) and R6 (symbol rules) |
-| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; R3 building on `feat/phase-33-r3-change-control`; R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
-| **Last merged** | R4 (#359, `ea3772b`) |
-| **Next action** | Merge R3, then C1 (scoped checks), C2 (SARIF), C3 (the debt ratchet) |
+| **Stage / step** | C1 Scoped checks: a suite, a rule or a path |
+| **Status** | R3 merged (#360): change control is in. C1 in review: check one suite, named rules, or the rules about a path, on the CLI, over MCP and REST. Built ahead: R9, R6 and R7 (call rules: only the clients may call api.stripe.com) |
+| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
+| **Last merged** | R3 (#360, `e3d04b8`) |
+| **Next action** | Merge C1, then C2 (SARIF and CI recipes), C3 (the debt ratchet), 0.3 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-06 |
 
-> Read from git at `origin/feat/phase-33` `ea3772b`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `e3d04b8`, with open PRs from GitHub.
 
 ---
 
@@ -41,6 +41,7 @@
 - [x] Follow-up: A new advisory (sprintf-js, GHSA-hp3w-g68c-fv3c) failed the production audit on every branch: kept out of the tree by an override (into `main`) (#347)
 - [x] Follow-up: A new advisory (MCP SDK, GHSA-6qxp-vccf-f47h) failed the production audit on every branch: SDK 1.32.1 (into `main`) (#355)
 - [ ] Follow-up: With many worktrees of one repository, `listWorkstreams` takes ~10 s and six parallel asks for it fill the browser's connections, so the graph waits behind them: share one answer
+- [ ] Follow-up: Call rules read HTTP and SQL callsites; no extractor finds subprocess commands or environment variables yet, so those calls cannot be ruled on
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
@@ -55,11 +56,11 @@
 ### Track R: the rulebook
 - [x] R1 Rules live in `.codetrellis/rules/<suite>.yaml` (moved from config.json by a person's confirm) (#356)
 - [x] R2 CI judges with the base branch's rules; a rulebook change is its own finding (#358)
-- [ ] R3 Change control: preview the effect, a person confirms, loosening is signed, `propose_rule` for agents — building
+- [x] R3 Change control: preview the effect, a person confirms, loosening is signed, `propose_rule` for agents (#360)
 - [x] R4 Strength: block, warn, guide (exit codes, `--strict`, signals) (#359)
 - [ ] R5 Package rules across all eleven languages (only the wrapper imports `stripe`) — building
 - [ ] R6 Symbol rules (who may import a named export, through re-exports) — building
-- [ ] R7 Call rules (HTTP hosts, commands, tables, env)
+- [ ] R7 Call rules (HTTP hosts, commands, tables, env) — building
 - [ ] R8 Folder rules (what files in a folder are)
 - [ ] R9 Guide rules in scope (the brief, `get_brief`, drift names the rule) — building
 
@@ -201,6 +202,25 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-06 — R3 merged (#360); C1 in review; R7 built
+
+- **R3 merged** (#360), green on every CI job. Track R's foundations (R1–R5)
+  are in except R5, which waits behind the G and V steps it was built on.
+- **C1: scoped checks.** `codetrellis check --suite`, `--rule` and `--path`
+  (comma-separated; together, all apply) judge only those rules: the imports
+  the change adds across them and what it does to them, not breakpoints,
+  tests, tasks or docs, and the check says what it checked. `check_changes`,
+  `check_conformity` and `GET /api/rules` take the same scopes.
+- **R7 built: call rules.** `kind: calls` keeps a call to the files in
+  `only`: an HTTP host or path (`http:api.stripe.com`) or a SQL table
+  (`sql:invoices`). HTTP callsites now keep their host (a new column; pairing
+  across systems still uses the path). Findings read "calls
+  api.stripe.com/v1/charges" or "uses the table invoices" everywhere. Shown
+  with `fetch` in TypeScript and `requests` in Python, and a SQL read.
+- **Follow-up:** subprocess commands and environment variables are in R7's
+  design, but no extractor finds them yet; call rules cover HTTP and SQL until
+  one does.
 
 ### 2026-10-06 — R4 merged (#359); R3 in review; R9 and R6 built
 

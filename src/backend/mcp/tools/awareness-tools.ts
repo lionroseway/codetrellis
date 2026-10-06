@@ -32,6 +32,7 @@ import { ruleImports } from '../../services/workstream-imports';
 import { rulesAt } from '../../services/rules-at';
 import { changeWords, diffRules, type RuleChange } from '../../services/rule-changes';
 import { approvalFor, approvalsHere, keysAt } from '../../services/rule-approvals';
+import { inScope, parseScope, scopeRules, scopeWords } from '../../services/rule-scope';
 import { edgesIfLoaded, rulesOf } from '../../services/architecture-rules';
 import { getDependencyEdges } from '../../services/database';
 import { isSafeGitRef } from '../../services/git-safety';
@@ -358,11 +359,15 @@ export function register(server: McpServer, deps: ToolDeps): void {
         base: z.string().max(200).optional().describe(
           'The commit the change started from (a branch\'s merge base); imports already there are not the change\'s. Without it, the last commit.'),
         project_path: z.string().optional().describe('Absolute path of an opened project. Defaults to the active project.'),
+        suite: z.string().max(500).optional().describe('Check only these suites\' rules (comma-separated, like payments). A scoped check judges only rules.'),
+        rule: z.string().max(500).optional().describe('Check only these rules, by id (comma-separated).'),
+        path: z.string().max(500).optional().describe('Check only the rules about these paths (comma-separated, like src/payments/).'),
         strict: z.boolean().optional().describe(
           'Fail on a rule at warn as well as one at block. By default a warn rule\'s breach is said in notes and the change still conforms.'),
       },
     },
-    async ({ paths, base, project_path, strict }) => {
+    async ({ paths, base, project_path, strict, suite, rule, path: scopePath }) => {
+      const scope = parseScope({ suite, rule, path: scopePath });
       const root = project_path ?? deps.getActiveProjectPath();
       if (!root) return noProject;
       // The rules (A7.3) compare against a commit, by its id.
@@ -382,8 +387,10 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (since) {
         const atBase = await rulesAt(root, since);
         if (atBase) {
-          judgeBy = atBase.rules;
-          rulebook = diffRules(atBase.rules, rulesOf(root), edgesIfLoaded(root, deps.getActiveProjectPath(), getDependencyEdges) ?? []);
+          judgeBy = scopeRules(atBase.rules, scope);
+          // C1: only the scope's rules, on either side: a rule moved out of the scope is still its change.
+          rulebook = diffRules(atBase.rules, rulesOf(root), edgesIfLoaded(root, deps.getActiveProjectPath(), getDependencyEdges) ?? [])
+            .filter((c) => !scope || (c.before && inScope(c.before, scope)) || (c.after && inScope(c.after, scope)));
           // R3: a loosening passes only with a person's signed approval, checked against the base's keys.
           if (rulebook.some((c) => c.effect === 'loosens')) {
             const approvals = approvalsHere(root);
@@ -396,7 +403,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
           notes.push(`⚠ The rules at ${since.slice(0, 7)} could not be read, so this change was judged by its own rules. Fetch the base with its history.`);
         }
       }
-      const c = await checkChanges(root, paths, (uid) => deps.criterionLoop.checkCriterion(uid), (files) => ruleImports(root, files, since, judgeBy), rulebook, notes, strict === true);
+      const c = await checkChanges(root, paths, (uid) => deps.criterionLoop.checkCriterion(uid), (files) => ruleImports(root, files, since, judgeBy ?? (scope ? scopeRules(rulesOf(root), scope) : undefined)), rulebook, notes, strict === true, scope !== null);
       return {
         _meta: { summary: c.ok ? `Checked ${c.files.length} changed file${c.files.length === 1 ? '' : 's'}: conforms` : `Checked ${c.files.length} changed files: ${c.says.length} to act on` },
         content: [{ type: 'text' as const, text: JSON.stringify({
@@ -407,6 +414,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
           rules: c.rules.map((r) => ({ path: r.path, imports: r.imports, rule: r.rule, words: r.words, because: r.because, strength: r.strength })),
           rulebook: c.rulebook.map((r) => ({ rule: r.rule, change: r.change, effect: r.effect, allowed: r.allowed, forbidden: r.forbidden, words: changeWords(r), ...(r.approval ? { approval: r.approval } : {}) })),
           notes: c.notes,
+          ...(scope ? { scope: scopeWords(scope) } : {}),
           ...(c.rulesChecked ? {} : { rules_note: 'The architecture rules were not checked: this project\'s imports are not loaded here. Open the project, or run `codetrellis start` in it.' }),
         }, null, 2) }],
       };
