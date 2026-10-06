@@ -135,3 +135,16 @@ test('a suite is written with each rule\'s strength, so it reads back the same',
   assert.match(fs.readFileSync(path.join(root, `${RULES_DIR}/architecture.yaml`), 'utf-8'), /strength: warn/);
   assert.deepEqual(readRulebook(root).suites[0].rules.map((r) => r.strength), ['warn', 'guide']);
 });
+
+test('a package rule is written the way a person writes one, and reads back the same (R5)', () => {
+  const root = project();
+  const stripe: ArchitectureRule = {
+    id: 'stripe-via-wrapper', kind: 'package', from: '**', mayNotImport: 'npm:stripe', only: ['src/payments/index.ts'],
+    except: [], because: 'The wrapper sets idempotency keys and retries.', since: '2026-10-06T00:00:00.000Z', by: '', strength: 'block', suite: 'payments',
+  };
+  writeSuite(root, 'payments', [stripe]);
+  const text = fs.readFileSync(path.join(root, RULES_DIR, 'payments.yaml'), 'utf-8');
+  assert.match(text, /kind: package\n\s+package: npm:stripe\n\s+only:\n\s+- src\/payments\/index.ts/);
+  assert.doesNotMatch(text, /mayNotImport|from:/);
+  assert.deepEqual(readRulebook(root).suites[0].rules[0], stripe);
+});

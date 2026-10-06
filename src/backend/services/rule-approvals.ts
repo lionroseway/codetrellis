@@ -47,10 +47,16 @@ const MAX_BYTES = 16 * 1024;
 const COMMIT = /^[0-9a-f]{40}$/;
 
 /** What a rule holds a change to: the terms that judge code. Who set it, when and why are not signed. */
-export interface RuleTerms { from: string; mayNotImport: string; except: string[]; strength: RuleStrength }
+export interface RuleTerms {
+  from: string; mayNotImport: string; except: string[]; strength: RuleStrength;
+  /** A package rule's (R5); absent for an imports rule, so approvals signed before R5 still read the same. */
+  kind?: 'package'; only?: string[];
+}
 
 export function ruleTerms(r: ArchitectureRule | null | undefined): RuleTerms | null {
-  return r ? { from: r.from, mayNotImport: r.mayNotImport, except: [...r.except].sort(), strength: r.strength } : null;
+  if (!r) return null;
+  const terms: RuleTerms = { from: r.from, mayNotImport: r.mayNotImport, except: [...r.except].sort(), strength: r.strength };
+  return r.kind === 'package' ? { ...terms, kind: 'package', only: [...(r.only ?? [])].sort() } : terms;
 }
 
 export interface RuleChangeStatement {

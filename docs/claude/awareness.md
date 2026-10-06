@@ -527,6 +527,28 @@ read, and a pull request reviews. Rules Phase 32 kept in
 `.codetrellis/config.json` still count until the person moves them
 (`POST /api/rules/move-from-config`, offered in the same section).
 
+A **package rule** (Phase 33 R5) says who alone may import an outside
+package, the Stripe example:
+
+```yaml
+  - id: stripe-via-wrapper
+    kind: package
+    package: npm:stripe
+    only: [src/payments/index.ts]
+    strength: block
+    because: The wrapper sets idempotency keys and retries.
+```
+
+An import that resolves to no file in the project is kept as the package it
+comes from, in every language: `npm:` (scope kept), `pypi:` (the top
+module), `go:` (the module path), `cargo:`, `gem:`, `maven:`, `nuget:`,
+`composer:` (the whole dotted or `\` name, which a rule names a prefix of:
+`maven:com.stripe`), and `swift:`. Relative imports and the standard
+library are not packages (`src/shared/lib/package-entry.ts`). `from` limits
+where the rule applies (everywhere when omitted); `except` names parts of
+the package anyone may import (`npm:stripe/types`). Letting more files
+import it loosens the rule (R2, R3). Everything below holds for both kinds.
+
 - **Today** (A7.1): each rule lists the imports that already break it ("1
   import breaks this today"); `check_conformity` refuses a proposed import
   with the rule and why; `list_rules` reads them.

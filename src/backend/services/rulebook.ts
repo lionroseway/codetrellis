@@ -158,6 +158,21 @@ export function readRulebook(projectRoot: string): Rulebook {
 
 /** A rule as it is written in a suite file: its own fields, nothing derived. */
 function written(rule: ArchitectureRule): Record<string, unknown> {
+  if (rule.kind === 'package') {
+    // R5: written the way a person writes one (design §3.1).
+    return {
+      id: rule.id,
+      kind: 'package',
+      package: rule.mayNotImport,
+      ...(rule.from !== '**' ? { from: rule.from } : {}),
+      only: rule.only ?? [],
+      strength: rule.strength,
+      ...(rule.except.length ? { except: rule.except } : {}),
+      ...(rule.because ? { because: rule.because } : {}),
+      since: rule.since,
+      ...(rule.by ? { by: rule.by } : {}),
+    };
+  }
   return {
     id: rule.id,
     from: rule.from,

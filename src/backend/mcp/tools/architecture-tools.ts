@@ -169,8 +169,11 @@ export function register(server: McpServer, deps: ToolDeps): void {
         'caught by the check, which judges a branch by its base\'s rules.',
       inputSchema: {
         id: z.string().min(1).max(63).describe('The rule\'s id, a short slug like web-not-db: an existing rule to change or stop, or a new one.'),
-        from: z.string().max(300).optional().describe('The files it is about: a folder ending in / or a pattern. Required unless remove.'),
-        may_not_import: z.string().max(300).optional().describe('What they may not import. Required unless remove.'),
+        kind: z.enum(['imports', 'package']).optional().describe('imports (the default): files in from may not import files in may_not_import. package: only the files in only may import the outside package named in package.'),
+        from: z.string().max(300).optional().describe('The files it is about: a folder ending in / or a pattern. Required for an imports rule unless remove; for a package rule, where it applies (everywhere if omitted).'),
+        may_not_import: z.string().max(300).optional().describe('What they may not import. Required for an imports rule unless remove.'),
+        package: z.string().max(300).optional().describe('A package rule\'s outside package, ecosystem and name: npm:stripe, pypi:requests, go:github.com/stripe/stripe-go, maven:com.stripe.'),
+        only: z.array(z.string().max(300)).max(50).optional().describe('A package rule\'s files that alone may import it, like src/payments/index.ts.'),
         except: z.array(z.string().max(300)).max(50).optional().describe('Files they may import all the same.'),
         because: z.string().max(200).optional().describe('Why the rule exists, in the team\'s words.'),
         strength: z.enum(['block', 'warn', 'guide']).optional().describe('block fails the check; warn is said; guide is never checked. A new rule starts at warn.'),
@@ -186,6 +189,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const id = authorFromExtra(deps, extra);
       const body = args.remove ? null : {
         from: args.from, mayNotImport: args.may_not_import, except: args.except, because: args.because, strength: args.strength, suite: args.suite,
+        ...(args.kind ? { kind: args.kind } : {}), ...(args.package ? { package: args.package } : {}), ...(args.only ? { only: args.only } : {}),
       };
       try {
         if (!body && !findRule(root, args.id)) return { isError: true, content: [{ type: 'text' as const, text: `No architecture rule "${args.id}" in this project to stop.` }] };

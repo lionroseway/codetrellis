@@ -18,7 +18,7 @@ import { getProjectConfig, updateProjectConfig } from './project-config-service'
 import { checkEdges, parseArchitectureRule, ruleWords } from './architecture-rule';
 import { isSuiteName, readRulebook, suiteFile, writeSuite } from './rulebook';
 
-export { breachWords, breaks, checkEdges, inPattern, parseArchitectureRule, ruleWords } from './architecture-rule';
+export { breachWords, breaks, checkEdges, inPattern, parseArchitectureRule, ruleStatement, ruleWords } from './architecture-rule';
 
 export class RuleError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
@@ -164,9 +164,19 @@ export function edgesIfLoaded(
   projectRoot: string,
   loadedRoot: string | null,
   edges: () => Array<{ sourceRelative: string; targetRelative: string }>,
+  packages: () => Array<{ sourceRelative: string; targetRelative: string }> = packageEdgesOfGraph,
 ): Array<{ from: string; to: string }> | null {
   if (!loadedRoot) return null;
   const real = (p: string) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
   if (real(loadedRoot) !== real(projectRoot)) return null;
-  return edges().map((e) => ({ from: e.sourceRelative, to: e.targetRelative }));
+  // Files importing files, then files importing outside packages (R5), which only package rules read.
+  return [...edges(), ...packages()].map((e) => ({ from: e.sourceRelative, to: e.targetRelative }));
+}
+
+function packageEdgesOfGraph(): Array<{ sourceRelative: string; targetRelative: string }> {
+  try {
+    return (require('./database') as typeof import('./database')).getPackageEdges();
+  } catch {
+    return [];
+  }
 }
