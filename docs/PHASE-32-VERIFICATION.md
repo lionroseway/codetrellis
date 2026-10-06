@@ -75,7 +75,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
 | a | `POST /api/git/fetch` |  | ✗ none | 2 |  |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 210 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 212 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `DELETE /api/rules/:id` |  | ✗ none | 2 |  |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
@@ -133,11 +133,11 @@ records that — but "✗ none" is proof of a gap.
 | c | `GET /api/plan-history/:planSlug/diff` |  | ✗ none | 1 | ✓ 0.4c: exercised by input-validation (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plan-history/:planSlug/search` |  | ✗ none | 1 | ✓ 0.4c-1: finds by text; missing q 400 (plan-rest) |  |  |
 | c | `GET /api/plan-templates` |  | ✗ none | 2 | ✓ 0.4c: exercised by filesystem-sinks, review-confinement (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `GET /api/plans` |  | ✗ none | 11 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans` |  | ✗ none | 13 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:planUid/channels` |  | ✗ none | 6 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:planUid/items` |  | ✗ none | 13 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:planUid/timeline` |  | ✗ none | 1 | ✓ 0.4c: exercised by full-loop (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `GET /api/plans/:uid` |  | ✗ none | 18 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `GET /api/plans/:uid` |  | ✗ none | 20 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:uid/budget` |  | ✗ none | 1 | ✓ 0.4g: report incl. flaggedChanges; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
 | c | `GET /api/plans/:uid/changes` |  | ✗ none | 2 | ✓ 0.4c: exercised by full-loop, plan-rest (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/plans/:uid/changes/:changeId` |  | ✗ none | 1 | ✓ 0.4c-1: one projected change; unknown 404 (plan-rest) |  |  |
@@ -189,13 +189,13 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/items/:uid/skill-arrivals/accept` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/spec-proposals` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/worktree` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans` |  | 1 | 120 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans` |  | 1 | 122 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 3 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:planUid/items` |  | ✗ none | 84 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 2 | ✓ 0.4c: exercised by criteria-loops (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/docs` |  | ✗ none | 7 | ✓ 0.4c: exercised by full-loop, phone-plans, plan-docs, plan-export, +2 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `POST /api/plans/:uid/export` |  | ✗ none | 21 | ✓ 0.4c: exercised by cdev-cross-repo, contributor-branch-index, criteria-signoff, next-up-and-sync, +4 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:uid/export` |  | ✗ none | 23 | ✓ 0.4c: exercised by cdev-cross-repo, contributor-branch-index, criteria-signoff, next-up-and-sync, +4 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/phases` |  | ✗ none | 2 | ✓ 0.4c: exercised by full-loop, plan-phases, plan-templates (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/publish-as-template` |  | ✗ none | 2 | ✓ 0.4c: exercised by plan-templates (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/reconcile` |  | ✗ none | 2 | ✓ 0.4c: exercised by drift-review-tools, full-loop (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -215,7 +215,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `PUT /api/items/:uid/workstream` |  | ✗ none | 12 |  |  |  |
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 3 | ✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `PUT /api/plan-phases/:phaseUid` |  | ✗ none | 2 | ✓ 0.4c: exercised by full-loop, plan-phases (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `PUT /api/plans/:uid` |  | ✗ none | 9 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `PUT /api/plans/:uid` |  | ✗ none | 10 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `PUT /api/plans/:uid/budget` |  | ✗ none | 1 | ✓ 0.4g: recorded with who and how (local-api / desktop), never flagged; invalid ceilings 400; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
 | c | `PUT /api/recurring/:id` |  | ✗ none | 1 |  |  |  |
 | c | `PUT /api/recurring/:id/agent` |  | ✗ none | 1 |  |  |  |
