@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "S3 Under load, end to end"
-  status: "S2 merged (#353). S3 measures the whole path: 200 task files across 5 plans changed at once give 5 plan-imported broadcasts and nothing else, the backend's slowest answer meanwhile 68 ms (idle 4 ms); in the window, one notice and the plan list fetched once or twice"
-  next: "Merge S3; the owner repeats it on a Mac with a real git pull. Then the rulebook: R1, R2, R4, R3"
+  step: "R1 Rules live in .codetrellis/rules/*.yaml"
+  status: "S3 merged (#354): Track S is done; the owner's Mac run with a real git pull is still to do. A new MCP SDK advisory (GHSA-6qxp-vccf-f47h) failed every branch's audit: fixed in S3 and in main (#355). R1 in review: rules in committed suite files, the Phase 32 config rules still counting until a person moves them"
+  next: "Merge R1, then R2 (CI judges with the base branch's rules), R4 and R3"
   blockers: "None"
   updated: 2026-10-06
 sections:

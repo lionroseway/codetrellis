@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | S3 Under load, end to end |
-| **Status** | S2 merged (#353). S3 measures the whole path: 200 task files across 5 plans changed at once give 5 plan-imported broadcasts and nothing else, the backend's slowest answer meanwhile 68 ms (idle 4 ms); in the window, one notice and the plan list fetched once or twice |
-| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; S3 building on `feat/phase-33-s3-under-load`; R1 building on `feat/phase-33-r1-rule-files`; R2 building on `feat/phase-33-r2-base-rules`; R3 building on `feat/phase-33-r3-change-control`; R4 building on `feat/phase-33-r4-strength`; R5 building on `feat/phase-33-r5-package-rules`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; G7 building on `feat/phase-33-g7-rules-view`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
-| **Last merged** | S2 (#353, `a019339`) |
-| **Next action** | Merge S3; the owner repeats it on a Mac with a real git pull. Then the rulebook: R1, R2, R4, R3 |
+| **Stage / step** | R1 Rules live in .codetrellis/rules/*.yaml |
+| **Status** | S3 merged (#354): Track S is done; the owner's Mac run with a real git pull is still to do. A new MCP SDK advisory (GHSA-6qxp-vccf-f47h) failed every branch's audit: fixed in S3 and in main (#355). R1 in review: rules in committed suite files, the Phase 32 config rules still counting until a person moves them |
+| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; R1 building on `feat/phase-33-r1-rule-files`; R2 building on `feat/phase-33-r2-base-rules`; R3 building on `feat/phase-33-r3-change-control`; R4 building on `feat/phase-33-r4-strength`; R5 building on `feat/phase-33-r5-package-rules`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
+| **Last merged** | S3 (#354, `775917e`) |
+| **Next action** | Merge R1, then R2 (CI judges with the base branch's rules), R4 and R3 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-06 |
 
-> Read from git at `origin/feat/phase-33` `a019339`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `775917e`, with open PRs from GitHub.
 
 ---
 
@@ -48,7 +48,7 @@
 ### Track S: quiet under load
 - [x] S1 One import per plan per burst (the watcher coalesces) (#352)
 - [x] S2 The window takes a burst as one (one refetch, one toast) (#353)
-- [ ] S3 Under load end to end (200 files, 5 plans; the owner's real `git pull`) — building
+- [x] S3 Under load end to end (200 files, 5 plans; the owner's real `git pull`) (#354)
 
 ### Track R: the rulebook
 - [ ] R1 Rules live in `.codetrellis/rules/<suite>.yaml` (moved from config.json by a person's confirm) — building
@@ -80,7 +80,7 @@
 - [ ] G5 Selecting a file lists the plans and tasks that touch it — building
 - [ ] G6 Opening a plan always shows it, from a chip too — building
 - [ ] G7 The Rules view (its own workspace, not Settings) — building
-- [ ] G8 Rules on the graph (breaches drawn, rules for the selected file)
+- [ ] G8 Rules on the graph (breaches drawn, rules for the selected file) — building
 - [ ] G9 The Checks view (run any check from the app, CI runs beside local ones, compare runs)
 - [ ] G10 Findings where the code is (graph, code gutter, inspector, brief, phone)
 
@@ -199,6 +199,32 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-06 — S3 merged (#354), Track S done; R1 in review
+
+- **S3 merged** (#354). Track S (quiet under load) is done; the owner's
+  run on a Mac with a real `git pull` is still to do.
+- **A new advisory failed every branch's audit**: GHSA-6qxp-vccf-f47h
+  (high), `@modelcontextprotocol/sdk` 1.12.0–1.30.1, published today. Not
+  any step's change. Fixed by 1.32.1 (same dependencies; only its own lock
+  entry changes), ported into S3 so the phase was not blocked, and to
+  `main` as #355. Checked against typecheck, the unit suite and the MCP,
+  CLI and connector harness tests.
+- **R1: rules live in `.codetrellis/rules/<suite>.yaml`** (design §3.1). A
+  loader with problems in words (a file or rule that does not parse is
+  named, the rest still count; an id two suites share is kept once),
+  writes that keep a file's comments and order, every read and write
+  through the confined-file helper. Phase 32's rules in `config.json`
+  still count until a person moves them (`POST /api/rules/move-from-config`,
+  refused from plain HTTP, kept in the record). **One deviation from the
+  step's text**: the index is an in-memory cache keyed by each suite
+  file's size and time, not SQLite; nothing reads rules often enough yet
+  to need more, and breaches are computed from the graph, which is
+  already in SQLite.
+- **Follow-up to watch:** `e2e/inspector/evolution.spec.ts` failed once,
+  waiting 20 s for the diff editor's text, when run beside the legend and
+  edge-toggle specs on G8's branch; three runs since pass, and G8 does not
+  touch the code view. Not yet reproduced.
 
 ### 2026-10-06 — S2 merged (#353); S3 measures the whole path under load
 
