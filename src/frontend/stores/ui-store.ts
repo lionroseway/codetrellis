@@ -110,6 +110,12 @@ interface UiState {
   showSidebar: () => void;
   toggleInspector: () => void;
   toggleAgentPanel: () => void;
+  /**
+   * Phase 33 G4 — the panels as they were before full screen, or null when
+   * the graph is not full screen. Toggling again puts them back as they were.
+   */
+  fullScreenFrom: { sidebar: boolean; inspector: boolean; planPanel: boolean } | null;
+  toggleFullScreen: () => void;
   setSidebarWidth: (w: number) => void;
   setInspectorWidth: (w: number) => void;
   setAgentPanelHeight: (h: number) => void;
@@ -241,6 +247,20 @@ export const useUiStore = create<UiState>((set) => ({
   showSidebar: () => set({ sidebarVisible: true }),
   toggleInspector: () => set((s) => ({ inspectorVisible: !s.inspectorVisible })),
   toggleAgentPanel: () => set((s) => ({ agentPanelVisible: !s.agentPanelVisible })),
+  fullScreenFrom: null,
+  toggleFullScreen: () => set((s) => (s.fullScreenFrom
+    ? {
+      sidebarVisible: s.fullScreenFrom.sidebar,
+      inspectorVisible: s.fullScreenFrom.inspector,
+      agentPanelVisible: s.fullScreenFrom.planPanel,
+      fullScreenFrom: null,
+    }
+    : {
+      fullScreenFrom: { sidebar: s.sidebarVisible, inspector: s.inspectorVisible, planPanel: s.agentPanelVisible },
+      sidebarVisible: false,
+      inspectorVisible: false,
+      agentPanelVisible: false,
+    })),
   setSidebarWidth: (w) => set({ sidebarWidth: w }),
   setInspectorWidth: (w) => set({ inspectorWidth: w }),
   setAgentPanelHeight: (h) => set({ agentPanelHeight: h }),

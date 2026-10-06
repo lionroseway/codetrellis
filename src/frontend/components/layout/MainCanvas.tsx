@@ -20,7 +20,7 @@ import {
   type NodeMouseHandler,
   type OnSelectionChangeFunc,
 } from '@xyflow/react';
-import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, Pause, Play, RefreshCw, Filter, Zap, Plus, Sparkles, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
+import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, Pause, Play, RefreshCw, Filter, Zap, Plus, Sparkles, AlertTriangle, ChevronDown, ChevronRight, Maximize2, Minimize2 } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 
 import { useProjectStore } from '../../stores/project-store';
@@ -1511,6 +1511,9 @@ export function MainCanvas() {
                 <OverlaysMenu />
               </div>
               <div className="shrink-0">
+                <FullScreenButton />
+              </div>
+              <div className="shrink-0">
                 <ExportButton />
               </div>
             </div>
@@ -2250,6 +2253,29 @@ function ExportButton() {
     >
       <Download size={12} />
       Export
+    </button>
+  );
+}
+
+/**
+ * Phase 33 G4 — the graph full screen and back. Hides the sidebar, the
+ * inspector and the plan panel, and puts back whichever were showing.
+ */
+function FullScreenButton() {
+  const full = useUiStore((s) => s.fullScreenFrom !== null);
+  const toggle = useUiStore((s) => s.toggleFullScreen);
+  const words = full ? 'Leave full screen (⌘⇧F)' : 'Full screen: hide the side panels (⌘⇧F)';
+  return (
+    <button
+      data-testid="graph-full-screen"
+      onClick={toggle}
+      aria-pressed={full}
+      title={words}
+      aria-label={words}
+      className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] rounded-lg bg-white/[0.03] backdrop-blur-md border border-white/[0.08] text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] hover:border-white/[0.12] transition-all"
+    >
+      {full ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+      {full ? 'Exit full screen' : 'Full screen'}
     </button>
   );
 }
