@@ -426,6 +426,26 @@ advisory, beside `claude-review.yml`.
   env:VAR`, else `GITHUB_TOKEN`, `GITLAB_TOKEN` or `BITBUCKET_TOKEN`. The
   agent's environment is scrubbed, so the model never sees it.
 
+### What reviews keep finding becomes a rule (Phase 33 C6)
+
+A reviewer names each bug or risk with a `topic`: a short slug it would use
+every time it saw that kind of problem (`charge-without-idempotency-key`).
+When a review keeps a finding whose topic an earlier review already kept,
+CodeTrellis proposes a rule (`services/review-graduation.ts`):
+
+- at `guide` strength, so it checks nothing;
+- about the folder those findings share;
+- saying what the reviews said and what to do instead;
+- with the reviews and their places as its reason.
+
+It reaches the proposals inbox like any other (R3): nothing changes until a
+person accepts it. Once per topic: a topic that already has a rule, or any
+proposal (open, accepted or rejected), is not proposed again.
+
+A folder rule at `guide` strength may carry only its guide. That is the
+judgement half of a rule, shown wherever the rule applies: the brief, the
+review bundle and the Rules view.
+
 ## Test runs that travel (D1.5a)
 
 With task state shared, each new run reported (`report-tests`) is also

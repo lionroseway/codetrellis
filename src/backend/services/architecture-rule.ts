@@ -176,7 +176,8 @@ const MAX_GUIDE = 1000;
 /**
  * A folder rule (Phase 33 R8): `folder` and what its files are: named to
  * `files` (a pattern or a list), of `kinds` (extensions), and `exports: one`.
- * `guide` is the judgement half, in prose, never checked.
+ * `guide` is the judgement half, in prose, never checked; at `guide` strength
+ * it may stand alone (C6: what agent reviews keep finding, graduated).
  */
 function parseFolderRule(r: Record<string, unknown>): { rule: ArchitectureRule | null; problems: string[] } {
   const problems: string[] = [];
@@ -190,7 +191,9 @@ function parseFolderRule(r: Record<string, unknown>): { rule: ArchitectureRule |
   const kinds = list(r.kinds);
   if (kinds === null || kinds.some((k) => !/^[a-z0-9]+$/i.test(k.replace(/^\./, '')))) problems.push('kinds must be file extensions, like ts');
   if (r.exports !== undefined && r.exports !== 'one') problems.push('exports may only be one');
-  if (!problems.length && (files ?? []).length === 0 && (kinds ?? []).length === 0 && r.exports === undefined) problems.push('a folder rule says what its files are: files, kinds or exports');
+  // C6: a guide alone is a rule too, at guide strength: the judgement half, shown where it applies and never checked.
+  const guideOnly = r.strength === 'guide' && typeof r.guide === 'string' && r.guide.trim() !== '';
+  if (!problems.length && !guideOnly && (files ?? []).length === 0 && (kinds ?? []).length === 0 && r.exports === undefined) problems.push('a folder rule says what its files are: files, kinds or exports (or, at guide strength, only a guide)');
   if (r.guide !== undefined && (typeof r.guide !== 'string' || r.guide.length > MAX_GUIDE)) problems.push(`guide must be words, at most ${MAX_GUIDE} characters`);
   commonProblems(r, problems);
   if (problems.length > 0) return { rule: null, problems };

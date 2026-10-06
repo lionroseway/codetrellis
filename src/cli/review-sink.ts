@@ -72,6 +72,7 @@ const TOOLS = [
               says: { type: 'string', maxLength: 1000 },
               rule: { type: 'string', maxLength: 63 },
               fix: { type: 'string', maxLength: 500 },
+              topic: { type: 'string', maxLength: 63, description: 'For a bug or risk: what kind of problem, as a short slug you would use every time (stripe-outside-client).' },
             },
             required: ['kind', 'says'],
           },

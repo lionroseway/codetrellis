@@ -435,6 +435,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
           says: z.string().max(1000).describe('What is wrong, in a sentence or two.'),
           rule: z.string().max(63).optional().describe('For a rule finding: a rule id from the bundle.'),
           fix: z.string().max(500).optional().describe('What to do instead.'),
+          topic: z.string().max(63).optional().describe('For a bug or risk: what kind of problem, as a short slug you would use every time (stripe-outside-client). One found in two reviews is proposed as a rule.'),
         })).max(200).describe('Your findings; empty when you found nothing.'),
         ran_in: z.string().max(80).optional().describe('Where this review runs, in words: the CLI says "GitHub Actions", "a terminal". Omit from a session.'),
         // Phase 33 C4 — what `codetrellis review` knows of the agent it ran.
@@ -455,9 +456,15 @@ export function register(server: McpServer, deps: ToolDeps): void {
         refused, error: error?.trim() || undefined, pass: pass?.trim() || null, retries, refuted, verify: verify?.trim() || null,
       });
       if ('error' in r) return { isError: true, content: [{ type: 'text' as const, text: r.error }] };
+      if (r.proposed.length) deps.broadcast?.('rules-changed', { project: r.proposed[0].projectRoot });
+      const proposed = r.proposed.map((p) => ({ proposal: p.uid, rule: p.ruleId, words: p.words }));
       return {
-        _meta: { summary: `Review kept: ${reviewWords(r.review)}` },
-        content: [{ type: 'text' as const, text: JSON.stringify({ run: r.run, outcome: r.review.outcome, reason: r.review.reason, says: reviewWords(r.review), kept: r.review.findings, dropped: r.review.dropped }, null, 2) }],
+        _meta: { summary: `Review kept: ${reviewWords(r.review)}${proposed.length ? `; proposed ${proposed.map((p) => p.rule).join(', ')}` : ''}` },
+        content: [{ type: 'text' as const, text: JSON.stringify({
+          run: r.run, outcome: r.review.outcome, reason: r.review.reason, says: reviewWords(r.review), kept: r.review.findings, dropped: r.review.dropped,
+          // C6: a topic found in two reviews, proposed as a guide; a person decides.
+          ...(proposed.length ? { proposed } : {}),
+        }, null, 2) }],
       };
     },
   );

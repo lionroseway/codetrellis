@@ -70,7 +70,9 @@ export function folderWords(folder: string, terms: FolderTerms): string {
     terms.files?.length ? `are named ${terms.files.join(' or ')}` : null,
     terms.exports === 'one' ? 'export one thing each' : null,
   ].filter(Boolean) as string[];
-  const said = parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  // C6: a guide alone says nothing checkable; the guide itself is shown beside the words.
+  if (!parts.length) return `files in ${folder} follow its guide`;
+  const said = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
   return `files in ${folder} ${said}`;
 }
 
