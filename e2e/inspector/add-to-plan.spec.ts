@@ -13,7 +13,7 @@
 
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { API, authHeaders, gotoWithProject } from '../helpers/setup';
+import { API, authHeaders, cleanupPlans, gotoWithProject } from '../helpers/setup';
 import { createMcpClient } from '../helpers/mcp-client';
 import { FIXTURE_PATH } from '../live-agent/helpers/fixture-reset';
 
@@ -30,6 +30,10 @@ async function api(method: string, url: string, body?: unknown): Promise<any> {
 }
 
 test.describe('Add to plan from the code reader', () => {
+  // Its plan targets validators.ts, so one left behind joins play-forward's
+  // planned overlap on the same file when the two run in one pass (Phase 33 0.1).
+  test.afterEach(async ({ request }) => { await cleanupPlans(request, 'e2e-add-to-plan-'); });
+
   test('lines attach to an existing Action and to a new one', async ({ page }) => {
     const title = `e2e-add-to-plan-${Date.now()}`;
     const plan = await api('POST', '/plans', { title, projectPath: FIXTURE_PATH });

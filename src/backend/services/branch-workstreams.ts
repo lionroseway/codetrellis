@@ -225,6 +225,11 @@ export function setBranchWorkstreamsWarmedListener(listener: (repo: string) => v
   onWarmed = listener;
 }
 
+/** Tell the listener that more of a repository's branches are ready (the symbol warmer, Phase 33 0.1). */
+export function notifyBranchesWarmed(repo: string): void {
+  onWarmed(repo);
+}
+
 /** Repositories with a warmer running. */
 const warming = new Map<string, Promise<void>>();
 
