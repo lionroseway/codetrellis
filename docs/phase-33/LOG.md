@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Setup PR into feat/phase-33; the owner's decisions recorded |
-| **Status** | The owner answered the open questions (2026-10-06): rules as YAML suites; loosening signed with the device key; agent checks free, on the user's own agent, model and key, built by driving the user's agent rather than writing one; no CI host first; review features V1, V2, V3 and V6; the name agent checks; go ahead |
-| **In flight** | nothing open |
-| **Last merged** | — |
-| **Next action** | Merge the setup PR into feat/phase-33; then 0.1 Baseline on feat/phase-33-0-1-baseline (Node 26, clean npm ci --ignore-scripts, every suite) |
+| **Stage / step** | S2 The window takes a burst as one |
+| **Status** | S1 merged (#352), with a fix CI found: an edit in the app and a change on disk at once now lose neither. S2 gathers the backend's plan-imported broadcasts in the window too: one plan-list refetch and one notice for a pull that touches several plans |
+| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; S2 building on `feat/phase-33-s2-window-takes-a-burst`; S3 building on `feat/phase-33-s3-under-load`; R1 building on `feat/phase-33-r1-rule-files`; R2 building on `feat/phase-33-r2-base-rules`; R3 building on `feat/phase-33-r3-change-control`; R4 building on `feat/phase-33-r4-strength`; R5 building on `feat/phase-33-r5-package-rules`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
+| **Last merged** | S1 (#352, `da38dce`) |
+| **Next action** | Merge S2, then S3 (200 files across 5 plans, end to end), then the rulebook (R1, R2, R4, R3) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-06 |
 
-> Read from git at `origin/feat/phase-33` `5fb23f4`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `da38dce`, with open PRs from GitHub.
 
 ---
 
@@ -34,60 +34,61 @@
 
 ### Setup
 - [x] Integration branch `feat/phase-33` cut from `main` (`5fb23f4`)
-- [ ] Status tooling serves any phase (and reads Phase 32's D and E steps, which the old pattern missed)
-- [ ] The progress page, generated from the status (`npm run status:page`) and published as an artifact
-- [ ] Design, execution plan, status and this log
-- [ ] CLAUDE.md points every session here
+- [x] Status tooling serves any phase (and reads Phase 32's D and E steps, which the old pattern missed) (#346)
+- [x] The progress page, generated from the status (`npm run status:page`) and published as an artifact (#346)
+- [x] Design, execution plan, status and this log (#346)
+- [x] CLAUDE.md points every session here (#346)
+- [x] Follow-up: A new advisory (sprintf-js, GHSA-hp3w-g68c-fv3c) failed the production audit on every branch: kept out of the tree by an override (into `main`) (#347)
 
 ### Stage 0: ground truth
-- [ ] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count)
-- [ ] 0.2 Measure the plan reload storm in a harness test (imports, broadcasts, response time)
-- [ ] 0.3 Colour audit (every colour, its meaning and where), the draft visual vocabulary
+- [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
+- [x] 0.2 Measure the plan reload storm in a harness test (imports, broadcasts, response time) (#351)
+- [ ] 0.3 Colour audit (every colour, its meaning and where), the draft visual vocabulary — building
 
 ### Track S: quiet under load
-- [ ] S1 One import per plan per burst (the watcher coalesces)
-- [ ] S2 The window takes a burst as one (one refetch, one toast)
-- [ ] S3 Under load end to end (200 files, 5 plans; the owner's real `git pull`)
+- [x] S1 One import per plan per burst (the watcher coalesces) (#352)
+- [ ] S2 The window takes a burst as one (one refetch, one toast) — building
+- [ ] S3 Under load end to end (200 files, 5 plans; the owner's real `git pull`) — building
 
 ### Track R: the rulebook
-- [ ] R1 Rules live in `.codetrellis/rules/<suite>.yaml` (moved from config.json by a person's confirm)
-- [ ] R2 CI judges with the base branch's rules; a rulebook change is its own finding
-- [ ] R3 Change control: preview the effect, a person confirms, loosening is signed, `propose_rule` for agents
-- [ ] R4 Strength: block, warn, guide (exit codes, `--strict`, signals)
-- [ ] R5 Package rules across all eleven languages (only the wrapper imports `stripe`)
+- [ ] R1 Rules live in `.codetrellis/rules/<suite>.yaml` (moved from config.json by a person's confirm) — building
+- [ ] R2 CI judges with the base branch's rules; a rulebook change is its own finding — building
+- [ ] R3 Change control: preview the effect, a person confirms, loosening is signed, `propose_rule` for agents — building
+- [ ] R4 Strength: block, warn, guide (exit codes, `--strict`, signals) — building
+- [ ] R5 Package rules across all eleven languages (only the wrapper imports `stripe`) — building
 - [ ] R6 Symbol rules (who may import a named export, through re-exports)
 - [ ] R7 Call rules (HTTP hosts, commands, tables, env)
 - [ ] R8 Folder rules (what files in a folder are)
 - [ ] R9 Guide rules in scope (the brief, `get_brief`, drift names the rule)
 
 ### Track C: checks anywhere
-- [ ] C1 Scoped checks (`--suite`, `--rule`, `--path`; MCP and REST alike)
-- [ ] C2 SARIF output, host-neutral; recipes are examples for any CI (no host first)
-- [ ] C3 Debt ratchet (existing breaches may only fall)
+- [ ] C1 Scoped checks (`--suite`, `--rule`, `--path`; MCP and REST alike) — building
+- [ ] C2 SARIF output, host-neutral; recipes are examples for any CI (no host first) — building
+- [ ] C3 Debt ratchet (existing breaches may only fall) — building
 - [ ] C4 Agent checks locally on the user's own agent: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes)
 - [ ] C4b Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified)
 - [ ] C5 Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass)
 - [ ] C6 Graduation (a repeated finding proposes a rule)
-- [ ] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran
-- [ ] C8 One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words
+- [ ] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran — building
+- [ ] C8 One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words — building
 
 ### Track G: graph and clarity
-- [ ] G1 One visual vocabulary (colour, glyph, dash, words) with a guard test
-- [ ] G2 The legend on the graph, plan canvas, file tree and Timeline
-- [ ] G3 Edge toggles (imports, cross-system, symbol links)
-- [ ] G4 Graph full screen and back; hidden panes leave no gap
-- [ ] G5 Selecting a file lists the plans and tasks that touch it
-- [ ] G6 Opening a plan always shows it, from a chip too
+- [ ] G1 One visual vocabulary (colour, glyph, dash, words) with a guard test — building
+- [ ] G2 The legend on the graph, plan canvas, file tree and Timeline — building
+- [ ] G3 Edge toggles (imports, cross-system, symbol links) — building
+- [ ] G4 Graph full screen and back; hidden panes leave no gap — building
+- [ ] G5 Selecting a file lists the plans and tasks that touch it — building
+- [ ] G6 Opening a plan always shows it, from a chip too — building
 - [ ] G7 The Rules view (its own workspace, not Settings)
 - [ ] G8 Rules on the graph (breaches drawn, rules for the selected file)
 - [ ] G9 The Checks view (run any check from the app, CI runs beside local ones, compare runs)
 - [ ] G10 Findings where the code is (graph, code gutter, inspector, brief, phone)
 
 ### Track V: review (the owner's picks)
-- [ ] V1 What this change does to the architecture (structural diff at the top of every review)
-- [ ] V2 Review in order of risk (dependents, rule scope, test grounding, other work)
-- [ ] V3 Re-review only what changed since each reviewer's last look
-- [ ] V6 Did the change do what the task said (only when it is linked to a task)
+- [ ] V1 What this change does to the architecture (structural diff at the top of every review) — building
+- [ ] V2 Review in order of risk (dependents, rule scope, test grounding, other work) — building
+- [ ] V3 Re-review only what changed since each reviewer's last look — building
+- [ ] V6 Did the change do what the task said (only when it is linked to a task) — building
 
 ### Stage Z: close
 - [ ] Z1 Docs: `docs/claude/rules.md`, CLI and MCP references, the change-control security rule
@@ -100,9 +101,35 @@
 
 ## Baseline
 
-To be recorded by 0.1 on Node 26 from a clean `npm ci`: typecheck, the
-lint warning count, `test:unit`, `test:harness`, the browser suite and
-`test:phone`.
+Measured by 0.1 on 2026-10-06 at `feat/phase-33` (`81db781`), on Node
+26.10.0 and npm 11.19.1, from `npm ci --ignore-scripts` plus
+`patch-package` (as CI installs), in a 4-core cloud container.
+
+| Suite | Result | Time |
+|---|---|---|
+| `npm run typecheck` | clean | 25 s |
+| `npm run lint` | 0 errors, **306 warnings** | |
+| `npm run test:unit` | 1,993 tests: 1,989 pass, 0 fail, 4 skipped | 72 s |
+| `npm run test:phone` | 39 pass | 13 s |
+| `npm run test:harness` | 1,262 tests: 1,254 pass; 2 fail and 6 did not run, all in two files that need `ssh-keygen`, which this container lacked. With `openssh-client` installed, both files pass (25 of 25) | 46.8 min |
+| Browser, `chromium` | 556 pass | 36.6 min, 2 workers |
+| Browser, `serial` | 219 pass, **3 fail** (`e2e/plan/play-forward.spec.ts`), fixed in 0.1, below | 16.9 min |
+
+The suite was green at the start, so the three failures were ours:
+
+- **A spec left its plan behind.** `e2e/inspector/add-to-plan.spec.ts`
+  made a plan on `validators.ts` and never removed it, so play-forward,
+  run after it in the same pass, saw a three-way planned overlap. CI's
+  serial shards happened to keep the two apart. It now cleans up.
+- **Awareness took 7–10 s to answer**, so B9.3b timed out on "Checking
+  for overlaps…". With twenty `feat/phase-33-*` branches of forty files
+  each on the remote, every listing parsed every branch's changed files
+  for symbols before answering; the branches' own budget (HD4b) stopped
+  short of that. One listing now parses at most 60 files and warms the
+  rest in the background, telling the window when they are ready
+  (`branch-symbols-budget.test.ts`). Real users with many pushed branches
+  would have hit the same wait. The 108 awareness, workstream and branch
+  harness tests pass with it.
 
 ## Decisions
 
@@ -172,6 +199,112 @@ lint warning count, `test:unit`, `test:harness`, the browser suite and
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-06 — S1 merged (#352); S2 makes the window take a burst as one
+
+- **S1 merged** (#352), green after the fix for what CI found (the entry
+  below).
+- **S2: the window takes a burst as one** (`src/frontend/lib/plan-reload.ts`,
+  the shared burst helper in `useWebSocket`). After S1 a pull touching three
+  plans still sent three `plan-imported` broadcasts; the window now gathers
+  them: one refetch of the plan list, the open plan once if it was among
+  them, and one notice naming how many plans and files ("3 plans reloaded
+  from disk"), which a later burst replaces rather than stacks. The browser
+  test runs in the serial project: it counts every reload the window takes,
+  and a parallel spec writing plan files would add its own.
+
+### 2026-10-06 — 0.2 merged (#351); S1 makes a burst one import
+
+- **0.2 merged** (#351), green on every CI job once its inventory was
+  regenerated.
+- **S1: one import per plan per burst** (`src/shared/lib/burst.ts`, used by
+  `plan-file-service`). The watcher gathers a plan's changed files and
+  imports it once they go quiet (250 ms, and at most a second apart while
+  a burst keeps going); each `plan-imported` broadcast says how many files
+  it covers. The same test, tightened:
+
+  | Files changed | `plan-imported` broadcasts (0.2 → S1) | Slowest answer during the burst (0.2 → S1; idle 3 ms) |
+  |---|---|---|
+  | 1 | 1 → 1 | 14 → 7 ms |
+  | 10 | 10 → 1 | 141 → 6 ms |
+  | 50 | 50 → 1 | 1,896 → 56 ms |
+
+  It now asserts one or two imports (two only when a burst straddles the
+  one-second cap), that together they cover every changed file, and that
+  the slowest answer stays within twice the idle one (250 ms floor). The
+  window still refetches and toasts per broadcast; S2 makes it take a
+  burst as one.
+- **CI found what S1's wait opened** (#352, `plan-doc-guard`, ours). An
+  edit in the app writes the plan back to disk 200 ms later, from the
+  database. A disk change waiting in its burst lost that race: the export
+  overwrote the file before the import read it. And the import reads the
+  whole plan, so a `plan.yaml` still as we wrote it overwrote an edit made
+  in the app since. Two fixes, with a test that fails without them (`a
+  change on disk and an edit in the app at once: neither is lost`):
+  - the write-through imports the plan's waiting disk changes first;
+  - the watcher's import skips any file that still reads exactly as we
+    last wrote it, by the self-write tracker's content hash, so the
+    database keeps what changed in the app. An import someone asks for
+    still reads every file.
+
+### 2026-10-06 — 0.1 merged (#350); 0.2 measures the storm
+
+- **0.1 merged** (#350), green on every CI job. With both fixes the
+  serial browser project passes in full (222 of 222) in a clean clone.
+- **0.2: the reload storm, measured** (`tests/e2e/plan-reload-storm.test.ts`).
+  One plan's task files changed at once, as a pull does:
+
+  | Files changed | `plan-imported` broadcasts | Slowest answer during the burst (idle 3–5 ms) |
+  |---|---|---|
+  | 1 | 1 | 14 ms |
+  | 10 | 10 | 141 ms |
+  | 50 | 50 | 1,896 ms |
+
+  One whole-plan import and one broadcast per changed file: the backend
+  stops answering for about two seconds at 50 files, and the window, which
+  refetches and toasts once per broadcast, does fifty of each. That is the
+  freeze the owner saw. The test asserts today's numbers; S1 tightens it.
+
+### 2026-10-06 — 0.1 Baseline measured; two of our bugs fixed
+
+- Every suite measured on Node 26 (the Baseline above). Two harness files
+  need `ssh-keygen`; the container lacked it, and they pass with it.
+- Three serial browser failures in play-forward, from two bugs of ours,
+  both fixed on the 0.1 branch: a spec that leaked its plan, and an
+  awareness listing that parsed every remote branch's files before it
+  answered (now inside a budget, the rest warmed in the background).
+- Built ahead on their own branches while the suites ran, each with its
+  tests, and queued to merge one PR at a time: 0.2, S1, S2, R1, R2, R4,
+  R3 (a: signed approval of a loosening, checked against the base's keys;
+  b: `propose_rule`), C1 (scoped checks), C2 (SARIF and recipes for any
+  host), C3 (debt ratchet, building), 0.3 (colour audit, shown on its own
+  page), G1 (one visual vocabulary), G3 (edge toggles), G4 (full screen),
+  G5 (the inspector lists a file's plans) and G6 (opening a plan shows it).
+- Decision (R4): a rule written before strength existed reads as `block`,
+  what every rule did then; only new rules start at `warn`, so no rule gets
+  weaker unasked.
+- Decision (R3): the shared "Waiting on you" inbox does not list rule
+  proposals yet; they are in Settings → Architecture rules until the Rules
+  view (G7) gives them a home.
+
+### 2026-10-06 — Setup merged; 0.1 started
+
+- **#347 into `main`.** A moderate advisory published today against
+  `sprintf-js` (GHSA-hp3w-g68c-fv3c, every version affected) failed
+  `npm audit --omit=dev` on every branch. It reached production only through
+  `mammoth` → `argparse@1`, and only `mammoth`'s CLI uses `argparse`. An npm
+  override gives `mammoth` `argparse` 2, so `sprintf-js` leaves the
+  production tree.
+  - The lockfile change is only `mammoth`'s two nested entries. npm also
+    wanted to resync the root `bin` and `better-sqlite3`'s
+    `hasInstallScript`; I left those out, and `npm ci` accepts the result.
+  - Found on the way: with `node_modules` absent, `npm install
+    --package-lock-only` (npm 10 and 11 alike) leaves an override
+    unapplied. A full install applies it.
+- **#346 merged into `feat/phase-33`** (`81db781`), carrying the same fix,
+  and green on all 20 checks.
+- **0.1 started** on `feat/phase-33-0-1-baseline`, on Node 26.10.0 (npm
+  11.19.1).
 
 ### 2026-10-05 — Its own folder; agent checks, review and rendering designed
 

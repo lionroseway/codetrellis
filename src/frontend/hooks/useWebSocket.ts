@@ -11,6 +11,25 @@ import { usePlayForwardStore } from '../stores/play-forward-store';
 import { useSourceControlStore } from '../stores/source-control-store';
 import { useArtefactViewStore } from '../stores/artefact-view-store';
 import type { AgentEvent } from '../../shared/types';
+import { burst } from '../../shared/lib/burst';
+import { planReload, type PlanImported } from '../lib/plan-reload';
+
+/**
+ * Plans reloaded from disk, taken as one per burst (Phase 33 S2). A pull that
+ * touches several plans sends one `plan-imported` each; the window refetches
+ * the list once, the open plan once if it was among them, and shows one
+ * notice that a later burst replaces rather than stacks.
+ */
+const planReloads = burst<'disk', PlanImported>((_key, payloads) => {
+  const { planUids, title, message } = planReload(payloads);
+  const plans = usePlanStore.getState();
+  plans.fetchPlans(plans.planScope === 'all' ? undefined : plans.planScope).catch(() => {});
+  if (plans.activePlanUid && planUids.includes(plans.activePlanUid)) {
+    // Re-fetch the open plan so the view reflects the disk change.
+    plans.fetchPlan(plans.activePlanUid).catch(() => {});
+  }
+  useToastStore.getState().addToast({ type: 'info', title, message, duration: 5000, key: 'plan-reloaded-from-disk' });
+}, { quietMs: 300, maxWaitMs: 1000 });
 
 /**
  * Connects to the backend WebSocket and routes messages
@@ -192,31 +211,15 @@ export function useWebSocket() {
           }
 
           if (type === 'plan-imported') {
-            // An external import (MCP, another window, future
-            // auto-sync) loaded a plan. Refresh the list so the
-            // user sees it, respecting the current plan scope.
-            const scope = usePlanStore.getState().planScope;
-            usePlanStore.getState().fetchPlans(scope === 'all' ? undefined : scope).catch(() => {});
-            // Phase 13 §B: file-watcher-driven auto-syncs are common
-            // (every git pull, every external edit). Distinguish them
-            // so the toast text matches what just happened.
+            // Phase 13 §B: file-watcher-driven auto-syncs are common (every
+            // git pull, every external edit), and come in bursts: gathered
+            // and taken as one (Phase 33 S2, above).
             if (payload?.source === 'file-watcher') {
-              const planUid = payload?.planUid;
-              const active = usePlanStore.getState().activePlanUid;
-              if (planUid && planUid === active) {
-                // Re-fetch the in-flight plan so the open view
-                // reflects the disk change.
-                usePlanStore.getState().fetchPlan(planUid).catch(() => {});
-              }
-              useToastStore.getState().addToast({
-                type: 'info',
-                title: 'Plan reloaded from disk',
-                message: payload?.warnings?.length
-                  ? `External change picked up (${payload.warnings.length} warnings).`
-                  : 'External change picked up.',
-                duration: 5000,
-              });
+              planReloads.add('disk', payload as PlanImported);
             } else {
+              // An import someone asked for (MCP, another window): at once.
+              const scope = usePlanStore.getState().planScope;
+              usePlanStore.getState().fetchPlans(scope === 'all' ? undefined : scope).catch(() => {});
               useToastStore.getState().addToast({ type: 'info', title: 'Plan imported', message: payload?.source || 'from disk' });
             }
           }

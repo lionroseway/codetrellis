@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "Setup PR into feat/phase-33; the owner's decisions recorded"
-  status: "The owner answered the open questions (2026-10-06): rules as YAML suites; loosening signed with the device key; agent checks free, on the user's own agent, model and key, built by driving the user's agent rather than writing one; no CI host first; review features V1, V2, V3 and V6; the name agent checks; go ahead"
-  next: "Merge the setup PR into feat/phase-33; then 0.1 Baseline on feat/phase-33-0-1-baseline (Node 26, clean npm ci --ignore-scripts, every suite)"
+  step: "S2 The window takes a burst as one"
+  status: "S1 merged (#352), with a fix CI found: an edit in the app and a change on disk at once now lose neither. S2 gathers the backend's plan-imported broadcasts in the window too: one plan-list refetch and one notice for a pull that touches several plans"
+  next: "Merge S2, then S3 (200 files across 5 plans, end to end), then the rulebook (R1, R2, R4, R3)"
   blockers: "None"
   updated: 2026-10-06
 sections:
@@ -28,9 +28,26 @@ sections:
       - title: Integration branch `feat/phase-33` cut from `main` (`5fb23f4`)
         status: done
       - title: Status tooling serves any phase (and reads Phase 32's D and E steps, which the old pattern missed)
+        status: done
+        prs:
+          - 346
       - title: The progress page, generated from the status (`npm run status:page`) and published as an artifact
+        status: done
+        prs:
+          - 346
       - title: Design, execution plan, status and this log
+        status: done
+        prs:
+          - 346
       - title: CLAUDE.md points every session here
+        status: done
+        prs:
+          - 346
+      - title: "A new advisory (sprintf-js, GHSA-hp3w-g68c-fv3c) failed the production audit on every branch: kept out of the tree by an override (into `main`)"
+        followUp: true
+        status: done
+        prs:
+          - 347
   - title: "Stage 0: ground truth"
     goal: Numbers to measure against, the freeze measured, and every colour the app draws written down.
     items:
