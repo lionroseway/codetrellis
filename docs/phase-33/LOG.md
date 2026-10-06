@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | 0.1 Baseline |
-| **Status** | Measured on Node 26 (see the Baseline). Three serial browser failures were ours and are fixed: a spec that leaked a plan, and awareness parsing every remote branch's files before answering. 15 later steps are built on their branches, each tested, waiting to merge in order |
-| **In flight** | 0.1 in review (#350) on `feat/phase-33-0-1-baseline`; 0.2 building on `feat/phase-33-0-2-reload-storm`; 0.3 building on `feat/phase-33-0-3-colour-audit`; S1 building on `feat/phase-33-s1-one-import-per-burst`; S2 building on `feat/phase-33-s2-window-takes-a-burst`; R1 building on `feat/phase-33-r1-rule-files`; R2 building on `feat/phase-33-r2-base-rules`; R3 building on `feat/phase-33-r3-change-control`; R4 building on `feat/phase-33-r4-strength`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan` |
-| **Last merged** | — |
-| **Next action** | Merge 0.1, then 0.2, S1 and S2, one PR at a time, each green in CI before the next |
+| **Stage / step** | 0.2 Measure the plan reload storm |
+| **Status** | 0.1 merged (#350). Measured: 1, 10 and 50 changed task files give 1, 10 and 50 whole-plan imports and broadcasts, and the backend's slowest answer during the burst grows to 1.9 s at 50 (idle 3–5 ms) |
+| **In flight** | 0.2 building on `feat/phase-33-0-2-reload-storm`; 0.3 building on `feat/phase-33-0-3-colour-audit`; S1 building on `feat/phase-33-s1-one-import-per-burst`; S2 building on `feat/phase-33-s2-window-takes-a-burst`; R1 building on `feat/phase-33-r1-rule-files`; R2 building on `feat/phase-33-r2-base-rules`; R3 building on `feat/phase-33-r3-change-control`; R4 building on `feat/phase-33-r4-strength`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan` |
+| **Last merged** | 0.1 (#350, `30c5289`) |
+| **Next action** | Merge 0.2, then S1 (one import per plan per burst) and S2 (the window takes a burst as one) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-06 |
 
-> Read from git at `origin/feat/phase-33` `81db781`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `30c5289`, with open PRs from GitHub.
 
 ---
 
@@ -41,7 +41,7 @@
 - [x] Follow-up: A new advisory (sprintf-js, GHSA-hp3w-g68c-fv3c) failed the production audit on every branch: kept out of the tree by an override (into `main`) (#347)
 
 ### Stage 0: ground truth
-- [ ] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350) — in review
+- [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
 - [ ] 0.2 Measure the plan reload storm in a harness test (imports, broadcasts, response time) — building
 - [ ] 0.3 Colour audit (every colour, its meaning and where), the draft visual vocabulary — building
 
@@ -74,7 +74,7 @@
 
 ### Track G: graph and clarity
 - [ ] G1 One visual vocabulary (colour, glyph, dash, words) with a guard test — building
-- [ ] G2 The legend on the graph, plan canvas, file tree and Timeline
+- [ ] G2 The legend on the graph, plan canvas, file tree and Timeline — building
 - [ ] G3 Edge toggles (imports, cross-system, symbol links) — building
 - [ ] G4 Graph full screen and back; hidden panes leave no gap — building
 - [ ] G5 Selecting a file lists the plans and tasks that touch it — building
