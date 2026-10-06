@@ -69,8 +69,9 @@ test.describe('code and plan, both directions', () => {
     await expect(banner, 'the code reader should name the item that wants this file')
       .toBeVisible({ timeout: 8000 });
 
-    // Follow it.
-    await page.getByRole('button', { name: /Align rounding/ }).first().click();
+    // Follow it: the banner's own button. Since Phase 33 G5 the inspector
+    // also lists the file's tasks, with a button of the task's name.
+    await page.getByRole('button', { name: /Align rounding.*wants this file/ }).first().click();
     await page.waitForTimeout(1500);
 
     // We are on the item.
