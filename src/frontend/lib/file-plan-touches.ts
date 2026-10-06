@@ -49,3 +49,25 @@ export function fileTouches(overlay: FileOverlay | null, planTitles: ReadonlyMap
   }
   return [...byPlan.values()];
 }
+
+/**
+ * For a cluster or folder: how many of the open plan's tasks touch each of
+ * its files. Only files some task touches are in the map, so its size is
+ * the number of files the plan touches.
+ */
+export function taskCountsByFile(
+  files: readonly string[],
+  items: ReadonlyArray<{ uid: string; fileSpecs?: ReadonlyArray<{ path?: string | null }> | null }>,
+): Map<string, number> {
+  const wanted = new Set(files);
+  const tasks = new Map<string, Set<string>>();
+  for (const item of items) {
+    for (const spec of item.fileSpecs ?? []) {
+      if (!spec.path || !wanted.has(spec.path)) continue;
+      let set = tasks.get(spec.path);
+      if (!set) tasks.set(spec.path, (set = new Set()));
+      set.add(item.uid);
+    }
+  }
+  return new Map([...tasks].map(([p, s]) => [p, s.size]));
+}

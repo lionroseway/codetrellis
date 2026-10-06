@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileTouches } from './file-plan-touches';
+import { fileTouches, taskCountsByFile } from './file-plan-touches';
 import type { FileOverlay, OverlayMarker } from './plan-overlay';
 
 const m = (itemUid: string, planUid: string, extra: Partial<OverlayMarker> = {}): OverlayMarker => ({
@@ -30,4 +30,13 @@ test('a task whose edit could not be placed still counts; no overlay is no plans
   assert.equal(fileTouches(overlay([], [], [m('u', 'p1', { anchor: 'unanchored' })]), new Map())[0].tasks[0].itemUid, 'u');
   assert.equal(fileTouches(overlay([], [], [m('u', 'p1')]), new Map())[0].title, 'A plan');
   assert.deepEqual(fileTouches(null, new Map()), []);
+});
+
+test('a cluster counts the open plan\'s tasks per file, each task once, and only its own files', () => {
+  const counts = taskCountsByFile(['a.ts', 'b.ts', 'c.ts'], [
+    { uid: 't1', fileSpecs: [{ path: 'a.ts' }, { path: 'a.ts' }, { path: 'b.ts' }] },
+    { uid: 't2', fileSpecs: [{ path: 'a.ts' }, { path: 'elsewhere.ts' }] },
+    { uid: 't3', fileSpecs: null },
+  ]);
+  assert.deepEqual([...counts], [['a.ts', 2], ['b.ts', 1]]);
 });
