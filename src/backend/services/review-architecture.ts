@@ -25,6 +25,7 @@ import { parseVirtualFile } from './ast-parser';
 import { rulesAt } from './rules-at';
 import { checkEdges, ruleWords } from './architecture-rule';
 import { diffRules } from './rule-changes';
+import { riskInputs, riskMarkdown, riskOrder, type FileRisk } from './review-risk';
 
 const MAX_PARSED = 200;
 const MAX_BYTES = 512 * 1024;
@@ -45,6 +46,8 @@ export interface ArchitectureChange {
   rules: RuleTouch[];
   /** One sentence per finding, most telling first. */
   words: string[];
+  /** Phase 33 V2: the changed files in order of risk, each with why. */
+  order: FileRisk[];
 }
 
 function git(root: string, args: string[]): string | null {
@@ -215,7 +218,11 @@ export async function architectureOf(projectRoot: string, baseRef: string, headR
   for (const r of rules.filter((x) => x.kind === 'tightens' || x.kind === 'reworded')) words.push(r.detail);
   if (!edgesKnown) words.push('The imports between folders are not known: one side\'s import graph could not be read.');
 
-  return { base, head, edgesKnown, folders, packages, calls, rules, words };
+  // V2 — the files in order of what a mistake there would cost.
+  const inputs = await riskInputs(projectRoot, changed, headRef);
+  const order = riskOrder(changed, inputs);
+
+  return { base, head, edgesKnown, folders, packages, calls, rules, words, order };
 }
 
 /** The section as markdown, for the top of a review or a pull request. */
@@ -225,5 +232,6 @@ export function architectureMarkdown(a: ArchitectureChange): string {
   if (shown.length === 0) lines.push('No imports between folders, outside packages, cross-system calls or rules change.');
   else for (const w of a.words) lines.push(`- ${w}`);
   if (shown.length === 0 && !a.edgesKnown) lines.push('', '_The imports between folders are not known: one side\'s import graph could not be read._');
+  if (a.order?.length) lines.push('', riskMarkdown(a.order));
   return lines.join('\n');
 }
