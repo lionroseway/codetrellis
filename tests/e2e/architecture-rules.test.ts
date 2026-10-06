@@ -59,10 +59,13 @@ test.describe.serial('Architecture rules', () => {
 
   test('an agent asking before it writes an import is told the rule and why; an import inside the web app is fine', async () => {
     const put = await h.client.raw('PUT', `/api/rules/web-not-services?project=${encodeURIComponent(root)}`, {
-      from: 'packages/web/', mayNotImport: 'services/', because: 'the web app calls the API over HTTP',
+      from: 'packages/web/', mayNotImport: 'services/', because: 'the web app calls the API over HTTP', strength: 'block',
     });
     expect(put.status, await put.clone().text()).toBe(200);
-    expect(((await put.json()) as { view: RuleView }).view.breachWords).toBe('Nothing breaks this today');
+    const set = (await put.json()) as { view: RuleView };
+    expect(set.view.breachWords).toBe('Nothing breaks this today');
+    // Asked for at block (R4), it is kept at block.
+    expect(set.view.rule.strength).toBe('block');
 
     const refused = await agent.callTool('check_conformity', { proposed_imports: [{ from: 'packages/web/src/UserList.tsx', importing: 'services/api/app/db.py' }], project_path: root });
     expect(refused.isError, refused.text).toBeFalsy();
@@ -85,6 +88,9 @@ test.describe.serial('Architecture rules', () => {
   });
 
   test('a bad rule is refused with why; an unknown one cannot be stopped; a stopped one is gone from its file', async () => {
+    const odd = await h.client.raw('PUT', `/api/rules/web?project=${encodeURIComponent(root)}`, { from: 'web/', mayNotImport: 'db/', strength: 'sometimes' });
+    expect(odd.status).toBe(400);
+    expect(((await odd.json()) as { error: string }).error).toMatch(/strength must be block, warn or guide/);
     const bad = await h.client.raw('PUT', `/api/rules/web?project=${encodeURIComponent(root)}`, { from: '../web/', mayNotImport: '' });
     expect(bad.status).toBe(400);
     expect(((await bad.json()) as { error: string }).error).toBe('from may not climb out of the project; mayNotImport must be a folder or a pattern, like web/');
