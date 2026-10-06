@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isPackageEntry, packageEntry, packageMatches, packageProblem } from './package-entry';
+import { ecosystemOfPath, isPackageEntry, packageApplies, packageEntry, packageMatches, packageProblem } from './package-entry';
 
 test('each language names the package an outside import comes from', () => {
   const cases: Array<[string, string, string | null]> = [
@@ -50,4 +50,17 @@ test('a package entry is told from a project path; a bad one is named', () => {
   assert.equal(packageProblem('npm:stripe'), null);
   assert.match(packageProblem('stripe') ?? '', /ecosystem and a name/);
   assert.match(packageProblem('bower:jquery') ?? '', /ecosystem and a name/);
+});
+
+test('G10: the ecosystem a file imports from, by its extension; a file in no language imports none', () => {
+  assert.equal(ecosystemOfPath('packages/web/src/api.ts'), 'npm');
+  assert.equal(ecosystemOfPath('web/App.TSX'), 'npm');
+  assert.equal(ecosystemOfPath('services/api/app/billing.py'), 'pypi');
+  assert.equal(ecosystemOfPath('internal/ledger/ledger.go'), 'go');
+  assert.equal(ecosystemOfPath('app/Models/Invoice.php'), 'composer');
+  assert.equal(ecosystemOfPath('README.md'), null);
+  assert.equal(ecosystemOfPath('.github/CODEOWNERS'), null);
+  assert.equal(ecosystemOfPath('v1.2/Makefile'), null);
+  assert.equal(packageApplies('npm:stripe', 'src/api.ts'), true);
+  assert.equal(packageApplies('npm:stripe', 'app/billing.py'), false);
 });

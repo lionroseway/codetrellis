@@ -17,10 +17,10 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 306 | 304 | 0 | 0 | 217 | 0 |
+| REST routes | 307 | 305 | 0 | 0 | 217 | 0 |
 | MCP tools | 215 | 215 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
-| Frontend components | 146 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 147 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 38 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 0 | n/a | n/a | n/a | 0 | 0 |
 
@@ -30,9 +30,9 @@ records that — but "✗ none" is proof of a gap.
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 25 | 12 | 10 | 0 | 0 | 0 |
 | 0.4b Graph | 30 | 15 | 8 | 21 | 0 | 0 |
-| 0.4c Plans and items | 120 | 63 | 29 | 64 | 0 | 0 |
+| 0.4c Plans and items | 121 | 63 | 29 | 64 | 0 | 0 |
 | 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
-| 0.4e Brief and viewer | 5 | 4 | 1 | 4 | 0 | 0 |
+| 0.4e Brief and viewer | 5 | 4 | 1 | 5 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 14 | 7 | 1 | 0 | 0 |
 | 0.4g Agents and MCP | 31 | 33 | 10 | 38 | 0 | 0 |
 | 0.4h Drift, governance, review | 13 | 28 | 9 | 0 | 0 | 0 |
@@ -48,7 +48,7 @@ records that — but "✗ none" is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (306)
+## REST routes (307)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -127,6 +127,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `GET /api/items/:uid/full` |  | ✗ none | 2 | ✓ 0.4c: exercised by item-surface, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `GET /api/items/:uid/grounding` |  | ✗ none | 2 |  |  |  |
 | c | `GET /api/items/:uid/routing` |  | ✗ none | 1 |  |  |  |
+| c | `GET /api/items/:uid/rules` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/items/:uid/signed-approvals` |  | ✗ none | 1 |  |  |  |
 | c | `GET /api/items/:uid/skills` |  | ✗ none | 4 |  |  |  |
 | c | `GET /api/items/:uid/spec-links` |  | ✗ none | 1 |  |  |  |
@@ -196,9 +197,9 @@ records that — but "✗ none" is proof of a gap.
 | c | `POST /api/items/:uid/skill-arrivals/accept` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/spec-proposals` |  | ✗ none | 1 |  |  |  |
 | c | `POST /api/items/:uid/worktree` |  | ✗ none | 1 |  |  |  |
-| c | `POST /api/plans` |  | 1 | 124 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans` |  | 1 | 125 | ✓ 0.4c: exercised by agent-loop, agent-ui-tools, artefacts-stale, brief-surface, +45 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:planUid/channels` |  | ✗ none | 3 | ✓ 0.4c: exercised by artefacts-stale, phone-channels-projects, presence-channels (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `POST /api/plans/:planUid/items` |  | ✗ none | 85 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `POST /api/plans/:planUid/items` |  | ✗ none | 86 | ✓ 0.4c: exercised by agent-ui-tools, artefacts-stale, brief-surface, code-reference, +20 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/apply-template` |  | ✗ none | 1 | ✓ 0.4c-1: seeds items; missing templateId 400 (plan-rest) |  |  |
 | c | `POST /api/plans/:uid/check-runs` |  | ✗ none | 2 | ✓ 0.4c: exercised by criteria-loops (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `POST /api/plans/:uid/docs` |  | ✗ none | 7 | ✓ 0.4c: exercised by full-loop, phone-plans, plan-docs, plan-export, +2 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -462,7 +463,7 @@ records that — but "✗ none" is proof of a gap.
 | d | `report_tests` | test · write | ✗ none | 4 |  |  |  |
 | d | `run_checks` | plan-item · read | ✗ none | 1 | ✓ 0.4d: names the stale criterion and the changed file; approves nothing (criteria-loops) |  |  |
 | d | `submit_criterion` | plan-item · write | ✗ none | 10 | ✓ 0.4d: submitting is not approving; agent policy self-approves in the agent's name (criteria-signoff) |  |  |
-| e | `get_brief` | plan-item · read | ✗ none | 16 | ✓ 0.4e: item, guide from pages, own files + pages' materials only, still_needs; unknown refused (brief-surface) |  |  |
+| e | `get_brief` | plan-item · read | ✗ none | 17 | ✓ 0.4e: item, guide from pages, own files + pages' materials only, still_needs; unknown refused (brief-surface) |  |  |
 | e | `list_materials` | plan-item · read | ✗ none | 1 | ✓ 0.4e: every file item by item in tree order, outputs included; unknown refused (brief-surface) |  |  |
 | e | `read_material` | plan-item · files | ✗ none | 8 | ✓ 0.4e: CSV by {range} (bug 24), text by {lines}, image as itself; read logged on the item (brief-surface, read unit) |  |  |
 | e | `record_artefact` | plan-item · write | ✗ none | 7 | ✓ 0.4e: agent records an output (brief-surface, criteria-loops) |  |  |
@@ -642,7 +643,7 @@ records that — but "✗ none" is proof of a gap.
 | f | `channel.thread` | read | ✗ none | 1 | ✓ 0.4j: root then reply (phone-channels-projects) |  |  |
 | f | `input.respond` | write | ✗ none | 1 | ✓ 0.4j: answer reaches the asking peer once; not pending refused (phone-channels-projects) |  |  |
 | g | `awareness.answer` | write | 1 | 1 |  |  |  |
-| g | `awareness.needsYou` | read | ✗ none | 2 |  |  |  |
+| g | `awareness.needsYou` | read | ✗ none | 3 |  |  |  |
 | g | `awareness.reply` | write | ✗ none | 2 |  |  |  |
 | g | `awareness.signal` | read | ✗ none | 3 |  |  |  |
 | g | `breakpoint.answer` | write | 1 | 2 | ✓ B4.4: continue, steer (needs a note) or stop in the person's name; confirmed pairing only, audited, desktop told; the first answer stands (phone-breakpoints) |  |  |
@@ -678,7 +679,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (146)
+## Frontend components (147)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -771,6 +772,7 @@ records that — but "✗ none" is proof of a gap.
 | e | `brief/BriefWorkspace.tsx` |  | n/a | n/a |  | ✓ 0.5 — agent-agnostic wording (0.5b) |  |
 | e | `brief/EvidenceControls.tsx` |  | n/a | n/a |  |  |  |
 | e | `brief/SignoffPackControls.tsx` |  | n/a | n/a |  |  |  |
+| e | `brief/TaskRules.tsx` |  | n/a | n/a |  |  |  |
 | f | `presence/PresencePane.tsx` |  | n/a | n/a |  | ✓ 0.5 — one count that names what it counts (0.5c). Minors: toast over reply (m17), above modal backdrop (m22) |  |
 | g | `ActiveAgentProjects.tsx` |  | n/a | n/a |  |  |  |
 | g | `ErrorBoundary.tsx` |  | n/a | n/a |  |  |  |

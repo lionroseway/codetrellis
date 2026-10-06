@@ -50,6 +50,28 @@ const ecosystemOf: Record<string, PackageEcosystem> = {
   java: 'maven', kotlin: 'maven', csharp: 'nuget', php: 'composer', swift: 'swift',
 };
 
+const ecosystemOfExt: Record<string, PackageEcosystem> = {
+  ts: 'npm', tsx: 'npm', mts: 'npm', cts: 'npm', js: 'npm', jsx: 'npm', mjs: 'npm', cjs: 'npm',
+  py: 'pypi', go: 'go', rs: 'cargo', rb: 'gem', java: 'maven', kt: 'maven', kts: 'maven',
+  cs: 'nuget', php: 'composer', swift: 'swift',
+};
+
+/**
+ * The ecosystem whose packages a file can import, from its extension (G10), or
+ * null for a file that imports none. A package rule about `npm:stripe` is
+ * about the TypeScript files under its `from`, and not the Python ones.
+ */
+export function ecosystemOfPath(file: string): PackageEcosystem | null {
+  const dot = file.lastIndexOf('.');
+  return dot > file.lastIndexOf('/') ? ecosystemOfExt[file.slice(dot + 1).toLowerCase()] ?? null : null;
+}
+
+/** Whether a package rule (`npm:stripe`) can be about this file: its language imports from that ecosystem. */
+export function packageApplies(rulePackage: string, file: string): boolean {
+  const eco = ecosystemOfPath(file);
+  return eco !== null && rulePackage.startsWith(`${eco}:`);
+}
+
 const RUST_LOCAL = new Set(['crate', 'self', 'super', 'std', 'core', 'alloc']);
 /** How many path segments name a Go module on hosts that say: `github.com/owner/repo`, `golang.org/x/repo`, `gopkg.in/pkg.v3`. */
 const GO_MODULE_SEGMENTS: Array<[RegExp, number]> = [

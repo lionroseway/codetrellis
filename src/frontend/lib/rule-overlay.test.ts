@@ -60,3 +60,13 @@ test('the rules about a file, and what a suite keeps lit', () => {
   assert.equal(suiteCovers(VIEWS, 'architecture', ['web/a.ts']), true);
   assert.equal(suiteCovers([WEB], 'payments', ['web/a.ts']), false);
 });
+
+test('G10: a package rule is about the files that can import from its ecosystem, and the files that may: npm:stripe is not about a Python file', () => {
+  const npm = { id: 'stripe-via-wrapper', kind: 'package' as const, from: '**', mayNotImport: 'npm:stripe', only: ['src/payments/index.ts'], except: [], suite: 'payments', strength: 'block' };
+  assert.equal(ruleCovers(npm, 'src/api.ts'), true);
+  assert.equal(ruleCovers(npm, 'src/payments/index.ts'), true);
+  assert.equal(ruleCovers(npm, 'services/api/app/billing.py'), false);
+  assert.equal(ruleCovers(npm, 'README.md'), false);
+  assert.equal(ruleCovers({ ...npm, mayNotImport: 'pypi:stripe', only: ['services/api/app/billing.py'] }, 'services/api/app/routes/users.py'), true);
+  assert.equal(ruleCovers({ ...npm, mayNotImport: 'pypi:stripe', only: ['services/api/app/billing.py'] }, 'src/api.ts'), false);
+});

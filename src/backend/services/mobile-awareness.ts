@@ -23,6 +23,9 @@ import { getPairedDevice } from './paired-device-service';
 import { PeerAuthorizationError } from './peer-capabilities';
 import { recordPeerAudit } from './peer-audit-service';
 import { buildDigest } from '../../shared/lib/awareness-digest';
+import { listCheckRuns } from './check-runs';
+import { outcomeWords } from './task-records/check-run-record';
+import { blockingRuns } from '../../shared/lib/open-findings';
 import { kindWords, sideWords, type SideWords } from '../../shared/lib/signal-words';
 import { sideLabel } from '../../shared/lib/workstream-words';
 import { SETTABLE_SIGNAL_STATES } from '../../shared/types';
@@ -70,6 +73,37 @@ export interface PhoneNeedsYou {
   digest: { needsYou: number; low: number; moreLines: number; lines: Array<{ text: string; question: string; told: boolean; signalIds: string[] }> };
   /** High and medium signals still in play: open first, then seen. Set-aside ones are left to the desktop. */
   signals: PhoneSignal[];
+  /** Phase 33 G10: check runs that block, the latest from each place, newest first. */
+  checks: PhoneCheckRun[];
+}
+
+/** A check run that blocks, as the phone shows it in Needs you. */
+export interface PhoneCheckRun {
+  id: string;
+  who: string;
+  ranIn: string;
+  /** What it checked: "the payments suite", or null for every rule. */
+  scope: string | null;
+  at: number;
+  /** "✗ 1 blocks" */
+  outcome: string;
+  /** The findings that fail it, a few: where, the rule, and what to do instead. */
+  findings: Array<{ where: string; rule: string; fix: string | null }>;
+  more: number;
+}
+
+const PHONE_FINDINGS = 3;
+
+/** The runs that block in a project, for the phone. */
+export function phoneChecks(projectRoot: string): PhoneCheckRun[] {
+  return blockingRuns(listCheckRuns(projectRoot)).map((r) => {
+    const failing = r.findings.filter((f) => f.failing);
+    return {
+      id: r.id, who: r.who, ranIn: r.ranIn, scope: r.scope, at: r.at, outcome: outcomeWords(r.outcome),
+      findings: failing.slice(0, PHONE_FINDINGS).map((f) => ({ where: `${f.path} imports ${f.imports}`, rule: f.rule, fix: f.fix })),
+      more: Math.max(0, failing.length - PHONE_FINDINGS),
+    };
+  });
 }
 
 export interface PhoneAwarenessContext {
@@ -104,7 +138,7 @@ const RANK = { high: 0, medium: 1, low: 2 } as const;
 
 /** What needs the person, in the digest's words, and the signals to open. */
 export async function phoneNeedsYou(projectRoot: string | null): Promise<PhoneNeedsYou> {
-  const empty: PhoneNeedsYou = { projectRoot, digest: { needsYou: 0, low: 0, moreLines: 0, lines: [] }, signals: [] };
+  const empty: PhoneNeedsYou = { projectRoot, digest: { needsYou: 0, low: 0, moreLines: 0, lines: [] }, signals: [], checks: [] };
   if (!projectRoot) return empty;
   // The stored signals, as the snapshot's count reads them: the folder and ref
   // watchers keep them current (scheduleSignalRefresh), window open or not.
@@ -124,6 +158,7 @@ export async function phoneNeedsYou(projectRoot: string | null): Promise<PhoneNe
       lines: d.lines.map((l) => ({ text: l.text, question: l.question, told: l.told, signalIds: l.signalIds })),
     },
     signals: inPlay.map((s) => toPhoneSignal(s, label)),
+    checks: phoneChecks(projectRoot),
   };
 }
 

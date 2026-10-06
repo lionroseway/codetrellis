@@ -9,6 +9,7 @@
  */
 
 import { inRulePattern } from '../../shared/lib/rule-pattern';
+import { packageApplies } from '../../shared/lib/package-entry';
 
 export interface OverlayRule {
   id: string;
@@ -53,7 +54,8 @@ export function nodeBreachMark(breaches: readonly OverlayBreach[], files: readon
 
 /** Whether a rule is about a file: it is in the rule's scope, may alone import its package, or is what the rule guards. */
 export function ruleCovers(rule: OverlayRule, file: string): boolean {
-  if (rule.kind === 'package') return inRulePattern(rule.from, file) || (rule.only ?? []).some((o) => inRulePattern(o, file));
+  // G10: a package rule is about the files under it that can import from its ecosystem, and the files that may.
+  if (rule.kind === 'package') return (inRulePattern(rule.from, file) && packageApplies(rule.mayNotImport, file)) || (rule.only ?? []).some((o) => inRulePattern(o, file));
   return inRulePattern(rule.from, file) || inRulePattern(rule.mayNotImport, file);
 }
 

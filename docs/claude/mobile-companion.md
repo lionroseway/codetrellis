@@ -183,7 +183,10 @@ harness sees them. Tapping the push opens `/signal-detail?id=` (A4.5b,
   heading's count is the snapshot's `waitingBreakpoints + openSignals`, the
   same count the Home badge adds in. The words are pulled when `openSignals`
   moves or the tab is focused. When nothing is waiting, a line says so.
-  "Lines of work ›" opens the list.
+  "Lines of work ›" opens the list. Since Phase 33 G10 a check run that
+  blocks is here too (`checks` in `awareness.needsYou`): the latest run from
+  each place it ran, with up to three findings and what to do instead, counted
+  in the heading. A place whose latest run passes is not listed.
 - **`signal-detail`**, which is also where the push lands. It shows the
   summary, each side in the desktop's words, the files, and what each told
   agent said. Below that are the person's own replies, each with whether an

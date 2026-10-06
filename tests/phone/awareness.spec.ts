@@ -114,6 +114,27 @@ test.describe('Needs you, on Activity', () => {
     await shot(page, 'signal-detail-material');
   });
 
+  test('Phase 33 G10: a check that blocks, where it ran, what it found and what to do instead', async ({ page }) => {
+    const check = {
+      id: 'aaaaaaaa-2', who: 'ci for Build bot', ranIn: 'GitHub Actions', scope: 'the payments suite', at: now - 3 * MIN, outcome: '✗ 4 block',
+      findings: ['api', 'cart', 'refund'].map((x) => ({ where: `packages/web/src/${x}.ts imports npm:stripe`, rule: 'stripe-via-wrapper', fix: 'use packages/web/src/payments.ts instead' })),
+      more: 1,
+    };
+    await openScreen(page, 'activity', {
+      rpc: { 'awareness.needsYou': { projectRoot: '/work/acme', digest: { needsYou: 0, low: 0, moreLines: 0, lines: [] }, signals: [], checks: [check] } },
+    });
+    const card = page.getByTestId('needs-you-check');
+    await expect(card).toHaveCount(1);
+    await expect(page.getByTestId('needs-you')).toContainText('NEEDS YOU (1)');
+    await expect(card).toContainText('✗ A check blocks · the payments suite');
+    await expect(card).toContainText('ci for Build bot in GitHub Actions: ✗ 4 block');
+    await expect(card).toContainText('packages/web/src/api.ts imports npm:stripe · stripe-via-wrapper');
+    await expect(card).toContainText('→ use packages/web/src/payments.ts instead');
+    await expect(card).toContainText('and 1 more');
+    await expect(page.getByTestId('needs-you')).not.toContainText('Nothing is waiting on you.');
+    await shot(page, 'needs-you-check');
+  });
+
   test('nothing waiting says so in a line', async ({ page }) => {
     await openScreen(page, 'activity', {
       rpc: { 'awareness.needsYou': { projectRoot: '/work/acme', digest: { needsYou: 0, low: 0, moreLines: 0, lines: [] }, signals: [] } },

@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EditorState, type Extension } from '@codemirror/state';
-import { EditorView, lineNumbers, highlightActiveLine } from '@codemirror/view';
+import { EditorView, GutterMarker, gutter, lineNumbers, highlightActiveLine } from '@codemirror/view';
 import { MergeView, unifiedMergeView } from '@codemirror/merge';
 import { AlertTriangle, Columns2, Loader2, Rows3 } from 'lucide-react';
 import { languageExtensionFor, languageForPath } from '../../lib/codemirror-lang';
+import { findingHover, placeFindings, type PlacedFinding, type RunFinding } from '../../../shared/lib/open-findings';
+import { ATTENTION, TONES } from '../../lib/visual-language';
+import { useUiStore } from '../../stores/ui-store';
 
 /**
  * The diff editor — Phase 26, layer B.
@@ -50,9 +53,56 @@ interface Props {
   /** Language tag; inferred from the path when omitted. */
   language?: string | null;
   authHeaders?: Record<string, string>;
+  /**
+   * Phase 33 G10 — what the latest check run found in the file as it is now.
+   * Marked on the after side only, and only when that side is the live file:
+   * a finding is about the code as it stands.
+   */
+  findings?: { runId: string; findings: RunFinding[] } | null;
 }
 
 type Layout = 'split' | 'unified';
+
+/** Phase 33 G10 — the ⊘ in the after side's gutter: the finding in words on hover, the run on a click. */
+class FindingMarker extends GutterMarker {
+  constructor(readonly findings: PlacedFinding[], readonly onOpen: (runId: string) => void) { super(); }
+  eq(other: FindingMarker) { return other.findings === this.findings; }
+  toDOM() {
+    const words = this.findings.map(findingHover).join('\n');
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.textContent = ATTENTION.breach.glyph;
+    el.title = `${words}\nOpen the check run`;
+    el.setAttribute('aria-label', `Line ${this.findings[0].line}: ${words}. Open the check run`);
+    el.dataset.testid = 'diff-finding';
+    el.dataset.line = String(this.findings[0].line);
+    el.className = `${this.findings.some((f) => f.failing) ? TONES[ATTENTION.breach.tone].text : TONES.attention.text} px-0.5 leading-none`;
+    el.addEventListener('click', (e) => { e.stopPropagation(); this.onOpen(this.findings[0].runId); });
+    return el;
+  }
+}
+
+/** Holds the gutter's width: the glyph, hidden, with nothing to click or find. */
+class FindingSpacer extends GutterMarker {
+  toDOM() {
+    const el = document.createElement('span');
+    el.textContent = ATTENTION.breach.glyph;
+    el.className = 'px-0.5';
+    el.setAttribute('aria-hidden', 'true');
+    return el;
+  }
+}
+
+function findingGutter(placed: PlacedFinding[], onOpen: (runId: string) => void): Extension {
+  const byLine = new Map<number, PlacedFinding[]>();
+  for (const f of placed) byLine.set(f.line, [...(byLine.get(f.line) ?? []), f]);
+  const markers = new Map([...byLine].map(([line, list]) => [line, new FindingMarker(list, onOpen)]));
+  return gutter({
+    class: 'cm-findings-gutter',
+    lineMarker: (view, block) => markers.get(view.state.doc.lineAt(block.from).number) ?? null,
+    initialSpacer: () => new FindingSpacer(),
+  });
+}
 
 /** Dark theme tuned to the app's surface, so the diff does not look bolted on. */
 const THEME: Extension = EditorView.theme(
@@ -100,7 +150,9 @@ export function CodeDiffView({
   labels,
   beforePath,
   afterPath,
+  findings,
 }: Props) {
+  const openCheckRun = useUiStore((s) => s.openCheckRun);
   const host = useRef<HTMLDivElement>(null);
   const mergeRef = useRef<MergeView | null>(null);
   const unifiedRef = useRef<EditorView | null>(null);
@@ -108,6 +160,8 @@ export function CodeDiffView({
   const [layout, setLayout] = useState<Layout>('split');
   const [loading, setLoading] = useState(true);
   const [sides, setSides] = useState<{ before: FileAtResult; after: FileAtResult } | null>(null);
+
+  const findingsKey = findings ? `${findings.runId}:${findings.findings.map((f) => `${f.rule}>${f.imports}`).join(',')}` : '';
 
   const languageExt = useMemo(
     () => languageExtensionFor(language ?? languageForPath(relativePath)),
@@ -153,6 +207,9 @@ export function CodeDiffView({
 
     const beforeDoc = sides.before.content ?? '';
     const afterDoc = sides.after.content ?? '';
+    // G10: the after side carries the findings, placed on its lines.
+    const placed = findings && after === 'live' ? placeFindings(findings.findings, findings.runId, afterDoc) : [];
+    const afterExt = placed.length > 0 ? [...base, findingGutter(placed, openCheckRun)] : base;
 
     // Two genuinely different views, not one view with a cosmetic flag.
     // Neither offers accept/reject controls: this is a read-only review
@@ -163,7 +220,7 @@ export function CodeDiffView({
         state: EditorState.create({
           doc: afterDoc,
           extensions: [
-            ...base,
+            ...afterExt,
             unifiedMergeView({
               original: beforeDoc,
               highlightChanges: true,
@@ -183,7 +240,7 @@ export function CodeDiffView({
 
     const view = new MergeView({
       a: { doc: beforeDoc, extensions: base },
-      b: { doc: afterDoc, extensions: base },
+      b: { doc: afterDoc, extensions: afterExt },
       parent: host.current,
       orientation: 'a-b',
       highlightChanges: true,
@@ -196,7 +253,9 @@ export function CodeDiffView({
       view.destroy();
       mergeRef.current = null;
     };
-  }, [sides, languageExt, layout]);
+    // `findingsKey`, not `findings`: a fresh fetch of the same runs must not rebuild the editor.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sides, languageExt, layout, findingsKey, after, openCheckRun]);
 
   if (loading) {
     return (
