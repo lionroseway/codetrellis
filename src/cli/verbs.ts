@@ -27,6 +27,8 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { flag, type Parsed } from './args';
+import { toSarif, ruleFileIn } from './sarif';
+import { version as CLI_VERSION } from '../../package.json';
 import { changedFiles, gate, gateWords } from './conformity';
 import type { Agent, ToolAnswer } from './agent';
 
@@ -245,6 +247,15 @@ async function conforms(ctx: Ctx, root: string): Promise<Outcome> {
   try { changed = changedFiles(root, flag(ctx.p, 'base'), process.env); } catch (err) { throw new UsageError((err as Error).message); }
   const g = await gate(ctx.agent, root, changed, ctx.p.flags.strict === true, { suite: flag(ctx.p, 'suite'), rule: flag(ctx.p, 'rule'), path: flag(ctx.p, 'path') });
   if ('error' in g) return { out: g.error, code: 1 };
-  if (ctx.json) return { out: JSON.stringify(g), code: g.ok ? 0 : 3 };
+  const format = flag(ctx.p, 'format') ?? (ctx.json ? 'json' : 'text');
+  if (format === 'sarif') {
+    // C2: for any host that reads SARIF; the exit code still says whether it conforms.
+    const read = (rel: string): string | null => {
+      try { return fs.readFileSync(path.join(root, rel), 'utf8'); } catch { return null; }
+    };
+    return { out: JSON.stringify(toSarif(g, { version: CLI_VERSION, root, read, ruleFile: ruleFileIn(root) }), null, 2), code: g.ok ? 0 : 3 };
+  }
+  if (format === 'json') return { out: JSON.stringify(g), code: g.ok ? 0 : 3 };
+  if (format !== 'text') throw new UsageError(`--format is text, json or sarif, not ${format}`);
   return { out: gateWords(g), code: g.ok ? 0 : 3 };
 }

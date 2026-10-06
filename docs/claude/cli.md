@@ -95,7 +95,25 @@ The data dir can be cached between runs (`actions/cache` on
 time; nothing in it is needed for the gate to be right.
 
 This repository runs it on every pull request, in the Desktop job of
-`.github/workflows/ci.yml`, over its own unit run.
+`.github/workflows/ci.yml`, over its own unit run, and uploads the SARIF.
+
+### Any other host (Phase 33 C2)
+
+No CI host comes first. `codetrellis check --format sarif` writes SARIF
+2.1.0 (validated against the schema in `tools/sarif/`): each finding at the
+line it is about where there is one (a rule's breach at its import), an
+error at `block`, a warning at `warn`, an approved loosening a note.
+GitHub code scanning, GitLab, Azure DevOps and Jenkins's Warnings NG read it.
+
+[`docs/recipes/check.sh`](../recipes/check.sh) is the whole job as a plain
+shell script any runner can call: it installs CodeTrellis if it is not
+there, starts it, hands it the JUnit report, writes the SARIF, prints the
+words and exits 0, or 3 when the change does not conform. It reads the base
+from each host's own variable. The other recipes only call it:
+[GitLab CI](../recipes/gitlab-ci.yml),
+[Azure Pipelines](../recipes/azure-pipelines.yml),
+[Bitbucket Pipelines](../recipes/bitbucket-pipelines.yml) and
+[Jenkins](../recipes/Jenkinsfile).
 
 ## The gate
 

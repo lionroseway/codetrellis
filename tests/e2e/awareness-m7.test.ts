@@ -161,6 +161,17 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
       expect(words.code).toBe(3);
       expect(words.out).toBe(`Does not conform (1 changed file since ${main}):\n  ✗ ${USERS} now imports ${CONFIG}, which the rule “${RULE}” forbids: ${BECAUSE}`);
 
+      // C2: the same finding as SARIF, at the line that imports it, for any host to show.
+      const sarif = ct('check', '--base', main, '--format', 'sarif');
+      expect(sarif.code, sarif.err).toBe(3);
+      const run = (JSON.parse(sarif.out) as { version: string; runs: Array<{ results: Array<{ ruleId: string; level: string; locations: Array<{ physicalLocation: { artifactLocation: { uri: string }; region?: { startLine: number } } }> }> }> });
+      expect(run.version).toBe('2.1.0');
+      const [hit] = run.runs[0].results;
+      expect(hit).toMatchObject({ ruleId: 'rule/routes-not-config', level: 'error' });
+      const lines = fs.readFileSync(path.join(root, USERS), 'utf-8').split('\n');
+      expect(lines[hit.locations[0].physicalLocation.region!.startLine - 1]).toBe(ADDED.trim());
+      expect(ct('check', '--base', main, '--format', 'yaml').code).toBe(2);
+
       edit(root, USERS, ADDED, '');
       git(root, 'commit', '-qam', 'Exports read the URL through the app');
       const fixed = ct('check', '--base', main, '--json');
