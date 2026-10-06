@@ -20,7 +20,7 @@ records that — but "✗ none" is proof of a gap.
 | REST routes | 300 | 298 | 0 | 0 | 217 | 0 |
 | MCP tools | 213 | 213 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
-| Frontend components | 141 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 142 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 38 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 0 | n/a | n/a | n/a | 0 | 0 |
 
@@ -670,7 +670,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (141)
+## Frontend components (142)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
