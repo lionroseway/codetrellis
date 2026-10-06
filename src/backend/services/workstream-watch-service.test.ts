@@ -193,11 +193,24 @@ describe('watching', () => {
 
   test('a change made while the watcher is still starting is not lost', async () => {
     const f = path.join(tree, 'src/during-startup.ts');
-    await syncWorkstreamWatchers([{ folder: tree, mainRef: 'main' }]);
-    write(tree, 'src/during-startup.ts'); // before chokidar is ready: no event for it
-    await settle();
-    assert.ok((await getChanges(tree, 'main')).files.some((x) => x.path === 'src/during-startup.ts'));
-    fs.rmSync(f);
+    // Waited for, not slept on: on a loaded machine the watcher's ready, and
+    // the git read it schedules, took longer than a fixed 600 ms (#370).
+    const started = new Promise<void>((resolve) => setWorkstreamWatchStartedListener((folder) => { if (folder === tree) resolve(); }));
+    try {
+      await syncWorkstreamWatchers([{ folder: tree, mainRef: 'main' }]);
+      write(tree, 'src/during-startup.ts'); // before chokidar is ready: no event for it
+      await started;
+      const deadline = Date.now() + 15_000;
+      let seen = false;
+      while (!seen && Date.now() < deadline) {
+        seen = (await getChanges(tree, 'main')).files.some((x) => x.path === 'src/during-startup.ts');
+        if (!seen) await settle(100);
+      }
+      assert.ok(seen, 'the change made during startup is in the answer once the watcher is listening');
+    } finally {
+      setWorkstreamWatchStartedListener(() => {});
+      fs.rmSync(f);
+    }
   });
 
   test('a folder newly watched is announced once its watcher is listening, with nothing having changed', async () => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Allotment } from 'allotment';
 import { ChevronLeft, Minimize2, Activity as ActivityIcon, ListChecks, PanelRightOpen, MessageCircle, History, ArrowLeft } from 'lucide-react';
 import { useUiStore } from '../../../stores/ui-store';
@@ -88,8 +88,11 @@ export function PlanWorkspaceShellV2() {
     useChannelsStore.getState().hydrate(plan.uid).catch(() => {});
   }, [plan?.uid, activeStorePlanUid, hydratePlan, resetForPlan, resetChannels]);
 
-  // Esc minimizes (matches V1 behaviour from Phase 14.B).
-  useEffect(() => {
+  // Esc minimizes (matches V1 behaviour from Phase 14.B). A layout effect, so
+  // the listener is there before the workspace is painted: a passive effect
+  // runs after paint, and an Escape pressed as the plan appeared on a busy
+  // page went to nobody (#370), as the Settings dialog's did (#367).
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || (t as HTMLElement).isContentEditable)) return;

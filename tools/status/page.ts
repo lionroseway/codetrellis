@@ -13,7 +13,7 @@
  */
 
 import type { Facts } from './git-facts';
-import { flatten, resolve, type ItemStatus, type PhaseDocs, type Resolved, type Status } from './status';
+import { flatten, resolve, type ItemStatus, type PhaseDocs, type Resolved, type Shot, type Status } from './status';
 
 const esc = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -69,7 +69,21 @@ function itemHtml(it: Resolved): string {
     + `<span class="what">${id}${follow}<span class="title">${inline(it.title)}</span>${prs}</span>${parts}</li>`;
 }
 
-export function renderPage(s: Status, facts: Facts | null, docs: PhaseDocs, now: Date): string {
+/**
+ * "See it": the screens the phase built, each opening full size when tapped
+ * (the page is read on a phone). Only the shots whose images are published
+ * beside the page, under `shots/`, are shown.
+ */
+export function shotsHtml(shots: readonly Shot[], present: ReadonlySet<string>): string {
+  const shown = shots.filter((x) => present.has(x.file));
+  if (!shown.length) return '';
+  const figs = shown.map((x) => `<figure class="shot"><a href="shots/${esc(x.file)}" target="_blank" rel="noopener"><img src="shots/${esc(x.file)}" alt="${esc(x.title)}" loading="lazy"></a>`
+    + `<figcaption>${x.step ? `<span class="id">${esc(x.step)}</span>` : ''}<b>${inline(x.title)}</b> ${inline(x.says)}</figcaption></figure>`).join('\n');
+  return `<section class="see" aria-label="See it"><header><h2>See it</h2><span class="count">${shown.length} screens</span></header>`
+    + `<p class="goal">Taken by the browser suite from the newest code. Tap one to open it full size.</p><div class="shots">${figs}</div></section>`;
+}
+
+export function renderPage(s: Status, facts: Facts | null, docs: PhaseDocs, now: Date, shotsPresent: ReadonlySet<string> = new Set()): string {
   const { phase } = docs;
   const resolved = resolve(s, facts);
   const all = countLeaves(resolved.flat());
@@ -138,6 +152,14 @@ ul.parts { margin: 6px 0 2px 1.4rem; }
 .prs { font-family: var(--mono); font-size: 0.8rem; margin-left: 6px; }
 @media (max-width: 520px) { .item { grid-template-columns: 1fr; } .item > ul.parts { grid-column: 1; } }
 footer { color: var(--muted); font-size: 0.85rem; }
+.see { display: grid; gap: 10px; }
+.see header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border-top: 2px solid var(--ink); padding-top: 12px; }
+.shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr)); gap: 16px; }
+.shot { margin: 0; display: grid; gap: 8px; align-content: start; }
+.shot a { display: block; background: #0b0f14; border: 1px solid var(--rule); border-radius: 8px; padding: 6px; }
+.shot img { display: block; width: 100%; height: auto; border-radius: 4px; }
+.shot figcaption { color: var(--muted); font-size: 0.92rem; }
+.shot figcaption b { color: var(--ink); display: block; }
 </style>
 <div class="wrap">
   <header class="overall">
@@ -157,6 +179,7 @@ footer { color: var(--muted); font-size: 0.85rem; }
       <dt>Updated</dt><dd>${esc(String(s.now.updated))}</dd>
     </dl>
   </section>
+${shotsHtml(s.shots ?? [], shotsPresent)}
 ${sections}
   <footer>${readAt}. Generated ${esc(now.toISOString().slice(0, 16).replace('T', ' '))} UTC from <code>${esc(docs.status)}</code> by <code>npm run status -- --page</code>.</footer>
 </div>
