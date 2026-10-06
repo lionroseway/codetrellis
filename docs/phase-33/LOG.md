@@ -18,13 +18,13 @@
 
 | | |
 |---|---|
-| **Stage / step** | Setup: Phase 33 docs, status tooling for any phase, the progress page |
-| **Status** | The owner asked (2026-10-05) for a Phase 33 run the way Phase 32 was: the rulebook and checks anywhere, the reload freeze, a colour legend, graph edge toggles and full screen, plan items in the inspector, and opening a plan that shows it. The integration branch is cut; the setup PR carries the docs and tooling |
+| **Stage / step** | Setup PR into feat/phase-33; the owner's decisions recorded |
+| **Status** | The owner answered the open questions (2026-10-06): rules as YAML suites; loosening signed with the device key; agent checks free, on the user's own agent, model and key, built by driving the user's agent rather than writing one; no CI host first; review features V1, V2, V3 and V6; the name agent checks; go ahead |
 | **In flight** | nothing open |
 | **Last merged** | — |
-| **Next action** | The owner reviews the setup PR (docs in docs/phase-33/, the design's open questions, which Track V features to take); merge it into feat/phase-33; then 0.1 Baseline on feat/phase-33-0-1-baseline |
-| **Blockers** | None. Open questions for the owner are in the design doc §8; none blocks Stage 0 or Track S |
-| **Last updated** | 2026-10-05 |
+| **Next action** | Merge the setup PR into feat/phase-33; then 0.1 Baseline on feat/phase-33-0-1-baseline (Node 26, clean npm ci --ignore-scripts, every suite) |
+| **Blockers** | None |
+| **Last updated** | 2026-10-06 |
 
 > Read from git at `origin/feat/phase-33` `5fb23f4`, with open PRs from GitHub.
 
@@ -62,9 +62,9 @@
 
 ### Track C: checks anywhere
 - [ ] C1 Scoped checks (`--suite`, `--rule`, `--path`; MCP and REST alike)
-- [ ] C2 SARIF output and recipes for GitLab, Azure, Bitbucket and Jenkins
+- [ ] C2 SARIF output, host-neutral; recipes are examples for any CI (no host first)
 - [ ] C3 Debt ratchet (existing breaches may only fall)
-- [ ] C4 Agent checks locally: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes)
+- [ ] C4 Agent checks locally on the user's own agent: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes)
 - [ ] C4b Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified)
 - [ ] C5 Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass)
 - [ ] C6 Graduation (a repeated finding proposes a rule)
@@ -83,15 +83,11 @@
 - [ ] G9 The Checks view (run any check from the app, CI runs beside local ones, compare runs)
 - [ ] G10 Findings where the code is (graph, code gutter, inspector, brief, phone)
 
-### Track V: review (proposed; the owner chooses)
+### Track V: review (the owner's picks)
 - [ ] V1 What this change does to the architecture (structural diff at the top of every review)
 - [ ] V2 Review in order of risk (dependents, rule scope, test grounding, other work)
 - [ ] V3 Re-review only what changed since each reviewer's last look
-- [ ] V4 Agent-check questions go to the author (app, phone, MCP)
-- [ ] V5 Mark a finding useful or wrong (suppression and graduation learn from it)
-- [ ] V6 Did the change do what the task said (criteria and footprint in the review)
-- [ ] V7 Suggested reviewers from suite ownership (shown, never assigned)
-- [ ] V8 The review record in the sign-off pack (runs, findings, marks, questions)
+- [ ] V6 Did the change do what the task said (only when it is linked to a task)
 
 ### Stage Z: close
 - [ ] Z1 Docs: `docs/claude/rules.md`, CLI and MCP references, the change-control security rule
@@ -110,6 +106,31 @@ lint warning count, `test:unit`, `test:harness`, the browser suite and
 
 ## Decisions
 
+- **2026-10-06 — The owner's answers** (tapped on the briefing page, with
+  notes):
+  - **Rules** are YAML files per suite under `.codetrellis/rules/`, with
+    SQLite as an index.
+  - **Loosening a rule** is signed with the person's device key, and CI
+    verifies it.
+  - **Agent checks are free** and run on the user's own inference: "ai
+    checks etc are all meant to use the users inference endpoint, model,
+    apikey/oauth key, we don't want to be handling everything. costs are
+    with the user".
+  - **No CI host comes first:** "shouldn't the ci thing be agnostic or
+    something that can run anywhere? … we are like a simple wrapper". So C2
+    and C5 are host-neutral, and recipes are examples.
+  - **Don't reinvent the wheel:** "we are still free and open source,
+    people bring their own agent, their own key, their own vpn". So agent
+    checks drive the user's own agent CLI headless (AGENT-CHECKS-AND-REVIEW
+    §1.4). For a bare endpoint, an existing runner is used where one meets
+    the contract.
+  - **Review features V1, V2, V3 and V6**, each useful without a plan ("some
+    pr reviews might not have plans"). V4, V5, V7 and V8 are dropped from
+    the plan.
+  - **Names:** "agent checks" for the AI side, "checks" for the
+    deterministic side.
+  - **Monetisation** is "waaaay down the line" and shapes nothing here.
+  - **Go ahead.** Open the setup PR, then the baseline and the freeze.
 - **2026-10-05 — Phase 33 is run like Phase 32** (the owner): an
   integration branch, one step per branch and PR, a generated log, and a
   progress page he can open.
@@ -144,9 +165,8 @@ lint warning count, `test:unit`, `test:harness`, the browser suite and
   shows check output** (the owner). One renderer for the words (C8), check
   runs as records that travel (C7), the Checks view (G9), findings where
   the code is (G10).
-- **2026-10-05 — Review features proposed, not yet chosen**: Track V
-  (V1–V8, AGENT-CHECKS-AND-REVIEW §2). Only what the owner picks is
-  built; V1–V3 are recommended first.
+- **2026-10-05 — Review features proposed** (Track V, V1–V8,
+  AGENT-CHECKS-AND-REVIEW §2); the owner chose on 2026-10-06, above.
 - **2026-10-05 — Relief first, then safety.** Track S comes straight after
   Stage 0 (the freeze), then R1–R3 (a pull request can today weaken the
   rules that judge it), then the small clarity wins (EXECUTION §2).

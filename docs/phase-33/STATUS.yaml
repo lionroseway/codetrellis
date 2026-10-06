@@ -16,11 +16,11 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "Setup: Phase 33 docs, status tooling for any phase, the progress page"
-  status: "The owner asked (2026-10-05) for a Phase 33 run the way Phase 32 was: the rulebook and checks anywhere, the reload freeze, a colour legend, graph edge toggles and full screen, plan items in the inspector, and opening a plan that shows it. The integration branch is cut; the setup PR carries the docs and tooling"
-  next: "The owner reviews the setup PR (docs in docs/phase-33/, the design's open questions, which Track V features to take); merge it into feat/phase-33; then 0.1 Baseline on feat/phase-33-0-1-baseline"
-  blockers: "None. Open questions for the owner are in the design doc §8; none blocks Stage 0 or Track S"
-  updated: 2026-10-05
+  step: "Setup PR into feat/phase-33; the owner's decisions recorded"
+  status: "The owner answered the open questions (2026-10-06): rules as YAML suites; loosening signed with the device key; agent checks free, on the user's own agent, model and key, built by driving the user's agent rather than writing one; no CI host first; review features V1, V2, V3 and V6; the name agent checks; go ahead"
+  next: "Merge the setup PR into feat/phase-33; then 0.1 Baseline on feat/phase-33-0-1-baseline (Node 26, clean npm ci --ignore-scripts, every suite)"
+  blockers: "None"
+  updated: 2026-10-06
 sections:
   - title: Setup
     goal: The phase can be picked up cold by any session, and its progress read on one page.
@@ -76,11 +76,11 @@ sections:
       - id: C1
         title: Scoped checks (`--suite`, `--rule`, `--path`; MCP and REST alike)
       - id: C2
-        title: SARIF output and recipes for GitLab, Azure, Bitbucket and Jenkins
+        title: SARIF output, host-neutral; recipes are examples for any CI (no host first)
       - id: C3
         title: Debt ratchet (existing breaches may only fall)
       - id: C4
-        title: "Agent checks locally: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes)"
+        title: "Agent checks locally on the user's own agent: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes)"
       - id: C4b
         title: Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified)
       - id: C5
@@ -114,8 +114,8 @@ sections:
         title: The Checks view (run any check from the app, CI runs beside local ones, compare runs)
       - id: G10
         title: Findings where the code is (graph, code gutter, inspector, brief, phone)
-  - title: "Track V: review (proposed; the owner chooses)"
-    goal: Review that starts from what a change does to the architecture and what it would cost to get wrong. Proposed in AGENT-CHECKS-AND-REVIEW §2; only what the owner picks is built.
+  - title: "Track V: review (the owner's picks)"
+    goal: Review that starts from what a change does to the architecture and what it would cost to get wrong, useful with or without a plan behind the change.
     items:
       - id: V1
         title: What this change does to the architecture (structural diff at the top of every review)
@@ -123,16 +123,8 @@ sections:
         title: Review in order of risk (dependents, rule scope, test grounding, other work)
       - id: V3
         title: Re-review only what changed since each reviewer's last look
-      - id: V4
-        title: Agent-check questions go to the author (app, phone, MCP)
-      - id: V5
-        title: Mark a finding useful or wrong (suppression and graduation learn from it)
       - id: V6
-        title: Did the change do what the task said (criteria and footprint in the review)
-      - id: V7
-        title: Suggested reviewers from suite ownership (shown, never assigned)
-      - id: V8
-        title: The review record in the sign-off pack (runs, findings, marks, questions)
+        title: Did the change do what the task said (only when it is linked to a task)
   - title: "Stage Z: close"
     goal: Documented, walked by the owner on a packaged build, merged and released.
     items:

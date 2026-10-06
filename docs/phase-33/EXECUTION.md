@@ -130,8 +130,8 @@ rulebook's breadth.
 8. **R6–R9.** Symbol, call, folder and guide rules.
 9. **C4, C4b, C5, C6.** Agent checks locally, your own agent locally, then
    in CI, then graduation.
-10. **Track V**, the review features the owner picks: V1–V3 first, then
-    V4–V5 once agent checks exist, then V6–V8.
+10. **Track V**, the review features the owner chose (2026-10-06): V1, V2
+    and V3, then V6.
 11. **Z.** Docs, phase review, into `main`, release.
 
 The checklist in the log is grouped by track; this list is the order.
@@ -327,8 +327,15 @@ Done when:
 - Recipes for GitLab CI, Azure Pipelines, Bitbucket Pipelines and Jenkins.
 - This repo's CI uploads it.
 
-Done when GitHub shows a breach on the changed line in a test pull
-request.
+No CI host comes first (the owner, 2026-10-06). The recipes are examples
+for GitHub Actions, GitLab CI, Azure Pipelines, Bitbucket Pipelines,
+Jenkins, and a plain shell script any runner can call.
+
+Done when:
+- the SARIF validates;
+- GitHub shows a breach on the changed line in a test pull request;
+- the shell recipe runs unchanged in a second, non-GitHub runner (a GitLab
+  CI job is enough).
 
 **C3 Debt ratchet.**
 - `codetrellis rules baseline` records the existing breaches per rule.
@@ -361,8 +368,12 @@ Every pass runs under the contract (§1.2 there):
 The outcome is `pass`, `findings`, `inconclusive` or `error`.
 
 Done when:
-- it runs against an Anthropic endpoint and an OpenAI-compatible one
-  (a local stub in tests);
+- it runs through the first agent CLI adapter on the user's own model and
+  key, with the CLI held to a deny-by-default tool set (AGENT-CHECKS-AND-REVIEW
+  §1.4);
+- for a bare OpenAI-compatible endpoint, an existing open-source runner
+  that meets the contract is chosen, or the log says why none fits (a
+  local stub endpoint in tests);
 - a pass that asks a question yields a `question` finding and the run
   completes;
 - a pass that never reports ends `inconclusive` after one retry;
@@ -384,8 +395,9 @@ fixture change and its grounded findings land as a check run.
 **C5 Agent checks in CI.**
 - The same command in CI.
 - The optional verify pass: a second agent tries to refute each finding.
-- A GitHub adapter posts review comments with a token the model never
-  sees.
+- Output is host-neutral (SARIF, markdown, JSON). Posting comments is
+  optional, through the review-host adapters that exist (GitHub, GitLab,
+  Bitbucket), with a token the model never sees.
 - OIDC to Bedrock, Vertex and Azure.
 - Recipes. A cost dial: auto, on request, off.
 
@@ -534,10 +546,11 @@ Done when:
 Done when a single finding can be reached from each of those places, and
 each place links to the others (browser tests).
 
-### Track V: review (proposed; the owner chooses)
+### Track V: review (the owner chose V1, V2, V3 and V6, 2026-10-06)
 
-Designed in AGENT-CHECKS-AND-REVIEW §2. Each step starts only when the
-owner has chosen it; the choice is a decision in the log.
+Designed in AGENT-CHECKS-AND-REVIEW §2. Each feature must be useful on a
+pull request with no plan behind it: "a bit of meat to the bones" (the
+owner).
 
 - **V1 What this change does to the architecture.** A structural diff at
   the top of the review: imports between folders, new packages, new
@@ -549,17 +562,10 @@ owner has chosen it; the choice is a decision in the log.
 - **V3 Re-review only what changed.** Each reviewer's last commit is
   remembered; later pushes show only what moved, and which findings a push
   addressed.
-- **V4 Questions go to the author.** Agent-check questions become review
-  questions, answered in the app, on the phone, or through MCP.
-- **V5 Useful or wrong.** A mark on every finding, recorded. Suppression of
-  repeated wrong ones, visible and undoable. Graduation counts useful
-  ones.
 - **V6 Did it do what the task said.** Criteria results and planned
-  against actual footprint in the review.
-- **V7 Suggested reviewers.** From suite ownership and recent changes;
-  shown, never assigned.
-- **V8 The review record.** Runs, findings, marks and questions in the
-  signed sign-off pack.
+  against actual footprint in the review, only when the change is linked
+  to a task. Without one, the section is absent.
+  Done when a linked fixture shows both and an unlinked one shows neither.
 
 ### Stage Z: close
 

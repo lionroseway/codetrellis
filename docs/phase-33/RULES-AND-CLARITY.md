@@ -185,6 +185,12 @@ froze (0.1.17). Nothing since has changed the path.
    its EXECUTION, still hold.)
 7. **Quiet under load.** A burst of changes is one reload and one notice,
    never one per file.
+8. **Free, open source, and a thin wrapper** (the owner, 2026-10-06).
+   - People bring their own agent, model, key and VPN, and the costs stay
+     theirs.
+   - CodeTrellis runs anywhere: no CI host is first.
+   - It adds value by connecting what exists, never by rebuilding it.
+   - Monetisation is far off and shapes nothing here.
 
 ---
 
@@ -346,8 +352,13 @@ codetrellis check --strict                 # warn counts as block
 - **`--format sarif`** (SARIF 2.1.0). GitHub code scanning, GitLab and
   Azure DevOps take it, and show breaches on the changed lines.
 - **`text` and `json` as today.**
-- **Recipes** for GitLab CI, Azure Pipelines, Bitbucket Pipelines and
-  Jenkins, beside `docs/recipes/github-actions.yml`.
+- **No CI host comes first.** The gate is a CLI with host-neutral output:
+  text, JSON, SARIF and markdown. So it runs in any pipeline.
+  - Recipes for GitHub Actions, GitLab CI, Azure Pipelines, Bitbucket
+    Pipelines, Jenkins and a plain shell script are examples, not
+    integrations.
+  - Posting to a host is optional, through the review-host adapters that
+    already exist (GitHub, GitLab, Bitbucket).
 - **Open question.** GitHub code scanning on a private repository appears
   to need a paid licence. The fallback there is review comments through
   the Checks API.
@@ -502,14 +513,17 @@ headless, and bringing your own agent locally) is
   the rest until then.
 - Packaging and price of agent checks.
 
-## 8. Open questions for the owner
+## 8. Decided by the owner (2026-10-06)
 
-1. **Rule files.** YAML under `.codetrellis/rules/` as the source, with
-   SQLite as an index (3.1). Confirm, or keep the database as the source
-   with an export.
-2. **Approval.** Is the device-key signature (4.3) the way a person's
-   approval travels, or is CODEOWNERS enough?
-3. **Agent checks.** Part of the open CLI, or a paid tier?
-4. **CI hosts after GitHub.** GitLab or Azure DevOps first?
-5. **Naming.** "Agent checks" for the AI side, beside "checks" for the
-   deterministic side?
+1. **Rule files.** YAML under `.codetrellis/rules/`, one file per suite,
+   with SQLite as an index (3.1).
+2. **Approval.** A loosening is signed with the person's device key, and
+   CI verifies it against the base branch's keys (4.3).
+3. **Agent checks.** Free and part of the CLI. They run on the user's own
+   agent, model, endpoint and key, and the costs are the user's. Built by
+   driving the user's agent, not by writing our own
+   (AGENT-CHECKS-AND-REVIEW §1.4).
+4. **CI hosts.** None comes first. CodeTrellis is a wrapper that runs
+   anywhere (5.2).
+5. **Naming.** "Agent checks" for the AI side, "checks" for the
+   deterministic side.

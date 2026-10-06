@@ -144,25 +144,46 @@ something the team should see.
   findings meet the same bar as a headless one's.
 - **No second model or credential is needed.**
 
-### 1.4 Which agent runtime
+### 1.4 Which agent runtime: the user's own (decided 2026-10-06)
 
-- **The default is CodeTrellis's own small agent loop** over two APIs:
-  - the Anthropic Messages API;
-  - the OpenAI-compatible chat API, which covers vLLM, Ollama and LiteLLM
-    gateways, and through them most providers.
+The owner: CodeTrellis stays free and open source. People bring their own
+agent, their own key and their own VPN, and the costs are theirs. "We
+don't want to be reinventing the wheel."
 
-  Owning the loop is what makes §1.2 enforceable: the tools offered are
-  exactly the allowlist. It also keeps CodeTrellis model- and
-  host-neutral.
-- **Adapters for an existing agent CLI** come later, for teams that want
-  their agent's own skills and settings:
-  - Claude Code in print mode, with an explicit allowed-tools list and JSON
-    output;
-  - Codex's non-interactive mode.
+So **CodeTrellis does not build an agent.** It supplies:
+- the bundle;
+- the contract;
+- the report schema;
+- the verification.
 
-  An adapter must still end in the report schema, and still gets its
-  citations verified. Each adapter is checked against that CLI's own
-  documentation before it ships, as Phase 32 A8.3 did for hooks.
+The user's own agent does the reading and reasoning, run headless.
+
+- **Adapters for agent CLIs are the default.** The first are Claude Code's
+  non-interactive print mode and Codex's non-interactive mode.
+  - Each adapter starts the CLI with the user's own model, endpoint and
+    credential.
+  - It connects the CLI to CodeTrellis's MCP server, giving it only the
+    `read` tools, plus `get_review_bundle` and `report_review`.
+  - It sets the CLI's own non-interactive, deny-by-default tool settings:
+    no shell, no write, no web.
+  - Each adapter is checked against that CLI's own documentation before it
+    ships, as Phase 32 A8.3 did for hooks.
+- **The contract still holds when the agent is someone else's.**
+  - The tool limits are set through the CLI's own settings.
+  - What comes back is verified by our code: a report in the schema,
+    citations that exist in the diff, rules that are in scope.
+  - A CLI that cannot be held to a deny-by-default tool set is not
+    offered.
+  - In CI the job should also run where the only secret is the model
+    credential, which is the recipe's default.
+- **For a bare model endpoint** (an OpenAI-compatible URL with no agent
+  CLI), C4 first looks for an existing open-source runner that meets the
+  contract. Only if none fits does it write the smallest loop that does,
+  and the log says why.
+
+**Agent checks are free, part of the CLI, and run on the user's
+inference.** CodeTrellis never holds a model key and never pays for a
+call.
 
 ---
 
@@ -175,9 +196,12 @@ CodeTrellis already has a lot of review machinery:
 - read-only host status for GitHub, GitLab and Bitbucket (Phase 32 C2);
 - sign-off packs, signed approvals and the evidence export (B10).
 
-These build on it. Each one is proposed; the owner chooses.
+These build on it. **The owner chose V1, V2, V3 and V6 (2026-10-06).**
+V4, V5, V7 and V8 stay here as ideas and are not in the plan. Review
+features add "a bit of meat to the bones" (the owner): many pull requests
+have no plan, so each must be useful without one.
 
-### 2.1 What this change does to the architecture (recommended)
+### 2.1 What this change does to the architecture (chosen)
 
 A section at the top of every review: the change's **structural diff**,
 not its text diff.
@@ -189,7 +213,7 @@ not its text diff.
 The diff engine and the graph already know all of it. A reviewer sees
 "adds a call from `web/` to `api.stripe.com`" before reading a line.
 
-### 2.2 Review in order of risk (recommended)
+### 2.2 Review in order of risk (chosen)
 
 The files in a change, ordered by what a mistake there would cost:
 - how many files depend on it;
@@ -200,7 +224,7 @@ The files in a change, ordered by what a mistake there would cost:
 Each file gets one line saying why it is where it is. "Review these
 three first" is the most useful thing a big agent-written change can say.
 
-### 2.3 Re-review only what changed (recommended)
+### 2.3 Re-review only what changed (chosen)
 
 - Remember the commit each reviewer last reviewed.
 - After a push, show what changed since then, and which earlier findings
@@ -209,7 +233,7 @@ three first" is the most useful thing a big agent-written change can say.
 This saves the most time on long agent pull requests that get pushed to
 many times.
 
-### 2.4 Questions go to the author
+### 2.4 Questions go to the author (not chosen)
 
 - The `question` findings from agent checks (§1.2) become questions on the
   review.
@@ -217,7 +241,7 @@ many times.
   Phase 32 A4 reply path) or through MCP.
 - An unanswered question is shown, never silently dropped.
 
-### 2.5 Is a finding right?
+### 2.5 Is a finding right? (not chosen)
 
 - Every finding can be marked **useful** or **wrong**, with one line of
   why. The mark goes into the record.
@@ -226,22 +250,23 @@ many times.
 - Useful ones count towards graduation (RULES-AND-CLARITY §5.5).
 - Over time this measures whether agent checks earn their cost.
 
-### 2.6 Did the change do what the task said?
+### 2.6 Did the change do what the task said? (chosen)
 
-For a change linked to a task:
+**Only when a change is linked to a task.** Without one, this section is
+absent, not empty. For a change linked to a task:
 - the task's criteria, each with its check's result;
 - the planned footprint against the actual one (files the plan expected
   and did not touch, files it touched and did not plan).
 
 `review_plan` has the parts; this puts them in the review.
 
-### 2.7 Who should review
+### 2.7 Who should review (not chosen)
 
 - Suggested reviewers, from who owns the suites the change touches
   (CODEOWNERS and the rule's `by`) and who changed those files recently.
 - Shown only. CodeTrellis never assigns.
 
-### 2.8 The review record
+### 2.8 The review record (not chosen)
 
 - When a change is approved, the sign-off pack includes the check runs,
   the agent findings with their marks, and the questions and answers.
@@ -249,9 +274,7 @@ For a change linked to a task:
 
 Months later, "what did the checks say when this merged?" has an answer.
 
-**Order, if all are taken:** 2.1, 2.2, 2.3 first: cheap, built on what
-exists, and the most visible. Then 2.4 and 2.5, which need agent checks.
-Then 2.6, 2.7, 2.8.
+**Order:** 2.1, 2.2 and 2.3 first, then 2.6.
 
 ---
 
@@ -370,11 +393,11 @@ with two tabs: what the rules are, and what the checks say.
 
 | Step | What |
 |---|---|
-| C4 | The agent check orchestrator, refined: passes, the contract (§1.2), the four outcomes, the report schema, grounding verification |
+| C4 | The agent check orchestrator: passes, the contract (§1.2), the four outcomes, the report schema, grounding verification, run on the user's own agent CLI (§1.4) |
 | C4b | Bring your own agent locally: `get_review_bundle`, `report_review` |
 | C5 | In CI, plus the optional verify pass |
 | C7 | Check runs as records that travel (§3.2) |
 | C8 | One renderer: `check-words.ts`, and the terminal, markdown and SARIF from it (§3.1) |
 | G9 | The Checks view: run, history, compare (§3.3) |
 | G10 | Findings where the code is: graph, code gutter, inspector, brief (§3.4) |
-| V1–V8 | Review features (§2), proposed; added to the checklist as the owner chooses |
+| V1, V2, V3, V6 | The review features the owner chose (§2) |
