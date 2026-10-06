@@ -4,6 +4,7 @@
 
 import path from 'node:path';
 import { z } from 'zod';
+import { debtByRule } from '../../services/rules-overview';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { breachWords, checkEdges, edgesIfLoaded, findRule, proposedRule, RuleError, rulesOf, rulesView } from '../../services/architecture-rules';
@@ -155,7 +156,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const root = project_path ?? deps.getActiveProjectPath();
       if (!root) return { isError: true, content: [{ type: 'text' as const, text: 'No project is open.' }] };
       const view = rulesView(root, edgesIfLoaded(root, deps.getActiveProjectPath(), deps.getDependencyEdges));
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ rules: view }, null, 2) }] };
+      // G7: each rule's debt (the baseline's old breaches), as the Rules view shows it.
+      const debt = debtByRule(root);
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ rules: view.map((v) => ({ ...v, debt: debt.get(v.rule.id) ?? 0 })) }, null, 2) }] };
     },
   );
 

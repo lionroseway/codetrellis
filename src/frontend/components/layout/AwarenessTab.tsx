@@ -311,10 +311,10 @@ function RuleDetail({ subject }: { subject: AwarenessSignal['subject'] }) {
       </ul>
       <button
         data-testid="awareness-rule-change"
-        onClick={() => window.dispatchEvent(new CustomEvent('open-settings', { detail: { section: 'rules' } }))}
+        onClick={() => useUiStore.getState().setWorkspaceMode('rules')}
         className="mt-1 text-[10px] text-sky-300/90 hover:underline"
       >
-        Change the rule in Settings
+        See the rule in the Rules view
       </button>
     </div>
   );

@@ -99,6 +99,7 @@ import { lastMark, markReviewed, sinceLastLook } from './services/review-marks';
 import { taskMarkdown, taskOutcome } from './services/review-task';
 import { inScope, parseScope, scopeWords } from './services/rule-scope';
 import { getCheckRun, listCheckRuns } from './services/check-runs';
+import { debtByRule, ruleHistory, suiteSummaries } from './services/rules-overview';
 import { decideRuleProposal, getRuleProposal, listRuleProposals } from './services/rule-proposals';
 import { writerId as taskRecordWriterId } from './services/task-records/shared-state';
 import type { ArchitectureRule } from '../shared/types/architecture-rules';
@@ -2738,15 +2739,19 @@ app.put('/api/recurring/:id', (req, res) => {
 // committed files (`.codetrellis/rules/<suite>.yaml` since Phase 33 R1).
 // Reading them, with what breaks each today, is anyone's; setting, stopping
 // or moving one is the person's, as a plans folder is.
-const RULES_WHERE = 'Settings → Architecture rules';
+const RULES_WHERE = 'Rules view';
 
 app.get('/api/rules', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   // C1: ?suite=, ?rule=, ?path= show part of the rulebook, as `check` scopes it.
   const scope = parseScope({ suite: req.query.suite, rule: req.query.rule, path: req.query.path });
+  const views = rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)).filter((v) => inScope(v.rule, scope));
+  // G7: each rule's debt (the baseline's count), and each suite with its status.
+  const debt = debtByRule(projectRoot);
   res.json({
-    rules: rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)).filter((v) => inScope(v.rule, scope)),
+    rules: views.map((v) => ({ ...v, debt: debt.get(v.rule.id) ?? 0 })),
+    suites: suiteSummaries(views, debt),
     ...(scope ? { scope: scopeWords(scope) } : {}),
     // Rules still in config.json, waiting for a person to move them (R1).
     inConfig: rulesInConfig(projectRoot).length,
@@ -2754,12 +2759,19 @@ app.get('/api/rules', (req, res) => {
   });
 });
 
+// Phase 33 G7 — the history of changes to the project's rules, newest first.
+app.get('/api/rules/history', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json({ history: ruleHistory(projectRoot) });
+});
+
 // Phase 33 R1 — move the rules Phase 32 kept in config.json into the
 // `architecture` suite file. A person's confirmed act, never automatic.
 app.post('/api/rules/move-from-config', async (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
-  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can move the architecture rules — in the CodeTrellis app, ${RULES_WHERE}.` }); return; }
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can move the architecture rules — in the CodeTrellis app's ${RULES_WHERE}.` }); return; }
   try {
     const moved = moveRulesFromConfig(projectRoot);
     broadcast('rules-changed', { project: projectRoot });
@@ -2848,7 +2860,7 @@ async function applyRuleChange(req: express.Request, projectRoot: string, id: st
 app.put('/api/rules/:id', async (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
-  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can set an architecture rule — in the CodeTrellis app, ${RULES_WHERE}.` }); return; }
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can set an architecture rule — in the CodeTrellis app's ${RULES_WHERE}.` }); return; }
   try {
     const confirmed = (req.body as Record<string, unknown> | undefined)?.confirm === true;
     const r = await applyRuleChange(req, projectRoot, req.params.id, ruleBody(req), confirmed);
@@ -2862,7 +2874,7 @@ app.put('/api/rules/:id', async (req, res) => {
 app.delete('/api/rules/:id', async (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
-  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can stop an architecture rule — in the CodeTrellis app, ${RULES_WHERE}.` }); return; }
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can stop an architecture rule — in the CodeTrellis app's ${RULES_WHERE}.` }); return; }
   try {
     const r = await applyRuleChange(req, projectRoot, req.params.id, null, req.query.confirm === '1');
     res.status(r.status).json(r.body);
@@ -2911,7 +2923,7 @@ app.get('/api/rules/proposals', (req, res) => {
 app.post('/api/rules/proposals/:uid/decide', async (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
-  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can decide a proposed rule — in the CodeTrellis app, ${RULES_WHERE}.` }); return; }
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can decide a proposed rule — in the CodeTrellis app's ${RULES_WHERE}.` }); return; }
   const p = getRuleProposal(req.params.uid);
   if (!p || p.projectRoot !== projectRoot) { res.status(404).json({ error: 'No such proposal in this project' }); return; }
   if (p.status !== 'open') { res.status(409).json({ error: `This proposal was already ${p.status}.` }); return; }

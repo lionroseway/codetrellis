@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderOpen, Plug, Plus, X, GitBranch, RefreshCw, AlertCircle, Camera, GitCompare, Settings as SettingsIcon, GraduationCap, BookOpen, Zap, FileCode, ClipboardList } from 'lucide-react';
+import { FolderOpen, Plug, Plus, X, GitBranch, RefreshCw, AlertCircle, Camera, GitCompare, Settings as SettingsIcon, GraduationCap, BookOpen, Zap, FileCode, ClipboardList, ShieldCheck } from 'lucide-react';
 import { useProjectStore, type ProjectTab } from '../../stores/project-store';
 import { useGraphStore } from '../../stores/graph-store';
 import { useUiStore } from '../../stores/ui-store';
@@ -339,6 +339,35 @@ function DocsToggle() {
 }
 
 /**
+ * Phase 33 G7 — the Rules view: the team's architecture rules in a workspace
+ * of their own, beside graph, plans, docs and code, not in Settings.
+ */
+function RulesToggle() {
+  const root = useProjectStore((s) => s.root);
+  const workspaceMode = useUiStore((s) => s.workspaceMode);
+  const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
+  if (!root) return null;
+
+  const active = workspaceMode === 'rules';
+  return (
+    <button
+      type="button"
+      onClick={() => setWorkspaceMode(active ? 'graph' : 'rules')}
+      aria-pressed={active}
+      className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg border transition-all shrink-0 ${
+        active
+          ? 'border-accent/60 text-accent bg-accent/10 shadow-[0_0_10px_rgba(59,130,246,0.15)]'
+          : 'border-border text-foreground-muted hover:text-foreground hover:border-border-glow hover:shadow-[0_0_8px_rgba(59,130,246,0.1)]'
+      }`}
+      title={active ? 'Back to graph' : 'Architecture rules'}
+    >
+      <ShieldCheck size={12} />
+      Rules
+    </button>
+  );
+}
+
+/**
  * Phase 26 — the code-first mode toggle.
  *
  * A peer of the graph rather than a panel inside it: switching here
@@ -491,6 +520,7 @@ export function TopBar() {
       <BriefToggle />
       <CodeModeToggle />
       <DocsToggle />
+      <RulesToggle />
 
       <button
         onClick={() => window.dispatchEvent(new CustomEvent('open-mcp-guide'))}

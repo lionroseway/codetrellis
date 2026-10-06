@@ -17,10 +17,10 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 304 | 302 | 0 | 0 | 217 | 0 |
+| REST routes | 305 | 303 | 0 | 0 | 217 | 0 |
 | MCP tools | 215 | 215 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
-| Frontend components | 142 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 143 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 38 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 0 | n/a | n/a | n/a | 0 | 0 |
 
@@ -29,7 +29,7 @@ records that — but "✗ none" is proof of a gap.
 | Domain | REST | MCP | RPC | Components | Mobile | Settings |
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 25 | 12 | 10 | 0 | 0 | 0 |
-| 0.4b Graph | 28 | 15 | 8 | 17 | 0 | 0 |
+| 0.4b Graph | 29 | 15 | 8 | 18 | 0 | 0 |
 | 0.4c Plans and items | 120 | 63 | 29 | 64 | 0 | 0 |
 | 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 4 | 0 | 0 |
@@ -48,7 +48,7 @@ records that — but "✗ none" is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (304)
+## REST routes (305)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -93,6 +93,7 @@ records that — but "✗ none" is proof of a gap.
 | b | `GET /api/replay/frames` |  | ✗ none | 1 |  |  |  |
 | b | `GET /api/replay/state` |  | ✗ none | 3 |  |  |  |
 | b | `GET /api/rules` |  | ✗ none | 4 |  |  |  |
+| b | `GET /api/rules/history` |  | ✗ none | 1 |  |  |  |
 | b | `GET /api/rules/proposals` |  | ✗ none | 1 |  |  |  |
 | b | `GET /api/symbols/file` |  | ✗ none | 6 | ✓ 0.4b: flat qualified symbols per language (go/ruby/jvm-apple support, smoke) |  |  |
 | b | `GET /api/symbols/search` |  | ✗ none | 3 | ✓ 0.4b: finds symbols by name, incl. through a workspace alias (smoke, input-validation) |  |  |
@@ -676,7 +677,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (142)
+## Frontend components (143)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -697,6 +698,7 @@ records that — but "✗ none" is proof of a gap.
 | b | `inspector/CodePreview.tsx` |  | n/a | n/a |  |  |  |
 | b | `inspector/FilePlans.tsx` |  | n/a | n/a |  |  |  |
 | b | `inspector/PlaybackBar.tsx` |  | n/a | n/a |  |  |  |
+| b | `rules/RulesView.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/CommentThread.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/ContributorBranchModal.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/CrossRepoSection.tsx` |  | n/a | n/a |  |  |  |
