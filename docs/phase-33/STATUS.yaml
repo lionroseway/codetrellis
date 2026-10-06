@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "R3 Change control: a loosening is previewed, confirmed and signed"
-  status: "R4 merged (#359): every rule has a strength. R3 in review: every rule change is previewed against the code; a loosening is confirmed, signed as the person and checked by CI against the base's keys; agents propose, a person decides. Built ahead: R9 (guide rules in scope) and R6 (symbol rules)"
-  next: "Merge R3, then C1 (scoped checks), C2 (SARIF), C3 (the debt ratchet)"
+  step: "C1 Scoped checks: a suite, a rule or a path"
+  status: "R3 merged (#360): change control is in. C1 in review: check one suite, named rules, or the rules about a path, on the CLI, over MCP and REST. Built ahead: R9, R6 and R7 (call rules: only the clients may call api.stripe.com)"
+  next: "Merge C1, then C2 (SARIF and CI recipes), C3 (the debt ratchet), 0.3"
   blockers: "None"
   updated: 2026-10-06
 sections:
@@ -54,6 +54,8 @@ sections:
         prs:
           - 355
       - title: "With many worktrees of one repository, `listWorkstreams` takes ~10 s and six parallel asks for it fill the browser's connections, so the graph waits behind them: share one answer"
+        followUp: true
+      - title: "Call rules read HTTP and SQL callsites; no extractor finds subprocess commands or environment variables yet, so those calls cannot be ruled on"
         followUp: true
   - title: "Stage 0: ground truth"
     goal: Numbers to measure against, the freeze measured, and every colour the app draws written down.
