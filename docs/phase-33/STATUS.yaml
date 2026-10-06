@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "S2 The window takes a burst as one"
-  status: "S1 merged (#352), with a fix CI found: an edit in the app and a change on disk at once now lose neither. S2 gathers the backend's plan-imported broadcasts in the window too: one plan-list refetch and one notice for a pull that touches several plans"
-  next: "Merge S2, then S3 (200 files across 5 plans, end to end), then the rulebook (R1, R2, R4, R3)"
+  step: "S3 Under load, end to end"
+  status: "S2 merged (#353). S3 measures the whole path: 200 task files across 5 plans changed at once give 5 plan-imported broadcasts and nothing else, the backend's slowest answer meanwhile 68 ms (idle 4 ms); in the window, one notice and the plan list fetched once or twice"
+  next: "Merge S3; the owner repeats it on a Mac with a real git pull. Then the rulebook: R1, R2, R4, R3"
   blockers: "None"
   updated: 2026-10-06
 sections:
