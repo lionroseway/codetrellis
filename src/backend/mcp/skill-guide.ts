@@ -438,6 +438,7 @@ edges.
 | \`check_architecture(query?)\` | Full dependency graph (filterable) |
 | \`check_conformity(proposed_imports[], project_path?)\` | Would these imports cross one of the team's architecture rules, or make a cycle? Each breach says the rule and why |
 | \`list_rules(project_path?)\` | The team's architecture rules ("web/ may not import db/"), each with why, its strength (block fails the check, warn is said, guide is never checked) and the imports that break it today. A person sets them |
+| \`propose_rule(id, from?, may_not_import?, except?, because?, strength?, suite?, remove?, why, project_path?)\` | Propose a new rule, a change to one, or stopping one. Nothing changes until a person accepts it in the app, having seen what it does against the code; the answer says what it would do now. Never edit \`.codetrellis/rules/\` yourself: the check judges a branch by its base's rules |
 | \`list_cross_system_edges()\` | Runtime couplings: HTTP fetches ↔ API routes across languages |
 
 ### Plan management
@@ -1348,6 +1349,7 @@ point to detect unplanned changes.
 |------|-------------|
 | \`check_conformity(proposed_imports, project_path?)\` | Check proposed imports (\`[{ from, importing }]\`) against the team's architecture rules (path boundaries kept in committed suite files, \`.codetrellis/rules/<suite>.yaml\`, each with why) and for a direct two-file cycle. |
 | \`list_rules(project_path?)\` | The team's architecture rules, each with why, its strength (block, warn or guide) and the imports that break it today. A person sets them in the app. |
+| \`propose_rule(id, …, why, remove?)\` | Propose a change to a rule. A person sees its effect and decides in the app; no tool changes a rule. |
 | \`check_architecture(query?)\` | List file-to-file import edges, optionally filtered by a path substring. |
 | \`list_cross_system_edges()\` | Find HTTP, SQL, subprocess, and env coupling between modules. |
 `;

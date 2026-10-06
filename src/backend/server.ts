@@ -90,9 +90,11 @@ import { buildPlayForward } from './services/play-forward';
 import { resequence, tellAgents, leaveOverlap, OverlapActionError, noteApproval, approvalNotices, markNoticeSeen } from './services/planned-overlap-actions';
 import { seriesFor, setRule, removeRule, startRun, dismissDue, recurrenceOf, RecurringError } from './services/recurring-service';
 import { isRunAgent, setRunAgent, startRunAgent } from './services/recurring-agent';
-import { rulesView, setRule as setArchitectureRule, removeRule as removeArchitectureRule, edgesIfLoaded, RuleError, rulesInConfig, rulebookProblems, moveRulesFromConfig, proposedRule, findRule, checkEdges as checkRuleEdges } from './services/architecture-rules';
-import { diffRules, type RuleChange } from './services/rule-changes';
+import { rulesView, setRule as setArchitectureRule, removeRule as removeArchitectureRule, edgesIfLoaded, RuleError, rulesInConfig, rulebookProblems, moveRulesFromConfig, proposedRule, findRule } from './services/architecture-rules';
+import type { RuleChange } from './services/rule-changes';
+import { previewChange, previewJson, type RulePreview } from './services/rule-preview';
 import { signRuleChange } from './services/rule-approvals';
+import { decideRuleProposal, getRuleProposal, listRuleProposals } from './services/rule-proposals';
 import { writerId as taskRecordWriterId } from './services/task-records/shared-state';
 import type { ArchitectureRule } from '../shared/types/architecture-rules';
 import { startRecurringScheduler } from './services/recurring-scheduler';
@@ -2770,12 +2772,8 @@ function ruleBody(req: express.Request): Record<string, unknown> {
   return { id: req.params.id, suite: b.suite, from: b.from, mayNotImport: b.mayNotImport, except: b.except, because: b.because, strength: b.strength };
 }
 
-function previewRuleChange(projectRoot: string, id: string, next: ArchitectureRule | null): { change: RuleChange | null; breaches: number | null } {
-  const edges = edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges);
-  const current = findRule(projectRoot, id);
-  const change = diffRules(current ? [current] : [], next ? [next] : [], edges ?? [])[0] ?? null;
-  const breaches = edges && next && next.strength !== 'guide' ? checkRuleEdges([next], edges).length : null;
-  return { change, breaches };
+function previewRuleChange(projectRoot: string, id: string, next: ArchitectureRule | null): RulePreview {
+  return previewChange(projectRoot, id, next, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges));
 }
 
 app.post('/api/rules/:id/preview', (req, res) => {
@@ -2785,14 +2783,7 @@ app.post('/api/rules/:id/preview', (req, res) => {
     const remove = (req.body as Record<string, unknown> | undefined)?.remove === true;
     if (remove && !findRule(projectRoot, req.params.id)) { res.status(404).json({ error: `No architecture rule "${req.params.id}" in this project` }); return; }
     const next = remove ? null : proposedRule(projectRoot, ruleBody(req), changedBy(req)).rule;
-    const { change, breaches } = previewRuleChange(projectRoot, req.params.id, next);
-    res.json({
-      change: change ? { rule: change.rule, change: change.change, effect: change.effect, allowed: change.allowed, forbidden: change.forbidden, words: change.words } : null,
-      // Nothing about how code is judged changes (a reworded reason is still listed in `change`).
-      words: change ? change.words : 'This changes nothing about how code is judged.',
-      breaches,
-      needsConfirm: change?.effect === 'loosens',
-    });
+    res.json(previewJson(previewRuleChange(projectRoot, req.params.id, next)));
   } catch (err) {
     if (err instanceof RuleError) { res.status(err.status).json({ error: err.message }); return; }
     throw err;
@@ -2808,31 +2799,48 @@ function signLoosening(projectRoot: string, change: RuleChange, person: { author
   }
 }
 
+/**
+ * R3 — make a person's change to a rule: a set (`raw`) or a stop (null). A
+ * loosening needs `confirmed`, and is then signed as the person. Shared by
+ * the person's own change and their acceptance of an agent's proposal.
+ */
+async function applyRuleChange(req: express.Request, projectRoot: string, id: string, raw: Record<string, unknown> | null, confirmed: boolean, extra: Record<string, unknown> = {}): Promise<{ status: number; body: Record<string, unknown> }> {
+  if (raw === null && !findRule(projectRoot, id)) return { status: 404, body: { error: `No architecture rule "${id}" in this project` } };
+  const next = raw ? proposedRule(projectRoot, { ...raw, id }, changedBy(req)).rule : null;
+  const { change } = previewRuleChange(projectRoot, id, next);
+  // A loosening is confirmed after its preview, never by default.
+  if (change?.effect === 'loosens' && !confirmed) {
+    return {
+      status: 409,
+      body: { error: `${raw ? 'This loosens the rule' : 'Stopping a rule loosens it'}. Look at what it allows, then confirm it.`, needsConfirm: true, words: change.words, allowed: change.allowed },
+    };
+  }
+  const person = personFrom(req);
+  let rule: ArchitectureRule | null = null;
+  if (raw) rule = setArchitectureRule(projectRoot, { ...raw, id }, changedBy(req));
+  else removeArchitectureRule(projectRoot, id);
+  const approval = change?.effect === 'loosens' ? signLoosening(projectRoot, change, person) : null;
+  broadcast('rules-changed', { project: projectRoot });
+  recordDecision('rule_changed', {
+    projectRoot, ruleId: id, change: rule ? 'set' : 'stopped',
+    ...(rule ? { suite: rule.suite, from: rule.from, mayNotImport: rule.mayNotImport, except: rule.except, because: rule.because, strength: rule.strength } : {}),
+    effect: change?.effect ?? 'none', words: change?.words ?? null, approval: approval && 'file' in approval ? approval.file : null,
+    ...extra, author: person.author, authorType: person.authorType,
+  }, person.authorType);
+  // A7.2 — work in flight is checked against the change at once.
+  await refreshSignals(projectRoot).catch((err) => console.warn('[Awareness] refresh failed:', err));
+  const view = rule ? rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)).find((v) => v.rule.id === id) : undefined;
+  return { status: 200, body: { ...(rule ? { rule, view } : { removed: id }), ...(approval ? { approval } : {}) } };
+}
+
 app.put('/api/rules/:id', async (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
   if (!mayGrant(req)) { res.status(403).json({ error: `Only you can set an architecture rule — in the CodeTrellis app, ${RULES_WHERE}.` }); return; }
   try {
-    const raw = ruleBody(req);
-    const { rule: next } = proposedRule(projectRoot, raw, changedBy(req));
-    const { change } = previewRuleChange(projectRoot, req.params.id, next);
-    // R3: a loosening is confirmed after its preview, never by default.
-    if (change?.effect === 'loosens' && (req.body as Record<string, unknown>)?.confirm !== true) {
-      res.status(409).json({ error: 'This loosens the rule. Look at what it allows, then confirm it.', needsConfirm: true, words: change.words, allowed: change.allowed });
-      return;
-    }
-    const rule = setArchitectureRule(projectRoot, raw, changedBy(req));
-    const person = personFrom(req);
-    const approval = change?.effect === 'loosens' ? signLoosening(projectRoot, change, person) : null;
-    broadcast('rules-changed', { project: projectRoot });
-    recordDecision('rule_changed', {
-      projectRoot, ruleId: rule.id, change: 'set', suite: rule.suite, from: rule.from, mayNotImport: rule.mayNotImport, except: rule.except, because: rule.because, strength: rule.strength,
-      effect: change?.effect ?? 'none', words: change?.words ?? null, approval: approval && 'file' in approval ? approval.file : null,
-      author: person.author, authorType: person.authorType,
-    }, person.authorType);
-    // A7.2 — work in flight is checked against the new rule at once.
-    await refreshSignals(projectRoot).catch((err) => console.warn('[Awareness] refresh failed:', err));
-    res.json({ rule, view: rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)).find((v) => v.rule.id === rule.id), ...(approval ? { approval } : {}) });
+    const confirmed = (req.body as Record<string, unknown> | undefined)?.confirm === true;
+    const r = await applyRuleChange(req, projectRoot, req.params.id, ruleBody(req), confirmed);
+    res.status(r.status).json(r.body);
   } catch (err) {
     if (err instanceof RuleError) { res.status(err.status).json({ error: err.message }); return; }
     throw err;
@@ -2844,24 +2852,57 @@ app.delete('/api/rules/:id', async (req, res) => {
   if (!projectRoot) return;
   if (!mayGrant(req)) { res.status(403).json({ error: `Only you can stop an architecture rule — in the CodeTrellis app, ${RULES_WHERE}.` }); return; }
   try {
-    const current = findRule(projectRoot, req.params.id);
-    if (!current) { res.status(404).json({ error: `No architecture rule "${req.params.id}" in this project` }); return; }
-    const { change } = previewRuleChange(projectRoot, req.params.id, null);
-    // Stopping a rule loosens it (R2): confirmed after its preview, never by default.
-    if (req.query.confirm !== '1') {
-      res.status(409).json({ error: 'Stopping a rule loosens it. Look at what it allows, then confirm it.', needsConfirm: true, words: change?.words ?? null, allowed: change?.allowed ?? [] });
-      return;
+    const r = await applyRuleChange(req, projectRoot, req.params.id, null, req.query.confirm === '1');
+    res.status(r.status).json(r.body);
+  } catch (err) {
+    if (err instanceof RuleError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+// Phase 33 R3 — agents' proposals (`propose_rule`), each with what it would do now.
+app.get('/api/rules/proposals', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const edges = edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges);
+  const proposals = listRuleProposals(projectRoot).map((p) => {
+    if (p.status !== 'open') return { ...p, now: null };
+    // Said again against the code and rules as they are now: either may have moved since it was proposed.
+    try {
+      const next = p.body ? proposedRule(projectRoot, { ...p.body, id: p.ruleId }, p.author).rule : null;
+      if (!next && !findRule(projectRoot, p.ruleId)) return { ...p, now: { words: `The rule ${p.ruleId} is already gone.`, change: null, breaches: null, needsConfirm: false } };
+      return { ...p, now: previewJson(previewChange(projectRoot, p.ruleId, next, edges)) };
+    } catch (err) {
+      return { ...p, now: { words: err instanceof RuleError ? err.message : String(err), change: null, breaches: null, needsConfirm: false } };
     }
-    removeArchitectureRule(projectRoot, req.params.id);
-    const person = personFrom(req);
-    const approval = change ? signLoosening(projectRoot, change, person) : null;
+  });
+  res.json({ proposals });
+});
+
+app.post('/api/rules/proposals/:uid/decide', async (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can decide a proposed rule — in the CodeTrellis app, ${RULES_WHERE}.` }); return; }
+  const p = getRuleProposal(req.params.uid);
+  if (!p || p.projectRoot !== projectRoot) { res.status(404).json({ error: 'No such proposal in this project' }); return; }
+  if (p.status !== 'open') { res.status(409).json({ error: `This proposal was already ${p.status}.` }); return; }
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const note = typeof b.note === 'string' ? b.note.slice(0, 500) : null;
+  const person = personFrom(req);
+  if (b.decision === 'reject') {
+    const decided = decideRuleProposal(p.uid, 'rejected', person, note);
+    recordDecision('rule_changed', { projectRoot, proposal: p.uid, ruleId: p.ruleId, change: 'proposal_rejected', proposedBy: p.author, author: person.author, authorType: person.authorType }, person.authorType);
     broadcast('rules-changed', { project: projectRoot });
-    recordDecision('rule_changed', {
-      projectRoot, ruleId: req.params.id, change: 'stopped', effect: 'loosens', words: change?.words ?? null,
-      approval: approval && 'file' in approval ? approval.file : null, author: person.author, authorType: person.authorType,
-    }, person.authorType);
-    await refreshSignals(projectRoot).catch((err) => console.warn('[Awareness] refresh failed:', err));
-    res.json({ removed: req.params.id, ...(approval ? { approval } : {}) });
+    res.json({ proposal: decided });
+    return;
+  }
+  if (b.decision !== 'accept') { res.status(400).json({ error: 'decision must be accept or reject' }); return; }
+  try {
+    // Accepting is the person's change, made as if they made it: a loosening is confirmed and signed.
+    const r = await applyRuleChange(req, projectRoot, p.ruleId, p.body, b.confirm === true, { proposal: p.uid, proposedBy: p.author });
+    if (r.status !== 200) { res.status(r.status).json(r.body); return; }
+    const decided = decideRuleProposal(p.uid, 'accepted', person, note);
+    res.json({ ...r.body, proposal: decided });
   } catch (err) {
     if (err instanceof RuleError) { res.status(err.status).json({ error: err.message }); return; }
     throw err;

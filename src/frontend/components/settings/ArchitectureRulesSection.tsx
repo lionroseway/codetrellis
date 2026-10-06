@@ -3,8 +3,13 @@ import { useProjectStore } from '../../stores/project-store';
 import { RULE_STRENGTHS, type RuleStrength, type RuleView } from '../../../shared/types/architecture-rules';
 
 interface Preview { change: { effect: string; allowed: unknown[] } | null; words: string; needsConfirm: boolean }
+interface Proposal {
+  uid: string; ruleId: string; status: string; why: string; author: string; createdAt: number;
+  now: { words: string; needsConfirm: boolean } | null;
+}
 type Pending =
   | { kind: 'stop'; id: string; words: string; allowed: number }
+  | { kind: 'proposal'; id: string; uid: string; words: string; allowed: number }
   | { kind: 'set'; id: string; body: Record<string, unknown>; words: string; allowed: number };
 
 /** R4 — each strength in a glyph and words, never colour alone. */
@@ -43,6 +48,7 @@ export function ArchitectureRulesSection() {
   // R4 — a new rule starts at warn: said, and CI passes, until it is made to block.
   const [strength, setStrength] = useState<RuleStrength>('warn');
   const [pending, setPending] = useState<Pending | null>(null);
+  const [proposals, setProposals] = useState<Proposal[]>([]);
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -57,6 +63,9 @@ export function ArchitectureRulesSection() {
         setInConfig(body.inConfig ?? 0);
         setProblems(body.problems ?? []);
       }
+      // R3 — what agents proposed, for the person to decide.
+      const p = await fetch(`/api/rules/proposals?project=${encodeURIComponent(root)}`);
+      if (p.ok) setProposals(((await p.json()) as { proposals: Proposal[] }).proposals.filter((x) => x.status === 'open'));
     } catch { /* keeps what is shown */ }
   }, [root]);
 
@@ -109,11 +118,37 @@ export function ArchitectureRulesSection() {
     if (p) setPending({ kind: 'stop', id, words: p.words, allowed: p.change?.allowed.length ?? 0 });
   };
 
+  const decide = async (uid: string, decision: 'accept' | 'reject', confirmed = false): Promise<boolean> => {
+    if (!root) return false;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/rules/proposals/${encodeURIComponent(uid)}/decide?project=${encodeURIComponent(root)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision, ...(confirmed ? { confirm: true } : {}) }),
+      });
+      if (!res.ok) { setError(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `Server returned ${res.status}`); return false; }
+      await reload();
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const accept = (p: Proposal) => {
+    if (p.now?.needsConfirm) setPending({ kind: 'proposal', id: p.ruleId, uid: p.uid, words: p.now.words, allowed: 0 });
+    else void decide(p.uid, 'accept');
+  };
+
   const confirm = async () => {
     if (!pending) return;
     const ok = pending.kind === 'stop'
       ? await call('DELETE', pending.id, undefined, '&confirm=1')
-      : await call('PUT', pending.id, { ...pending.body, confirm: true });
+      : pending.kind === 'proposal'
+        ? await decide(pending.uid, 'accept', true)
+        : await call('PUT', pending.id, { ...pending.body, confirm: true });
     if (ok && pending.kind === 'set') { setFrom(''); setMayNotImport(''); setExcept(''); setBecause(''); setStrength('warn'); setOpen(pending.id); }
     setPending(null);
   };
@@ -145,7 +180,7 @@ export function ArchitectureRulesSection() {
       <div className="flex gap-2">
         <button type="button" disabled={busy} onClick={() => { void confirm(); }} data-testid="rule-confirm"
           className="px-2.5 py-0.5 rounded text-[11.5px] bg-red-500/20 text-foreground hover:bg-red-500/30 disabled:opacity-40">
-          {pending.kind === 'stop' ? 'Stop it, signed as you' : 'Loosen it, signed as you'}
+          {pending.kind === 'stop' ? 'Stop it, signed as you' : pending.kind === 'proposal' ? 'Accept it, signed as you' : 'Loosen it, signed as you'}
         </button>
         <button type="button" onClick={() => setPending(null)} data-testid="rule-cancel"
           className="px-2.5 py-0.5 rounded text-[11.5px] bg-white/[0.06] text-foreground hover:bg-white/[0.1]">
@@ -177,6 +212,26 @@ export function ArchitectureRulesSection() {
         </div>
       )}
 
+      {proposals.length > 0 && (
+        <div className="rounded border border-violet-300/25 bg-violet-500/[0.05] px-3 py-2 text-[12px] space-y-2" data-testid="rule-proposals">
+          <p className="text-foreground font-medium">Proposed by agents ({proposals.length})</p>
+          <p className="text-[11px] text-foreground-muted">Nothing changes until you accept. Each says what it would do against the code now.</p>
+          {proposals.map((p) => (
+            <div key={p.uid} className="space-y-1 border-t border-white/[0.05] pt-2" data-testid="rule-proposal">
+              <p className="text-foreground" data-testid="rule-proposal-words">{p.now?.words ?? ''}</p>
+              <p className="text-[11px] text-foreground-muted">{p.author}: “{p.why}”</p>
+              {pending?.kind === 'proposal' && pending.uid === p.uid ? confirmPanel : (
+                <div className="flex gap-2">
+                  <button type="button" disabled={busy} onClick={() => accept(p)} data-testid="rule-proposal-accept"
+                    className="px-2.5 py-0.5 rounded text-[11.5px] bg-accent/20 text-foreground hover:bg-accent/30 disabled:opacity-40">Accept</button>
+                  <button type="button" disabled={busy} onClick={() => { void decide(p.uid, 'reject'); }} data-testid="rule-proposal-reject"
+                    className="px-2.5 py-0.5 rounded text-[11.5px] bg-white/[0.06] text-foreground hover:bg-white/[0.1] disabled:opacity-40">Reject</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
       {problems.length > 0 && (
         <ul className="rounded border border-red-300/25 bg-red-500/[0.06] px-3 py-2 text-[12px] text-foreground space-y-1" data-testid="rules-problems">
           {problems.map((p) => <li key={p}>✗ {p}</li>)}

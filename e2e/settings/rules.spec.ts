@@ -124,3 +124,42 @@ test.describe('Settings → Architecture rules', () => {
     await expect(section.getByTestId('rule-error')).toHaveText('from may not climb out of the project');
   });
 });
+
+test.describe('Settings → Architecture rules: what agents propose (Phase 33 R3)', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('a proposed loosening shows what it allows, and is accepted only once confirmed', async ({ page }) => {
+    const words = '✗ This change removes the rule “web/ may not import db/” (web-not-db): 1 import it forbade become allowed. Loosening a rule needs a person\'s approval in the app.';
+    let open = true;
+    const decisions: unknown[] = [];
+    await page.route((url) => url.pathname.startsWith('/api/rules'), async (route) => {
+      const req = route.request();
+      const { pathname } = new URL(req.url());
+      if (req.method() === 'GET' && pathname === '/api/rules') return route.fulfill({ json: { rules: [] } });
+      if (req.method() === 'GET' && pathname === '/api/rules/proposals') {
+        return route.fulfill({ json: { proposals: open ? [{ uid: 'p1', ruleId: 'web-not-db', status: 'open', why: 'The report needs the DB client.', author: 'claude-code', createdAt: Date.now(), now: { words, needsConfirm: true } }] : [] } });
+      }
+      if (req.method() === 'POST' && pathname === '/api/rules/proposals/p1/decide') {
+        decisions.push(req.postDataJSON());
+        open = false;
+        return route.fulfill({ json: { proposal: { uid: 'p1', status: 'accepted' } } });
+      }
+      return route.fallback();
+    });
+    await gotoWithProject(page);
+    await page.locator('button[title*="Settings"]').click();
+    const dialog = page.getByRole('dialog', { name: 'Settings' });
+    await dialog.getByRole('button', { name: 'Architecture rules', exact: true }).click();
+    const box = dialog.getByTestId('rule-proposals');
+    await expect(box.getByTestId('rule-proposal-words')).toHaveText(words);
+    await expect(box).toContainText('claude-code: “The report needs the DB client.”');
+    await box.getByTestId('rule-proposal-accept').click();
+    expect(decisions).toEqual([]);
+    await expect(box.getByTestId('rule-confirm')).toHaveText('Accept it, signed as you');
+    fs.mkdirSync(OUT, { recursive: true });
+    await box.screenshot({ path: path.join(OUT, 'rules-settings-proposal.png') });
+    await box.getByTestId('rule-confirm').click();
+    await expect(dialog.getByTestId('rule-proposals')).toHaveCount(0);
+    expect(decisions).toEqual([{ decision: 'accept', confirm: true }]);
+  });
+});

@@ -17,8 +17,8 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 298 | 296 | 0 | 0 | 217 | 0 |
-| MCP tools | 212 | 212 | 0 | 0 | 185 | 0 |
+| REST routes | 300 | 298 | 0 | 0 | 217 | 0 |
+| MCP tools | 213 | 213 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
 | Frontend components | 139 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 38 | n/a | n/a | n/a | 0 | 0 |
@@ -29,8 +29,8 @@ records that — but "✗ none" is proof of a gap.
 | Domain | REST | MCP | RPC | Components | Mobile | Settings |
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 25 | 12 | 10 | 0 | 0 | 0 |
-| 0.4b Graph | 24 | 15 | 8 | 15 | 0 | 0 |
-| 0.4c Plans and items | 120 | 61 | 29 | 64 | 0 | 0 |
+| 0.4b Graph | 26 | 15 | 8 | 15 | 0 | 0 |
+| 0.4c Plans and items | 120 | 62 | 29 | 64 | 0 | 0 |
 | 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 4 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 13 | 7 | 1 | 0 | 0 |
@@ -43,12 +43,12 @@ records that — but "✗ none" is proof of a gap.
 
 ## MCP tools: registry vs capability matrix
 
-- Registered by the server: **212**
-- Rows in `TOOL_CAPABILITIES`: **212**
+- Registered by the server: **213**
+- Rows in `TOOL_CAPABILITIES`: **213**
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (298)
+## REST routes (300)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -75,7 +75,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
 | a | `POST /api/git/fetch` |  | ✗ none | 2 |  |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 212 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 213 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `DELETE /api/rules/:id` |  | ✗ none | 3 |  |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
@@ -90,7 +90,8 @@ records that — but "✗ none" is proof of a gap.
 | b | `GET /api/playback` |  | ✗ none | 2 | ✓ 0.4b: discrete frames between comparands (playback) |  |  |
 | b | `GET /api/replay/frames` |  | ✗ none | 1 |  |  |  |
 | b | `GET /api/replay/state` |  | ✗ none | 3 |  |  |  |
-| b | `GET /api/rules` |  | ✗ none | 1 |  |  |  |
+| b | `GET /api/rules` |  | ✗ none | 2 |  |  |  |
+| b | `GET /api/rules/proposals` |  | ✗ none | 1 |  |  |  |
 | b | `GET /api/symbols/file` |  | ✗ none | 6 | ✓ 0.4b: flat qualified symbols per language (go/ruby/jvm-apple support, smoke) |  |  |
 | b | `GET /api/symbols/search` |  | ✗ none | 3 | ✓ 0.4b: finds symbols by name, incl. through a workspace alias (smoke, input-validation) |  |  |
 | b | `GET /api/systems` |  | ✗ none | 3 | ✓ 0.4b: the fixture's services by path (graph-rest) |  |  |
@@ -99,8 +100,9 @@ records that — but "✗ none" is proof of a gap.
 | b | `GET /api/trellis/snapshots` |  | ✗ none | 1 | ✓ 0.4b: lists the capture (baselines) |  |  |
 | b | `POST /api/rules/:id/preview` |  | ✗ none | 1 |  |  |  |
 | b | `POST /api/rules/move-from-config` |  | ✗ none | 1 |  |  |  |
+| b | `POST /api/rules/proposals/:uid/decide` |  | ✗ none | 1 |  |  |  |
 | b | `POST /api/trellis/capture` |  | ✗ none | 3 | ✓ 0.4b: (baselines) |  |  |
-| b | `PUT /api/rules/:id` |  | ✗ none | 5 |  |  |  |
+| b | `PUT /api/rules/:id` |  | ✗ none | 6 |  |  |  |
 | c | `DELETE /api/attachments/:uid` |  | ✗ none | 1 | ✓ 0.4c-2: removes; unknown 404 (item-surface) |  |  |
 | c | `DELETE /api/comments/:uid` |  | ✗ none | 1 | ✓ 0.4c-2: removes a reply from the thread (item-surface) |  |  |
 | c | `DELETE /api/items/:uid` |  | ✗ none | 2 | ✓ 0.4c: exercised by agent-loop, criteria-signoff, drift-review-tools, full-loop, +5 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -351,7 +353,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `POST /api/system-docs/:uid/verify` |  | ✗ none | 2 | ✓ 0.4l: re-stamped at HEAD after a commit, freshness clears, desktop told; unknown 404 (sysdocs-intake) |  |  |
 | l | `PUT /api/system-docs/:uid` |  | ✗ none | 2 | ✓ 0.4l: named fields only, author from how it arrived — the body cannot name one (sysdocs-intake); bug 47 |  |  |
 
-## MCP tools (212)
+## MCP tools (213)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -425,6 +427,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `move_item` | plan-item · write | ✗ none | 3 | ✓ 0.4c-2: refuses cycles and foreign/missing parents (item-surface; bug 23) |  |  |
 | c | `prepare_contributor_branch` | contribution · write | ✗ none | 1 | ✓ 0.4c: exercised by cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `promote_to_contribution` | contribution · write | ✗ none | 1 | ✓ 0.4c: exercised by cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `propose_rule` | plan · write | ✗ none | 1 |  |  |  |
 | c | `propose_spec_change` | plan · write | ✗ none | 6 |  |  |  |
 | c | `publish_plan_as_template` | plan · write | ✗ none | 1 | ✓ 0.4c-1: writes template.yaml; appears in the list (plan-tools) |  |  |
 | c | `read_item_full` | plan-item · read | ✗ none | 2 | ✓ 0.4c: exercised by plan-items, task-context (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |

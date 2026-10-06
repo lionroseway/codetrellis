@@ -166,8 +166,10 @@ The check accepts an approval only when:
 
 An approved loosening is said as a note (`✓ … Sam approved it in the app,
 signed`) and passes; one whose approval does not count says why. No agent
-can change a rule through CodeTrellis; one that edits the files directly is
-caught by the same check.
+can change a rule through CodeTrellis: `propose_rule` keeps what it wants,
+with why, for a person to accept or reject in the app, and accepting is the
+person's change, confirmed and signed like any other. One that edits the
+files directly is caught by the same check.
 
 What a runner can and cannot see: plans, task records, criteria and system
 docs arrive with the checkout; test results arrive with the report the job

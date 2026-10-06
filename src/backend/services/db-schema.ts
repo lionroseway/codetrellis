@@ -707,6 +707,29 @@ export const SCHEMA_PLANS_CORE = `
   );
   CREATE INDEX IF NOT EXISTS idx_spec_proposals_page ON spec_proposals(page_uid, status);
 
+  -- Phase 33 R3: an agent proposes a change to an architecture rule; a
+  -- person sees what it would do against the code and decides. The rule is
+  -- the body an agent proposed, by field; null for stopping the rule.
+  CREATE TABLE IF NOT EXISTS rule_proposals (
+    uid TEXT PRIMARY KEY,
+    project_root TEXT NOT NULL,
+    rule_id TEXT NOT NULL,
+    body TEXT,
+    why TEXT NOT NULL,
+    effect TEXT,
+    words TEXT NOT NULL,
+    author TEXT NOT NULL,
+    author_type TEXT NOT NULL,
+    session_id TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at INTEGER NOT NULL,
+    decided_at INTEGER,
+    decided_by TEXT,
+    decided_by_type TEXT,
+    decision_note TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_rule_proposals_project ON rule_proposals(project_root, status);
+
   -- Phase 32 B7.3: each session holding an affected task is told of an open
   -- proposal once; this is who has been.
   CREATE TABLE IF NOT EXISTS spec_proposal_reads (
