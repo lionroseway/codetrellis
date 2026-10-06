@@ -187,7 +187,7 @@ const COMPONENT_DIR_DOMAINS: Record<string, DomainKey> = {
   plan: 'c',
   artefact: 'e', brief: 'e',
   presence: 'f',
-  layout: 'g', guide: 'g',
+  layout: 'g', guide: 'g', legend: 'g',
   terminal: 'i', audio: 'i',
   pairing: 'j',
   settings: 'k',

@@ -25,6 +25,8 @@ import { hhmm, hitsAsOf, signalsAsOf } from '../../lib/replay';
 import { buildLanes, position, type LaneMark } from '../../lib/timeline-lanes';
 import type { AgentTurn } from '../../lib/agent-turns';
 import { identityTone, LANE, TONES } from '../../lib/visual-language';
+import { legendFor } from '../../lib/legend';
+import { Legend } from '../legend/Legend';
 
 // Glyphs and words from the visual vocabulary (Phase 33 G1). A commit is ◉:
 // ◆ means unplanned everywhere else. U+FE0E asks for the text form of ⚠ and
@@ -172,6 +174,7 @@ export function TimelineLanes({
           <span data-testid="timeline-lanes-end">{replay ? `at ${hhmm(replay.at)}` : 'now'}</span>
         </div>
       </div>
+      <Legend surface="timeline" entries={legendFor(view.lanes.flatMap((l) => l.marks.map((m) => `lane:${m.kind}`)))} className="mt-1.5" />
     </div>
   );
 }

@@ -34,7 +34,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 4 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 13 | 7 | 1 | 0 | 0 |
-| 0.4g Agents and MCP | 31 | 33 | 10 | 37 | 0 | 0 |
+| 0.4g Agents and MCP | 31 | 33 | 10 | 38 | 0 | 0 |
 | 0.4h Drift, governance, review | 11 | 28 | 9 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 38 | 0 |
@@ -794,6 +794,7 @@ records that — but "✗ none" is proof of a gap.
 | g | `layout/TimelineLanes.tsx` |  | n/a | n/a |  |  |  |
 | g | `layout/TopBar.tsx` |  | n/a | n/a |  | ✓ 0.5 — depth tabs dim where no graph shows; branch chip one line (0.5c) |  |
 | g | `layout/WorkstreamStrip.tsx` |  | n/a | n/a |  |  |  |
+| g | `legend/Legend.tsx` |  | n/a | n/a |  |  |  |
 | g | `Toast.tsx` |  | n/a | n/a |  |  |  |
 | g | `UnverifiedTag.tsx` |  | n/a | n/a |  |  |  |
 | g | `WelcomeScreen.tsx` |  | n/a | n/a |  |  |  |

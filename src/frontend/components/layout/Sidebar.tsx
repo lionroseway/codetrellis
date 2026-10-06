@@ -9,6 +9,8 @@ import type { FileTreeNode, ProposedChange } from '@shared/types';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ProjectGitStatus } from '../../stores/project-store';
 import { GIT, INTENT, LANGUAGE, languageOf, TASK, TONES, type StateVisual } from '../../lib/visual-language';
+import { legendFor } from '../../lib/legend';
+import { Legend } from '../legend/Legend';
 
 type SidebarGitState = 'staged' | 'unstaged' | 'untracked' | 'deleted';
 const SIDEBAR_DIRTY_STATE_CLEAR_CONFIRMATIONS = 3;
@@ -36,6 +38,10 @@ const PLAN_META: Record<PlanFileState, { glyph: string; tone: string; legend: st
   satisfied:   planMeta(INTENT.landed, 'Aligned'),
   diverged:    planMeta(INTENT.missing, 'Diverged'),
   unplanned:   planMeta(INTENT.unplanned, 'Unplanned'),
+};
+/** Each plan state's entry in the shared legend (G2). */
+const PLAN_KEY: Record<PlanFileState, string> = {
+  planned: 'intent:planned', in_progress: 'task:in_progress', satisfied: 'intent:landed', diverged: 'intent:missing', unplanned: 'intent:unplanned',
 };
 // Severity order — picks a directory's dominant tone and orders the legend.
 const PLAN_ORDER: PlanFileState[] = ['diverged', 'unplanned', 'in_progress', 'planned', 'satisfied'];
@@ -305,6 +311,16 @@ export function Sidebar() {
     for (const st of planStatesByPath.values()) present.add(st);
     return PLAN_ORDER.filter((s) => present.has(s));
   }, [planStatesByPath]);
+  // G2 — the tree's legend: the plan states and git states it draws now, in
+  // the tree's own words for the plan states.
+  const treeLegend = useMemo(() => {
+    const plan = planLegendStates.map((st) => ({ key: PLAN_KEY[st], word: PLAN_META[st].legend }));
+    const git = new Set<SidebarGitState>();
+    for (const states of gitStatesByPath.values()) for (const st of states) git.add(st);
+    const gitKeys = (['staged', 'unstaged', 'untracked', 'deleted'] as SidebarGitState[]).filter((st) => git.has(st)).map((st) => `git:${st}`);
+    const words = new Map(plan.map((p) => [p.key, p.word]));
+    return legendFor([...plan.map((p) => p.key), ...gitKeys]).map((e) => (words.has(e.key) ? { ...e, word: words.get(e.key)! } : e));
+  }, [planLegendStates, gitStatesByPath]);
   const displayTree = filterTree(treeWithGitEntries, searchQuery);
 
   const view = useSourceControlStore((s) => s.sidebarView);
@@ -385,14 +401,9 @@ export function Sidebar() {
 
       </>)}
 
-      {view === 'files' && planLegendStates.length > 0 && (
-        <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 px-3 py-2 border-t border-border-subtle">
-          {planLegendStates.map((st) => (
-            <span key={st} className="flex items-center gap-1 text-[10px] text-foreground-subtle">
-              <span className={`font-semibold ${PLAN_META[st].tone}`}>{PLAN_META[st].glyph}</span>
-              {PLAN_META[st].legend}
-            </span>
-          ))}
+      {view === 'files' && (
+        <div className="px-2 py-1.5 border-t border-border-subtle">
+          <Legend surface="files" entries={treeLegend} />
         </div>
       )}
     </div>
