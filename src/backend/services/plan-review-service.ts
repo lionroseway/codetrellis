@@ -110,7 +110,7 @@ function normalise(p: string): string {
 }
 
 /** A target covers a path when equal, or when it is a parent directory. */
-function covers(target: string, changed: string): boolean {
+export function covers(target: string, changed: string): boolean {
   const t = normalise(target);
   const c = normalise(changed);
   if (!t) return false;

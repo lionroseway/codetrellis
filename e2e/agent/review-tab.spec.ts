@@ -164,6 +164,48 @@ test.describe('Review tab', () => {
     expect(posts).toEqual([{ base: 'main', head: 'billing-v2' }]);
   });
 
+  test('did it do what the task said: shown for a linked branch, absent otherwise (V6)', async ({ page }) => {
+    await serve(page, QUEUE);
+    await page.route('**/api/review/architecture?*', (route) => {
+      const head = new URL(route.request().url()).searchParams.get('head');
+      return route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify(head === 'billing-v2'
+          ? { words: [], task: {
+              branch: 'billing-v2', unplanned: ['services/api/requirements.txt'],
+              words: [
+                '✗ Strict validation: touched 1 of the 2 files it planned; not packages/web/src/Cart.ts; 1 of 2 criteria met (1 sent back).',
+                'Changed 1 file the task did not plan: services/api/requirements.txt.',
+              ],
+              items: [{ uid: 'i1', title: 'Strict validation', planTitle: 'Q4 checkout', words: '', criteria: [
+                { text: 'Bad emails are refused', state: 'met' },
+                { text: 'The cart shows the total', state: 'sent_back' },
+              ] }],
+            } }
+          : { words: [] }),
+      });
+    });
+    await gotoWithProject(page);
+    await tabButton(page).click();
+    await page.getByTestId('review-line').first().getByRole('button').first().click();
+
+    const task = page.getByTestId('review-task');
+    await expect(task.getByTestId('review-task-line')).toHaveText([
+      '✗ Strict validation: touched 1 of the 2 files it planned; not packages/web/src/Cart.ts; 1 of 2 criteria met (1 sent back).',
+      'Changed 1 file the task did not plan: services/api/requirements.txt.',
+    ]);
+    await expect(task.getByTestId('review-task-criterion')).toHaveText(['✓Bad emails are refused (met)', '✗The cart shows the total (sent back)']);
+    await expandPanel(page);
+    await shot(page, 'review-tab-task');
+
+    // A line whose branch no task names: no section, not an empty one.
+    await page.getByTestId('review-line').first().getByRole('button').first().click();
+    await page.getByTestId('review-line').nth(2).getByRole('button').first().click();
+    await expect(page.getByTestId('review-line-detail')).toBeVisible();
+    await expect(page.getByTestId('review-since')).toBeVisible();
+    await expect(page.getByTestId('review-task')).toHaveCount(0);
+  });
+
   test('nothing in review says how a line gets there', async ({ page }) => {
     await serve(page, { base: 'main', lines: [] });
     await gotoWithProject(page);
