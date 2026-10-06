@@ -14,6 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
+import yaml from 'yaml';
 import { setupHarness, type Harness, type ScriptedAgent } from '../harness';
 import type { RuleView } from '../../src/shared/types/architecture-rules';
 
@@ -37,11 +38,17 @@ test.describe.serial('Architecture rules', () => {
       from: 'services/api/app/routes/', mayNotImport: 'services/api/app/db.py', because: 'routes go through the service layer',
     });
     expect(put.status, await put.clone().text()).toBe(200);
-    const config = JSON.parse(fs.readFileSync(path.join(root, '.codetrellis', 'config.json'), 'utf8')) as { rules: Array<{ id: string; since: string }> };
-    expect(config.rules.map((r) => r.id)).toEqual(['routes-not-db']);
-    expect(Math.abs(Date.parse(config.rules[0].since) - Date.now())).toBeLessThan(60_000);
+    // Kept in the default suite's file, committed with the code (R1), not in the config.
+    const suite = yaml.parse(fs.readFileSync(path.join(root, '.codetrellis', 'rules', 'architecture.yaml'), 'utf8')) as { suite: string; rules: Array<{ id: string; since: string }> };
+    expect(suite.suite).toBe('architecture');
+    expect(suite.rules.map((r) => r.id)).toEqual(['routes-not-db']);
+    expect(Math.abs(Date.parse(suite.rules[0].since) - Date.now())).toBeLessThan(60_000);
+    const configPath = path.join(root, '.codetrellis', 'config.json');
+    expect(fs.existsSync(configPath) ? (JSON.parse(fs.readFileSync(configPath, 'utf8')) as { rules?: unknown }).rules : undefined).toBeUndefined();
 
     const [view] = await rules();
+    expect(view.where).toBe('.codetrellis/rules/architecture.yaml');
+    expect(view.rule.suite).toBe('architecture');
     expect(view.words).toBe('services/api/app/routes/ may not import services/api/app/db.py: routes go through the service layer');
     expect(view.breaches?.map((b) => b.from).sort()).toEqual(['services/api/app/routes/orders.py', 'services/api/app/routes/users.py']);
     expect(view.breaches?.every((b) => b.to === 'services/api/app/db.py')).toBe(true);
@@ -75,7 +82,7 @@ test.describe.serial('Architecture rules', () => {
     expect(JSON.parse(r.answer)).toEqual({ rules: await rules() });
   });
 
-  test('a bad rule is refused with why; an unknown one cannot be stopped; a stopped one is gone from the config', async () => {
+  test('a bad rule is refused with why; an unknown one cannot be stopped; a stopped one is gone from its file', async () => {
     const bad = await h.client.raw('PUT', `/api/rules/web?project=${encodeURIComponent(root)}`, { from: '../web/', mayNotImport: '' });
     expect(bad.status).toBe(400);
     expect(((await bad.json()) as { error: string }).error).toBe('from may not climb out of the project; mayNotImport must be a folder or a pattern, like web/');
@@ -83,7 +90,56 @@ test.describe.serial('Architecture rules', () => {
 
     expect((await h.client.raw('DELETE', `/api/rules/web-not-services?project=${encodeURIComponent(root)}`)).status).toBe(200);
     expect((await rules()).map((v) => v.rule.id)).toEqual(['routes-not-db']);
+    const suite = yaml.parse(fs.readFileSync(path.join(root, '.codetrellis', 'rules', 'architecture.yaml'), 'utf8')) as { rules: Array<{ id: string }> };
+    expect(suite.rules.map((r) => r.id)).toEqual(['routes-not-db']);
     expect((await h.client.raw('GET', `/api/rules?project=${encodeURIComponent('/tmp/never-opened')}`)).ok).toBe(false);
+  });
+
+  test('a rule Phase 32 left in config.json still counts, and moves to the rules file when the person says so', async () => {
+    const configPath = path.join(root, '.codetrellis', 'config.json');
+    const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown> : {};
+    config.rules = [{ id: 'web-not-db-legacy', from: 'packages/web/', mayNotImport: 'services/api/app/db.py', except: [], because: 'kept the old way', since: '2026-09-01T00:00:00.000Z', by: 'Sam' }];
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+
+    // Still counts, and says where it is kept.
+    await expect.poll(async () => (await h.client.raw('GET', `/api/rules?project=${encodeURIComponent(root)}`)).json(), { timeout: 10_000 })
+      .toMatchObject({ inConfig: 1, problems: [] });
+    const legacy = (await rules()).find((v) => v.rule.id === 'web-not-db-legacy');
+    expect(legacy?.where).toBe('.codetrellis/config.json');
+    expect(legacy?.rule.suite).toBeUndefined();
+    const asked = await agent.callTool('check_conformity', { proposed_imports: [{ from: 'packages/web/src/UserList.tsx', importing: 'services/api/app/db.py' }], project_path: root });
+    expect((JSON.parse(asked.answer) as { violations: Array<{ rule: string }> }).violations.map((v) => v.rule)).toContain('web-not-db-legacy');
+
+    // Moved by the person: into the suite file, out of the config, kept as it was.
+    const move = await h.client.raw('POST', `/api/rules/move-from-config?project=${encodeURIComponent(root)}`);
+    expect(move.status, await move.clone().text()).toBe(200);
+    expect(await move.json()).toEqual({ moved: ['web-not-db-legacy'], to: '.codetrellis/rules/architecture.yaml' });
+    const suite = yaml.parse(fs.readFileSync(path.join(root, '.codetrellis', 'rules', 'architecture.yaml'), 'utf8')) as { rules: Array<{ id: string; by: string; since: string }> };
+    expect(suite.rules.map((r) => r.id)).toEqual(['routes-not-db', 'web-not-db-legacy']);
+    expect(suite.rules[1]).toMatchObject({ by: 'Sam', since: '2026-09-01T00:00:00.000Z' });
+    expect((JSON.parse(fs.readFileSync(configPath, 'utf8')) as { rules?: unknown }).rules).toBeUndefined();
+    const after = (await (await h.client.raw('GET', `/api/rules?project=${encodeURIComponent(root)}`)).json()) as { inConfig: number };
+    expect(after.inConfig).toBe(0);
+    expect((await rules()).find((v) => v.rule.id === 'web-not-db-legacy')?.where).toBe('.codetrellis/rules/architecture.yaml');
+  });
+
+  test('a suite file a person edited by hand is read as it is; a rule it gets wrong is named, not dropped silently', async () => {
+    const file = path.join(root, '.codetrellis', 'rules', 'payments.yaml');
+    fs.writeFileSync(file, [
+      '# The payments team owns this.',
+      'suite: payments',
+      'rules:',
+      '  - id: web-not-payments',
+      '    from: packages/web/',
+      '    mayNotImport: services/payments/',
+      '  - id: Bad Id',
+      '    from: packages/web/',
+      '    mayNotImport: services/',
+    ].join('\n'));
+    const body = (await (await h.client.raw('GET', `/api/rules?project=${encodeURIComponent(root)}`)).json()) as { rules: RuleView[]; problems: string[] };
+    expect(body.rules.find((v) => v.rule.id === 'web-not-payments')?.where).toBe('.codetrellis/rules/payments.yaml');
+    expect(body.problems).toEqual(['.codetrellis/rules/payments.yaml, rule "Bad Id": id must be a short slug, like web-not-db']);
+    fs.unlinkSync(file);
   });
 });
 
@@ -105,6 +161,9 @@ test.describe.serial('Only the person sets the rules', () => {
     const stop = await h.client.raw('DELETE', `/api/rules/web-not-db?project=${root}`);
     expect(stop.status).toBe(403);
     expect(((await stop.json()) as { error: string }).error).toBe('Only you can stop an architecture rule — in the CodeTrellis app, Settings → Architecture rules.');
+    const move = await h.client.raw('POST', `/api/rules/move-from-config?project=${root}`);
+    expect(move.status).toBe(403);
+    expect(((await move.json()) as { error: string }).error).toBe('Only you can move the architecture rules — in the CodeTrellis app, Settings → Architecture rules.');
     expect((await h.client.raw('GET', `/api/rules?project=${root}`)).status).toBe(200);
   });
 });

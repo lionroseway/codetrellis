@@ -137,7 +137,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
     {
       description:
         'The team\'s architecture rules (Phase 32 A7): path boundaries such as "web/ may not import db/ (except db/types.ts): ' +
-        'web talks to db through the API", kept in the committed config, each with the imports that break it today. ' +
+        'web talks to db through the API", kept in committed suite files (.codetrellis/rules/<suite>.yaml), each with the imports that break it today. ' +
         'A person sets them in the app; this only reads. Check an import before writing it with check_conformity.',
       inputSchema: {
         project_path: z.string().optional().describe('An opened project. Omit for the one open in the app.'),

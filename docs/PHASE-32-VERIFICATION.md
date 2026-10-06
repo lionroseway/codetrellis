@@ -17,7 +17,7 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 296 | 294 | 0 | 0 | 217 | 0 |
+| REST routes | 297 | 295 | 0 | 0 | 217 | 0 |
 | MCP tools | 212 | 212 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
 | Frontend components | 139 | n/a | n/a | n/a | 0 | 23 |
@@ -29,7 +29,7 @@ records that — but "✗ none" is proof of a gap.
 | Domain | REST | MCP | RPC | Components | Mobile | Settings |
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 25 | 12 | 10 | 0 | 0 | 0 |
-| 0.4b Graph | 22 | 15 | 8 | 15 | 0 | 0 |
+| 0.4b Graph | 23 | 15 | 8 | 15 | 0 | 0 |
 | 0.4c Plans and items | 120 | 61 | 29 | 64 | 0 | 0 |
 | 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 4 | 0 | 0 |
@@ -48,7 +48,7 @@ records that — but "✗ none" is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (296)
+## REST routes (297)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -97,6 +97,7 @@ records that — but "✗ none" is proof of a gap.
 | b | `GET /api/trellis/:id` |  | ✗ none | 2 | ✓ 0.4b: includes the branch (baselines) |  |  |
 | b | `GET /api/trellis/:id/diff` |  | ✗ none | 2 | ✓ 0.4b: empty at capture; then the new file and its edge, live; 404 unknown (baselines) |  |  |
 | b | `GET /api/trellis/snapshots` |  | ✗ none | 1 | ✓ 0.4b: lists the capture (baselines) |  |  |
+| b | `POST /api/rules/move-from-config` |  | ✗ none | 1 |  |  |  |
 | b | `POST /api/trellis/capture` |  | ✗ none | 3 | ✓ 0.4b: (baselines) |  |  |
 | b | `PUT /api/rules/:id` |  | ✗ none | 5 |  |  |  |
 | c | `DELETE /api/attachments/:uid` |  | ✗ none | 1 | ✓ 0.4c-2: removes; unknown 404 (item-surface) |  |  |
