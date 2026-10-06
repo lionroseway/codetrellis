@@ -147,6 +147,9 @@ export const SERIAL_SPECS = [
   '**/graph/mcp-view-tools.spec.ts',
   // So do the UI tools (open_plan, select_item, the drawers and dialogs).
   '**/agent/mcp-ui-tools.spec.ts',
+  // "No agents connected" is a fact about the whole backend: any parallel
+  // spec's MCP client makes it false (#367, once shards were balanced).
+  '**/agent/connected-agents.spec.ts',
   // Changes shared settings — plan visibility, identity — that a parallel
   // spec creating plans would pick up.
   '**/settings/sections-save.spec.ts',
