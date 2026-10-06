@@ -44,6 +44,8 @@ export interface OverlayMarker {
   itemUid: string;
   itemTitle: string;
   itemStatus: string | null;
+  /** Who holds the task, when someone does (Phase 33 G5: the inspector says). */
+  itemAssignee?: string | null;
   planUid: string;
   /** How the edit was pinned, and whether it resolved. */
   anchor: OverlayAnchor;
@@ -139,6 +141,7 @@ function markerBase(item: PlanItem, edit: FileEdit | null): Omit<OverlayMarker, 
     itemUid: item.uid,
     itemTitle: item.title,
     itemStatus: item.status ?? null,
+    itemAssignee: item.assignee ?? null,
     planUid: item.planUid,
     instruction: edit?.instruction ?? '',
     intent: edit?.intent ?? null,

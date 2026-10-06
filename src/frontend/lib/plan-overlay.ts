@@ -14,6 +14,8 @@ export interface OverlayMarker {
   itemUid: string;
   itemTitle: string;
   itemStatus: string | null;
+  /** Who holds the task, when someone does. */
+  itemAssignee?: string | null;
   planUid: string;
   anchor: OverlayAnchor;
   startLine: number | null;

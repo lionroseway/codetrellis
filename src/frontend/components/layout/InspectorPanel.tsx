@@ -8,6 +8,7 @@ import { useUiStore, type SelectedNodeKind, type SelectedNodeMeta } from '../../
 import { useProjectStore } from '../../stores/project-store';
 import { usePlanStore } from '../../stores/plan-store';
 import { CodePreview, type FileContent } from '../inspector/CodePreview';
+import { FilePlans } from '../inspector/FilePlans';
 /**
  * Phase 26 — the diff editor is lazy.
  *
@@ -301,6 +302,8 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
         </div>
         <p className="text-[10.5px] text-foreground-subtle font-mono break-all">{nodeId}</p>
       </div>
+
+      <FilePlans overlay={overlay} />
 
       <button
         onClick={loadCode}
