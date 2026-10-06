@@ -210,6 +210,38 @@ export function App() {
   // internal views and calling resize() too early throws "Cannot read
   // properties of undefined (reading 'minimumSize')". On mount we let
   // Allotment use the Pane preferredSize/minSize props.
+  // G4 — a side pane shown again comes back at the width it had. Allotment
+  // re-shows a hidden pane at its minimum (the sidebar at 180, not the 240
+  // it was), so full screen and back did not restore the layout. Widths are
+  // remembered as the person drags; on showing, the panes are put back.
+  const sideWidths = useRef({ sidebar: SIDEBAR_DEFAULT, inspector: INSPECTOR_DEFAULT });
+  // While panes come back Allotment squeezes the others to fit them (the
+  // sidebar to 180 as the inspector returns): not the person's widths.
+  const restoringPanes = useRef(false);
+  const onHorizontalChange = useCallback((sizes: number[]) => {
+    if (sizes.length !== 3 || restoringPanes.current) return;
+    if (sizes[0] > 0) sideWidths.current.sidebar = sizes[0];
+    if (sizes[2] > 0) sideWidths.current.inspector = sizes[2];
+  }, []);
+  const panesShown = useRef({ sidebarVisible, inspectorVisible });
+  if ((sidebarVisible && !panesShown.current.sidebarVisible) || (inspectorVisible && !panesShown.current.inspectorVisible)) {
+    restoringPanes.current = true;
+  }
+  useEffect(() => {
+    const was = panesShown.current;
+    panesShown.current = { sidebarVisible, inspectorVisible };
+    if ((was.sidebarVisible || !sidebarVisible) && (was.inspectorVisible || !inspectorVisible)) return; // nothing came back
+    const raf = requestAnimationFrame(() => {
+      const handle = horizontalRef.current;
+      if (!handle) return;
+      const side = sidebarVisible ? sideWidths.current.sidebar : 0;
+      const insp = inspectorVisible ? sideWidths.current.inspector : 0;
+      try { handle.resize([side, Math.max(window.innerWidth - side - insp, 320), insp]); } catch (err) { console.warn('[App] pane restore failed', err); }
+      requestAnimationFrame(() => { restoringPanes.current = false; });
+    });
+    return () => { cancelAnimationFrame(raf); restoringPanes.current = false; };
+  }, [sidebarVisible, inspectorVisible]);
+
   const planResizeMounted = useRef(false);
   const inspectorResizeMounted = useRef(false);
 
@@ -278,7 +310,7 @@ export function App() {
             shared context they sat ABOVE every takeover, invisible, and took
             the clicks meant for whatever lay under them: on macOS's metrics,
             code mode's Diff button. */}
-        <Allotment className="absolute inset-0 z-0" ref={horizontalRef}>
+        <Allotment className="absolute inset-0 z-0" ref={horizontalRef} onChange={onHorizontalChange}>
           <Allotment.Pane preferredSize={SIDEBAR_DEFAULT} minSize={180} maxSize={400} visible={sidebarVisible}>
             <Sidebar />
           </Allotment.Pane>
