@@ -63,3 +63,11 @@ test('R6: a symbol is found by its name, through a barrel too; a namespace or de
   assert.equal(importLine(text, 'src/payments/charge.ts#*'), 3);
   assert.equal(importLine(text, 'src/payments/charge.ts#voidCharge'), null);
 });
+
+test('R7: a call is found on the line that names its host, its path or its table', () => {
+  const ts = "import { cart } from './cart';\n\nexport const charge = (cents: number) =>\n  fetch('https://api.stripe.com/v1/charges', { method: 'POST' });\n";
+  assert.equal(importLine(ts, 'http:api.stripe.com/v1/charges'), 4);
+  assert.equal(importLine("const r = await fetch('/api/admin/users');\n", 'http:/api/admin/users'), 1);
+  assert.equal(importLine('-- the ledger\nconst q = `SELECT * FROM payments WHERE id = $1`;\n', 'sql:payments'), 2);
+  assert.equal(importLine('const payments = [];\n', 'sql:payments'), null);
+});

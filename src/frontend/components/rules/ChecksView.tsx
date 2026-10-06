@@ -5,6 +5,7 @@ import { useUiStore } from '../../stores/ui-store';
 import { absoluteFilePath, openFileAt } from '../../lib/open-file-at';
 import { compareRuns, type ComparedFinding } from '../../../shared/lib/check-compare';
 import { ATTENTION, chipClass } from '../../lib/visual-language';
+import { reachWords } from '../../../shared/lib/check-words';
 
 interface Finding extends ComparedFinding { suite: string }
 interface Run {
@@ -213,7 +214,7 @@ function Findings({ findings, root }: { findings: Finding[]; root: string }) {
                 <span className="text-foreground-muted min-w-0">{f.words}</span>
               </div>
               <div className="flex items-baseline gap-2 pl-5">
-                <span className={`rounded-full border px-1.5 text-[10.5px] ${chipClass(ATTENTION.breach.tone)}`} data-testid="check-finding-where">{ATTENTION.breach.glyph} {f.path} imports {f.imports}</span>
+                <span className={`rounded-full border px-1.5 text-[10.5px] ${chipClass(ATTENTION.breach.tone)}`} data-testid="check-finding-where">{ATTENTION.breach.glyph} {f.path} {reachWords(f.imports)}</span>
                 <button type="button" className="text-sky-300/90 hover:underline text-[11px]" data-testid="check-finding-graph"
                   onClick={() => { setSelectedNode(f.path, 'file'); setWorkspaceMode('graph'); }}>graph</button>
                 <button type="button" className="text-sky-300/90 hover:underline text-[11px]" data-testid="check-finding-code"

@@ -83,6 +83,22 @@ export function normalizeRoute(url: string): string {
   return p.startsWith('/') ? p : '/' + p;
 }
 
+/**
+ * The host an outbound URL names, lowercase, or undefined for a path
+ * (Phase 33 R7). `normalizeUrl` drops it, because pairing is by path; a call
+ * rule needs it: only the payments module may call api.stripe.com.
+ */
+export function hostOf(url: string): string | undefined {
+  const m = /^https?:\/\/([^/:?#@]+)/i.exec(url.trim());
+  return m ? m[1].toLowerCase() : undefined;
+}
+
+/** `{ host }` when the URL names one, for spreading into a callsite. */
+export function hostField(url: string): { host?: string } {
+  const host = hostOf(url);
+  return host ? { host } : {};
+}
+
 /** Canonicalise an outbound call URL to the same form as a route. */
 export function normalizeUrl(url: string): string {
   let p = url.replace(/^https?:\/\/[^/]+/, '');
@@ -252,6 +268,7 @@ export function call(
     line,
     method: method.toUpperCase(),
     urlPattern: normalizeUrl(url),
+    ...hostField(url),
     context,
   };
 }

@@ -5,6 +5,7 @@ import type { ParsedFile, ParsedSymbol, AliasMapping, DiscoveredSystem, Supporte
 import { getDataDir, ensureDataDir } from './persistence';
 import { getResolverForLanguage } from './resolvers';
 import { packageEntry } from '../../shared/lib/package-entry';
+import { callEntry } from '../../shared/lib/call-entry';
 import { reconcileSchemaFromSql } from './schema-reconciler';
 // Called, never read at load: the two modules name each other.
 import { importersOf } from './importers';
@@ -394,8 +395,8 @@ export function storeParsedFile(parsed: ParsedFile, projectRoot: string): void {
     d.run(`DELETE FROM callsites WHERE file_id = ?`, [fileId]);
     for (const cs of parsed.callsites ?? []) {
       d.run(
-        `INSERT INTO callsites (file_id, kind, protocol, method, url_pattern, sql_text, line, context)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO callsites (file_id, kind, protocol, method, url_pattern, sql_text, line, context, host)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           fileId,
           cs.kind,
@@ -405,6 +406,7 @@ export function storeParsedFile(parsed: ParsedFile, projectRoot: string): void {
           cs.sqlText ?? null,
           cs.line ?? null,
           cs.context ?? null,
+          cs.host ?? null,
         ]
       );
     }
@@ -813,6 +815,35 @@ export function getDependencyEdges(): Array<{
  * The edges package rules are checked against; relative imports and the
  * standard library are left out.
  */
+/**
+ * Phase 33 R7: each file and the calls it makes, as call entries
+ * (`http:api.stripe.com/v1/charges`, `sql:payments`), for call rules.
+ */
+export function getCallEdges(): Array<{ sourceRelative: string; targetRelative: string }> {
+  let results;
+  try {
+    results = getDb().exec(`
+      SELECT DISTINCT f.relative_path, c.kind, c.url_pattern, c.host
+      FROM callsites c
+      JOIN files f ON c.file_id = f.id
+      WHERE c.kind IN ('http_call', 'sql_query')
+      ORDER BY f.relative_path
+    `);
+  } catch {
+    return [];
+  }
+  const out: Array<{ sourceRelative: string; targetRelative: string }> = [];
+  const seen = new Set<string>();
+  for (const row of results[0]?.values ?? []) {
+    const entry = callEntry({ kind: String(row[1]), urlPattern: row[2] as string | null, host: row[3] as string | null });
+    const key = `${row[0]}\0${entry}`;
+    if (!entry || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ sourceRelative: String(row[0]), targetRelative: entry });
+  }
+  return out;
+}
+
 export function getPackageEdges(): Array<{ sourceRelative: string; targetRelative: string }> {
   let results;
   try {

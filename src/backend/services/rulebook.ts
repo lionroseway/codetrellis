@@ -173,6 +173,20 @@ function written(rule: ArchitectureRule): Record<string, unknown> {
       ...(rule.by ? { by: rule.by } : {}),
     };
   }
+  if (rule.kind === 'calls') {
+    // R7: the same shape, naming the call.
+    return {
+      id: rule.id,
+      kind: 'calls',
+      calls: rule.mayNotImport,
+      ...(rule.from !== '**' ? { from: rule.from } : {}),
+      only: rule.only ?? [],
+      strength: rule.strength,
+      ...(rule.because ? { because: rule.because } : {}),
+      since: rule.since,
+      ...(rule.by ? { by: rule.by } : {}),
+    };
+  }
   if (rule.kind === 'symbol') {
     // R6: the same shape, naming the export.
     return {

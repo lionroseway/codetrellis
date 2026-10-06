@@ -67,19 +67,30 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 
 /** What to do instead, from the rule itself: the files that may, or the doors through it. */
 export function ruleFix(rule: { kind?: string; only?: string[]; except: string[] }): string | null {
-  if ((rule.kind === 'package' || rule.kind === 'symbol') && rule.only?.length) return `use ${rule.only.join(' or ')} instead`;
+  if ((rule.kind === 'package' || rule.kind === 'symbol' || rule.kind === 'calls') && rule.only?.length) return `use ${rule.only.join(' or ')} instead`;
   if (rule.except.length) return `import ${rule.except.join(' or ')} instead`;
   return null;
 }
 
+/**
+ * What the file does to what it reaches, in words: "imports npm:stripe",
+ * and for a call (R7) "calls api.stripe.com/v1/charges" or "uses the table
+ * invoices".
+ */
+export function reachWords(target: string): string {
+  if (target.startsWith('http:')) return `calls ${target.slice(5)}`;
+  if (target.startsWith('sql:')) return `uses the table ${target.slice(4)}`;
+  return `imports ${target}`;
+}
+
 /** The finding's own line, the one `says` and SARIF carry. */
 export function findingLine(r: Pick<RuleFinding, 'path' | 'imports' | 'words' | 'because'>): string {
-  return `${r.path} now imports ${r.imports}, which the rule “${r.words}” forbids${r.because ? `: ${r.because}` : ''}`;
+  return `${r.path} now ${reachWords(r.imports)}, which the rule “${r.words}” forbids${r.because ? `: ${r.because}` : ''}`;
 }
 
 /** Where and what: "packages/web/src/api.ts:1 imports npm:stripe". */
 export function findingTitle(r: Pick<RuleFinding, 'path' | 'imports' | 'line'>): string {
-  return `${r.path}${r.line ? `:${r.line}` : ''} imports ${r.imports}`;
+  return `${r.path}${r.line ? `:${r.line}` : ''} ${reachWords(r.imports)}`;
 }
 
 /** What to do: the rule's fix, else its reason. */

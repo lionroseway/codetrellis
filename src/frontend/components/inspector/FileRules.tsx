@@ -3,6 +3,7 @@ import { ATTENTION, chipClass } from '../../lib/visual-language';
 import { rulesForFile, type OverlayRuleView } from '../../lib/rule-overlay';
 import { useUiStore } from '../../stores/ui-store';
 import { useFileFindings } from '../../hooks/useCheckRuns';
+import { reachWords } from '../../../shared/lib/check-words';
 
 const STRENGTH_GLYPH: Record<string, string> = { block: '■', warn: '⚠', guide: '○' };
 
@@ -50,7 +51,7 @@ export function FileRules({ root, file }: { root: string; file: string }) {
           {findings.map((f) => (
             <div key={`${f.rule}>${f.imports}`} className="rounded border border-white/[0.06] bg-white/[0.02] px-2 py-1.5 text-[11px] space-y-0.5" data-testid="file-finding">
               <div className="flex items-baseline gap-1.5">
-                <span className={`shrink-0 rounded-full border px-1.5 text-[10px] ${chipClass(ATTENTION.breach.tone)}`}>{ATTENTION.breach.glyph} imports {f.imports}</span>
+                <span className={`shrink-0 rounded-full border px-1.5 text-[10px] ${chipClass(ATTENTION.breach.tone)}`}>{ATTENTION.breach.glyph} {reachWords(f.imports)}</span>
                 <span className="text-foreground-muted min-w-0">{f.failing ? '✗' : '⚠'} {f.rule} ({f.strength})</span>
               </div>
               <div className="text-foreground-muted">{f.words}</div>
@@ -71,7 +72,7 @@ export function FileRules({ root, file }: { root: string; file: string }) {
           </div>
           {v.here.map((b) => (
             <div key={`${b.from}>${b.to}`} className={`inline-flex items-center gap-1 rounded-full border px-1.5 text-[10px] ${chipClass(ATTENTION.breach.tone)}`} data-testid="file-rule-breach">
-              {ATTENTION.breach.glyph} {b.from === file ? `imports ${b.to}` : `imported by ${b.from}`}
+              {ATTENTION.breach.glyph} {b.from === file ? reachWords(b.to) : `imported by ${b.from}`}
             </div>
           ))}
           <div className="flex gap-3 text-[10.5px]">

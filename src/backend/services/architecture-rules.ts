@@ -176,8 +176,19 @@ export function edgesIfLoaded(
   if (real(loadedRoot) !== real(projectRoot)) return null;
   // Files importing files, then files importing outside packages (R5), which
   // only package rules read, then the named exports symbol rules name (R6).
-  return [...edges(), ...packages(), ...symbolEdgesOfGraph(projectRoot, [...rulesOf(projectRoot), ...alsoRules])]
+  const rules = [...rulesOf(projectRoot), ...alsoRules];
+  return [...edges(), ...packages(), ...symbolEdgesOfGraph(projectRoot, rules), ...callEdgesOfGraph(rules)]
     .map((e) => ({ from: e.sourceRelative, to: e.targetRelative }));
+}
+
+/** The calls the scanned code makes (R7), when a call rule would read them. */
+function callEdgesOfGraph(rules: readonly ArchitectureRule[]): Array<{ sourceRelative: string; targetRelative: string }> {
+  if (!rules.some((r) => r.kind === 'calls')) return [];
+  try {
+    return (require('./database') as typeof import('./database')).getCallEdges();
+  } catch {
+    return [];
+  }
 }
 
 /**

@@ -161,3 +161,15 @@ test('a symbol rule is written the way a person writes one, and reads back the s
   assert.doesNotMatch(text, /mayNotImport|from:|except/);
   assert.deepEqual(readRulebook(root).suites[0].rules[0], charge);
 });
+
+test('a call rule is written the way a person writes one, and reads back the same (R7)', () => {
+  const root = project();
+  const stripeApi: ArchitectureRule = {
+    id: 'stripe-api-via-payments', kind: 'calls', from: '**', mayNotImport: 'http:api.stripe.com', only: ['src/payments/'],
+    except: [], because: 'One client, with retries and idempotency keys.', since: '2026-10-06T00:00:00.000Z', by: '', strength: 'block', suite: 'payments',
+  };
+  writeSuite(root, 'payments', [stripeApi]);
+  const text = fs.readFileSync(path.join(root, RULES_DIR, 'payments.yaml'), 'utf-8');
+  assert.match(text, /kind: calls\n\s+calls: http:api.stripe.com\n\s+only:\n\s+- src\/payments\//);
+  assert.deepEqual(readRulebook(root).suites[0].rules[0], stripeApi);
+});

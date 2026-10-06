@@ -16,7 +16,7 @@ export type RuleStrength = 'block' | 'warn' | 'guide';
 
 export const RULE_STRENGTHS: readonly RuleStrength[] = ['block', 'warn', 'guide'];
 
-export type RuleKind = 'imports' | 'package' | 'symbol';
+export type RuleKind = 'imports' | 'package' | 'symbol' | 'calls';
 
 export interface ArchitectureRule {
   /** A slug, unique in the project: `web-not-db`. */
@@ -28,7 +28,9 @@ export interface ArchitectureRule {
    * (`npm:stripe`); `from` is where the rule applies, everywhere (`**`) when
    * not said. `symbol` (R6): only the files in `only` may import the named
    * export in `mayNotImport` (`src/payments/charge.ts#createCharge`), from
-   * its file or through any barrel that passes it on.
+   * its file or through any barrel that passes it on. `calls` (R7): only the
+   * files in `only` may make the call in `mayNotImport`: an HTTP host or path
+   * (`http:api.stripe.com`) or a SQL table (`sql:payments`).
    */
   kind?: RuleKind;
   /** The files the rule is about: `web/`. */

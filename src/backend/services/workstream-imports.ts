@@ -19,6 +19,7 @@ import { getAllFileHashes, getImportResolutionContext, resolutionContextRoot } f
 import { getResolverForLanguage } from './resolvers';
 import { packageEntry } from '../../shared/lib/package-entry';
 import { symbolEntry } from '../../shared/lib/symbol-entry';
+import { callEntry } from '../../shared/lib/call-entry';
 import { originsOf } from './importers';
 import { ruleFix } from '../../shared/lib/check-words';
 import { showAtAsync } from './branch-workstreams';
@@ -53,7 +54,7 @@ export async function importsAdded(
   projectRoot: string,
   w: Pick<Workstream, 'root' | 'shape' | 'head' | 'changes'>,
   mainRoot: string | null,
-  opts: { packages?: boolean; symbols?: boolean } = {},
+  opts: { packages?: boolean; symbols?: boolean; calls?: boolean } = {},
 ): Promise<ImportEdge[]> {
   const base = w.changes.base;
   const branch = w.shape === 'branch' && w.head && mainRoot ? w.head : null;
@@ -71,6 +72,8 @@ export async function importsAdded(
     let parsed: ReturnType<typeof parseVirtualFile> = null;
     try { parsed = parseVirtualFile(abs, content); } catch { return out; }
     if (!parsed) return out;
+    // R7: the calls it makes, for call rules to read (no resolver needed).
+    if (opts.calls) for (const cs of parsed.callsites ?? []) { const e = callEntry(cs); if (e) out.add(e); }
     const resolver = getResolverForLanguage(parsed.language);
     if (!resolver) return out;
     for (const imp of parsed.imports) {
@@ -96,7 +99,7 @@ export async function importsAdded(
   const edges: ImportEdge[] = [];
   for (const file of w.changes.files) {
     if (file.status === 'deleted') continue;
-    const key = `${folder}\0${file.path}\0${opts.packages ? 'p' : ''}${opts.symbols ? 's' : ''}`;
+    const key = `${folder}\0${file.path}\0${opts.packages ? 'p' : ''}${opts.symbols ? 's' : ''}${opts.calls ? 'c' : ''}`;
     const stamp = stampOf(folder, base, file, branch);
     const hit = cache.get(key);
     if (hit && hit.stamp === stamp) { edges.push(...hit.added); continue; }
@@ -137,7 +140,7 @@ export async function ruleImports(projectRoot: string, files: readonly string[],
   const edges = await importsAdded(projectRoot, {
     root: projectRoot, shape: 'shared', head: null,
     changes: { base, files: files.map((f) => ({ path: f, status: 'modified' as const })), truncated: false },
-  }, null, { packages: true, symbols: rules.some((r) => r.kind === 'symbol') });
+  }, null, { packages: true, symbols: rules.some((r) => r.kind === 'symbol'), calls: rules.some((r) => r.kind === 'calls') });
   const byId = new Map(rules.map((r) => [r.id, r]));
   return checkEdges(rules, edges).map((b) => {
     const rule = byId.get(b.rule)!;

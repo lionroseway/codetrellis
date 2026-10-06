@@ -2796,7 +2796,7 @@ function ruleBody(req: express.Request): Record<string, unknown> {
     id: req.params.id, suite: b.suite, from: b.from, mayNotImport: b.mayNotImport, except: b.except, because: b.because, strength: b.strength,
     // R5: a package rule's own fields; R6: a symbol rule's.
     ...(b.kind !== undefined ? { kind: b.kind } : {}), ...(b.package !== undefined ? { package: b.package } : {}), ...(b.only !== undefined ? { only: b.only } : {}),
-    ...(b.symbol !== undefined ? { symbol: b.symbol } : {}),
+    ...(b.symbol !== undefined ? { symbol: b.symbol } : {}), ...(b.calls !== undefined ? { calls: b.calls } : {}),
   };
 }
 

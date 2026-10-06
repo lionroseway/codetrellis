@@ -93,6 +93,8 @@ export interface Callsite {
   // HTTP specifics
   method?: string;        // 'GET' / 'POST' / 'PUT' / 'DELETE' / 'PATCH'
   urlPattern?: string;    // '/api/users', '/api/users/:id'
+  /** Phase 33 R7: an outbound call's host, lowercase, when its URL names one: `api.stripe.com`. */
+  host?: string;
   // SQL specifics (later phases)
   sqlText?: string;
   // Free-form context (function name, decorator name, etc.)

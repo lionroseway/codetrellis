@@ -73,7 +73,9 @@ export const SCHEMA_AST = `
     url_pattern TEXT,
     sql_text TEXT,
     line INTEGER,
-    context TEXT
+    context TEXT,
+    -- Phase 33 R7: an outbound call's host, which url_pattern drops.
+    host TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_callsites_file ON callsites(file_id);
   CREATE INDEX IF NOT EXISTS idx_callsites_kind ON callsites(kind);

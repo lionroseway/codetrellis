@@ -303,4 +303,37 @@ test.describe('The Rules view: an export (Phase 33 R6)', () => {
     }]);
     expect(previews[0]).toMatchObject({ kind: 'symbol', symbol: 'src/payments/charge.ts#createCharge' });
   });
+
+  test('the owner keeps calls to Stripe to the client (Phase 33 R7): the form sends the call and who may make it', async ({ page }) => {
+    const puts: Array<Record<string, unknown>> = [];
+    await page.route((url) => url.pathname.startsWith('/api/rules'), async (route) => {
+      const req = route.request();
+      const { pathname } = new URL(req.url());
+      if (req.method() === 'GET' && pathname === '/api/rules') return route.fulfill({ json: { rules: [], suites: [], inConfig: 0, problems: [] } });
+      if (req.method() === 'GET' && pathname === '/api/rules/proposals') return route.fulfill({ json: { proposals: [] } });
+      if (req.method() === 'GET' && pathname === '/api/rules/history') return route.fulfill({ json: { history: [] } });
+      if (req.method() === 'POST' && pathname.endsWith('/preview')) {
+        return route.fulfill({ json: { change: { effect: 'tightens', allowed: [] }, words: '⚠ This change adds the rule “only src/payments/ may call api.stripe.com”.', needsConfirm: false } });
+      }
+      if (req.method() === 'PUT') {
+        puts.push({ id: decodeURIComponent(pathname.split('/')[3]), ...(req.postDataJSON() as Record<string, unknown>) });
+        return route.fulfill({ json: { rule: {} } });
+      }
+      return route.fallback();
+    });
+
+    await gotoWithProject(page);
+    await page.getByRole('button', { name: 'Rules', exact: true }).click();
+    const view = page.getByTestId('rules-view');
+    await view.getByTestId('rule-kind-calls').check();
+    await expect(view.getByTestId('rule-form')).toContainText('A call is http: and a host or a path');
+    await view.getByTestId('rule-calls').fill('stripe');
+    await view.getByTestId('rule-only').fill('src/payments/');
+    await expect(view.getByTestId('rule-save')).toBeDisabled();
+    await view.getByTestId('rule-calls').fill('http:api.stripe.com');
+    await view.getByTestId('rule-save').click();
+    await expect.poll(() => puts).toEqual([{
+      id: 'api-stripe-com-only-src-payments', kind: 'calls', calls: 'http:api.stripe.com', only: ['src/payments/'], because: '', strength: 'warn',
+    }]);
+  });
 });

@@ -18,7 +18,7 @@
 
 import type { CallsiteExtractor } from './base';
 import type { Callsite } from '../../../shared/types';
-import { lineOf, normalizeUrl as normalizePath, isLikelyApiPath } from './shared';
+import { lineOf, normalizeUrl as normalizePath, isLikelyApiPath, hostField } from './shared';
 
 const FETCH_RE = /\bfetch\s*\(\s*([`'"])([^`'"]+?)\1(?:\s*,\s*\{([\s\S]*?)\})?/g;
 const AXIOS_RE = /\baxios\s*\.\s*(get|post|put|patch|delete|head|options)\s*\(\s*([`'"])([^`'"]+?)\2/gi;
@@ -63,6 +63,7 @@ function* iterateFetch(content: string): Iterable<Callsite> {
       line: lineOf(content, match.index),
       method: (methodMatch?.[1] || 'GET').toUpperCase(),
       urlPattern: normalizePath(url),
+      ...hostField(url),
       context: 'fetch',
     };
   }
@@ -81,6 +82,7 @@ function* iterateAxios(content: string): Iterable<Callsite> {
       line: lineOf(content, match.index),
       method: verb,
       urlPattern: normalizePath(url),
+      ...hostField(url),
       context: `axios.${verb.toLowerCase()}`,
     };
   }

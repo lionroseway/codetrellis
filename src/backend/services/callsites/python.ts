@@ -15,7 +15,7 @@
 
 import type { CallsiteExtractor } from './base';
 import type { Callsite } from '../../../shared/types';
-import { lineOf, normalizeRoute, normalizeUrl, isLikelyApiPath } from './shared';
+import { lineOf, normalizeRoute, normalizeUrl, isLikelyApiPath, hostField } from './shared';
 
 // Examples we want to catch:
 //   @router.get("/users")
@@ -95,6 +95,7 @@ function* iterateRequests(content: string): Iterable<Callsite> {
       line: lineOf(content, m.index),
       method: verb,
       urlPattern: normalizeUrl(url),
+      ...hostField(url),
       context: `requests.${verb.toLowerCase()}`,
     };
   }
