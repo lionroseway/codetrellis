@@ -86,6 +86,14 @@ describe('the words', () => {
     assert.equal(d.lines[0].told, false, 'nobody was told');
   });
 
+  test('R9: drift into what a rule is about names the rule', () => {
+    const rule = (id: string) => ({ id, suite: 'payments', words: id, strength: 'guide', files: ['src/payments/refund.ts'] });
+    const one = buildDigest([sig({ kind: 'drift', severity: 'medium', workstreams: ['/r/billing'], subject: { files: ['src/payments/refund.ts'], rules: [rule('stripe-via-wrapper')] } })], label);
+    assert.equal(one.lines[0].text, '`billing-v2` changes 1 file outside its scope: src/payments/refund.ts, where the rule stripe-via-wrapper applies');
+    const two = buildDigest([sig({ kind: 'drift', severity: 'medium', workstreams: ['/r/billing'], subject: { files: ['src/payments/refund.ts'], rules: [rule('a'), rule('b')] } })], label);
+    assert.equal(two.lines[0].text, '`billing-v2` changes 1 file outside its scope: src/payments/refund.ts, where the rules a and b apply');
+  });
+
   test('new since the person last looked', () => {
     const d = buildDigest([sig({ firstSeen: 100 }), sig({ firstSeen: 900, workstreams: ['/r/auth', '/r/checkout'] })], label, { since: 500 });
     assert.equal(d.newSince, 1);

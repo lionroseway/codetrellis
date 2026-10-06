@@ -6,15 +6,20 @@
  * Inside the claimed item's files, nothing is said. A file outside them is a
  * medium drift signal naming the file and the item; declaring an intent that
  * covers it brings it back into scope, and the signal resolves.
+ *
+ * Phase 33 R9: where the team wrote a rule about the files it reaches, a
+ * guide included, the drift names it; and the task's brief, over MCP and the
+ * CLI, lists the rules over its own files.
  */
 
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { setupHarness, createMcpClient, type Harness, type ScriptedMcp } from '../harness';
+import { REPO_ROOT } from '../harness/paths';
 
-interface Signal { id: string; kind: string; severity: string; summary: string; subject: { files?: string[]; items?: string[] }; workstreams: string[] }
+interface Signal { id: string; kind: string; severity: string; summary: string; subject: { files?: string[]; items?: string[]; rules?: Array<{ id: string; suite: string; words: string; strength: string; files: string[] }> }; workstreams: string[] }
 
 const VALIDATORS = 'packages/shared/src/validators.ts';
 const API = 'packages/web/src/api.ts';
@@ -77,6 +82,36 @@ test.describe.serial('Drift signals', () => {
 
     const told = JSON.parse((await agent.callTool('get_awareness', {})).text) as { signals: Signal[] };
     expect(told.signals.map((s) => `${s.severity} ${s.kind}`)).toContain('medium drift');
+  });
+
+  test('R9: drift names the rule about where it went, a guide included; the brief lists the rules over the task\'s own files', async () => {
+    const q = `project=${encodeURIComponent(root)}`;
+    for (const [id, from, mayNotImport, suite, because] of [
+      ['web-through-the-api', 'packages/web/', 'packages/shared/src/internal/', 'web', 'The web client reads data through the API.'],
+      ['shared-stays-pure', 'packages/shared/', 'packages/web/', 'shared', 'Shared code runs on both sides.'],
+    ]) {
+      const res = await h.client.raw('PUT', `/api/rules/${id}?${q}`, { from, mayNotImport, because, strength: 'guide', suite });
+      expect(res.status, await res.clone().text()).toBe(200);
+    }
+    // Both are about the web client: one judges it, the other guards it.
+    await expect.poll(async () => (await drift())[0]?.summary, { timeout: 10_000 })
+      .toBe(`\`billing-v2\` changes 1 file outside the scope its claimed item gives it: ${API}. 2 rules are about it: shared-stays-pure (shared, guide), web-through-the-api (web, guide)`);
+    expect((await drift())[0].subject.rules).toEqual([
+      { id: 'shared-stays-pure', suite: 'shared', words: 'packages/shared/ may not import packages/web/', strength: 'guide', files: [API] },
+      { id: 'web-through-the-api', suite: 'web', words: 'packages/web/ may not import packages/shared/src/internal/', strength: 'guide', files: [API] },
+    ]);
+
+    // The brief, as the agent reads it: the rules over its own files, guides included.
+    interface Rules { files: string[]; in_scope: Array<{ rule: string; suite: string; strength: string }> }
+    const brief = JSON.parse((await agent.callTool('get_brief', { item_uid: itemUid })).text) as { rules: Rules };
+    expect(brief.rules.files).toEqual([VALIDATORS]);
+    expect(brief.rules.in_scope.map((r) => `${r.rule} ${r.suite} ${r.strength}`)).toEqual(['shared-stays-pure shared guide']);
+    // And over the CLI, the same block.
+    const cli = spawnSync(process.execPath, [path.join(REPO_ROOT, 'bin', 'codetrellis.mjs'), 'brief', itemUid, '--json', '--data-dir', h.fixture.dataDir], {
+      cwd: billing, env: { ...(process.env as Record<string, string>), ...ENV, CLAUDECODE: '1', CODETRELLIS_AGENT: '', FORCE_COLOR: '' }, encoding: 'utf8', timeout: 120_000,
+    });
+    expect(cli.status, cli.stderr || cli.stdout).toBe(0);
+    expect((JSON.parse(cli.stdout) as { rules: Rules }).rules).toEqual(brief.rules);
   });
 
   test('declaring an intent that covers the file brings it into scope, and the signal resolves', async () => {

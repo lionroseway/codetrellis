@@ -6,6 +6,8 @@
  * with `*` is a glob (`*` within a folder name, `**` across folders);
  * anything else is that file, or that folder when the path continues.
  */
+import { packageApplies } from './package-entry';
+
 const escape = (s: string) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
 
 export function inRulePattern(pattern: string, relPath: string): boolean {
@@ -16,4 +18,23 @@ export function inRulePattern(pattern: string, relPath: string): boolean {
   }
   if (pattern.endsWith('/')) return p.startsWith(pattern);
   return p === pattern || p.startsWith(pattern + '/');
+}
+
+/** A rule as `ruleCovers` reads it: what it is about, not who set it. */
+export interface CoveringRule {
+  kind?: string;
+  from: string;
+  mayNotImport: string;
+  only?: string[];
+}
+
+/**
+ * Whether a rule is about a file (Phase 33 G8, shared since R9): the files it
+ * judges and, for an imports rule, the files it guards; for a package rule,
+ * the files under it that can import from its ecosystem, and the files that
+ * may. The window's overlay, the inspector and the drift signal all ask this.
+ */
+export function ruleCovers(rule: CoveringRule, file: string): boolean {
+  if (rule.kind === 'package') return (inRulePattern(rule.from, file) && packageApplies(rule.mayNotImport, file)) || (rule.only ?? []).some((o) => inRulePattern(o, file));
+  return inRulePattern(rule.from, file) || inRulePattern(rule.mayNotImport, file);
 }

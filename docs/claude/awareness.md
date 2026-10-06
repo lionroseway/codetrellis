@@ -97,7 +97,7 @@ written by CodeTrellis.
 |---|---|---|
 | `collision` | Two workstreams change the same file (declared intent counts) | high on the same symbol, else medium |
 | `contract` | An exported signature changed or an export was removed, and the other side's changed files import it | high; medium for a namespace import only |
-| `drift` | Changes outside the workstream's scope | medium |
+| `drift` | Changes outside the workstream's scope. Where a rule is about a file it reached, guides included, `subject.rules` names each with its suite, strength and files, and the summary and digest say so (Phase 33 R9) | medium |
 | `stale-base` | Main changed files this workstream changes, since it branched | low |
 | `rule` | The workstream adds an import across one of the team's architecture rules (A7.2): `subject.rule` names it in words with why, `subject.edges` each import. Only imports it *adds* against its merge base count; one already there is listed by the rule (A7.1), never signalled. A rule at `guide` is never checked (Phase 33 R4) | high at `block`, medium at `warn` |
 
