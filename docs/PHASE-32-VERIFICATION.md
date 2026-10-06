@@ -17,7 +17,7 @@ records that — but "✗ none" is proof of a gap.
 
 | Surface | Rows | No unit call | No harness call | Neither | Behaviour verified | UX checked |
 |---|---|---|---|---|---|---|
-| REST routes | 301 | 299 | 0 | 0 | 217 | 0 |
+| REST routes | 302 | 300 | 0 | 0 | 217 | 0 |
 | MCP tools | 214 | 214 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
 | Frontend components | 142 | n/a | n/a | n/a | 0 | 23 |
@@ -35,7 +35,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4e Brief and viewer | 5 | 4 | 1 | 4 | 0 | 0 |
 | 0.4f Channels and presence | 6 | 13 | 7 | 1 | 0 | 0 |
 | 0.4g Agents and MCP | 31 | 33 | 10 | 38 | 0 | 0 |
-| 0.4h Drift, governance, review | 12 | 28 | 9 | 0 | 0 | 0 |
+| 0.4h Drift, governance, review | 13 | 28 | 9 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 38 | 0 |
 | 0.4k Settings, updates, privacy | 22 | 0 | 3 | 12 | 0 | 0 |
@@ -48,7 +48,7 @@ records that — but "✗ none" is proof of a gap.
 - Rows for tools the server does not register: none
 - Registered tools with no row (refused at call time): none
 
-## REST routes (301)
+## REST routes (302)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -75,7 +75,7 @@ records that — but "✗ none" is proof of a gap.
 | a | `GET /api/recent-projects` |  | ✗ none | 5 | ✓ 0.4a: branch recorded, pinned first (project-open, worktree-project) |  |  |
 | a | `GET /api/stats` |  | ✗ none | 2 | ✓ 0.4a: counts track rescans (project-open, smoke) |  |  |
 | a | `POST /api/git/fetch` |  | ✗ none | 2 |  |  |  |
-| a | `POST /api/project/scan` |  | ✗ none | 214 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
+| a | `POST /api/project/scan` |  | ✗ none | 215 | ✓ 0.4a: seeds identity once; rescan adds and drops files (project-open, and 60+ others) |  |  |
 | a | `POST /api/recent-projects/pin` |  | ✗ none | 2 | ✓ 0.4a: reorders, and unpin restores recency order (project-open) |  |  |
 | b | `DELETE /api/rules/:id` |  | ✗ none | 3 |  |  |  |
 | b | `GET /api/architecture-summary` |  | ✗ none | 3 | ✓ 0.4b: counts match stats; dirs, languages, most-imported (graph-rest) |  |  |
@@ -284,10 +284,11 @@ records that — but "✗ none" is proof of a gap.
 | h | `GET /api/freeze` |  | ✗ none | 4 | ✓ 0.4h: reason and until while active; inactive after lifting (review-governance-tools), cdev-phase6 |  |  |
 | h | `GET /api/freeze/changes` |  | ✗ none | 1 | ✓ 0.4k: every change newest first, with who and how it arrived; outside a project 403 (freeze-flags) |  |  |
 | h | `GET /api/review-queue` |  | ✗ none | 1 |  |  |  |
-| h | `GET /api/review/architecture` |  | ✗ none | 1 |  |  |  |
+| h | `GET /api/review/architecture` |  | ✗ none | 2 |  |  |  |
 | h | `POST /api/baseline/capture` |  | ✗ none | 4 | ✓ 0.4h: pins HEAD's contents or a named commit; refs checked before git; 400 for a non-commit (baseline); bug 29 |  |  |
 | h | `POST /api/conflicts/resolve` |  | ✗ none | 2 | ✓ 0.4h: fields and by_side; staged; escaping path refused, outside file untouched (manifest-conflicts, filesystem-sinks) |  |  |
 | h | `POST /api/freeze/changes/:id/acknowledge` |  | ✗ none | 1 | ✓ 0.4k: unflags an agent's change and records who saw it; unknown 404, outside a project 403 (freeze-flags, e2e mcp-ui-tools) |  |  |
+| h | `POST /api/review/seen` |  | ✗ none | 1 |  |  |  |
 | h | `PUT /api/freeze` |  | ✗ none | 2 | ✓ 0.4h: freeze, exempt a plan, lift; every field validated; outside a project 403 (review-governance-tools); bug 33; recorded with who and how, never flagged (freeze-flags, 0.4k) |  |  |
 | i | `DELETE /api/terminals/:id` |  | ✗ none | 5 | ✓ 0.4i: killed, broadcast, gone for inject and write; scrollback kept; unknown 404 (terminal-surface), terminals |  |  |
 | i | `GET /api/audio/recent` |  | ✗ none | 1 | ✓ 0.4i: chunks concatenated in order with duration and times; seconds narrows; 404 when empty (audio-rest) |  |  |
@@ -439,7 +440,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `resolve_pantry_references` | contribution · read | ✗ none | 1 | ✓ 0.4c: exercised by cdev-phase7 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `resolve_reference` | plan-item · read | ✗ none | 1 | ✓ 0.4c: exercised by short-references (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `restore_item_version` | plan-item · write | ✗ none | 2 | ✓ 0.4c: exercised by plan-items (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `review_change` | plan · read | ✗ none | 1 |  |  |  |
+| c | `review_change` | plan · read | ✗ none | 2 |  |  |  |
 | c | `search_items` | plan-item · read | ✗ none | 1 | ✓ 0.7: titles and bodies with an excerpt, case-insensitive; "%" and "_" literal; unknown plan refused (item-batch-search-import) |  |  |
 | c | `set_item_blocked` | plan-item · write | ✗ none | 1 | ✓ 0.4c: exercised by plan-items (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `set_plan_home_repo` | plan · write | ✗ none | 1 | ✓ 0.4c-1: normalised; empty clears (plan-tools) |  |  |

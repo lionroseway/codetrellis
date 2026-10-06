@@ -159,6 +159,7 @@ function LineDetail({ line, base, root }: { line: ReviewQueueLine; base: string 
   const other = review.otherWork;
   return (
     <div className="px-8 pb-2 space-y-2" data-testid="review-line-detail">
+      {base && <SinceLastLook root={root} base={base} head={line.branch} />}
       {/* V1 — what the change does to the architecture, before anything else. */}
       {review.architecture && (
         <section data-testid="review-architecture">
@@ -218,5 +219,62 @@ function LineDetail({ line, base, root }: { line: ReviewQueueLine; base: string 
       </section>
       )}
     </div>
+  );
+}
+
+interface Since { words: string; changed: string[]; addressed: string[]; added: string[] }
+
+/**
+ * Phase 33 V3 — what moved since you last marked this line reviewed: the
+ * files, the findings the pushes addressed, the new ones. Marking keeps the
+ * look at the branch's head now.
+ */
+function SinceLastLook({ root, base, head }: { root: string; base: string; head: string }) {
+  const [since, setSince] = useState<Since | null>(null);
+  const [marked, setMarked] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const q = `project=${encodeURIComponent(root)}`;
+
+  const load = useCallback(async () => {
+    const r = await fetch(`/api/review/architecture?${q}&base=${encodeURIComponent(base)}&head=${encodeURIComponent(head)}`);
+    if (!r.ok) return;
+    setSince(((await r.json()) as { since?: Since }).since ?? null);
+  }, [q, base, head]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const mark = async () => {
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/review/seen?${q}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ base, head }) });
+      if (r.ok) {
+        const m = (await r.json()) as { commit: string };
+        setMarked(m.commit.slice(0, 7));
+        await load();
+      }
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <section className="flex items-start gap-2" data-testid="review-since">
+      <div className="min-w-0 flex-1">
+        {since
+          ? <>
+              <div className="text-foreground" data-testid="review-since-words">{since.words}</div>
+              {since.addressed.map((f) => <div key={`a:${f}`} className="text-foreground-subtle line-through" data-testid="review-since-addressed">{f}</div>)}
+              {since.added.map((f) => <div key={`n:${f}`} className="text-foreground-muted" data-testid="review-since-added">New: {f}</div>)}
+            </>
+          : <div className="text-foreground-subtle">You have not marked {head} reviewed. Mark it, and the next look shows only what moved since.</div>}
+        {marked && <div className="text-foreground-subtle" data-testid="review-since-marked">Marked reviewed at {marked}.</div>}
+      </div>
+      <button
+        onClick={() => void mark()}
+        disabled={busy}
+        className="shrink-0 px-2 py-0.5 rounded border border-border-subtle hover:bg-surface-hover disabled:opacity-50"
+        data-testid="review-mark-reviewed"
+      >
+        Mark reviewed
+      </button>
+    </section>
   );
 }

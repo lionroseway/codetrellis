@@ -730,6 +730,21 @@ export const SCHEMA_PLANS_CORE = `
   );
   CREATE INDEX IF NOT EXISTS idx_rule_proposals_project ON rule_proposals(project_root, status);
 
+  -- Phase 33 V3: the commit each reviewer last looked at, per line of work,
+  -- with what the review said then, so a later look shows only what moved
+  -- and which findings the pushes since addressed.
+  CREATE TABLE IF NOT EXISTS review_marks (
+    project_root TEXT NOT NULL,
+    target TEXT NOT NULL,
+    reviewer TEXT NOT NULL,
+    reviewer_type TEXT NOT NULL,
+    base TEXT NOT NULL,
+    head_commit TEXT NOT NULL,
+    findings TEXT NOT NULL DEFAULT '[]',
+    at INTEGER NOT NULL,
+    PRIMARY KEY (project_root, target, reviewer)
+  );
+
   -- Phase 32 B7.3: each session holding an affected task is told of an open
   -- proposal once; this is who has been.
   CREATE TABLE IF NOT EXISTS spec_proposal_reads (
