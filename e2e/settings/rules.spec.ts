@@ -66,12 +66,16 @@ test.describe('Settings → Architecture rules', () => {
     await section.getByTestId('rule-may-not-import').fill('db/');
     await section.getByTestId('rule-except').fill('db/types.ts');
     await section.getByTestId('rule-because').fill('web talks to db through the API');
+    // R4: a new rule starts at warn; this one is made to block.
+    await expect(section.getByTestId('rule-strength-warn')).toBeChecked();
+    await section.getByTestId('rule-strength-block').check();
     fs.mkdirSync(OUT, { recursive: true });
     await section.screenshot({ path: path.join(OUT, 'rules-settings-form.png') });
     await section.getByTestId('rule-save').click();
 
     await expect(section.getByTestId('rule')).toHaveCount(1);
-    expect(puts).toEqual([{ id: 'web-not-db', body: { from: 'web/', mayNotImport: 'db/', because: 'web talks to db through the API', except: ['db/types.ts'] } }]);
+    expect(puts).toEqual([{ id: 'web-not-db', body: { from: 'web/', mayNotImport: 'db/', because: 'web talks to db through the API', except: ['db/types.ts'], strength: 'block' } }]);
+    await expect(section.getByTestId('rule-strength')).toHaveText('■ block');
     await expect(section.getByTestId('rule-words')).toHaveText('web/ may not import db/ (except db/types.ts): web talks to db through the API');
     // Written, it opens on what already breaks it.
     await expect(section.getByTestId('rule-breach-words')).toHaveText('1 import breaks this today');

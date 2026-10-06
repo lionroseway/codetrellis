@@ -7,6 +7,15 @@
  * (`src/**\/ui/**`); `except` names the doors through the wall.
  */
 
+/**
+ * How hard a rule holds (Phase 33 R4). `block` fails CI (exit 3) and raises a
+ * high signal; `warn` is reported and CI passes (`--strict` makes it block);
+ * `guide` is shown to agents whose work touches it, and nothing is checked.
+ */
+export type RuleStrength = 'block' | 'warn' | 'guide';
+
+export const RULE_STRENGTHS: readonly RuleStrength[] = ['block', 'warn', 'guide'];
+
 export interface ArchitectureRule {
   /** A slug, unique in the project: `web-not-db`. */
   id: string;
@@ -22,6 +31,11 @@ export interface ArchitectureRule {
   since: string;
   /** Who set it, from the transport. */
   by: string;
+  /**
+   * How hard it holds. A rule written before Phase 33 R4 has none and read as
+   * `block`, which is what it did then; a new rule starts at `warn`.
+   */
+  strength: RuleStrength;
   /**
    * The suite it is kept in: `.codetrellis/rules/<suite>.yaml` (Phase 33 R1).
    * Absent for a rule still in `.codetrellis/config.json`, where Phase 32 kept

@@ -18,6 +18,9 @@
  * is committed on main, as a team keeps it. A branch that deletes the rule
  * and adds the import it forbade still fails, and says it loosens the rule;
  * a branch that only adds a rule passes, and says so.
+ *
+ * Phase 33 R4: on a base where the rule is at warn, the same import is said
+ * and the check passes; `--strict` fails it; at guide it is not checked.
  */
 
 import fs from 'node:fs';
@@ -38,7 +41,7 @@ const RULE = 'services/api/app/routes/ may not import services/api/app/config.py
 const BECAUSE = 'routes read settings through the app';
 
 interface Gate {
-  ok: boolean; says: string[]; files: number; rules: Array<{ path: string; imports: string; rule: string; words: string; because: string }>; rulesNote?: string;
+  ok: boolean; says: string[]; files: number; rules: Array<{ path: string; imports: string; rule: string; words: string; because: string; strength: string }>; rulesNote?: string;
   rulebook: Array<{ rule: string; change: string; effect: string; words: string }>; notes: string[];
 }
 
@@ -79,7 +82,7 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
     main = git(root, 'rev-parse', '--abbrev-ref', 'HEAD');
     await h.client.scanProject(root);
     const res = await h.client.raw('PUT', `/api/rules/routes-not-config?project=${encodeURIComponent(root)}`, {
-      from: 'services/api/app/routes/', mayNotImport: CONFIG, because: BECAUSE,
+      from: 'services/api/app/routes/', mayNotImport: CONFIG, because: BECAUSE, strength: 'block',
     });
     expect(res.status, await res.clone().text()).toBe(200);
     // The team's rule is committed on main (R2: the pipeline judges by the base's rules).
@@ -146,7 +149,7 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
       const g = JSON.parse(r.out) as Gate;
       expect(g.ok).toBe(false);
       // The import of db.py was there before the branch: not the branch's.
-      expect(g.rules).toEqual([{ path: USERS, imports: CONFIG, rule: 'routes-not-config', words: RULE, because: BECAUSE }]);
+      expect(g.rules).toEqual([{ path: USERS, imports: CONFIG, rule: 'routes-not-config', words: RULE, because: BECAUSE, strength: 'block' }]);
       expect(g.rulesNote).toBeUndefined();
 
       const words = ct('check', '--base', main);
@@ -175,7 +178,7 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
       expect(r.code, r.err || r.out).toBe(3);
       const g = JSON.parse(r.out) as Gate;
       // Judged by main's rules: the import is still a breach.
-      expect(g.rules).toEqual([{ path: USERS, imports: CONFIG, rule: 'routes-not-config', words: RULE, because: BECAUSE }]);
+      expect(g.rules).toEqual([{ path: USERS, imports: CONFIG, rule: 'routes-not-config', words: RULE, because: BECAUSE, strength: 'block' }]);
       // And the rule's removal is a finding of its own, first.
       expect(g.rulebook).toEqual([expect.objectContaining({ rule: 'routes-not-config', change: 'removed', effect: 'loosens' })]);
       expect(g.says[0]).toMatch(/^✗ This change removes the rule “services\/api\/app\/routes\/ may not import services\/api\/app\/config\.py” \(routes-not-config\)(: \d+ imports? it forbade become allowed)?\. Loosening a rule needs a person's approval in the app\.$/);
@@ -215,6 +218,39 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
       const words = ct('check', '--base', main);
       expect(words.code).toBe(0);
       expect(words.out.split('\n')[1]).toMatch(/^ {2}⚠ This change adds the rule/);
+    } finally {
+      git(root, 'checkout', '-q', '-f', main);
+    }
+  });
+
+  test('R4: a rule at warn says the import and passes; --strict fails it; a guide is not checked', async () => {
+    const suite = path.join(root, '.codetrellis', 'rules', 'architecture.yaml');
+    const atStrength = (strength: string) => {
+      // A base where the team keeps the rule at this strength, and a branch from it adding the import.
+      git(root, 'checkout', '-qB', `base-${strength}`, main);
+      fs.writeFileSync(suite, fs.readFileSync(suite, 'utf-8').replace(/strength: block/, `strength: ${strength}`));
+      git(root, 'commit', '-qam', `The routes rule at ${strength}`);
+      git(root, 'checkout', '-qB', `adds-import-${strength}`);
+      edit(root, USERS, 'from app.db import', `${ADDED}from app.db import`);
+      git(root, 'commit', '-qam', 'Read the URL directly');
+    };
+    try {
+      atStrength('warn');
+      const r = ct('check', '--base', 'base-warn', '--json');
+      expect(r.code, r.err || r.out).toBe(0);
+      const g = JSON.parse(r.out) as Gate;
+      expect(g.ok).toBe(true);
+      expect(g.rules).toEqual([{ path: USERS, imports: CONFIG, rule: 'routes-not-config', words: RULE, because: BECAUSE, strength: 'warn' }]);
+      expect(g.notes).toEqual([`⚠ ${USERS} now imports ${CONFIG}, which the rule “${RULE}” forbids: ${BECAUSE} (the rule warns; it does not fail the check)`]);
+      const strict = ct('check', '--base', 'base-warn', '--strict');
+      expect(strict.code, strict.err || strict.out).toBe(3);
+      expect(strict.out).toBe(`Does not conform (1 changed file since base-warn):\n  ✗ ${USERS} now imports ${CONFIG}, which the rule “${RULE}” forbids: ${BECAUSE}`);
+
+      git(root, 'checkout', '-q', '-f', main);
+      atStrength('guide');
+      const guide = ct('check', '--base', 'base-guide', '--strict', '--json');
+      expect(guide.code, guide.err || guide.out).toBe(0);
+      expect((JSON.parse(guide.out) as Gate).rules).toEqual([]);
     } finally {
       git(root, 'checkout', '-q', '-f', main);
     }

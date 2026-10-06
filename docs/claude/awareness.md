@@ -99,7 +99,7 @@ written by CodeTrellis.
 | `contract` | An exported signature changed or an export was removed, and the other side's changed files import it | high; medium for a namespace import only |
 | `drift` | Changes outside the workstream's scope | medium |
 | `stale-base` | Main changed files this workstream changes, since it branched | low |
-| `rule` | The workstream adds an import across one of the team's architecture rules (A7.2): `subject.rule` names it in words with why, `subject.edges` each import. Only imports it *adds* against its merge base count; one already there is listed by the rule (A7.1), never signalled | high |
+| `rule` | The workstream adds an import across one of the team's architecture rules (A7.2): `subject.rule` names it in words with why, `subject.edges` each import. Only imports it *adds* against its merge base count; one already there is listed by the rule (A7.1), never signalled. A rule at `guide` is never checked (Phase 33 R4) | high at `block`, medium at `warn` |
 
 **Staying quiet** (spec §4.4):
 - The id is derived from kind, subject and workstreams, so a signal that

@@ -30,7 +30,11 @@ export interface HeldFile { path: string; breakpoint: string; note: string | nul
 export interface TestTrouble { path: string; state: 'failing' | 'stale'; says: string }
 export interface FailingCriterion { itemUid: string; task: string; criterion: string; findings: string[] }
 export interface StaleDoc { uid: string; title: string; slug: string; verifiedAt: string; files: string[] }
-export interface RuleImport { path: string; imports: string; rule: string; words: string; because: string }
+export interface RuleImport {
+  path: string; imports: string; rule: string; words: string; because: string;
+  /** R4: a `block` breach fails the gate; a `warn` one is said and passes, unless strict. */
+  strength: 'block' | 'warn';
+}
 export type { RuleChange } from './rule-changes';
 import type { RuleChange } from './rule-changes';
 
@@ -91,6 +95,8 @@ export async function checkChanges(
   checkRules?: RuleChecker,
   rulebook: readonly RuleChange[] = [],
   notes: readonly string[] = [],
+  /** `--strict`: a rule at warn fails the gate like one at block (R4). */
+  strict = false,
 ): Promise<Conformity> {
   const files = cleanChanged(changed);
   const says: string[] = [];
@@ -112,7 +118,11 @@ export async function checkChanges(
   // The team's architecture rules (A7.3): one line per import, with the rule's reason.
   const found = files.length && checkRules ? await checkRules(files) : [];
   const rules = found ?? [];
-  for (const r of rules) says.push(`✗ ${r.path} now imports ${r.imports}, which the rule “${r.words}” forbids${r.because ? `: ${r.because}` : ''}`);
+  for (const r of rules) {
+    const line = `${r.path} now imports ${r.imports}, which the rule “${r.words}” forbids${r.because ? `: ${r.because}` : ''}`;
+    if (r.strength === 'block' || strict) says.push(`✗ ${line}`);
+    else said.push(`⚠ ${line} (the rule warns; it does not fail the check)`);
+  }
 
   const tests: TestTrouble[] = [];
   for (const f of files) {

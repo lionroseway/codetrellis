@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "R2 CI judges a change with its base branch's rules"
-  status: "R1 merged (#356): rules live in committed suite files. The MCP SDK fix is in main (#355). R2 in review: the gate reads the rules at its base, so a pull request that deletes a rule and adds the import it forbade fails, saying it loosens the rule"
-  next: "Merge R2, then R4 (strength: block, warn, guide) and R3 (change control)"
+  step: "R4 Every rule has a strength: block, warn or guide"
+  status: "R2 merged (#358): the gate judges with the base branch's rules, so deleting a rule and breaking it fails. R4 in review: block fails the check, warn is said and passes, guide is never checked; a new rule starts at warn and an old one reads as block. G10 (findings where the code is) is built and waiting its turn"
+  next: "Merge R4, then R3 (change control), C1, C2, C3"
   blockers: "None"
   updated: 2026-10-06
 sections:
@@ -48,6 +48,13 @@ sections:
         status: done
         prs:
           - 347
+      - title: "A new advisory (MCP SDK, GHSA-6qxp-vccf-f47h) failed the production audit on every branch: SDK 1.32.1 (into `main`)"
+        followUp: true
+        status: done
+        prs:
+          - 355
+      - title: "With many worktrees of one repository, `listWorkstreams` takes ~10 s and six parallel asks for it fill the browser's connections, so the graph waits behind them: share one answer"
+        followUp: true
   - title: "Stage 0: ground truth"
     goal: Numbers to measure against, the freeze measured, and every colour the app draws written down.
     items:

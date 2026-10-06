@@ -367,4 +367,11 @@ describe('rule (A7.2)', () => {
     assert.notEqual(one[0].shape, two[0].shape);
     assert.deepEqual(computeSignals([ws('/r/x', 'x', [file('web/a.ts')], { ruleBreaches: [] })]), []);
   });
+
+  test('a rule at warn raises a medium signal; at block, or written before strength, a high one (R4)', () => {
+    const at = (strength?: 'block' | 'warn') => computeSignals([ws('/r/x', 'x', [file('web/a.ts')], {
+      ruleBreaches: [{ rule: { ...RULE, ...(strength ? { strength } : {}) }, edges: [{ from: 'web/a.ts', to: 'db/a.ts' }] }],
+    })])[0].severity;
+    assert.deepEqual([at('warn'), at('block'), at()], ['medium', 'high', 'high']);
+  });
 });

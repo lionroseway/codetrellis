@@ -60,3 +60,14 @@ test('moving from the config is everything there, once, kept as written; a rule 
   assert.deepEqual(rulesInConfig(root), []);
   assert.deepEqual(moveRulesFromConfig(root), [], 'nothing left to move');
 });
+
+test('a new rule starts at warn; a changed one keeps its strength; a rule from the config keeps block (R4)', () => {
+  const root = project([legacy('from-config')]);
+  setRule(root, { id: 'fresh', from: 'web/', mayNotImport: 'db/' }, 'Saif');
+  setRule(root, { id: 'fresh', from: 'web/', mayNotImport: 'api/' }, 'Saif');
+  setRule(root, { id: 'hard', from: 'lib/', mayNotImport: 'ui/', strength: 'block' }, 'Saif');
+  setRule(root, { id: 'from-config', from: 'web/', mayNotImport: 'db/', because: 'moved by editing' }, 'Saif');
+  const strength = Object.fromEntries(rulesOf(root).map((r) => [r.id, r.strength]));
+  assert.deepEqual(strength, { fresh: 'warn', hard: 'block', 'from-config': 'block' });
+  assert.equal(moveRulesFromConfig(project([legacy('moved')])).length, 1);
+});

@@ -54,7 +54,7 @@ export interface FootprintInput {
    * rule. Looked up by the caller, since that needs the parser and the
    * project's import context; absent when there are no rules.
    */
-  ruleBreaches?: Array<{ rule: { id: string; from: string; mayNotImport: string; because: string }; edges: Array<{ from: string; to: string }> }>;
+  ruleBreaches?: Array<{ rule: { id: string; from: string; mayNotImport: string; because: string; strength?: 'block' | 'warn' | 'guide' }; edges: Array<{ from: string; to: string }> }>;
 }
 
 /** The files and folders a workstream may change, and where that came from (A2.5). */
@@ -264,8 +264,9 @@ export function computeSignals(footprints: readonly FootprintInput[]): SignalDra
   }
 
   // ── rule ──────────────────────────────────────────────────────────────
-  // One per workstream and rule, naming the imports it adds across it. High:
-  // the team wrote the rule down, so it is told to the agent on its next call,
+  // One per workstream and rule, naming the imports it adds across it. High
+  // for a rule at block, medium at warn (R4; a guide is never checked): the
+  // team wrote the rule down, so it is told to the agent on its next call,
   // reaches the phone, and can hold the next edit where a person set a `rule`
   // breakpoint (B4); holding is still the person's choice, never a default.
   for (const w of ordered) {
@@ -274,7 +275,7 @@ export function computeSignals(footprints: readonly FootprintInput[]): SignalDra
       const sorted = [...edges].sort((x, y) => x.from.localeCompare(y.from) || x.to.localeCompare(y.to));
       const shown = sorted.slice(0, 2).map((e) => `${e.from} → ${e.to}`).join(', ') + (sorted.length > 2 ? ` and ${sorted.length - 2} more` : '');
       const words = `${rule.from} may not import ${rule.mayNotImport}`;
-      out.push(draft('rule', 'high', `${w.root}\0${rule.id}`, {
+      out.push(draft('rule', rule.strength === 'warn' ? 'medium' : 'high', `${w.root}\0${rule.id}`, {
         files: [...new Set(sorted.map((e) => e.from))],
         rule: { id: rule.id, words, because: rule.because },
         edges: sorted,

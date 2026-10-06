@@ -77,12 +77,12 @@ export interface Gate {
 }
 
 /** `check_changes` over this work's files, as the agent. */
-export async function gate(agent: Agent, root: string, changed: Changed): Promise<Gate | { error: string }> {
+export async function gate(agent: Agent, root: string, changed: Changed, strict = false): Promise<Gate | { error: string }> {
   // Nothing changed, not even the rules: nothing to check. A change to the
   // rules alone is still checked (Phase 33 R2): it could loosen one.
   if (changed.files.length === 0 && !changed.rulebook) return { ok: true, says: [], files: 0, base: changed.base, breakpoints: [], tests: [], criteria: [], docs: [], rules: [], rulebook: [], notes: [] };
   // The merge base, so an import that was already there is not this work's (A7.3).
-  const a = await agent.call('check_changes', { paths: changed.files.slice(0, 500), project_path: root, ...(changed.since ? { base: changed.since } : {}) });
+  const a = await agent.call('check_changes', { paths: changed.files.slice(0, 500), project_path: root, ...(changed.since ? { base: changed.since } : {}), ...(strict ? { strict: true } : {}) });
   if (a.isError) return { error: a.text };
   const j = (a.json ?? {}) as Record<string, unknown>;
   const list = (k: string) => (Array.isArray(j[k]) ? j[k] as unknown[] : []);

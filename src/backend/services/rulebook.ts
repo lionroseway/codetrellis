@@ -159,6 +159,7 @@ function written(rule: ArchitectureRule): Record<string, unknown> {
     id: rule.id,
     from: rule.from,
     mayNotImport: rule.mayNotImport,
+    strength: rule.strength,
     ...(rule.except.length ? { except: rule.except } : {}),
     ...(rule.because ? { because: rule.because } : {}),
     since: rule.since,

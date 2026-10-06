@@ -2764,10 +2764,10 @@ app.put('/api/rules/:id', async (req, res) => {
   try {
     // The rule's own fields, by name: nothing else in the body reaches the config.
     const b = (req.body ?? {}) as Record<string, unknown>;
-    const rule = setArchitectureRule(projectRoot, { id: req.params.id, suite: b.suite, from: b.from, mayNotImport: b.mayNotImport, except: b.except, because: b.because }, changedBy(req));
+    const rule = setArchitectureRule(projectRoot, { id: req.params.id, suite: b.suite, from: b.from, mayNotImport: b.mayNotImport, except: b.except, because: b.because, strength: b.strength }, changedBy(req));
     broadcast('rules-changed', { project: projectRoot });
     const person = personFrom(req);
-    recordDecision('rule_changed', { projectRoot, ruleId: rule.id, change: 'set', suite: rule.suite, from: rule.from, mayNotImport: rule.mayNotImport, except: rule.except, because: rule.because, author: person.author, authorType: person.authorType }, person.authorType);
+    recordDecision('rule_changed', { projectRoot, ruleId: rule.id, change: 'set', suite: rule.suite, from: rule.from, mayNotImport: rule.mayNotImport, except: rule.except, because: rule.because, strength: rule.strength, author: person.author, authorType: person.authorType }, person.authorType);
     // A7.2 — work in flight is checked against the new rule at once.
     await refreshSignals(projectRoot).catch((err) => console.warn('[Awareness] refresh failed:', err));
     res.json({ rule, view: rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)).find((v) => v.rule.id === rule.id) });

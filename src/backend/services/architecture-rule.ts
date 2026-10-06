@@ -5,7 +5,7 @@
  * and which import edges cross which rules. Kept apart from the service so
  * the project config can parse rules without importing it back.
  */
-import type { ArchitectureRule, RuleBreach } from '../../shared/types/architecture-rules';
+import { RULE_STRENGTHS, type ArchitectureRule, type RuleBreach, type RuleStrength } from '../../shared/types/architecture-rules';
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const MAX_BECAUSE = 200;
@@ -35,6 +35,7 @@ export function parseArchitectureRule(raw: unknown): { rule: ArchitectureRule | 
     if (p) { problems.push(p); break; }
   }
   if (r.because !== undefined && (typeof r.because !== 'string' || r.because.length > MAX_BECAUSE)) problems.push(`because must be words, at most ${MAX_BECAUSE} characters`);
+  if (r.strength !== undefined && !RULE_STRENGTHS.includes(r.strength as RuleStrength)) problems.push('strength must be block, warn or guide');
   if (!fromProblem && !toProblem && normalise(r.from as string) === normalise(r.mayNotImport as string)) problems.push('from and mayNotImport must differ');
   if (problems.length > 0) return { rule: null, problems };
   return {
@@ -46,6 +47,8 @@ export function parseArchitectureRule(raw: unknown): { rule: ArchitectureRule | 
       because: typeof r.because === 'string' ? r.because.trim() : '',
       since: typeof r.since === 'string' && !Number.isNaN(Date.parse(r.since)) ? r.since : new Date(0).toISOString(),
       by: typeof r.by === 'string' ? r.by : '',
+      // Absent: written before strength existed, when every rule blocked (R4).
+      strength: (r.strength as RuleStrength | undefined) ?? 'block',
     },
     problems: [],
   };
@@ -80,10 +83,11 @@ export function breaks(rule: ArchitectureRule, from: string, to: string): boolea
   return !rule.except.some((e) => inPattern(e, to));
 }
 
-/** Which of these edges cross which of the project's rules. */
+/** Which of these edges cross which of the project's rules. A `guide` rule checks nothing (R4). */
 export function checkEdges(rules: ArchitectureRule[], edges: Array<{ from: string; to: string }>): RuleBreach[] {
   const out: RuleBreach[] = [];
   for (const rule of rules) {
+    if (rule.strength === 'guide') continue;
     for (const e of edges) if (breaks(rule, e.from, e.to)) out.push({ rule: rule.id, from: e.from, to: e.to });
   }
   return out;

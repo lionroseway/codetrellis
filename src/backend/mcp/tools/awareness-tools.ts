@@ -349,16 +349,19 @@ export function register(server: McpServer, deps: ToolDeps): void {
         'For the changed files (relative to the repository root), it lists a breakpoint a person set on one of them, ' +
         'tests that fail or are older than the code, a task marked done whose criterion check now fails, and a system doc ' +
         'that describes a changed file and was verified before it changed, and an import a changed file adds across one ' +
-        'of the team\'s architecture rules (with the rule and why). ok is true when there is none. Read only: ' +
+        'of the team\'s architecture rules (with the rule and why). A rule at block fails; one at warn is said in notes ' +
+        'unless strict; a guide is not checked. ok is true when there is nothing to act on. Read only: ' +
         'nothing is recorded and no breakpoint is hit. CodeTrellis runs no tests; it reads the reports handed over.',
       inputSchema: {
         paths: z.array(z.string().min(1).max(500)).max(500).describe('The changed files, relative to the repository root.'),
         base: z.string().max(200).optional().describe(
           'The commit the change started from (a branch\'s merge base); imports already there are not the change\'s. Without it, the last commit.'),
         project_path: z.string().optional().describe('Absolute path of an opened project. Defaults to the active project.'),
+        strict: z.boolean().optional().describe(
+          'Fail on a rule at warn as well as one at block. By default a warn rule\'s breach is said in notes and the change still conforms.'),
       },
     },
-    async ({ paths, base, project_path }) => {
+    async ({ paths, base, project_path, strict }) => {
       const root = project_path ?? deps.getActiveProjectPath();
       if (!root) return noProject;
       // The rules (A7.3) compare against a commit, by its id.
@@ -384,7 +387,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
           notes.push(`⚠ The rules at ${since.slice(0, 7)} could not be read, so this change was judged by its own rules. Fetch the base with its history.`);
         }
       }
-      const c = await checkChanges(root, paths, (uid) => deps.criterionLoop.checkCriterion(uid), (files) => ruleImports(root, files, since, judgeBy), rulebook, notes);
+      const c = await checkChanges(root, paths, (uid) => deps.criterionLoop.checkCriterion(uid), (files) => ruleImports(root, files, since, judgeBy), rulebook, notes, strict === true);
       return {
         _meta: { summary: c.ok ? `Checked ${c.files.length} changed file${c.files.length === 1 ? '' : 's'}: conforms` : `Checked ${c.files.length} changed files: ${c.says.length} to act on` },
         content: [{ type: 'text' as const, text: JSON.stringify({
@@ -392,7 +395,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
           breakpoints: c.breakpoints, tests: c.tests,
           criteria: c.criteria.map((x) => ({ item_uid: x.itemUid, task: x.task, criterion: x.criterion, findings: x.findings })),
           docs: c.docs.map((d) => ({ uid: d.uid, title: d.title, slug: d.slug, verified_at: d.verifiedAt, files: d.files })),
-          rules: c.rules.map((r) => ({ path: r.path, imports: r.imports, rule: r.rule, words: r.words, because: r.because })),
+          rules: c.rules.map((r) => ({ path: r.path, imports: r.imports, rule: r.rule, words: r.words, because: r.because, strength: r.strength })),
           rulebook: c.rulebook.map((r) => ({ rule: r.rule, change: r.change, effect: r.effect, allowed: r.allowed, forbidden: r.forbidden, words: r.words })),
           notes: c.notes,
           ...(c.rulesChecked ? {} : { rules_note: 'The architecture rules were not checked: this project\'s imports are not loaded here. Open the project, or run `codetrellis start` in it.' }),

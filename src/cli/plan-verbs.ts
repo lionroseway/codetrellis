@@ -215,7 +215,7 @@ async function status(ctx: Ctx): Promise<Outcome> {
   // D1.4: and whether this work conforms, so a job can gate on `status` too.
   let changed;
   try { changed = changedFiles(ctx.root, flag(ctx.p, 'base'), process.env); } catch (err) { throw new UsageError((err as Error).message); }
-  const g = await gate(ctx.agent, ctx.root, changed);
+  const g = await gate(ctx.agent, ctx.root, changed, ctx.p.flags.strict === true);
   const code = 'error' in g ? 1 : g.ok ? 0 : 3;
   if (ctx.json) return { out: JSON.stringify({ project: ctx.root, plans: out, conformity: g }), code };
   const lines: string[] = [];
