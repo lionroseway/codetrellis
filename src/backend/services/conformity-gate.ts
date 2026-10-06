@@ -37,6 +37,7 @@ export interface RuleImport {
 }
 export type { RuleChange } from './rule-changes';
 import { changeWords, type RuleChange } from './rule-changes';
+import type { RatchetFinding } from './rule-baseline';
 
 /** The imports these changed files add across the rules, or null when they could not be read (injected). */
 export type RuleChecker = (files: readonly string[]) => RuleImport[] | null | Promise<RuleImport[] | null>;
@@ -60,6 +61,8 @@ export interface Conformity {
   rulebook: RuleChange[];
   /** Said, but not a reason to fail: a rule added or tightened, a reason reworded, a base not read. */
   notes: string[];
+  /** C3: the debt ratchet's findings. */
+  ratchet: RatchetFinding[];
 }
 
 /** A criterion's check, as the criterion loop runs it (injected so tests need no files). */
@@ -99,6 +102,8 @@ export async function checkChanges(
   strict = false,
   /** C1: a check of part of the rulebook judges only those rules; breakpoints, tests, tasks and docs are not its question. */
   scoped = false,
+  /** C3: the debt ratchet's findings, with each rule's strength (a warn rule's breach is said, not failed, unless strict). */
+  ratchet: ReadonlyArray<RatchetFinding & { strength?: string }> = [],
 ): Promise<Conformity> {
   const files = cleanChanged(changed);
   const says: string[] = [];
@@ -125,6 +130,14 @@ export async function checkChanges(
     const line = `${r.path} now imports ${r.imports}, which the rule “${r.words}” forbids${r.because ? `: ${r.because}` : ''}`;
     if (r.strength === 'block' || strict) says.push(`✗ ${line}`);
     else said.push(`⚠ ${line} (the rule warns; it does not fail the check)`);
+  }
+
+  // C3: the whole tree against the base's baseline. An import the change adds is already said above, once.
+  const said1 = new Set(rules.map((r) => `${r.path}>${r.imports}`));
+  for (const f of ratchet) {
+    if (f.kind === 'breach' && said1.has(`${f.from}>${f.to}`)) continue;
+    if (f.kind === 'fell' || (f.kind === 'breach' && f.strength === 'warn' && !strict)) said.push(f.words);
+    else says.push(f.words);
   }
 
   const tests: TestTrouble[] = [];
@@ -171,5 +184,5 @@ export async function checkChanges(
   }
   for (const d of docs) says.push(`⚠ The system doc "${d.title}" describes ${d.files.join(', ')}, which changed after it was verified at ${d.verifiedAt}`);
 
-  return { ok: says.length === 0, says, files, breakpoints, tests, criteria, docs, rules, rulesChecked: found !== null, rulebook: [...rulebook], notes: said };
+  return { ok: says.length === 0, says, files, breakpoints, tests, criteria, docs, rules, rulesChecked: found !== null, rulebook: [...rulebook], notes: said, ratchet: ratchet.map(({ strength: _s, ...f }) => f) };
 }

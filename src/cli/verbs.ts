@@ -28,11 +28,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { flag, type Parsed } from './args';
 import { toSarif, ruleFileIn } from './sarif';
+import { BASELINE_FILE, baselineYaml, readBaseline, type Baseline } from '../backend/services/rule-baseline';
+import { writeFileWithin } from '../backend/services/confined-fs';
 import { version as CLI_VERSION } from '../../package.json';
 import { changedFiles, gate, gateWords } from './conformity';
 import type { Agent, ToolAnswer } from './agent';
 
-export const VERBS = new Set(['next', 'claim', 'update', 'stuck', 'done', 'request', 'brief', 'awareness', 'check', 'report-tests']);
+export const VERBS = new Set(['next', 'claim', 'update', 'stuck', 'done', 'request', 'brief', 'awareness', 'check', 'report-tests', 'rules']);
 
 export class UsageError extends Error {}
 /** A verb's outcome: what to print, and how the process exits. */
@@ -161,6 +163,10 @@ export async function runVerb(verb: string, agent: Agent, p: Parsed, cwd: string
       }, ctx);
     }
     case 'check': return check(ctx, first);
+    case 'rules': {
+      if (first !== 'baseline') throw new UsageError('codetrellis rules baseline — record each rule\'s breaches now, so the check fails on new ones');
+      return writeBaseline(ctx, projectRoot(cwd));
+    }
     case 'report-tests': {
       if (!first) throw new UsageError('Which report? codetrellis report-tests <junit.xml>');
       const a = await agent.call('report_tests', { path: first, project_path: projectRoot(cwd) });
@@ -258,4 +264,43 @@ async function conforms(ctx: Ctx, root: string): Promise<Outcome> {
   if (format === 'json') return { out: JSON.stringify(g), code: g.ok ? 0 : 3 };
   if (format !== 'text') throw new UsageError(`--format is text, json or sarif, not ${format}`);
   return { out: gateWords(g), code: g.ok ? 0 : 3 };
+}
+
+/**
+ * C3: record each rule's breaches now in `.codetrellis/rules/baseline.yaml`.
+ * A rule new to the baseline starts with what breaks it; one already in it
+ * only loses the entries fixed since, because a baseline only shrinks (the
+ * check holds a branch to that too). Commit the file with the code.
+ */
+async function writeBaseline(ctx: Ctx, root: string): Promise<Outcome> {
+  const a = await ctx.agent.call('list_rules', { project_path: root });
+  if (a.isError) return { out: a.text, code: 1 };
+  const views = (asObj(a.json).rules as Array<{ rule: { id: string; strength?: string }; breaches: Array<{ from: string; to: string }> | null }> | undefined) ?? [];
+  if (views.some((v) => v.rule.strength !== 'guide' && v.breaches === null)) {
+    return { out: 'The rules\' breaches could not be read: this project\'s imports are not loaded. Run `codetrellis start` in it first.', code: 1 };
+  }
+  const now: Baseline = new Map(views.filter((v) => v.rule.strength !== 'guide').map((v) => [v.rule.id, new Set((v.breaches ?? []).map((b) => `${b.from} > ${b.to}`))]));
+  const before = readBaseline(root);
+  const next: Baseline = new Map();
+  const lines: string[] = [];
+  let held = 0;
+  for (const [id, entries] of now) {
+    const was = before?.get(id);
+    if (!was) {
+      next.set(id, entries);
+      lines.push(`  ${id}: ${entries.size} ${entries.size === 1 ? 'breach' : 'breaches'} recorded`);
+      continue;
+    }
+    const kept = new Set([...entries].filter((e) => was.has(e)));
+    held += entries.size - kept.size;
+    next.set(id, kept);
+    lines.push(`  ${id}: ${kept.size}${kept.size < was.size ? `, down from ${was.size}` : ''}`);
+  }
+  // Through the confined-file helper, like every write into a project: a link at .codetrellis/ is refused.
+  writeFileWithin(root, BASELINE_FILE, baselineYaml(next), 'rule baseline');
+  if (ctx.json) return { out: JSON.stringify({ file: BASELINE_FILE, rules: Object.fromEntries([...next].map(([k, v]) => [k, [...v]])), notAdded: held }), code: 0 };
+  return {
+    out: [`Wrote ${BASELINE_FILE}:`, ...lines, ...(held ? [`${held} new ${held === 1 ? 'breach is' : 'breaches are'} not added: a baseline only shrinks. Fix ${held === 1 ? 'it' : 'them'}, or change the rule in the app.`] : []), 'Commit it with the code.'].join('\n'),
+    code: 0,
+  };
 }

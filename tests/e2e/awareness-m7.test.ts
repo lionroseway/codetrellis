@@ -352,4 +352,53 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
       fs.rmSync(path.join(root, '.codetrellis', 'rules', 'payments.yaml'), { force: true });
     }
   });
+
+  test('C3: the baseline records the breaches there are; a new one fails, a fixed one says the count fell, a bigger baseline fails', async () => {
+    const ORDERS_DB = 'from app.db import add_order, list_orders\n';
+    const baselineFile = path.join(root, '.codetrellis', 'rules', 'baseline.yaml');
+    try {
+      // The team adds a rule both routes already break, and baselines them.
+      git(root, 'checkout', '-qB', 'c3-base', main);
+      fs.writeFileSync(path.join(root, '.codetrellis', 'rules', 'service.yaml'), [
+        'suite: service', 'rules:',
+        '  - id: routes-not-db', '    from: services/api/app/routes/', '    mayNotImport: services/api/app/db.py', '    strength: block',
+      ].join('\n'));
+      await h.client.scanProject(root);
+      const wrote = ct('rules', 'baseline');
+      expect(wrote.code, wrote.err || wrote.out).toBe(0);
+      expect(wrote.out).toMatch(/routes-not-db: 2 breaches recorded/);
+      const recorded = fs.readFileSync(baselineFile, 'utf-8');
+      expect(recorded).toContain(`${ORDERS} > services/api/app/db.py`);
+      expect(recorded).toContain(`${USERS} > services/api/app/db.py`);
+      git(root, 'add', '.codetrellis/rules');
+      git(root, 'commit', '-qm', 'Rule and baseline: routes go through the service layer');
+
+      // Fixed one: passes, and says the count fell.
+      git(root, 'checkout', '-qB', 'c3-fix', 'c3-base');
+      edit(root, ORDERS, ORDERS_DB, 'from app.service import add_order, list_orders\n');
+      git(root, 'commit', '-qam', 'Orders through the service');
+      await h.client.scanProject(root);
+      const fixed = ct('check', '--base', 'c3-base', '--json');
+      expect(fixed.code, fixed.err || fixed.out).toBe(0);
+      expect((JSON.parse(fixed.out) as Gate).notes).toContain('↓ routes-not-db: 1 breach left, down from 2 in the baseline. Run `codetrellis rules baseline` to lock in the lower count.');
+      // Locked in, the file shrinks.
+      expect(ct('rules', 'baseline').out).toMatch(/routes-not-db: 1, down from 2/);
+      expect(fs.readFileSync(baselineFile, 'utf-8')).not.toContain(ORDERS);
+
+      // A bigger baseline: the branch writes an entry the base did not have.
+      git(root, 'checkout', '-q', '-f', 'c3-base');
+      git(root, 'checkout', '-qB', 'c3-grow', 'c3-base');
+      fs.appendFileSync(baselineFile, '    - services/api/app/routes/health.py > services/api/app/db.py\n');
+      git(root, 'commit', '-qam', 'Forgive one more');
+      await h.client.scanProject(root);
+      const grown = ct('check', '--base', 'c3-base', '--json');
+      expect(grown.code, grown.err || grown.out).toBe(3);
+      expect((JSON.parse(grown.out) as Gate).says).toContain('✗ This change adds 1 entry to the baseline of routes-not-db (services/api/app/routes/health.py > services/api/app/db.py); a baseline may only shrink.');
+    } finally {
+      git(root, 'checkout', '-q', '-f', main);
+      fs.rmSync(path.join(root, '.codetrellis', 'rules', 'service.yaml'), { force: true });
+      fs.rmSync(baselineFile, { force: true });
+      await h.client.scanProject(root);
+    }
+  });
 });
