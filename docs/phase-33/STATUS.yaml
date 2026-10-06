@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "C1 Scoped checks: a suite, a rule or a path"
-  status: "R3 merged (#360): change control is in. C1 in review: check one suite, named rules, or the rules about a path, on the CLI, over MCP and REST. Built ahead: R9, R6 and R7 (call rules: only the clients may call api.stripe.com)"
-  next: "Merge C1, then C2 (SARIF and CI recipes), C3 (the debt ratchet), 0.3"
+  step: "C2 SARIF and recipes for any CI host"
+  status: "C1 merged (#361): scoped checks are in. C2 in review: the check as SARIF 2.1.0 on the changed lines, and recipes for GitHub, GitLab, Azure, Bitbucket and Jenkins. Built ahead: R9, R6, R7 and R8 (folder rules)"
+  next: "Merge C2, then C3 (the debt ratchet), 0.3, G6"
   blockers: "None"
   updated: 2026-10-06
 sections:
