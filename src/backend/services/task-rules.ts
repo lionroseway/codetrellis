@@ -17,7 +17,7 @@ import { rulesOf } from './architecture-rules';
 import { inPattern, ruleStatement } from './architecture-rule';
 import { listCheckRuns } from './check-runs';
 import { openFindings } from '../../shared/lib/open-findings';
-import { packageApplies } from '../../shared/lib/package-entry';
+import { ruleCovers } from '../../shared/lib/rule-pattern';
 
 export interface TaskRules {
   /** The task's files, project-relative. */
@@ -60,8 +60,9 @@ export function taskRules(item: Pick<PlanItem, 'fileSpecs' | 'scopePath'>, proje
     return { files, in_scope: [], latest_run: null, says: 'This task names no files, so no rule is known to judge it.' };
   }
   const in_scope = rulesOf(projectRoot)
-    // A package rule judges the files that can import from its ecosystem: npm:stripe is not about a .py file.
-    .filter((r) => files.some((f) => inPattern(r.from, f) && (r.kind !== 'package' || packageApplies(r.mayNotImport, f) || (r.only ?? []).includes(f))))
+    // The rules that judge its files: an imports rule over them; a package or
+    // symbol rule over the files of its own language (npm:stripe is not about a .py file).
+    .filter((r) => files.some((f) => inPattern(r.from, f) && (r.kind !== 'package' && r.kind !== 'symbol' ? true : ruleCovers(r, f))))
     .map((r) => ({ rule: r.id, suite: r.suite ?? 'architecture', strength: r.strength, words: ruleStatement(r), because: r.because }));
   const open = openFindings(listCheckRuns(projectRoot), files);
   const latest_run = open && {

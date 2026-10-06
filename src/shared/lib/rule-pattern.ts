@@ -6,7 +6,8 @@
  * with `*` is a glob (`*` within a folder name, `**` across folders);
  * anything else is that file, or that folder when the path continues.
  */
-import { packageApplies } from './package-entry';
+import { ecosystemOfPath, packageApplies } from './package-entry';
+import { splitSymbol } from './symbol-entry';
 
 const escape = (s: string) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
 
@@ -36,5 +37,13 @@ export interface CoveringRule {
  */
 export function ruleCovers(rule: CoveringRule, file: string): boolean {
   if (rule.kind === 'package') return (inRulePattern(rule.from, file) && packageApplies(rule.mayNotImport, file)) || (rule.only ?? []).some((o) => inRulePattern(o, file));
+  if (rule.kind === 'symbol') {
+    // R6: the file that defines it, the files that may, and the files under it in the same language.
+    const sym = splitSymbol(rule.mayNotImport);
+    if (!sym) return false;
+    if (file === sym.file || (rule.only ?? []).some((o) => inRulePattern(o, file))) return true;
+    const eco = ecosystemOfPath(file);
+    return inRulePattern(rule.from, file) && eco !== null && eco === ecosystemOfPath(sym.file);
+  }
   return inRulePattern(rule.from, file) || inRulePattern(rule.mayNotImport, file);
 }

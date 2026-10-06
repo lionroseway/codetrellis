@@ -56,3 +56,10 @@ test('the phone hears the latest run from each place when it blocks, newest firs
   assert.deepEqual(blockingRuns(runs).map((r) => r.id), ['mine-payments', 'agent']);
   assert.deepEqual(blockingRuns(runs, 1).map((r) => r.id), ['mine-payments']);
 });
+
+test('R6: a symbol is found by its name, through a barrel too; a namespace or default import by its module', () => {
+  const text = "import { formatMoney } from '../money';\nimport { createCharge, refund } from '../payments';\nimport * as charge from '../payments/charge';\n";
+  assert.equal(importLine(text, 'src/payments/charge.ts#createCharge'), 2);
+  assert.equal(importLine(text, 'src/payments/charge.ts#*'), 3);
+  assert.equal(importLine(text, 'src/payments/charge.ts#voidCharge'), null);
+});

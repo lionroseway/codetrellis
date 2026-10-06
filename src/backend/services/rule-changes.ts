@@ -53,7 +53,7 @@ const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.l
  */
 function textEffect(base: ArchitectureRule, head: ArchitectureRule): RuleEffect | 'same' {
   const pathsSame = (base.kind ?? 'imports') === (head.kind ?? 'imports') && base.from === head.from && base.mayNotImport === head.mayNotImport;
-  // A package rule's `only` is who may: fewer is tighter, more or other is looser (R5).
+  // A package or symbol rule's `only` is who may: fewer is tighter, more or other is looser (R5, R6).
   const baseOnly = base.only ?? [];
   const headOnly = head.only ?? [];
   const onlySame = sameSet(baseOnly, headOnly);

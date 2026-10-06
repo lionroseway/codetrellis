@@ -16,6 +16,7 @@ import path from 'node:path';
 import type { ArchitectureRule, RuleView } from '../../shared/types/architecture-rules';
 import { getProjectConfig, updateProjectConfig } from './project-config-service';
 import { checkEdges, parseArchitectureRule, ruleWords } from './architecture-rule';
+import { splitSymbol } from '../../shared/lib/symbol-entry';
 import { isSuiteName, readRulebook, suiteFile, writeSuite } from './rulebook';
 import { getPackageEdges } from './database';
 
@@ -166,12 +167,37 @@ export function edgesIfLoaded(
   loadedRoot: string | null,
   edges: () => Array<{ sourceRelative: string; targetRelative: string }>,
   packages: () => Array<{ sourceRelative: string; targetRelative: string }> = packageEdgesOfGraph,
+  /** Rules beyond the project's own whose symbols to look up: a preview's, or the base's (R6). */
+  alsoRules: readonly ArchitectureRule[] = [],
 ): Array<{ from: string; to: string }> | null {
   if (!loadedRoot) return null;
   const real = (p: string) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
   if (real(loadedRoot) !== real(projectRoot)) return null;
-  // Files importing files, then files importing outside packages (R5), which only package rules read.
-  return [...edges(), ...packages()].map((e) => ({ from: e.sourceRelative, to: e.targetRelative }));
+  // Files importing files, then files importing outside packages (R5), which
+  // only package rules read, then the named exports symbol rules name (R6).
+  return [...edges(), ...packages(), ...symbolEdgesOfGraph(projectRoot, [...rulesOf(projectRoot), ...alsoRules])]
+    .map((e) => ({ from: e.sourceRelative, to: e.targetRelative }));
+}
+
+/**
+ * The files that import each symbol a symbol rule names (R6), directly, as a
+ * namespace, or through barrels, from the scanned graph. Only the symbols
+ * rules name are looked up.
+ */
+function symbolEdgesOfGraph(projectRoot: string, rules: readonly ArchitectureRule[]): Array<{ sourceRelative: string; targetRelative: string }> {
+  const out: Array<{ sourceRelative: string; targetRelative: string }> = [];
+  const done = new Set<string>();
+  for (const rule of rules) {
+    if (rule.kind !== 'symbol' || done.has(rule.mayNotImport)) continue;
+    done.add(rule.mayNotImport);
+    const sym = splitSymbol(rule.mayNotImport);
+    if (!sym) continue;
+    try {
+      const { importersOf } = require('./importers') as typeof import('./importers');
+      for (const i of importersOf(path.join(projectRoot, sym.file), [sym.name])) out.push({ sourceRelative: i.relativePath, targetRelative: rule.mayNotImport });
+    } catch { /* no scan yet, or no database */ }
+  }
+  return out;
 }
 
 function packageEdgesOfGraph(): Array<{ sourceRelative: string; targetRelative: string }> {

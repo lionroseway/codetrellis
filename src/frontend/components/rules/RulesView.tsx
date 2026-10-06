@@ -64,9 +64,11 @@ export function RulesView() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   // Which suite the list shows; null for every suite.
   const [shownSuite, setShownSuite] = useState<string | null>(null);
-  // R5 — a rule is an import boundary, or who alone may import an outside package.
-  const [kind, setKind] = useState<'imports' | 'package'>('imports');
+  // R5 — a rule is an import boundary, or who alone may import an outside package;
+  // R6 — or who alone may import one named export.
+  const [kind, setKind] = useState<'imports' | 'package' | 'symbol'>('imports');
   const [pkg, setPkg] = useState('');
+  const [sym, setSym] = useState('');
   const [only, setOnly] = useState('');
   const [suite, setSuite] = useState('');
   const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
@@ -191,21 +193,27 @@ export function RulesView() {
   };
 
   const clearForm = () => {
-    setFrom(''); setMayNotImport(''); setExcept(''); setBecause(''); setPkg(''); setOnly(''); setSuite(''); setStrength('warn');
+    setFrom(''); setMayNotImport(''); setExcept(''); setBecause(''); setPkg(''); setSym(''); setOnly(''); setSuite(''); setStrength('warn');
   };
 
   if (!root) return <p className="p-6 text-[12px] text-foreground-muted">Open a project to write down its architecture rules.</p>;
 
   const list = (v: string) => v.split(',').map((x) => x.trim()).filter(Boolean);
-  const ready = kind === 'package' ? !!pkg.trim() && list(only).length > 0 : !!from.trim() && !!mayNotImport.trim();
+  const ready = kind === 'package' ? !!pkg.trim() && list(only).length > 0
+    : kind === 'symbol' ? sym.includes('#') && list(only).length > 0
+      : !!from.trim() && !!mayNotImport.trim();
 
   const save = async () => {
     const id = kind === 'package'
       ? slug(`${pkg.replace(/^[a-z]+:/, '')}-only-${list(only)[0] ?? ''}`) || 'package-rule'
-      : slug(`${from}-not-${mayNotImport}`) || 'rule';
+      : kind === 'symbol'
+        ? slug(`${sym.split('#')[1] ?? ''}-only-${list(only)[0] ?? ''}`) || 'symbol-rule'
+        : slug(`${from}-not-${mayNotImport}`) || 'rule';
     const body: Record<string, unknown> = kind === 'package'
       ? { kind: 'package', package: pkg.trim(), only: list(only), because: because.trim(), strength }
-      : { from: from.trim(), mayNotImport: mayNotImport.trim(), because: because.trim(), except: list(except), strength };
+      : kind === 'symbol'
+        ? { kind: 'symbol', symbol: sym.trim(), only: list(only), because: because.trim(), strength }
+        : { from: from.trim(), mayNotImport: mayNotImport.trim(), because: because.trim(), except: list(except), strength };
     if (suite.trim()) body.suite = suite.trim();
     // A rule that already exists and would hold less tightly: shown first, then confirmed.
     const p = await preview(id, body);
@@ -377,6 +385,10 @@ export function RulesView() {
                 <input type="radio" name="rule-kind" checked={kind === 'package'} onChange={() => setKind('package')} data-testid="rule-kind-package" />
                 <span className="text-foreground">A package</span><span className="text-[11px] text-foreground-subtle">who alone may import it</span>
               </label>
+              <label className="flex items-baseline gap-1.5">
+                <input type="radio" name="rule-kind" checked={kind === 'symbol'} onChange={() => setKind('symbol')} data-testid="rule-kind-symbol" />
+                <span className="text-foreground">An export</span><span className="text-[11px] text-foreground-subtle">who alone may import one function or name</span>
+              </label>
             </fieldset>
             {kind === 'imports' ? (
               <>
@@ -395,6 +407,17 @@ export function RulesView() {
                   <input className={inputCls} value={except} onChange={(e) => setExcept(e.target.value)} placeholder="db/types.ts" data-testid="rule-except" />
                 </label>
               </>
+            ) : kind === 'symbol' ? (
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block space-y-1">
+                  <span className="text-foreground-muted">The export (file#name)</span>
+                  <input className={inputCls} value={sym} onChange={(e) => setSym(e.target.value)} placeholder="src/payments/charge.ts#createCharge" data-testid="rule-symbol" />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-foreground-muted">may be imported only by (comma-separated)</span>
+                  <input className={inputCls} value={only} onChange={(e) => setOnly(e.target.value)} placeholder="src/payments/" data-testid="rule-only" />
+                </label>
+              </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 <label className="block space-y-1">
@@ -431,7 +454,9 @@ export function RulesView() {
             <p className="text-[11px] text-foreground-subtle">
               {kind === 'package'
                 ? 'A package is its ecosystem and name: npm:stripe, pypi:requests, go:github.com/stripe/stripe-go, maven:com.stripe.'
-                : 'A folder ends in /; a pattern may use * within a name and ** across folders, like src/**/ui/**.'}
+                : kind === 'symbol'
+                  ? 'An export is the file that defines it and its name. Importing it through a barrel (an index file that passes it on) counts too.'
+                  : 'A folder ends in /; a pattern may use * within a name and ** across folders, like src/**/ui/**.'}
               {' '}You see what it does against the code before it is saved.
             </p>
             <button type="button" onClick={() => { void save(); }} disabled={busy || !ready} data-testid="rule-save"

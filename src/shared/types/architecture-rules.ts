@@ -16,7 +16,7 @@ export type RuleStrength = 'block' | 'warn' | 'guide';
 
 export const RULE_STRENGTHS: readonly RuleStrength[] = ['block', 'warn', 'guide'];
 
-export type RuleKind = 'imports' | 'package';
+export type RuleKind = 'imports' | 'package' | 'symbol';
 
 export interface ArchitectureRule {
   /** A slug, unique in the project: `web-not-db`. */
@@ -26,7 +26,9 @@ export interface ArchitectureRule {
    * may not import files in `mayNotImport`. `package`: only the files in
    * `only` may import the outside package named in `mayNotImport`
    * (`npm:stripe`); `from` is where the rule applies, everywhere (`**`) when
-   * not said.
+   * not said. `symbol` (R6): only the files in `only` may import the named
+   * export in `mayNotImport` (`src/payments/charge.ts#createCharge`), from
+   * its file or through any barrel that passes it on.
    */
   kind?: RuleKind;
   /** The files the rule is about: `web/`. */

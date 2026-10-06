@@ -547,7 +547,28 @@ module), `go:` (the module path), `cargo:`, `gem:`, `maven:`, `nuget:`,
 library are not packages (`src/shared/lib/package-entry.ts`). `from` limits
 where the rule applies (everywhere when omitted); `except` names parts of
 the package anyone may import (`npm:stripe/types`). Letting more files
-import it loosens the rule (R2, R3). Everything below holds for both kinds.
+import it loosens the rule (R2, R3).
+
+A **symbol rule** (Phase 33 R6) says who alone may import one named export:
+
+```yaml
+  - id: charges-via-payments
+    kind: symbol
+    symbol: src/payments/charge.ts#createCharge
+    only: [src/payments/]
+    strength: block
+    because: Charging goes through the payments module.
+```
+
+Importing it through a barrel counts: an import of `createCharge` from
+`src/payments/index.ts`, which passes it on, is an import of
+`src/payments/charge.ts#createCharge` too (`originsOf` in
+`services/importers.ts` follows re-exports, up to five deep). A namespace
+import of the module may use any of its names, and counts. The module that
+defines it, and the files in `only`, may. `from` limits where it applies;
+it has no `except`. The gate reads each named import a change adds
+(`src/shared/lib/symbol-entry.ts`); the rules view reads the graph's
+importers of the symbol. Everything below holds for every kind.
 
 - **On the graph** (Phase 33 G8): the Rules overlay (Overlays → Rules)
   draws an import that breaks a rule in the breach style (red, ⊘, the rule
