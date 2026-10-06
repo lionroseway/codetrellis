@@ -115,7 +115,7 @@ Over those files, the `check_changes` tool reports:
 | ✗ A changed file's tests fail, or ⚠ are older than the code | test grounding (B8.2), from the reports handed over |
 | ✗ A task marked done has a criterion whose check fails | the criterion checks (Phase 31 §8.1), run without recording |
 | ⚠ A system doc that describes a changed file was verified before it changed | the doc's stamp and `git diff <stamp>` over the working tree |
-| ✗ A changed file adds an import an architecture rule forbids | the team's rules in `.codetrellis/config.json` (A7), each changed file's imports now against the branch's merge base, which the CLI passes as `base`; an import already there before the branch is the rule's to list, not this change's |
+| ✗ A changed file adds an import an architecture rule forbids | the team's rules in `.codetrellis/rules/<suite>.yaml` (A7; Phase 33 R1 moved them out of `.codetrellis/config.json`, where any still there count until a person moves them), each changed file's imports now against the branch's merge base, which the CLI passes as `base`; an import already there before the branch is the rule's to list, not this change's |
 
 What a runner can and cannot see: plans, task records, criteria and system
 docs arrive with the checkout; test results arrive with the report the job

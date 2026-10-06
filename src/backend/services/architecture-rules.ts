@@ -1,16 +1,22 @@
 /**
- * Phase 32 A7.1 — architecture rules (awareness spec M7).
+ * Phase 32 A7.1 — architecture rules (awareness spec M7); Phase 33 R1 — kept
+ * as files.
  *
- * A rule lives in the committed `.codetrellis/config.json` so every laptop,
- * agent and pipeline reads the same one. Setting one is the person's (the
- * route checks); this module validates, keeps and checks them. A breach is an
- * import edge from the resolver's graph, never a text match.
+ * A rule lives in a committed suite file, `.codetrellis/rules/<suite>.yaml`
+ * (`rulebook.ts`), so every laptop, agent and pipeline reads the same one and
+ * a pull request reviews a change to it. Phase 32 kept them in
+ * `.codetrellis/config.json`; those still count until a person moves them
+ * (`moveRulesFromConfig`), and a suite's rule wins over a config rule with
+ * the same id. Setting one is the person's (the route checks); this module
+ * validates, keeps and checks them. A breach is an import edge from the
+ * resolver's graph, never a text match.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ArchitectureRule, RuleView } from '../../shared/types/architecture-rules';
 import { getProjectConfig, updateProjectConfig } from './project-config-service';
 import { checkEdges, parseArchitectureRule, ruleWords } from './architecture-rule';
+import { isSuiteName, readRulebook, suiteFile, writeSuite } from './rulebook';
 
 export { breachWords, breaks, checkEdges, inPattern, parseArchitectureRule, ruleWords } from './architecture-rule';
 
@@ -18,8 +24,31 @@ export class RuleError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
 }
 
-export function rulesOf(projectRoot: string): ArchitectureRule[] {
+/** The suite new rules go into when none is named. */
+export const DEFAULT_SUITE = 'architecture';
+const CONFIG_WHERE = '.codetrellis/config.json';
+
+/** Rules still in `.codetrellis/config.json`, where Phase 32 kept them. */
+export function rulesInConfig(projectRoot: string): ArchitectureRule[] {
   return getProjectConfig(projectRoot).rules ?? [];
+}
+
+/** Every rule: the suites', then any still in the config whose id no suite uses. */
+export function rulesOf(projectRoot: string): ArchitectureRule[] {
+  const fromSuites = readRulebook(projectRoot).suites.flatMap((s) => s.rules);
+  const ids = new Set(fromSuites.map((r) => r.id));
+  return [...fromSuites, ...rulesInConfig(projectRoot).filter((r) => !ids.has(r.id))];
+}
+
+/** Why a suite file or rule was not read, for the window to say. */
+export function rulebookProblems(projectRoot: string): string[] {
+  return readRulebook(projectRoot).problems;
+}
+
+const whereOf = (rule: ArchitectureRule): string => (rule.suite ? suiteFile(rule.suite) : CONFIG_WHERE);
+
+function suiteRules(projectRoot: string, suite: string): ArchitectureRule[] {
+  return readRulebook(projectRoot).suites.find((s) => s.name === suite)?.rules ?? [];
 }
 
 function ruleOf(projectRoot: string, id: string): ArchitectureRule {
@@ -28,19 +57,52 @@ function ruleOf(projectRoot: string, id: string): ArchitectureRule {
   return rule;
 }
 
-/** Set (or replace) a rule, keeping when it was first set. */
+/**
+ * Set (or replace) a rule in a suite file, keeping when it was first set. The
+ * suite is the one named, else the one already holding the rule, else
+ * `architecture`. A rule moving suites leaves its old one; a rule still in
+ * the config is taken out of it, since it now lives in a file.
+ */
 export function setRule(projectRoot: string, raw: Record<string, unknown>, by: string, now = Date.now()): ArchitectureRule {
   const existing = rulesOf(projectRoot).find((r) => r.id === raw.id);
-  const { rule, problems } = parseArchitectureRule({ ...raw, since: existing?.since ?? new Date(now).toISOString(), by });
-  if (!rule) throw new RuleError(problems.join('; '));
-  const rules = rulesOf(projectRoot).filter((r) => r.id !== rule.id).concat(rule);
-  updateProjectConfig(projectRoot, { rules });
+  const suite = raw.suite === undefined || raw.suite === '' ? existing?.suite ?? DEFAULT_SUITE : raw.suite;
+  if (!isSuiteName(suite)) throw new RuleError('suite must be a short name, like payments');
+  const { rule: parsed, problems } = parseArchitectureRule({ ...raw, since: existing?.since ?? new Date(now).toISOString(), by });
+  if (!parsed) throw new RuleError(problems.join('; '));
+  const rule: ArchitectureRule = { ...parsed, suite };
+  writeSuite(projectRoot, suite, suiteRules(projectRoot, suite).filter((r) => r.id !== rule.id).concat(rule));
+  if (existing?.suite && existing.suite !== suite) {
+    writeSuite(projectRoot, existing.suite, suiteRules(projectRoot, existing.suite).filter((r) => r.id !== rule.id));
+  }
+  if (rulesInConfig(projectRoot).some((r) => r.id === rule.id)) {
+    updateProjectConfig(projectRoot, { rules: rulesInConfig(projectRoot).filter((r) => r.id !== rule.id) });
+  }
   return rule;
 }
 
+/** Stop a rule: out of its suite file, or out of the config if it is still there. */
 export function removeRule(projectRoot: string, id: string): void {
-  ruleOf(projectRoot, id);
-  updateProjectConfig(projectRoot, { rules: rulesOf(projectRoot).filter((r) => r.id !== id) });
+  const rule = ruleOf(projectRoot, id);
+  if (rule.suite) writeSuite(projectRoot, rule.suite, suiteRules(projectRoot, rule.suite).filter((r) => r.id !== id));
+  if (rulesInConfig(projectRoot).some((r) => r.id === id)) {
+    updateProjectConfig(projectRoot, { rules: rulesInConfig(projectRoot).filter((r) => r.id !== id) });
+  }
+}
+
+/**
+ * Move every rule still in `.codetrellis/config.json` into the `architecture`
+ * suite file (Phase 33 R1). A person's confirmed act, never automatic: the
+ * route checks. A rule whose id a suite already uses stays as the suite has
+ * it. Returns the ids moved.
+ */
+export function moveRulesFromConfig(projectRoot: string): string[] {
+  const inConfig = rulesInConfig(projectRoot);
+  if (inConfig.length === 0) return [];
+  const taken = new Set(readRulebook(projectRoot).suites.flatMap((s) => s.rules.map((r) => r.id)));
+  const moving = inConfig.filter((r) => !taken.has(r.id)).map((r) => ({ ...r, suite: DEFAULT_SUITE }));
+  if (moving.length) writeSuite(projectRoot, DEFAULT_SUITE, [...suiteRules(projectRoot, DEFAULT_SUITE), ...moving]);
+  updateProjectConfig(projectRoot, { rules: [] });
+  return moving.map((r) => r.id);
 }
 
 /**
@@ -53,6 +115,7 @@ export function rulesView(projectRoot: string, edges: Array<{ from: string; to: 
     const breaches = edges ? checkEdges([rule], edges) : null;
     return {
       rule,
+      where: whereOf(rule),
       words: ruleWords(rule),
       breaches,
       breachWords: breaches === null

@@ -1346,7 +1346,7 @@ point to detect unplanned changes.
 
 | Tool | What it does |
 |------|-------------|
-| \`check_conformity(proposed_imports, project_path?)\` | Check proposed imports (\`[{ from, importing }]\`) against the team's architecture rules (path boundaries kept in \`.codetrellis/config.json\`, each with why) and for a direct two-file cycle. |
+| \`check_conformity(proposed_imports, project_path?)\` | Check proposed imports (\`[{ from, importing }]\`) against the team's architecture rules (path boundaries kept in committed suite files, \`.codetrellis/rules/<suite>.yaml\`, each with why) and for a direct two-file cycle. |
 | \`list_rules(project_path?)\` | The team's architecture rules, each with why and the imports that break it today. A person sets them in the app. |
 | \`check_architecture(query?)\` | List file-to-file import edges, optionally filtered by a path substring. |
 | \`list_cross_system_edges()\` | Find HTTP, SQL, subprocess, and env coupling between modules. |

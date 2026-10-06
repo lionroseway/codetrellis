@@ -519,9 +519,13 @@ run as a plain `codex` client with no hook and no watcher in
 ## Architecture rules: the team's boundaries (A7, M7)
 
 A rule is a boundary between two sets of paths, written once by a person in
-Settings → Architecture rules and committed in `.codetrellis/config.json`:
-`from` may not import `mayNotImport`, `except` some doors, `because` the
-team's reason. One file every laptop, agent and pipeline reads.
+Settings → Architecture rules and committed in a suite file,
+`.codetrellis/rules/<suite>.yaml` (Phase 33 R1; new rules go into
+`architecture.yaml`): `from` may not import `mayNotImport`, `except` some
+doors, `because` the team's reason. Files every laptop, agent and pipeline
+read, and a pull request reviews. Rules Phase 32 kept in
+`.codetrellis/config.json` still count until the person moves them
+(`POST /api/rules/move-from-config`, offered in the same section).
 
 - **Today** (A7.1): each rule lists the imports that already break it ("1
   import breaks this today"); `check_conformity` refuses a proposed import

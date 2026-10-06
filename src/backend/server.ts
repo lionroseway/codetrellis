@@ -90,7 +90,7 @@ import { buildPlayForward } from './services/play-forward';
 import { resequence, tellAgents, leaveOverlap, OverlapActionError, noteApproval, approvalNotices, markNoticeSeen } from './services/planned-overlap-actions';
 import { seriesFor, setRule, removeRule, startRun, dismissDue, recurrenceOf, RecurringError } from './services/recurring-service';
 import { isRunAgent, setRunAgent, startRunAgent } from './services/recurring-agent';
-import { rulesView, setRule as setArchitectureRule, removeRule as removeArchitectureRule, edgesIfLoaded, RuleError } from './services/architecture-rules';
+import { rulesView, setRule as setArchitectureRule, removeRule as removeArchitectureRule, edgesIfLoaded, RuleError, rulesInConfig, rulebookProblems, moveRulesFromConfig } from './services/architecture-rules';
 import { startRecurringScheduler } from './services/recurring-scheduler';
 import { buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
@@ -2723,15 +2723,38 @@ app.put('/api/recurring/:id', (req, res) => {
   }
 });
 
-// Phase 32 A7.1 — architecture rules: path boundaries the team keeps in the
-// committed config. Reading them, with what breaks each today, is anyone's;
-// setting or stopping one is the person's, as a plans folder is.
+// Phase 32 A7.1 — architecture rules: path boundaries the team keeps in
+// committed files (`.codetrellis/rules/<suite>.yaml` since Phase 33 R1).
+// Reading them, with what breaks each today, is anyone's; setting, stopping
+// or moving one is the person's, as a plans folder is.
 const RULES_WHERE = 'Settings → Architecture rules';
 
 app.get('/api/rules', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
-  res.json({ rules: rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)) });
+  res.json({
+    rules: rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)),
+    // Rules still in config.json, waiting for a person to move them (R1).
+    inConfig: rulesInConfig(projectRoot).length,
+    problems: rulebookProblems(projectRoot),
+  });
+});
+
+// Phase 33 R1 — move the rules Phase 32 kept in config.json into the
+// `architecture` suite file. A person's confirmed act, never automatic.
+app.post('/api/rules/move-from-config', async (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can move the architecture rules — in the CodeTrellis app, ${RULES_WHERE}.` }); return; }
+  try {
+    const moved = moveRulesFromConfig(projectRoot);
+    broadcast('rules-changed', { project: projectRoot });
+    const person = personFrom(req);
+    recordDecision('rule_changed', { projectRoot, change: 'moved-from-config', ruleIds: moved, to: '.codetrellis/rules/architecture.yaml', author: person.author, authorType: person.authorType }, person.authorType);
+    res.json({ moved, to: '.codetrellis/rules/architecture.yaml' });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 app.put('/api/rules/:id', async (req, res) => {
@@ -2741,10 +2764,10 @@ app.put('/api/rules/:id', async (req, res) => {
   try {
     // The rule's own fields, by name: nothing else in the body reaches the config.
     const b = (req.body ?? {}) as Record<string, unknown>;
-    const rule = setArchitectureRule(projectRoot, { id: req.params.id, from: b.from, mayNotImport: b.mayNotImport, except: b.except, because: b.because }, changedBy(req));
+    const rule = setArchitectureRule(projectRoot, { id: req.params.id, suite: b.suite, from: b.from, mayNotImport: b.mayNotImport, except: b.except, because: b.because }, changedBy(req));
     broadcast('rules-changed', { project: projectRoot });
     const person = personFrom(req);
-    recordDecision('rule_changed', { projectRoot, ruleId: rule.id, change: 'set', from: rule.from, mayNotImport: rule.mayNotImport, except: rule.except, because: rule.because, author: person.author, authorType: person.authorType }, person.authorType);
+    recordDecision('rule_changed', { projectRoot, ruleId: rule.id, change: 'set', suite: rule.suite, from: rule.from, mayNotImport: rule.mayNotImport, except: rule.except, because: rule.because, author: person.author, authorType: person.authorType }, person.authorType);
     // A7.2 — work in flight is checked against the new rule at once.
     await refreshSignals(projectRoot).catch((err) => console.warn('[Awareness] refresh failed:', err));
     res.json({ rule, view: rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)).find((v) => v.rule.id === rule.id) });

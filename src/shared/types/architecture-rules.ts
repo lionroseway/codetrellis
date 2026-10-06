@@ -22,6 +22,12 @@ export interface ArchitectureRule {
   since: string;
   /** Who set it, from the transport. */
   by: string;
+  /**
+   * The suite it is kept in: `.codetrellis/rules/<suite>.yaml` (Phase 33 R1).
+   * Absent for a rule still in `.codetrellis/config.json`, where Phase 32 kept
+   * them, until a person moves it.
+   */
+  suite?: string;
 }
 
 /** One import that crosses a rule: `from` imports `to`, both project-relative. */
@@ -33,6 +39,8 @@ export interface RuleBreach {
 
 /** A rule as the window, an agent and the phone read it. */
 export interface RuleView {
+  /** Where it is kept: the suite file, or `.codetrellis/config.json` until it is moved. */
+  where: string;
   rule: ArchitectureRule;
   /** "web/ may not import db/ (except db/types.ts): web talks to db through the API" */
   words: string;
