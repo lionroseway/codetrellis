@@ -1,3 +1,4 @@
+import { FileRules } from '../inspector/FileRules';
 import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import {
   ArrowRight, ArrowLeft, Braces, Box, Layers, LetterText, List, Hash,
@@ -394,6 +395,9 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
       )}
 
       {grounding && <TestsLine grounding={grounding} />}
+
+      {/* Phase 33 G8 — the rules about this file, and what breaks them here. */}
+      {root && <FileRules root={root} file={nodeId.startsWith('/') ? nodeId.slice(root.length + 1) : nodeId} />}
 
       {symbols.length > 0 && (
         <Section label="Symbols" count={symbols.length} accentClass="text-accent">

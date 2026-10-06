@@ -549,6 +549,13 @@ where the rule applies (everywhere when omitted); `except` names parts of
 the package anyone may import (`npm:stripe/types`). Letting more files
 import it loosens the rule (R2, R3). Everything below holds for both kinds.
 
+- **On the graph** (Phase 33 G8): the Rules overlay (Overlays → Rules)
+  draws an import that breaks a rule in the breach style (red, ⊘, the rule
+  named on hover), on a file edge or a cluster edge holding one, and puts a
+  ⊘ mark with the count on the file (or cluster) it starts from; the legend
+  explains both. The inspector lists the rules about the selected file and
+  what breaks them there; "Show the … suite" fades every node no rule of
+  that suite is about.
 - **Today** (A7.1): each rule lists the imports that already break it ("1
   import breaks this today"); `check_conformity` refuses a proposed import
   with the rule and why; `list_rules` reads them.

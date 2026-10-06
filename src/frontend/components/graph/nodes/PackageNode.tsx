@@ -8,6 +8,7 @@ import { useUiStore } from '../../../stores/ui-store';
 import { BreakpointBadge } from './BreakpointBadge';
 import { GroundingMark } from './GroundingMark';
 import { PlannedOverlapMark } from './PlannedOverlapMark';
+import { RuleBreachMark } from './RuleBreachMark';
 
 interface PackageNodeData extends GraphNodeVisualData {
   label: string;
@@ -57,6 +58,7 @@ function PackageNodeComponent({ data }: NodeProps) {
       <BreakpointBadge title={(data as Record<string, unknown>).breakpointTitle} />
       <GroundingMark grounding={(data as Record<string, unknown>).grounding} />
       <PlannedOverlapMark planned={(data as Record<string, unknown>).plannedOverlap} />
+      <RuleBreachMark breach={(data as Record<string, unknown>).ruleBreach} />
       <div className={`pointer-events-none absolute inset-0 rounded-[24px] ${GRAPH_CHROME.clusterSheen}`} />
       <div className="relative z-10">
         <div className="flex items-start gap-3">

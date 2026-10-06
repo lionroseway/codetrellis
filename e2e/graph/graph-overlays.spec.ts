@@ -79,13 +79,13 @@ test.describe('Overlays on the graph', () => {
     const x = Math.max(0, at.x - 120), y = Math.max(0, at.y - 80);
     await page.screenshot({ path: path.join(OUT, 'graph-overlays-node.png'), clip: { x, y, width: Math.min(at.width + 240, vp.width - x), height: Math.min(at.height + 160, vp.height - y) } });
 
-    // The menu: all five on (B8.3a added test grounding); each turned off and on again.
+    // The menu: all six on (B8.3a added test grounding, Phase 33 G8 the rules); each turned off and on again.
     const menuButton = page.getByTestId('graph-overlays');
-    await expect(menuButton).toContainText('5/5');
+    await expect(menuButton).toContainText('6/6');
     await menuButton.click();
     const menu = page.getByTestId('graph-overlays-menu');
     await expect(menu.locator('label')).toHaveText([
-      /Plan intent/, /Workstreams/, /Collision zones/, /Breakpoints/, /Test grounding/,
+      /Plan intent/, /Workstreams/, /Collision zones/, /Breakpoints/, /Test grounding/, /Rules/,
     ]);
     await page.screenshot({ path: path.join(OUT, 'graph-overlays-menu.png') });
     await menu.getByTestId('overlay-workstreams').uncheck();
@@ -93,7 +93,7 @@ test.describe('Overlays on the graph', () => {
     await expect(zone).toBeVisible();
     await menu.getByTestId('overlay-collisions').uncheck();
     await expect(zone).toHaveCount(0);
-    await expect(menuButton).toContainText('3/5');
+    await expect(menuButton).toContainText('4/6');
     await menu.getByTestId('overlay-workstreams').check();
     await menu.getByTestId('overlay-collisions').check();
     await expect(file.getByTestId('node-work-count')).toBeVisible();

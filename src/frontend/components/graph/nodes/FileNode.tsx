@@ -8,6 +8,7 @@ import { useUiStore } from '../../../stores/ui-store';
 import { BreakpointBadge } from './BreakpointBadge';
 import { GroundingMark } from './GroundingMark';
 import { PlannedOverlapMark } from './PlannedOverlapMark';
+import { RuleBreachMark } from './RuleBreachMark';
 import { WorkOverlayMarks } from './WorkOverlayMarks';
 
 const NODE_CARD_PLANNED = nodeChange('planned_add')?.card ?? '';
@@ -102,6 +103,7 @@ function FileNodeComponent({ data }: NodeProps) {
       <BreakpointBadge title={(data as Record<string, unknown>).breakpointTitle} />
       <GroundingMark grounding={(data as Record<string, unknown>).grounding} />
       <PlannedOverlapMark planned={(data as Record<string, unknown>).plannedOverlap} />
+      <RuleBreachMark breach={(data as Record<string, unknown>).ruleBreach} />
       <WorkOverlayMarks workCount={(data as Record<string, unknown>).workCount} collisionTitle={(data as Record<string, unknown>).collisionTitle} />
       <div className={`pointer-events-none absolute inset-0 rounded-[22px] ${GRAPH_CHROME.sheen} opacity-90`} style={{ ['--node-glow' as string]: change?.glow || language.glow }} />
       <div className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-80" />

@@ -20,7 +20,7 @@ records that — but "✗ none" is proof of a gap.
 | REST routes | 305 | 303 | 0 | 0 | 217 | 0 |
 | MCP tools | 215 | 215 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
-| Frontend components | 143 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 145 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 38 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 0 | n/a | n/a | n/a | 0 | 0 |
 
@@ -29,7 +29,7 @@ records that — but "✗ none" is proof of a gap.
 | Domain | REST | MCP | RPC | Components | Mobile | Settings |
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 25 | 12 | 10 | 0 | 0 | 0 |
-| 0.4b Graph | 29 | 15 | 8 | 18 | 0 | 0 |
+| 0.4b Graph | 29 | 15 | 8 | 20 | 0 | 0 |
 | 0.4c Plans and items | 120 | 63 | 29 | 64 | 0 | 0 |
 | 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 4 | 0 | 0 |
@@ -677,7 +677,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (143)
+## Frontend components (145)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -689,6 +689,7 @@ records that — but "✗ none" is proof of a gap.
 | b | `graph/nodes/GroundingMark.tsx` |  | n/a | n/a |  |  |  |
 | b | `graph/nodes/PackageNode.tsx` |  | n/a | n/a |  |  |  |
 | b | `graph/nodes/PlannedOverlapMark.tsx` |  | n/a | n/a |  |  |  |
+| b | `graph/nodes/RuleBreachMark.tsx` |  | n/a | n/a |  |  |  |
 | b | `graph/nodes/SymbolNode.tsx` |  | n/a | n/a |  |  |  |
 | b | `graph/nodes/WorkOverlayMarks.tsx` |  | n/a | n/a |  |  |  |
 | b | `graph/OverlaysMenu.tsx` |  | n/a | n/a |  |  |  |
@@ -697,6 +698,7 @@ records that — but "✗ none" is proof of a gap.
 | b | `inspector/CodeDiffView.tsx` |  | n/a | n/a |  |  |  |
 | b | `inspector/CodePreview.tsx` |  | n/a | n/a |  |  |  |
 | b | `inspector/FilePlans.tsx` |  | n/a | n/a |  |  |  |
+| b | `inspector/FileRules.tsx` |  | n/a | n/a |  |  |  |
 | b | `inspector/PlaybackBar.tsx` |  | n/a | n/a |  |  |  |
 | b | `rules/RulesView.tsx` |  | n/a | n/a |  |  |  |
 | c | `plan/CommentThread.tsx` |  | n/a | n/a |  |  |  |

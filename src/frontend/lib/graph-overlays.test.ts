@@ -22,7 +22,7 @@ const ROOM = [
 
 describe('which overlays are on', () => {
   test('nothing saved means all; unknown ids are dropped; order is the list\'s', () => {
-    assert.deepEqual(parseOverlays(undefined), ['plan', 'workstreams', 'collisions', 'breakpoints', 'tests']);
+    assert.deepEqual(parseOverlays(undefined), ['plan', 'workstreams', 'collisions', 'breakpoints', 'tests', 'rules']);
     assert.deepEqual(parseOverlays(['breakpoints', 'nope', 'plan']), ['plan', 'breakpoints']);
     assert.deepEqual(parseOverlays([]), []);
   });
