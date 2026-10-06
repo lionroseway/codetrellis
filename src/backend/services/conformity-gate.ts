@@ -31,6 +31,8 @@ export interface TestTrouble { path: string; state: 'failing' | 'stale'; says: s
 export interface FailingCriterion { itemUid: string; task: string; criterion: string; findings: string[] }
 export interface StaleDoc { uid: string; title: string; slug: string; verifiedAt: string; files: string[] }
 export interface RuleImport { path: string; imports: string; rule: string; words: string; because: string }
+export type { RuleChange } from './rule-changes';
+import type { RuleChange } from './rule-changes';
 
 /** The imports these changed files add across the rules, or null when they could not be read (injected). */
 export type RuleChecker = (files: readonly string[]) => RuleImport[] | null | Promise<RuleImport[] | null>;
@@ -47,6 +49,13 @@ export interface Conformity {
   rules: RuleImport[];
   /** False when the rules could not be checked: the project's imports are not loaded here. */
   rulesChecked: boolean;
+  /**
+   * What this change does to the rulebook against its base (Phase 33 R2):
+   * loosening is a finding in `says`; tightening and rewording are `notes`.
+   */
+  rulebook: RuleChange[];
+  /** Said, but not a reason to fail: a rule added or tightened, a reason reworded, a base not read. */
+  notes: string[];
 }
 
 /** A criterion's check, as the criterion loop runs it (injected so tests need no files). */
@@ -75,9 +84,20 @@ function changedSince(root: string, commit: string): Set<string> | null {
   }
 }
 
-export async function checkChanges(root: string, changed: readonly string[], checkCriterion: CriterionChecker, checkRules?: RuleChecker): Promise<Conformity> {
+export async function checkChanges(
+  root: string,
+  changed: readonly string[],
+  checkCriterion: CriterionChecker,
+  checkRules?: RuleChecker,
+  rulebook: readonly RuleChange[] = [],
+  notes: readonly string[] = [],
+): Promise<Conformity> {
   const files = cleanChanged(changed);
   const says: string[] = [];
+  const said = [...notes];
+
+  // The rulebook first (R2): a change that loosens a rule is the first thing a reviewer must see.
+  for (const c of rulebook) (c.effect === 'loosens' ? says : said).push(c.words);
 
   const breakpoints: HeldFile[] = [];
   const code = listBreakpoints().filter((b) => b.kind === 'code' && b.projectRoot === root);
@@ -138,5 +158,5 @@ export async function checkChanges(root: string, changed: readonly string[], che
   }
   for (const d of docs) says.push(`⚠ The system doc "${d.title}" describes ${d.files.join(', ')}, which changed after it was verified at ${d.verifiedAt}`);
 
-  return { ok: says.length === 0, says, files, breakpoints, tests, criteria, docs, rules, rulesChecked: found !== null };
+  return { ok: says.length === 0, says, files, breakpoints, tests, criteria, docs, rules, rulesChecked: found !== null, rulebook: [...rulebook], notes: said };
 }

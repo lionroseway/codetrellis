@@ -29,6 +29,10 @@ import { importersOf, type Importer } from '../../services/importers';
 import { enforceEdit, editView } from '../../services/code-breakpoints';
 import { checkChanges } from '../../services/conformity-gate';
 import { ruleImports } from '../../services/workstream-imports';
+import { rulesAt } from '../../services/rules-at';
+import { diffRules, type RuleChange } from '../../services/rule-changes';
+import { edgesIfLoaded, rulesOf } from '../../services/architecture-rules';
+import { getDependencyEdges } from '../../services/database';
 import { isSafeGitRef } from '../../services/git-safety';
 import { execFileSync } from 'node:child_process';
 import { enforceSignalsForSession, signalHeldText } from '../../services/signal-breakpoints';
@@ -366,7 +370,21 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (base !== undefined && !since) {
         return { isError: true, content: [{ type: 'text' as const, text: `${base} is not a commit in this repository (a shallow clone? fetch the base first).` }] };
       }
-      const c = await checkChanges(root, paths, (uid) => deps.criterionLoop.checkCriterion(uid), (files) => ruleImports(root, files, since));
+      // Phase 33 R2: judged by the base's rules, so a change cannot loosen the
+      // rule it breaks; what it does to the rulebook is its own finding.
+      let judgeBy: ReturnType<typeof rulesOf> | undefined;
+      let rulebook: RuleChange[] = [];
+      const notes: string[] = [];
+      if (since) {
+        const atBase = await rulesAt(root, since);
+        if (atBase) {
+          judgeBy = atBase.rules;
+          rulebook = diffRules(atBase.rules, rulesOf(root), edgesIfLoaded(root, deps.getActiveProjectPath(), getDependencyEdges) ?? []);
+        } else {
+          notes.push(`⚠ The rules at ${since.slice(0, 7)} could not be read, so this change was judged by its own rules. Fetch the base with its history.`);
+        }
+      }
+      const c = await checkChanges(root, paths, (uid) => deps.criterionLoop.checkCriterion(uid), (files) => ruleImports(root, files, since, judgeBy), rulebook, notes);
       return {
         _meta: { summary: c.ok ? `Checked ${c.files.length} changed file${c.files.length === 1 ? '' : 's'}: conforms` : `Checked ${c.files.length} changed files: ${c.says.length} to act on` },
         content: [{ type: 'text' as const, text: JSON.stringify({
@@ -375,6 +393,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
           criteria: c.criteria.map((x) => ({ item_uid: x.itemUid, task: x.task, criterion: x.criterion, findings: x.findings })),
           docs: c.docs.map((d) => ({ uid: d.uid, title: d.title, slug: d.slug, verified_at: d.verifiedAt, files: d.files })),
           rules: c.rules.map((r) => ({ path: r.path, imports: r.imports, rule: r.rule, words: r.words, because: r.because })),
+          rulebook: c.rulebook.map((r) => ({ rule: r.rule, change: r.change, effect: r.effect, allowed: r.allowed, forbidden: r.forbidden, words: r.words })),
+          notes: c.notes,
           ...(c.rulesChecked ? {} : { rules_note: 'The architecture rules were not checked: this project\'s imports are not loaded here. Open the project, or run `codetrellis start` in it.' }),
         }, null, 2) }],
       };
