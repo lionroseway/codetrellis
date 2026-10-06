@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | S1 One import per plan per burst |
-| **Status** | 0.2 merged (#351). S1 gathers a plan's changed files and imports it once they go quiet: at 50 changed files, 1 import and broadcast instead of 50, and the slowest answer meanwhile 56 ms instead of 1.9 s |
-| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; S1 in review (#352) on `feat/phase-33-s1-one-import-per-burst`; S2 building on `feat/phase-33-s2-window-takes-a-burst`; R1 building on `feat/phase-33-r1-rule-files`; R2 building on `feat/phase-33-r2-base-rules`; R3 building on `feat/phase-33-r3-change-control`; R4 building on `feat/phase-33-r4-strength`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look` |
-| **Last merged** | 0.2 (#351, `b902134`) |
-| **Next action** | Merge S1, then S2 (the window takes a burst as one: one refetch, one toast) |
+| **Stage / step** | S2 The window takes a burst as one |
+| **Status** | S1 merged (#352), with a fix CI found: an edit in the app and a change on disk at once now lose neither. S2 gathers the backend's plan-imported broadcasts in the window too: one plan-list refetch and one notice for a pull that touches several plans |
+| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; S2 building on `feat/phase-33-s2-window-takes-a-burst`; S3 building on `feat/phase-33-s3-under-load`; R1 building on `feat/phase-33-r1-rule-files`; R2 building on `feat/phase-33-r2-base-rules`; R3 building on `feat/phase-33-r3-change-control`; R4 building on `feat/phase-33-r4-strength`; R5 building on `feat/phase-33-r5-package-rules`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
+| **Last merged** | S1 (#352, `da38dce`) |
+| **Next action** | Merge S2, then S3 (200 files across 5 plans, end to end), then the rulebook (R1, R2, R4, R3) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-06 |
 
-> Read from git at `origin/feat/phase-33` `b902134`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `da38dce`, with open PRs from GitHub.
 
 ---
 
@@ -46,16 +46,16 @@
 - [ ] 0.3 Colour audit (every colour, its meaning and where), the draft visual vocabulary — building
 
 ### Track S: quiet under load
-- [ ] S1 One import per plan per burst (the watcher coalesces) (#352) — in review
+- [x] S1 One import per plan per burst (the watcher coalesces) (#352)
 - [ ] S2 The window takes a burst as one (one refetch, one toast) — building
-- [ ] S3 Under load end to end (200 files, 5 plans; the owner's real `git pull`)
+- [ ] S3 Under load end to end (200 files, 5 plans; the owner's real `git pull`) — building
 
 ### Track R: the rulebook
 - [ ] R1 Rules live in `.codetrellis/rules/<suite>.yaml` (moved from config.json by a person's confirm) — building
 - [ ] R2 CI judges with the base branch's rules; a rulebook change is its own finding — building
 - [ ] R3 Change control: preview the effect, a person confirms, loosening is signed, `propose_rule` for agents — building
 - [ ] R4 Strength: block, warn, guide (exit codes, `--strict`, signals) — building
-- [ ] R5 Package rules across all eleven languages (only the wrapper imports `stripe`)
+- [ ] R5 Package rules across all eleven languages (only the wrapper imports `stripe`) — building
 - [ ] R6 Symbol rules (who may import a named export, through re-exports)
 - [ ] R7 Call rules (HTTP hosts, commands, tables, env)
 - [ ] R8 Folder rules (what files in a folder are)
@@ -69,8 +69,8 @@
 - [ ] C4b Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified)
 - [ ] C5 Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass)
 - [ ] C6 Graduation (a repeated finding proposes a rule)
-- [ ] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran
-- [ ] C8 One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words
+- [ ] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran — building
+- [ ] C8 One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words — building
 
 ### Track G: graph and clarity
 - [ ] G1 One visual vocabulary (colour, glyph, dash, words) with a guard test — building
@@ -88,7 +88,7 @@
 - [ ] V1 What this change does to the architecture (structural diff at the top of every review) — building
 - [ ] V2 Review in order of risk (dependents, rule scope, test grounding, other work) — building
 - [ ] V3 Re-review only what changed since each reviewer's last look — building
-- [ ] V6 Did the change do what the task said (only when it is linked to a task)
+- [ ] V6 Did the change do what the task said (only when it is linked to a task) — building
 
 ### Stage Z: close
 - [ ] Z1 Docs: `docs/claude/rules.md`, CLI and MCP references, the change-control security rule
@@ -199,6 +199,19 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-06 — S1 merged (#352); S2 makes the window take a burst as one
+
+- **S1 merged** (#352), green after the fix for what CI found (the entry
+  below).
+- **S2: the window takes a burst as one** (`src/frontend/lib/plan-reload.ts`,
+  the shared burst helper in `useWebSocket`). After S1 a pull touching three
+  plans still sent three `plan-imported` broadcasts; the window now gathers
+  them: one refetch of the plan list, the open plan once if it was among
+  them, and one notice naming how many plans and files ("3 plans reloaded
+  from disk"), which a later burst replaces rather than stacks. The browser
+  test runs in the serial project: it counts every reload the window takes,
+  and a parallel spec writing plan files would add its own.
 
 ### 2026-10-06 — 0.2 merged (#351); S1 makes a burst one import
 
