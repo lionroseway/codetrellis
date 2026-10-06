@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "0.2 Measure the plan reload storm"
-  status: "0.1 merged (#350). Measured: 1, 10 and 50 changed task files give 1, 10 and 50 whole-plan imports and broadcasts, and the backend's slowest answer during the burst grows to 1.9 s at 50 (idle 3–5 ms)"
-  next: "Merge 0.2, then S1 (one import per plan per burst) and S2 (the window takes a burst as one)"
+  step: "S1 One import per plan per burst"
+  status: "0.2 merged (#351). S1 gathers a plan's changed files and imports it once they go quiet: at 50 changed files, 1 import and broadcast instead of 50, and the slowest answer meanwhile 56 ms instead of 1.9 s"
+  next: "Merge S1, then S2 (the window takes a burst as one: one refetch, one toast)"
   blockers: "None"
   updated: 2026-10-06
 sections:
