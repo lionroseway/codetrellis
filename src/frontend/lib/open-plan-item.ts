@@ -1,4 +1,22 @@
 /**
+ * Open a plan and show it (Phase 33 G6). The owner's report: opening a plan
+ * that was minimised to its chip left it minimised, because the workspace
+ * flips to the plan only when the active plan CHANGES (App.tsx), so opening
+ * the plan already active did nothing visible from eight places. Every
+ * person's "open this plan" goes through here: it sets the plan, then brings
+ * the plan workspace to the front, from a chip too. The Brief is the one
+ * exception, as in App.tsx: there, opening a plan is part of reading it.
+ */
+export async function showPlan(planUid: string, opts: { item?: string } = {}): Promise<void> {
+  const { usePlanStore } = await import('../stores/plan-store');
+  const { useUiStore } = await import('../stores/ui-store');
+  // With an item, the plan is opened and the item selected in the order F9 fixed.
+  if (opts.item) await openPlanItem(planUid, opts.item);
+  else if (usePlanStore.getState().activePlanUid !== planUid) await usePlanStore.getState().setActivePlan(planUid);
+  if (useUiStore.getState().workspaceMode !== 'brief') useUiStore.getState().setWorkspaceMode('plan');
+}
+
+/**
  * Open a plan item — activate its plan, hydrate the tree, select it.
  *
  * Extracted rather than copied. This sequence is load-bearing and subtle:

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Check, ChevronDown, FolderOpen, GitBranch, Search } from 'lucide-react';
 
 import { usePlanStore } from '../../../stores/plan-store';
+import { showPlan } from '../../../lib/open-plan-item';
 import { usePlanWorktrees } from '../../../hooks/usePlanWorktrees';
 import { openWorktreeTab, worktreeLabel, type WorktreePlanSummary } from '../../../lib/plan-worktrees';
 import { StatusBadge } from '../StatusBadge';
@@ -26,7 +27,6 @@ export function PlanSwitcher() {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const activePlanUid = usePlanStore((s) => s.activePlanUid);
-  const setActivePlan = usePlanStore((s) => s.setActivePlan);
   const grouped = usePlanWorktrees(open);
 
   useEffect(() => {
@@ -134,7 +134,7 @@ export function PlanSwitcher() {
                   {plans.map((p) => (
                     <button
                       key={p.uid}
-                      onClick={() => { setOpen(false); if (p.uid !== activePlanUid) void setActivePlan(p.uid); }}
+                      onClick={() => { setOpen(false); void showPlan(p.uid); }}
                       className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left transition-colors ${
                         p.uid === activePlanUid ? 'bg-accent/10 text-accent' : 'text-foreground-muted hover:bg-white/[0.05] hover:text-foreground'
                       }`}

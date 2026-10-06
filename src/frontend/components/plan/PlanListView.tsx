@@ -2,8 +2,8 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { RecurringSeriesList } from './RecurringSeriesList';
 import { ClipboardList, Plus, FolderInput, Layers, Trash2, Search, X, CheckSquare, Square, AlertTriangle, RefreshCw, FolderOpen } from 'lucide-react';
 import { usePlanStore } from '../../stores/plan-store';
+import { showPlan } from '../../lib/open-plan-item';
 import { useProjectStore } from '../../stores/project-store';
-import { useUiStore } from '../../stores/ui-store';
 import { useToastStore } from '../../stores/toast-store';
 import { StatusBadge } from './StatusBadge';
 import { CrossRepoSection } from './CrossRepoSection';
@@ -517,7 +517,7 @@ export function PlanList() {
 
       {activePlanRow && (
         <button
-          onClick={() => setActivePlan(activePlanRow.uid)}
+          onClick={() => { void showPlan(activePlanRow.uid); }}
           className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/10 border border-accent/30 text-left"
           title="The open plan, outside the current filter"
           data-testid="pinned-active-plan"
@@ -559,7 +559,7 @@ export function PlanList() {
                 // The workspace opens when the active plan changes, so the
                 // plan already active (minimised, or navigated away from)
                 // opened nothing when clicked. It opens it now.
-                onClick={() => (activePlanUid === plan.uid ? useUiStore.getState().setWorkspaceMode('plan') : setActivePlan(plan.uid))}
+                onClick={() => { void showPlan(plan.uid); }}
                 className="flex-1 min-w-0 text-left"
                 title="Click to open the plan workspace"
               >

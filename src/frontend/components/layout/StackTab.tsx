@@ -2,8 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Layers, Crosshair, ExternalLink } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
 import { useGraphStore } from '../../stores/graph-store';
-import { usePlanStore } from '../../stores/plan-store';
-import { revealPlanItem } from '../../lib/open-plan-item';
+import { revealPlanItem, showPlan } from '../../lib/open-plan-item';
 import { useReplayStore } from '../../stores/replay-store';
 import { hhmm } from '../../lib/replay';
 import { usePlayForwardStore } from '../../stores/play-forward-store';
@@ -210,7 +209,7 @@ function PlanRow({ plan, open, onToggle, focused, planned }: {
           <Crosshair size={10} /> {focused ? 'Following' : 'Follow'}
         </button>
         <button
-          onClick={() => { void usePlanStore.getState().setActivePlan(plan.uid); }}
+          onClick={() => { void showPlan(plan.uid); }}
           className="text-foreground-subtle hover:text-foreground"
           title={`Open ${plan.title}`}
           aria-label={`Open ${plan.title}`}

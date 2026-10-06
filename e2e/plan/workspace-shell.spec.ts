@@ -107,6 +107,25 @@ test.describe('Workspace shell', () => {
     });
   });
 
+  // Phase 33 G6 — the owner's report: opening a plan that was minimised left
+  // it minimised, because the workspace opens only when the active plan
+  // CHANGES. Opening it again from the plan list shows it.
+  test('opening the minimised plan again from the plan list shows it', async ({ page }) => {
+    await gotoWithProject(page);
+    await openPlan(page, PLAN_TITLE);
+    const title = page.locator('textarea[placeholder="Untitled plan"]');
+    await expect(title).toBeVisible({ timeout: 5000 });
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('button[title*="Restore plan workspace"]')).toBeVisible({ timeout: 5000 });
+    await expect(title).toBeHidden();
+
+    await page.getByRole('button', { name: 'Plans', exact: true }).first().click();
+    await page.getByTitle('Click to open the plan workspace').filter({ hasText: PLAN_TITLE }).first().click();
+    await expect(title).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('button[title*="Restore plan workspace"]')).toBeHidden();
+  });
+
   // A stack of notifications sat over the minimised-plan chip and took the
   // click meant for "restore" - intermittently on CI, where other specs'
   // plan broadcasts pile toasts up. Here the pile-up is made on purpose:

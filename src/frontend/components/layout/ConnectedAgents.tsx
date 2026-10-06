@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Cpu, Sparkles, Bot, Plug, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { usePlanStore } from '../../stores/plan-store';
+import { showPlan } from '../../lib/open-plan-item';
 import { useAgentStore } from '../../stores/agent-store';
 import { usePlanItemsStore } from '../../stores/plan-items-store';
 import { checkScope, describeScope } from '../../lib/scope-check';
@@ -210,7 +211,6 @@ export function ConnectedAgents() {
 }
 
 function SessionRow({ session, planTitle }: { session: AgentSessionInfo; planTitle?: string }) {
-  const setActivePlan = usePlanStore((s) => s.setActivePlan);
   const { Icon, tint, label } = agentBadge(session.agentType);
 
   return (
@@ -227,7 +227,7 @@ function SessionRow({ session, planTitle }: { session: AgentSessionInfo; planTit
         <span className="font-mono opacity-60">{shortSessionId(session.sessionId)}</span>
         {session.activePlanUid ? (
           <button
-            onClick={() => setActivePlan(session.activePlanUid)}
+            onClick={() => { if (session.activePlanUid) void showPlan(session.activePlanUid); }}
             className="ml-auto text-accent hover:underline truncate max-w-[180px] text-right"
             title={`Open plan: ${planTitle || session.activePlanUid}`}
           >
