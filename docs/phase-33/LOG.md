@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Merging the built steps, in order |
-| **Status** | C3 in review (old breaches may only fall); C2 merged (#362); C4b built |
-| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C3 building on `feat/phase-33-c3-debt-ratchet`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
-| **Last merged** | C2 (#362, `10bf4d2`) |
-| **Next action** | Merge C3 when CI is green, then replay 0.3 |
+| **Stage / step** | Merging the built steps, in order; building C4 |
+| **Status** | 0.3 in review (the colour audit); C3 merged (#363); G6 finished; C4 building |
+| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
+| **Last merged** | C3 (#363, `6962ae0`) |
+| **Next action** | Merge 0.3 when CI is green, then replay G6 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-06 |
 
-> Read from git at `origin/feat/phase-33` `10bf4d2`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `6962ae0`, with open PRs from GitHub.
 
 ---
 
@@ -67,8 +67,8 @@
 ### Track C: checks anywhere
 - [x] C1 Scoped checks (`--suite`, `--rule`, `--path`; MCP and REST alike) (#361)
 - [x] C2 SARIF output, host-neutral; recipes are examples for any CI (no host first) (#362)
-- [ ] C3 Debt ratchet (existing breaches may only fall) — building
-- [ ] C4 Agent checks locally on the user's own agent: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes)
+- [x] C3 Debt ratchet (existing breaches may only fall) (#363)
+- [ ] C4 Agent checks locally on the user's own agent: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes) — building
 - [ ] C4b Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified) — building
 - [ ] C5 Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass)
 - [ ] C6 Graduation (a repeated finding proposes a rule)
@@ -202,6 +202,31 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-06 — C3 merged (#363); 0.3 in review; G6 finished; C4 building
+
+- **C3 merged** (#363), green on every CI job.
+- **0.3: the colour audit** (`COLOUR-AUDIT.md`). Every colour the graph,
+  Explorer, plan canvas, Timeline and Awareness tab draw, with file and line.
+  27 collisions: amber alone means about twenty things, "planned" is drawn
+  in five hues, and two plan panels swap missing and unexpected. What the
+  code sets is not always what is drawn: the import edge ignores the style
+  the graph gives it, so cross-system edges looked like imports. G1's
+  vocabulary is drafted there.
+- **G6 finished before review.** Its commit was marked work in progress: an
+  agent's `select_item` still left a minimised plan minimised. It now goes
+  through `showPlan(uid, { item })` like every other way in, with a browser
+  test.
+- **C4 building: `codetrellis review`.** Your own agent CLI (Claude Code's
+  print mode, or Codex's `exec`) runs headless, in an empty folder, with no
+  shell, file access or web, given only a small review server with two
+  tools: report, and read a changed file. Its report is checked by the same
+  code as C4b and kept as a check run. Codex also covers a bare model
+  endpoint (any that serves the Responses API), so nothing new is built for
+  that.
+- Two browser tests (`navigate_to` opening Awareness) time out in a local
+  clone with many fetched branches, with or without G6: the
+  `listWorkstreams` slowness already logged. CI passes them.
 
 ### 2026-10-06 — C2 merged (#362); C3 in review; C4b built
 
