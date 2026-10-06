@@ -150,6 +150,9 @@ export const SERIAL_SPECS = [
   // "No agents connected" is a fact about the whole backend: any parallel
   // spec's MCP client makes it false (#367, once shards were balanced).
   '**/agent/connected-agents.spec.ts',
+  // Opens throwaway projects, which swaps the one project every parallel spec
+  // reads: the re-exports spec read a temporary folder's graph (#370).
+  '**/onboarding/recent-projects.spec.ts',
   // Changes shared settings — plan visibility, identity — that a parallel
   // spec creating plans would pick up.
   '**/settings/sections-save.spec.ts',
