@@ -47,6 +47,7 @@
     "inventory": "tsx tools/inventory/run.ts",
     "status": "NODE_USE_ENV_PROXY=1 tsx tools/status/run.ts",
     "status:check": "NODE_USE_ENV_PROXY=1 tsx tools/status/run.ts --check",
+    "status:page": "NODE_USE_ENV_PROXY=1 tsx tools/status/run.ts --page",
     "inventory:check": "tsx tools/inventory/run.ts --check",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
@@ -156,6 +157,11 @@
     "yaml": "^2.8.3",
     "zod": "^4.3.6",
     "zustand": "^5.0.0"
+  },
+  "overrides": {
+    "mammoth": {
+      "argparse": "^2.0.1"
+    }
   },
   "build": {
     "appId": "dev.codetrellis.app",
