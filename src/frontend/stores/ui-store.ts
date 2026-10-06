@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { parseOverlays, type OverlayId } from '../lib/graph-overlays';
+import { parseEdgeKinds, type EdgeKind } from '../lib/graph-edge-kinds';
 
 export type SelectedNodeKind = 'cluster' | 'file' | 'symbol' | 'directory' | 'ghost' | null;
 
@@ -126,6 +127,9 @@ interface UiState {
   /** Phase 32 B3.3 — the graph overlays that are on. */
   graphOverlays: OverlayId[];
   toggleGraphOverlay: (id: OverlayId) => void;
+  /** Phase 33 G3 — the kinds of edge the graph draws. */
+  graphEdges: EdgeKind[];
+  toggleGraphEdge: (id: EdgeKind) => void;
   setGraphStyle: (style: GraphStyle) => void;
 }
 
@@ -165,6 +169,18 @@ function readGraphOverlays(): OverlayId[] {
   }
 }
 
+/** Per machine too: which kinds of edge a person keeps drawn (G3). */
+const GRAPH_EDGES_KEY = 'codetrellis.graphEdges';
+
+function readGraphEdges(): EdgeKind[] {
+  try {
+    const raw = localStorage.getItem(GRAPH_EDGES_KEY);
+    return parseEdgeKinds(raw ? JSON.parse(raw) : undefined);
+  } catch {
+    return parseEdgeKinds(undefined);
+  }
+}
+
 function readGraphStyle(): GraphStyle {
   try {
     return localStorage.getItem(GRAPH_STYLE_KEY) === 'glass' ? 'glass' : 'performance';
@@ -200,6 +216,12 @@ export const useUiStore = create<UiState>((set) => ({
     const graphOverlays = s.graphOverlays.includes(id) ? s.graphOverlays.filter((x) => x !== id) : [...s.graphOverlays, id];
     try { localStorage.setItem(GRAPH_OVERLAYS_KEY, JSON.stringify(graphOverlays)); } catch { /* private window — session only */ }
     return { graphOverlays };
+  }),
+  graphEdges: readGraphEdges(),
+  toggleGraphEdge: (id) => set((s) => {
+    const graphEdges = s.graphEdges.includes(id) ? s.graphEdges.filter((x) => x !== id) : [...s.graphEdges, id];
+    try { localStorage.setItem(GRAPH_EDGES_KEY, JSON.stringify(graphEdges)); } catch { /* private window — session only */ }
+    return { graphEdges };
   }),
   splitView: false,
   toggleSplitView: () => set((s) => ({ splitView: !s.splitView })),
