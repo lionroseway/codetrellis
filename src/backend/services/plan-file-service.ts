@@ -442,6 +442,32 @@ export function importPlan(planDirOrPlanYaml: string): ImportPlanResult {
   }
 }
 
+/**
+ * Set while the watcher imports what changed on disk (Phase 33 S1). A file
+ * that still reads exactly as we last wrote it carries no change from
+ * outside, so it does not overwrite the database: an edit made in the app
+ * since that export, not yet written back, stays. The watcher imports a
+ * plan once its burst of changes goes quiet, so an edit in the app can land
+ * in between; before S1 each file was imported at once and the gap was
+ * smaller, not absent. An import someone asks for reads every file.
+ */
+let onlyOutsideChanges = false;
+
+/** True when the watcher is importing and `file` is still exactly our own last write. */
+function oursUnchanged(file: string): boolean {
+  return onlyOutsideChanges && wasJustWrittenByUs(file);
+}
+
+/** The watcher's import: every file changed outside the app, none that still reads as we wrote it. */
+function importOutsideChanges(planDir: string): ImportPlanResult {
+  onlyOutsideChanges = true;
+  try {
+    return importPlan(planDir);
+  } finally {
+    onlyOutsideChanges = false;
+  }
+}
+
 function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
   // Accept either the directory or the plan.yaml path explicitly.
   let planDir = planDirOrPlanYaml;
@@ -481,17 +507,21 @@ function importPlanInternal(planDirOrPlanYaml: string): ImportPlanResult {
   // to this machine arrived through its files: who added it, and in which
   // commit, as git says (C2.6a).
   const arriving = !planService.getPlan(planUid);
-  upsertPlan(planUid, planRaw, projectPath);
-  if (arriving) recordPlanArrival(planUid, planFile);
-  else completePlanArrival(planUid, planFile);
-  if (planRaw.refs !== undefined) importPlanRefs(planUid, planRaw.refs);
+  // A plan new here is read whole; one already here skips files that are still our own write.
+  const skipOurs = (file: string) => !arriving && oursUnchanged(file);
+  if (!skipOurs(planFile)) {
+    upsertPlan(planUid, planRaw, projectPath);
+    if (arriving) recordPlanArrival(planUid, planFile);
+    else completePlanArrival(planUid, planFile);
+    if (planRaw.refs !== undefined) importPlanRefs(planUid, planRaw.refs);
+  }
 
   // 2. Detect format: version:2 in plan.yaml OR items/ directory → V2.
   const isV2 = planRaw.version === 2 || fs.existsSync(path.join(planDir, 'items'));
 
   const result = isV2
-    ? importPlanV2(planDir, planUid, warnings)
-    : importPlanV1(planDir, planUid, warnings);
+    ? importPlanV2(planDir, planUid, warnings, skipOurs)
+    : importPlanV1(planDir, planUid, warnings, skipOurs);
 
   // CDev Phase 1.3 — bulk-import any channel events under <slug>/channels/.
   // require() at runtime to avoid an import cycle with channel-event-file-service
@@ -544,13 +574,14 @@ export function setPlanImportedListener(fn: ((planUid: string, projectRoot: stri
 }
 
 /** V1 import path — reads phases/, tasks/, docs/ directories. */
-function importPlanV1(planDir: string, planUid: string, warnings: string[]): ImportPlanResult {
+function importPlanV1(planDir: string, planUid: string, warnings: string[], skipOurs: (file: string) => boolean): ImportPlanResult {
   // Phases
   const phaseDir = path.join(planDir, 'phases');
   if (fs.existsSync(phaseDir)) {
     for (const fname of fs.readdirSync(phaseDir)) {
       if (!fname.endsWith('.yaml') && !fname.endsWith('.yml')) continue;
       const fpath = path.join(phaseDir, fname);
+      if (skipOurs(fpath)) continue;
       try {
         const raw = parseYaml(readPlanFile(planDir, fpath));
         if (!raw?.uid) { warnings.push(`Skipping ${fpath} — missing uid`); continue; }
@@ -567,6 +598,7 @@ function importPlanV1(planDir: string, planUid: string, warnings: string[]): Imp
     for (const fname of fs.readdirSync(taskDir)) {
       if (!fname.endsWith('.yaml') && !fname.endsWith('.yml')) continue;
       const fpath = path.join(taskDir, fname);
+      if (skipOurs(fpath)) continue;
       try {
         const raw = parseYaml(readPlanFile(planDir, fpath));
         if (!raw?.uid) { warnings.push(`Skipping ${fpath} — missing uid`); continue; }
@@ -583,6 +615,7 @@ function importPlanV1(planDir: string, planUid: string, warnings: string[]): Imp
     for (const fname of fs.readdirSync(docDir)) {
       if (!fname.endsWith('.md')) continue;
       const fpath = path.join(docDir, fname);
+      if (skipOurs(fpath)) continue;
       try {
         const { meta, body } = parseFrontMatter(readPlanFile(planDir, fpath));
         if (!meta.uid) { warnings.push(`Skipping ${fpath} — missing uid in front-matter`); continue; }
@@ -608,12 +641,12 @@ function importPlanV1(planDir: string, planUid: string, warnings: string[]): Imp
 }
 
 /** V2 import path — reads items/ tree recursively, creates V2 plan_items. */
-function importPlanV2(planDir: string, planUid: string, warnings: string[]): ImportPlanResult {
+function importPlanV2(planDir: string, planUid: string, warnings: string[], skipOurs: (file: string) => boolean): ImportPlanResult {
   const itemsDir = path.join(planDir, 'items');
   const importedItems: PlanItem[] = [];
 
   if (fs.existsSync(itemsDir)) {
-    importItemsFromDir(planDir, itemsDir, planUid, null, warnings, importedItems);
+    importItemsFromDir(planDir, itemsDir, planUid, null, warnings, importedItems, skipOurs);
   }
 
   const updatedPlan = planService.getPlan(planUid);
@@ -644,6 +677,7 @@ function importItemsFromDir(
   parentUid: string | null,
   warnings: string[],
   collected: PlanItem[],
+  skipOurs: (file: string) => boolean = () => false,
 ): void {
   const entries = fs.readdirSync(dir).sort();
 
@@ -662,7 +696,7 @@ function importItemsFromDir(
         if (isPlaceholder(fullPath)) { warnings.push(`${path.relative(planDir, fullPath)} is not on this device`); continue; }
         const raw = parseYaml(readPlanFile(planDir, fullPath));
         if (!raw?.uid) { warnings.push(`Skipping ${fullPath} — missing uid`); continue; }
-        const item = upsertItem(planUid, parentUid, raw, warnings, fullPath);
+        const item = skipOurs(fullPath) ? planItemService.getItem(raw.uid) : upsertItem(planUid, parentUid, raw, warnings, fullPath);
         if (item) collected.push(item);
       } else if (stat.isDirectory()) {
         // Item with children — read _self.yaml first
@@ -674,11 +708,11 @@ function importItemsFromDir(
         if (isPlaceholder(selfPath)) { warnings.push(`${path.relative(planDir, selfPath)} is not on this device`); continue; }
         const raw = parseYaml(readPlanFile(planDir, selfPath));
         if (!raw?.uid) { warnings.push(`Skipping ${selfPath} — missing uid`); continue; }
-        const item = upsertItem(planUid, parentUid, raw, warnings, selfPath);
+        const item = skipOurs(selfPath) ? planItemService.getItem(raw.uid) : upsertItem(planUid, parentUid, raw, warnings, selfPath);
         if (item) {
           collected.push(item);
           // Recurse into children
-          importItemsFromDir(planDir, fullPath, planUid, item.uid, warnings, collected);
+          importItemsFromDir(planDir, fullPath, planUid, item.uid, warnings, collected, skipOurs);
         }
       }
     } catch (err) {
@@ -1108,7 +1142,12 @@ export function scheduleWriteThrough(planUid: string, projectRoot?: string): voi
     writeThroughTimers.delete(planUid);
     // Linked when scheduled is not linked now: the folder may have been
     // removed in the debounce window, and exporting would recreate it.
-    if (!getLinkedPlanDir(planUid, root)) return;
+    const linkedDir = getLinkedPlanDir(planUid, root);
+    if (!linkedDir) return;
+    // Changes to this plan's files already seen on disk are imported first
+    // (Phase 33 S1): the export writes the database over the files, so an
+    // edit still waiting in its burst would otherwise be overwritten unseen.
+    flushPlanImports(linkedDir);
     try {
       const result = exportPlan(planUid, root);
       // Best-effort broadcast (server module may not be imported yet
@@ -1153,6 +1192,16 @@ const PLAN_IMPORT_QUIET_MS = 250;
 const PLAN_IMPORT_MAX_WAIT_MS = 1000;
 const importBursts = new Map<string, Burst<string, string>>();
 
+const realDir = (p: string): string => { try { return fs.realpathSync.native(p); } catch { return path.resolve(p); } };
+
+/** Import now any burst gathered for `planDir`, under whichever spelling the watcher saw it. */
+function flushPlanImports(planDir: string): void {
+  const want = realDir(planDir);
+  for (const b of importBursts.values()) {
+    for (const key of b.pending()) if (key === planDir || realDir(key) === want) b.flush(key);
+  }
+}
+
 export function startPlanFileWatcher(projectRoot: string): Promise<void> {
   if (watchersByProject.has(projectRoot)) {
     return watcherReady.get(projectRoot) ?? Promise.resolve(); // already watching
@@ -1193,7 +1242,7 @@ export function startPlanFileWatcher(projectRoot: string): Promise<void> {
   const imports = burst<string, string>((planDir, files) => {
     if (watchersByProject.get(projectRoot) !== watcher) return; // closed meanwhile
     try {
-      const result = importPlan(planDir);
+      const result = importOutsideChanges(planDir);
       try {
         const { broadcast } = _lazy____server;
         broadcast('plan-imported', {
