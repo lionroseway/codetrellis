@@ -625,11 +625,12 @@ export function useWebSocket() {
             if (planUid && itemUid) {
               // Shared with the code reader's overlay banner — see
               // `lib/open-plan-item`. The ordering in there is what F9
-              // fixed; keeping one copy is how it stays fixed.
+              // fixed; keeping one copy is how it stays fixed. Phase 33 G6:
+              // the plan shows, though it was the active one, minimised.
               (async () => {
                 try {
-                  const { openPlanItem } = await import('../lib/open-plan-item');
-                  await openPlanItem(planUid, itemUid);
+                  const { showPlan } = await import('../lib/open-plan-item');
+                  await showPlan(planUid, { item: itemUid });
                 } catch (err) {
                   console.error('[WS] select_item failed:', err);
                 }

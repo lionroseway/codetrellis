@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Repeat } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
-import { usePlanStore } from '../../stores/plan-store';
+import { showPlan } from '../../lib/open-plan-item';
 import { useReplayStore } from '../../stores/replay-store';
 import { useRecurring, startRecurringRun } from '../../hooks/useRecurring';
 
@@ -29,7 +29,7 @@ export function RecurringDue() {
     try {
       const run = await startRecurringRun(root, id);
       await reload();
-      void usePlanStore.getState().setActivePlan(run.planUid);
+      void showPlan(run.planUid);
     } catch (e) {
       setError({ id, text: e instanceof Error ? e.message : String(e) });
     } finally {

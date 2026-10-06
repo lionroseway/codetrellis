@@ -1,6 +1,7 @@
 import { FolderOpen, GitBranch } from 'lucide-react';
 
 import { usePlanStore } from '../../stores/plan-store';
+import { showPlan } from '../../lib/open-plan-item';
 import { usePlanWorktrees } from '../../hooks/usePlanWorktrees';
 import { openWorktreeTab, worktreeLabel } from '../../lib/plan-worktrees';
 import { StatusBadge } from './StatusBadge';
@@ -17,7 +18,6 @@ import { StatusBadge } from './StatusBadge';
 export function OtherWorktreesSection() {
   const { otherWorktrees } = usePlanWorktrees();
   const activePlanUid = usePlanStore((s) => s.activePlanUid);
-  const setActivePlan = usePlanStore((s) => s.setActivePlan);
 
   const withPlans = otherWorktrees.filter((g) => g.plans.length > 0 || g.onDiskOnly.length > 0);
   if (withPlans.length === 0) return null;
@@ -44,7 +44,7 @@ export function OtherWorktreesSection() {
           {g.plans.map((p) => (
             <button
               key={p.uid}
-              onClick={() => void setActivePlan(p.uid)}
+              onClick={() => void showPlan(p.uid)}
               className={`w-full flex items-center gap-2 pl-5 pr-2 py-1.5 rounded-md text-left transition-colors ${
                 p.uid === activePlanUid ? 'bg-accent/10 text-accent' : 'text-foreground-muted hover:bg-surface-hover hover:text-foreground'
               }`}
