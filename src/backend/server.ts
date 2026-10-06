@@ -94,6 +94,7 @@ import { rulesView, setRule as setArchitectureRule, removeRule as removeArchitec
 import type { RuleChange } from './services/rule-changes';
 import { previewChange, previewJson, type RulePreview } from './services/rule-preview';
 import { signRuleChange } from './services/rule-approvals';
+import { inScope, parseScope, scopeWords } from './services/rule-scope';
 import { decideRuleProposal, getRuleProposal, listRuleProposals } from './services/rule-proposals';
 import { writerId as taskRecordWriterId } from './services/task-records/shared-state';
 import type { ArchitectureRule } from '../shared/types/architecture-rules';
@@ -2738,8 +2739,11 @@ const RULES_WHERE = 'Settings → Architecture rules';
 app.get('/api/rules', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
+  // C1: ?suite=, ?rule=, ?path= show part of the rulebook, as `check` scopes it.
+  const scope = parseScope({ suite: req.query.suite, rule: req.query.rule, path: req.query.path });
   res.json({
-    rules: rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)),
+    rules: rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)).filter((v) => inScope(v.rule, scope)),
+    ...(scope ? { scope: scopeWords(scope) } : {}),
     // Rules still in config.json, waiting for a person to move them (R1).
     inConfig: rulesInConfig(projectRoot).length,
     problems: rulebookProblems(projectRoot),

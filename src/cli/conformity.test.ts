@@ -85,3 +85,12 @@ test('a change to the rules alone is still a change to check (Phase 33 R2)', () 
   w2('.codetrellis/plans/exports/plan.yaml', 'title: Exports\n');
   assert.equal(changedFiles(other, undefined, {}).rulebook, false, 'a plan changing is not the rules changing');
 });
+
+test('a scoped check says what it checked, and answers only that (C1)', () => {
+  const base = { files: 2, base: 'origin/main', breakpoints: [], tests: [], criteria: [], docs: [], rules: [], rulebook: [], notes: [], scope: 'suite payments' };
+  assert.equal(gateWords({ ...base, ok: true, says: [] }), 'Conforms to suite payments: 2 changed files since origin/main. They add no import those rules forbid, and loosen none of them.');
+  assert.equal(
+    gateWords({ ...base, ok: false, says: ['✗ web/a.ts now imports stripe, which the rule “web/ may not import stripe” forbids'] }),
+    'Does not conform to suite payments (2 changed files since origin/main):\n  ✗ web/a.ts now imports stripe, which the rule “web/ may not import stripe” forbids',
+  );
+});

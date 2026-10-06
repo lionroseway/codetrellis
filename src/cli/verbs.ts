@@ -243,7 +243,7 @@ async function check(ctx: Ctx, file: string | undefined): Promise<Outcome> {
 async function conforms(ctx: Ctx, root: string): Promise<Outcome> {
   let changed;
   try { changed = changedFiles(root, flag(ctx.p, 'base'), process.env); } catch (err) { throw new UsageError((err as Error).message); }
-  const g = await gate(ctx.agent, root, changed, ctx.p.flags.strict === true);
+  const g = await gate(ctx.agent, root, changed, ctx.p.flags.strict === true, { suite: flag(ctx.p, 'suite'), rule: flag(ctx.p, 'rule'), path: flag(ctx.p, 'path') });
   if ('error' in g) return { out: g.error, code: 1 };
   if (ctx.json) return { out: JSON.stringify(g), code: g.ok ? 0 : 3 };
   return { out: gateWords(g), code: g.ok ? 0 : 3 };

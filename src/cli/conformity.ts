@@ -74,15 +74,20 @@ export interface Gate {
   notes: string[];
   /** Set when the rules could not be checked, and why. */
   rulesNote?: string;
+  /** C1: what part of the rulebook was checked, when not all of it. */
+  scope?: string;
 }
 
 /** `check_changes` over this work's files, as the agent. */
-export async function gate(agent: Agent, root: string, changed: Changed, strict = false): Promise<Gate | { error: string }> {
+/** C1: part of the rulebook to check, as the flags give it (comma-separated). */
+export interface GateScope { suite?: string; rule?: string; path?: string }
+
+export async function gate(agent: Agent, root: string, changed: Changed, strict = false, scope: GateScope = {}): Promise<Gate | { error: string }> {
   // Nothing changed, not even the rules: nothing to check. A change to the
   // rules alone is still checked (Phase 33 R2): it could loosen one.
   if (changed.files.length === 0 && !changed.rulebook) return { ok: true, says: [], files: 0, base: changed.base, breakpoints: [], tests: [], criteria: [], docs: [], rules: [], rulebook: [], notes: [] };
   // The merge base, so an import that was already there is not this work's (A7.3).
-  const a = await agent.call('check_changes', { paths: changed.files.slice(0, 500), project_path: root, ...(changed.since ? { base: changed.since } : {}), ...(strict ? { strict: true } : {}) });
+  const a = await agent.call('check_changes', { paths: changed.files.slice(0, 500), project_path: root, ...(changed.since ? { base: changed.since } : {}), ...(strict ? { strict: true } : {}), ...scope });
   if (a.isError) return { error: a.text };
   const j = (a.json ?? {}) as Record<string, unknown>;
   const list = (k: string) => (Array.isArray(j[k]) ? j[k] as unknown[] : []);
@@ -91,6 +96,7 @@ export async function gate(agent: Agent, root: string, changed: Changed, strict 
     breakpoints: list('breakpoints'), tests: list('tests'), criteria: list('criteria'), docs: list('docs'), rules: list('rules'),
     rulebook: list('rulebook'), notes: list('notes').filter((n): n is string => typeof n === 'string'),
     ...(typeof j.rules_note === 'string' ? { rulesNote: j.rules_note } : {}),
+    ...(typeof j.scope === 'string' ? { scope: j.scope } : {}),
   };
 }
 
@@ -98,6 +104,11 @@ export async function gate(agent: Agent, root: string, changed: Changed, strict 
 export function gateWords(g: Gate): string {
   const what = `${g.files} changed file${g.files === 1 ? '' : 's'}${g.base ? ` since ${g.base}` : ''}`;
   const note = (g.notes.length ? `\n${g.notes.map((n) => `  ${n}`).join('\n')}` : '') + (g.rulesNote ? `\n${g.rulesNote}` : '');
+  // C1: a scoped check answers only its rules' question, in its own words.
+  if (g.scope) {
+    if (g.ok) return `Conforms to ${g.scope}: ${what}. They add no import those rules forbid, and loosen none of them.${note}`;
+    return [`Does not conform to ${g.scope} (${what}):`, ...g.says.map((s) => `  ${s}`)].join('\n') + note;
+  }
   if (g.ok) return `Conforms: ${what}. No breakpoint holds them, none of their tests fail or are older than the code, no done task fails its checks, no doc that describes them is stale, they add no import an architecture rule forbids, and they loosen no rule.${note}`;
   return [`Does not conform (${what}):`, ...g.says.map((s) => `  ${s}`)].join('\n') + note;
 }
