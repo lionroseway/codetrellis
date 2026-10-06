@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "Merging the built steps, in order; building C4"
-  status: "0.3 in review (the colour audit); C3 merged (#363); G6 finished; C4 building"
-  next: "Merge 0.3 when CI is green, then replay G6"
+  step: "Merging the built steps, in order; building C5"
+  status: "G6 in review (opening a plan shows it); 0.3 merged (#364); C4 built; C5 building"
+  next: "Merge G6 when CI is green, then replay G5"
   blockers: "None"
   updated: 2026-10-06
 sections:

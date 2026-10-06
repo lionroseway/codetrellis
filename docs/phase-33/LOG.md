@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Merging the built steps, in order; building C4 |
-| **Status** | 0.3 in review (the colour audit); C3 merged (#363); G6 finished; C4 building |
-| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
-| **Last merged** | C3 (#363, `6962ae0`) |
-| **Next action** | Merge 0.3 when CI is green, then replay G6 |
+| **Stage / step** | Merging the built steps, in order; building C5 |
+| **Status** | G6 in review (opening a plan shows it); 0.3 merged (#364); C4 built; C5 building |
+| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task` |
+| **Last merged** | 0.3 (#364, `37145f2`) |
+| **Next action** | Merge G6 when CI is green, then replay G5 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-06 |
 
-> Read from git at `origin/feat/phase-33` `6962ae0`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `37145f2`, with open PRs from GitHub.
 
 ---
 
@@ -46,7 +46,7 @@
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
 - [x] 0.2 Measure the plan reload storm in a harness test (imports, broadcasts, response time) (#351)
-- [ ] 0.3 Colour audit (every colour, its meaning and where), the draft visual vocabulary — building
+- [x] 0.3 Colour audit (every colour, its meaning and where), the draft visual vocabulary (#364)
 
 ### Track S: quiet under load
 - [x] S1 One import per plan per burst (the watcher coalesces) (#352)
@@ -70,7 +70,7 @@
 - [x] C3 Debt ratchet (existing breaches may only fall) (#363)
 - [ ] C4 Agent checks locally on the user's own agent: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes) — building
 - [ ] C4b Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified) — building
-- [ ] C5 Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass)
+- [ ] C5 Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass) — building
 - [ ] C6 Graduation (a repeated finding proposes a rule)
 - [ ] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran — building
 - [ ] C8 One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words — building
@@ -202,6 +202,28 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-06 — 0.3 merged (#364); G6 in review; C4 built; C5 building
+
+- **0.3 merged** (#364), green on every CI job.
+- **G6: opening a plan shows it.** Opening the plan that is already active,
+  minimised to its chip, now shows it from every place: the plan list, the
+  Stack, recurring runs, other worktrees, connected agents, the switcher, and
+  an agent's `select_item`. A structural test lists every direct
+  `setActivePlan` caller with why it may be one.
+- **C4 built: `codetrellis review`.** Tested end to end with a stand-in for
+  `claude -p` in eight scenarios, including a planted prompt injection: it
+  reached no shell, no file outside the change and no secret, and every
+  attempt was recorded. Found and fixed on the way: an untracked `.env`
+  counted as part of the change, so its contents would have gone to the
+  model. Files whose names say they hold secrets are now withheld from every
+  review bundle.
+- **C5 building: the review in CI.**
+  - A second pass that tries to refute each finding (`--verify`).
+  - SARIF, markdown and JSON output.
+  - Signing in through Bedrock, Vertex or Azure via the CI's OIDC step.
+  - An optional comment on the pull request, with a token the model never
+    sees.
 
 ### 2026-10-06 — C3 merged (#363); 0.3 in review; G6 finished; C4 building
 
