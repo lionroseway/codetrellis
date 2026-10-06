@@ -48,6 +48,8 @@ import { useTerminalStore } from '../../stores/terminal-store';
 import type { GraphNode, GraphEdge } from '@shared/types';
 import { useAwarenessStore } from '../../stores/awareness-store';
 import { OverlaysMenu } from '../graph/OverlaysMenu';
+import { EdgesMenu } from '../graph/EdgesMenu';
+import { visibleEdges } from '../../lib/graph-edge-kinds';
 import { openFileAt } from '../../lib/open-file-at';
 import { workCountsByFile, workCountLabel, collisionFiles, projectPrefix, fileGrounding, clusterGrounding, type GroundingMapView } from '../../lib/graph-overlays';
 
@@ -90,6 +92,7 @@ export function MainCanvas() {
   const graphStyle = useUiStore((s) => s.graphStyle);
   // Phase 32 B3.3 — the overlays a person has on.
   const graphOverlays = useUiStore((s) => s.graphOverlays);
+  const graphEdges = useUiStore((s) => s.graphEdges);
   const planOverlay = graphOverlays.includes('plan');
   const setGraphStyle = useUiStore((s) => s.setGraphStyle);
   const recentlyChanged = useAgentStore((s) => s.recentlyChangedFiles);
@@ -913,7 +916,8 @@ export function MainCanvas() {
     for (const n of rawNodes) {
       if (!seenIds.has(n.id)) { seenIds.add(n.id); safeNodes.push(n); }
     }
-    const safeEdges = graphData?.edges ?? [];
+    // G3 — only the kinds of edge a person keeps on.
+    const safeEdges = visibleEdges(graphData?.edges ?? [], graphEdges);
 
     if (!selectedNodeId && !hasPlanHighlights && codeBreakpoints.length === 0 && workCounts.size === 0 && collisions.size === 0 && !groundingMap?.hasResults && plannedByFile.size === 0) {
       return { nodes: safeNodes, edges: safeEdges };
@@ -983,7 +987,7 @@ export function MainCanvas() {
         },
       })),
     };
-  }, [graphData, selectedNodeId, planHighlightPaths, planOverlay, stackFocus, breakpoints, graphOverlays, workCounts, collisions, groundingMap, plannedByFile]);
+  }, [graphData, graphEdges, selectedNodeId, planHighlightPaths, planOverlay, stackFocus, breakpoints, graphOverlays, workCounts, collisions, groundingMap, plannedByFile]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(displayGraphData?.nodes ?? []);
   const [edges, setEdges, onEdgesChange] = useEdgesState(displayGraphData?.edges ?? []);
@@ -1499,6 +1503,9 @@ export function MainCanvas() {
                   <option value={10000}>10s</option>
                   <option value={30000}>30s</option>
                 </select>
+              </div>
+              <div className="shrink-0">
+                <EdgesMenu />
               </div>
               <div className="shrink-0">
                 <OverlaysMenu />

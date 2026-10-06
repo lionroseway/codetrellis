@@ -4,7 +4,7 @@ import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from '@xyf
 import { useUiStore } from '../../../stores/ui-store';
 
 interface ImportEdgeData {
-  importState?: 'regular' | 'planned_add' | 'planned_remove' | 'active' | 'symbol_link' | 'added' | 'removed' | 'unexpected';
+  importState?: 'regular' | 'planned_add' | 'planned_remove' | 'active' | 'symbol_link' | 'cross_system' | 'added' | 'removed' | 'unexpected';
   symbols?: string[];
   alwaysShowLabel?: boolean;
   symbolCount?: number;
@@ -58,6 +58,16 @@ function edgeVisuals(state: ImportEdgeData['importState']) {
         dashArray: undefined,
         flow: '#bfdbfe',
       };
+    case 'cross_system':
+      // Phase 33 G3 — an HTTP call, a SQL table, a subprocess or an env
+      // variable joining two places. Dotted, so it never reads as an import;
+      // the builder's protocol tint replaces this colour (see below).
+      return {
+        color: 'rgba(167, 139, 250, 0.65)',
+        glow: 'rgba(167, 139, 250, 0.3)',
+        dashArray: '2 5',
+        flow: '#c4b5fd',
+      };
     case 'symbol_link':
       return {
         color: 'rgba(255, 255, 255, 0.22)',
@@ -79,7 +89,12 @@ function ImportEdgeComponent(props: EdgeProps) {
   const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, selected, data, label } = props;
   const edgeData = (data || {}) as ImportEdgeData;
   const [isHovered, setIsHovered] = useState(false);
-  const visual = edgeVisuals(edgeData.importState);
+  const base = edgeVisuals(edgeData.importState);
+  // A cross-system edge keeps its protocol's tint from the graph builder
+  // (http, sql, subprocess, env); before G3 this component drew it as a
+  // plain solid import and the tint never showed.
+  const tint = edgeData.importState === 'cross_system' && typeof props.style?.stroke === 'string' ? props.style.stroke : null;
+  const visual = tint ? { ...base, color: tint } : base;
   const pathId = `${useId()}-${id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
@@ -98,7 +113,7 @@ function ImportEdgeComponent(props: EdgeProps) {
   // A status edge in performance mode has no glow to set it apart, so it
   // gets the weight instead. Same rule as the cards: the signal moves
   // from a filter to geometry, it does not go away.
-  const hasStatus = Boolean(edgeData.importState) && edgeData.importState !== 'symbol_link' && edgeData.importState !== 'regular';
+  const hasStatus = Boolean(edgeData.importState) && edgeData.importState !== 'symbol_link' && edgeData.importState !== 'cross_system' && edgeData.importState !== 'regular';
   const statusBoost = perf && hasStatus ? 1.5 : 0;
   const strokeWidth = (edgeData.emphasized ? baseStrokeWidth + 1.5 : baseStrokeWidth) + statusBoost;
   const labelText = symbolNames.length > 0 ? `{ ${symbolNames.slice(0, 4).join(', ')}${symbolNames.length > 4 ? ', ...' : ''} }` : typeof label === 'string' ? label : '';

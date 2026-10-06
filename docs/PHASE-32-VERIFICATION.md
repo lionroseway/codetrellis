@@ -20,7 +20,7 @@ records that — but "✗ none" is proof of a gap.
 | REST routes | 300 | 298 | 0 | 0 | 217 | 0 |
 | MCP tools | 213 | 213 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
-| Frontend components | 140 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 141 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 38 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 0 | n/a | n/a | n/a | 0 | 0 |
 
@@ -29,7 +29,7 @@ records that — but "✗ none" is proof of a gap.
 | Domain | REST | MCP | RPC | Components | Mobile | Settings |
 |---|---|---|---|---|---|---|
 | 0.4a Project and scan | 25 | 12 | 10 | 0 | 0 | 0 |
-| 0.4b Graph | 26 | 15 | 8 | 16 | 0 | 0 |
+| 0.4b Graph | 26 | 15 | 8 | 17 | 0 | 0 |
 | 0.4c Plans and items | 120 | 62 | 29 | 64 | 0 | 0 |
 | 0.4d Criteria and sign-off | 12 | 9 | 3 | 0 | 0 | 0 |
 | 0.4e Brief and viewer | 5 | 4 | 1 | 4 | 0 | 0 |
@@ -670,11 +670,12 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (140)
+## Frontend components (141)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
 | b | `graph/edges/ImportEdge.tsx` |  | n/a | n/a |  |  |  |
+| b | `graph/EdgesMenu.tsx` |  | n/a | n/a |  |  |  |
 | b | `graph/nodes/BreakpointBadge.tsx` |  | n/a | n/a |  |  |  |
 | b | `graph/nodes/DirectoryNode.tsx` |  | n/a | n/a |  |  |  |
 | b | `graph/nodes/FileNode.tsx` |  | n/a | n/a |  |  |  |

@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
-| **Status** | G5 in review (a file's plans in the inspector); G6 merged (#365); C5, C6 and Z1 built |
-| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 in review (#366) on `feat/phase-33-g5-inspector-plan-items`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | G6 (#365, `2b13e80`) |
-| **Next action** | Merge G5 when CI is green, then replay G3 |
+| **Status** | G3 in review (each kind of edge can be turned off); G5 merged (#366); the shard follow-up in review (#367) |
+| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs`; #367 in review on `feat/phase-33-fu-browser-shards` |
+| **Last merged** | G5 (#366, `08a4bfc`) |
+| **Next action** | Merge #367 and G3 when CI is green, then replay G4 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-06 |
 
-> Read from git at `origin/feat/phase-33` `2b13e80`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `08a4bfc`, with open PRs from GitHub.
 
 ---
 
@@ -43,6 +43,7 @@
 - [ ] Follow-up: With many worktrees of one repository, `listWorkstreams` takes ~10 s and six parallel asks for it fill the browser's connections, so the graph waits behind them: share one answer
 - [ ] Follow-up: Call rules read HTTP and SQL callsites; no extractor finds subprocess commands or environment variables yet, so those calls cannot be ruled on
 - [ ] Follow-up: Rebalance the browser shards: chromium 2/3 runs 185 tests in about 25 minutes, the others about 7
+- [ ] Follow-up: Four browser specs fail in a local clone with many fetched branches and pass in CI (evolution, play-forward, navigate_to Awareness, signal-to-lines): find why
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
@@ -81,7 +82,7 @@
 - [ ] G2 The legend on the graph, plan canvas, file tree and Timeline — building
 - [ ] G3 Edge toggles (imports, cross-system, symbol links) — building
 - [ ] G4 Graph full screen and back; hidden panes leave no gap — building
-- [ ] G5 Selecting a file lists the plans and tasks that touch it (#366) — in review
+- [x] G5 Selecting a file lists the plans and tasks that touch it (#366)
 - [x] G6 Opening a plan always shows it, from a chip too (#365)
 - [ ] G7 The Rules view (its own workspace, not Settings) — building
 - [ ] G8 Rules on the graph (breaches drawn, rules for the selected file) — building
@@ -203,6 +204,33 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-06 — G5 merged (#366); G3 in review; the browser shards balanced
+
+- **G5 merged** (#366). CI caught a real clash first. G5's inspector list
+  gives each task a button named for it, and the code-to-plan round-trip spec
+  clicked "the first button named Align rounding…", which was now the
+  inspector's, behind the code reader. The spec now clicks the banner's own
+  button.
+- **G3: each kind of edge can be turned off.** An Edges menu beside Overlays
+  turns imports, cross-system links and symbol links off one by one,
+  remembered per machine. Cross-system edges now draw dotted, in their
+  protocol's colour. The import edge used to ignore the style the graph gave
+  it, so they looked exactly like imports (the colour audit found this).
+- **Follow-up in review (#367): the browser shards balanced by weight.** One
+  shard held most of the slow plan specs and took 25 minutes while the
+  others took 7, so every pull request waited on it. Each spec file is now
+  weighed by its tests and whole files are dealt to the lightest shard: the
+  shards take 7 to 12 minutes. The new neighbours exposed two latent
+  problems, both fixed:
+  - a spec asserting "no agents connected" while another spec's agent was
+    connected (it now runs with the backend to itself);
+  - the Settings dialog's Escape listener attached after paint, so an
+    Escape pressed as it opened on a busy page was lost.
+- Four browser specs fail in this container's test clone and pass in CI,
+  with or without these changes: `evolution`, `play-forward`, `navigate_to`
+  Awareness and `signal-to-lines`. All but `evolution` involve overlaps or
+  awareness, and the clone has many fetched branches. Logged as a follow-up.
 
 ### 2026-10-06 — G6 merged (#365); G5 in review; C5, C6 and Z1 built
 
