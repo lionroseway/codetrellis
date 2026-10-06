@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Layers } from 'lucide-react';
 import { useUiStore } from '../../stores/ui-store';
 import { OVERLAYS } from '../../lib/graph-overlays';
+import { GRAPH_CHROME } from '../../lib/visual-language';
 
 /**
  * What is drawn over the graph (Phase 32 B3.3): plan intent, other
@@ -37,7 +38,7 @@ export function OverlaysMenu() {
         <div
           role="menu"
           data-testid="graph-overlays-menu"
-          className="absolute right-0 top-full z-50 mt-1 w-64 rounded-lg border border-white/[0.1] bg-[#0d1117] p-1.5 shadow-xl"
+          className={`absolute right-0 top-full z-50 mt-1 w-64 rounded-lg border border-white/[0.1] ${GRAPH_CHROME.menu} p-1.5 shadow-xl`}
         >
           {OVERLAYS.map((o) => (
             <label key={o.id} className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 hover:bg-white/[0.04]">

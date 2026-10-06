@@ -8,12 +8,14 @@ import {
   Minus,
   Move,
   CheckCircle2,
-  AlertCircle,
+  AlertTriangle,
+  Diamond,
   Loader2,
   Circle,
   RefreshCw,
 } from 'lucide-react';
 import { usePlanStore } from '../../stores/plan-store';
+import { INTENT, OPERATION, taskState, TONES } from '../../lib/visual-language';
 import type {
   ProposedChange,
   ChangeDriftStatus,
@@ -33,12 +35,15 @@ import type {
  * `list_proposed_changes` so the agent and human see the same picture.
  */
 
+// The vocabulary's plan-against-code states (Phase 33 G1). Missing and
+// unexpected are both drift, told apart by ▲ and ◆; this panel had them amber
+// and red, and the plan diff the other way round.
 const STATUS_META: Record<ChangeDriftStatus, { label: string; tint: string; Icon: typeof Circle }> = {
-  planned: { label: 'Planned', tint: 'text-zinc-400', Icon: Circle },
-  in_progress: { label: 'In progress', tint: 'text-accent', Icon: Loader2 },
-  satisfied: { label: 'Satisfied', tint: 'text-green-400', Icon: CheckCircle2 },
-  missing: { label: 'Missing', tint: 'text-amber-400', Icon: AlertCircle },
-  unexpected: { label: 'Unexpected', tint: 'text-red-400', Icon: AlertCircle },
+  planned: { label: 'Planned', tint: TONES[INTENT.planned.tone].text, Icon: Circle },
+  in_progress: { label: 'In progress', tint: TONES[INTENT.in_progress.tone].text, Icon: Loader2 },
+  satisfied: { label: 'Satisfied', tint: TONES[INTENT.landed.tone].text, Icon: CheckCircle2 },
+  missing: { label: 'Missing', tint: TONES[INTENT.missing.tone].text, Icon: AlertTriangle },
+  unexpected: { label: 'Unexpected', tint: TONES[INTENT.unplanned.tone].text, Icon: Diamond },
 };
 
 const OPERATION_ICON: Record<ChangeOperation, typeof Plus> = {
@@ -248,21 +253,10 @@ function ChangeRow({ change }: { change: ProposedChange }) {
 }
 
 function operationTint(op: ChangeOperation): string {
-  switch (op) {
-    case 'add': return 'text-green-400';
-    case 'modify': return 'text-amber-400';
-    case 'remove': return 'text-red-400';
-    case 'move': return 'text-cyan-400';
-  }
+  return TONES[OPERATION[op].tone].text;
 }
 
 function taskStatusTint(status: string): string {
-  switch (status) {
-    case 'done': return 'text-green-400 bg-green-500/10';
-    case 'in_progress': return 'text-accent bg-accent/10';
-    case 'assigned': return 'text-blue-400 bg-blue-500/10';
-    case 'blocked': return 'text-red-400 bg-red-500/10';
-    case 'skipped': return 'text-zinc-400 bg-zinc-500/10';
-    default: return 'text-zinc-400 bg-white/[0.04]';
-  }
+  const tone = TONES[taskState(status).tone];
+  return `${tone.text} ${tone.bg}`;
 }

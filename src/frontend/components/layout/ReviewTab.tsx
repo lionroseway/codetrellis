@@ -4,6 +4,7 @@ import { useProjectStore } from '../../stores/project-store';
 import type { ReviewQueue, ReviewQueueLine, ReviewQueueStatus } from '@shared/types';
 import type { OtherWorkInFlight } from '@shared/lib/other-work';
 import { singleFlight } from '../../lib/single-flight';
+import { gitLetterText } from '../../lib/visual-language';
 
 /**
  * The Review tab (Phase 32 A5.5, awareness spec §9.4): the review queue, in
@@ -182,7 +183,7 @@ function LineDetail({ line, base, root }: { line: ReviewQueueLine; base: string 
         {files.length === 0
           ? <div className="text-foreground-subtle">Nothing changed yet.</div>
           : files.slice(0, 25).map(([mark, f]) => (
-            <div key={f} className="font-mono text-foreground-muted"><span className="text-amber-400 mr-1.5">{mark}</span>{f}</div>
+            <div key={f} className="font-mono text-foreground-muted"><span className={`${gitLetterText(mark)} mr-1.5`}>{mark}</span>{f}</div>
           ))}
         {files.length > 25 && <div className="text-foreground-subtle">…and {files.length - 25} more</div>}
       </section>

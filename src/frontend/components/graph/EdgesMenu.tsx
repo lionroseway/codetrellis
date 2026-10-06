@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Spline } from 'lucide-react';
 import { useUiStore } from '../../stores/ui-store';
 import { EDGE_KINDS } from '../../lib/graph-edge-kinds';
+import { GRAPH_CHROME } from '../../lib/visual-language';
 
 /**
  * Which kinds of edge the graph draws (Phase 33 G3): imports, cross-system
@@ -37,7 +38,7 @@ export function EdgesMenu() {
         <div
           role="menu"
           data-testid="graph-edges-menu"
-          className="absolute right-0 top-full z-50 mt-1 w-64 rounded-lg border border-white/[0.1] bg-[#0d1117] p-1.5 shadow-xl"
+          className={`absolute right-0 top-full z-50 mt-1 w-64 rounded-lg border border-white/[0.1] ${GRAPH_CHROME.menu} p-1.5 shadow-xl`}
         >
           {EDGE_KINDS.map((k) => (
             <label key={k.id} className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 hover:bg-white/[0.04]">

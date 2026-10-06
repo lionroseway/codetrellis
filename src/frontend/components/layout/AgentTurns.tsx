@@ -8,6 +8,7 @@ import {
 } from '../../lib/agent-turns';
 import { phraseEvent, rawPayloadText, type EventIntent, type PhraseVocabulary } from '../../lib/tool-phrasing';
 import type { AgentEvent, AgentPlan } from '@shared/types';
+import { EVENT_INTENT, TONES } from '../../lib/visual-language';
 
 /**
  * Phase 22 — the Timeline renders TURNS, not raw tool calls.
@@ -43,12 +44,14 @@ const INTENT_ICON: Record<EventIntent, typeof FileEdit> = {
   error: AlertTriangle,
 };
 
+// The vocabulary's tones (Phase 33 G1): a write is the agent acting now,
+// an ask needs you, an error stopped.
 const INTENT_COLOR: Record<EventIntent, string> = {
   read: 'text-foreground-subtle',
-  write: 'text-accent',
-  ask: 'text-warning',
+  write: TONES[EVENT_INTENT.write.tone].text,
+  ask: TONES[EVENT_INTENT.ask.tone].text,
   session: 'text-foreground-subtle',
-  error: 'text-danger',
+  error: TONES[EVENT_INTENT.error.tone].text,
 };
 
 /** One event row inside an expanded turn. */
@@ -112,7 +115,7 @@ function TurnCard({ turn, vocabulary, initiallyExpanded = false, focus = 0 }: {
         <span className="flex-1 min-w-0">
           <span
             className={`block truncate ${
-              turn.hasError ? 'text-danger' : turn.mutating ? 'text-foreground' : 'text-foreground-muted'
+              turn.hasError ? TONES.blocked.text : turn.mutating ? 'text-foreground' : 'text-foreground-muted'
             }`}
           >
             {turn.summary}

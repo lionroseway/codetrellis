@@ -1,6 +1,7 @@
 import { memo, useId, useState } from 'react';
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from '@xyflow/react';
 
+import { edgeVisual, EDGE } from '../../../lib/visual-language';
 import { useUiStore } from '../../../stores/ui-store';
 
 interface ImportEdgeData {
@@ -8,93 +9,30 @@ interface ImportEdgeData {
   symbols?: string[];
   alwaysShowLabel?: boolean;
   symbolCount?: number;
+  /** A cross-system edge's protocol: http, sql, subprocess, env. */
+  protocol?: string;
   emphasized?: boolean;
   muted?: boolean;
 }
 
-function edgeVisuals(state: ImportEdgeData['importState']) {
-  switch (state) {
-    case 'planned_add':
-      return {
-        color: 'rgba(34, 197, 94, 0.82)',
-        glow: 'rgba(34, 197, 94, 0.42)',
-        dashArray: '8 8',
-        flow: '#86efac',
-      };
-    case 'planned_remove':
-      return {
-        color: 'rgba(248, 113, 113, 0.82)',
-        glow: 'rgba(239, 68, 68, 0.34)',
-        dashArray: '5 8',
-        flow: '#f87171',
-      };
-    case 'added':
-      return {
-        color: 'rgba(52, 211, 153, 0.9)',
-        glow: 'rgba(16, 185, 129, 0.42)',
-        dashArray: undefined,
-        flow: '#6ee7b7',
-      };
-    case 'unexpected':
-      // Drift — a new edge that no plan called for. Solid magenta-red so it
-      // pops next to the green planned/realized adds.
-      return {
-        color: 'rgba(244, 63, 94, 0.95)',
-        glow: 'rgba(244, 63, 94, 0.5)',
-        dashArray: undefined,
-        flow: '#fb7185',
-      };
-    case 'removed':
-      return {
-        color: 'rgba(248, 113, 113, 0.9)',
-        glow: 'rgba(239, 68, 68, 0.4)',
-        dashArray: '6 6',
-        flow: '#fca5a5',
-      };
-    case 'active':
-      return {
-        color: 'rgba(96, 165, 250, 0.9)',
-        glow: 'rgba(59, 130, 246, 0.42)',
-        dashArray: undefined,
-        flow: '#bfdbfe',
-      };
-    case 'cross_system':
-      // Phase 33 G3 — an HTTP call, a SQL table, a subprocess or an env
-      // variable joining two places. Dotted, so it never reads as an import;
-      // the builder's protocol tint replaces this colour (see below).
-      return {
-        color: 'rgba(167, 139, 250, 0.65)',
-        glow: 'rgba(167, 139, 250, 0.3)',
-        dashArray: '2 5',
-        flow: '#c4b5fd',
-      };
-    case 'symbol_link':
-      return {
-        color: 'rgba(255, 255, 255, 0.22)',
-        glow: 'rgba(255, 255, 255, 0.12)',
-        dashArray: '4 8',
-        flow: '#e4e4e7',
-      };
-    default:
-      return {
-        color: 'rgba(96, 165, 250, 0.7)',
-        glow: 'rgba(59, 130, 246, 0.28)',
-        dashArray: undefined,
-        flow: '#93c5fd',
-      };
-  }
+/**
+ * Colour, dash and label come from the vocabulary (`EDGE` in
+ * `visual-language.ts`): import slate solid, cross-system cyan dashed with
+ * its protocol in words, symbol link dotted, planned violet dashed, added
+ * emerald, removed red, unplanned fuchsia, active blue with flow dots.
+ */
+function edgeStateOf(state: ImportEdgeData['importState']): string {
+  return state === 'regular' || !state ? 'import' : state;
 }
 
 function ImportEdgeComponent(props: EdgeProps) {
   const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, selected, data, label } = props;
   const edgeData = (data || {}) as ImportEdgeData;
   const [isHovered, setIsHovered] = useState(false);
-  const base = edgeVisuals(edgeData.importState);
-  // A cross-system edge keeps its protocol's tint from the graph builder
-  // (http, sql, subprocess, env); before G3 this component drew it as a
-  // plain solid import and the tint never showed.
-  const tint = edgeData.importState === 'cross_system' && typeof props.style?.stroke === 'string' ? props.style.stroke : null;
-  const visual = tint ? { ...base, color: tint } : base;
+  // One colour for every cross-system edge; the protocol is in its label,
+  // in words, rather than in four more hues that already meant states.
+  const visual = edgeVisual(edgeStateOf(edgeData.importState));
+  const isCrossSystem = edgeData.importState === 'cross_system';
   const pathId = `${useId()}-${id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
@@ -116,7 +54,10 @@ function ImportEdgeComponent(props: EdgeProps) {
   const hasStatus = Boolean(edgeData.importState) && edgeData.importState !== 'symbol_link' && edgeData.importState !== 'cross_system' && edgeData.importState !== 'regular';
   const statusBoost = perf && hasStatus ? 1.5 : 0;
   const strokeWidth = (edgeData.emphasized ? baseStrokeWidth + 1.5 : baseStrokeWidth) + statusBoost;
-  const labelText = symbolNames.length > 0 ? `{ ${symbolNames.slice(0, 4).join(', ')}${symbolNames.length > 4 ? ', ...' : ''} }` : typeof label === 'string' ? label : '';
+  const plainLabel = symbolNames.length > 0 ? `{ ${symbolNames.slice(0, 4).join(', ')}${symbolNames.length > 4 ? ', ...' : ''} }` : typeof label === 'string' ? label : '';
+  const labelText = isCrossSystem
+    ? [EDGE.cross_system.glyph, edgeData.protocol ?? EDGE.cross_system.word, typeof label === 'string' ? label : ''].filter(Boolean).join(' ')
+    : plainLabel;
   const showLabel = Boolean(labelText && (edgeData.alwaysShowLabel || selected || isHovered || edgeData.emphasized));
 
   return (
@@ -163,15 +104,7 @@ function ImportEdgeComponent(props: EdgeProps) {
       {showLabel && labelText && (
         <EdgeLabelRenderer>
           <div
-            className={`pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border px-2.5 py-1 text-[10px] font-medium ${perf ? '' : 'backdrop-blur-md'} ${
-              edgeData.importState === 'planned_remove' || edgeData.importState === 'removed'
-                ? 'border-red-300/20 bg-red-500/12 text-red-100 line-through'
-                : edgeData.importState === 'unexpected'
-                  ? 'border-rose-300/30 bg-rose-500/15 text-rose-100'
-                  : edgeData.importState === 'planned_add' || edgeData.importState === 'added'
-                    ? 'border-emerald-300/20 bg-emerald-500/12 text-emerald-100'
-                    : 'border-white/10 bg-[#0b1120]/78 text-zinc-100'
-            }`}
+            className={`pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border px-2.5 py-1 text-[10px] font-medium ${perf ? '' : 'backdrop-blur-md'} ${visual.label}`}
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               boxShadow: perf ? undefined : `0 0 18px ${visual.glow}`,
