@@ -101,3 +101,43 @@ for (const n of [1, 10, 50]) {
     }
   });
 }
+
+// S1 holds a disk change back until its burst goes quiet. The app's own
+// write-through export, 200 ms after an edit in the app, writes the
+// database over the plan's files: it must take the disk changes it has
+// already seen first, or a pull landing beside an edit in the app is lost.
+test('a change on disk and an edit in the app at once: neither is lost', async () => {
+  test.setTimeout(120_000);
+  const h = await setupHarness('plan-reload-storm-both');
+  try {
+    await h.client.scanProject(h.fixture.projectPath);
+    const plan = await h.client.createPlan({
+      title: 'Both at once',
+      projectPath: h.fixture.projectPath,
+      tasks: [{ description: 'Task 1', affectedFiles: [] }, { description: 'Task 2', affectedFiles: [] }],
+    });
+    const exported = await h.client.exportPlan(plan.uid, h.fixture.projectPath);
+    const tasksDir = path.join(exported.planDir, 'tasks');
+    const [first] = fs.readdirSync(tasksDir).filter((f) => f.endsWith('.yaml')).sort().map((f) => path.join(tasksDir, f));
+    await sleep(1500);
+
+    // The pull lands, and the person edits the plan in the app just after.
+    const doc = yaml.parse(fs.readFileSync(first, 'utf-8'));
+    doc.description = 'Task 1 (from the pull)';
+    fs.writeFileSync(first, yaml.stringify(doc), 'utf-8');
+    await sleep(150);
+    expect((await h.client.raw('PUT', `/api/plans/${plan.uid}`, { description: 'Edited in the app' })).ok).toBe(true);
+
+    await waitFor(async () => {
+      const p = await h.client.getPlan(plan.uid);
+      return p.tasks.some((t) => t.description === 'Task 1 (from the pull)') ? true : null;
+    }, { timeoutMs: 10_000, intervalMs: 100, description: 'the pulled change in the plan' });
+    await sleep(1000);
+    const p = await h.client.getPlan(plan.uid) as unknown as { description?: string; tasks: Array<{ description: string }> };
+    expect(p.tasks.map((t) => t.description)).toContain('Task 1 (from the pull)');
+    expect(p.description).toBe('Edited in the app');
+    expect(yaml.parse(fs.readFileSync(first, 'utf-8')).description).toBe('Task 1 (from the pull)');
+  } finally {
+    await h.teardown();
+  }
+});

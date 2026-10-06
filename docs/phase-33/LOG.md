@@ -20,7 +20,7 @@
 |---|---|
 | **Stage / step** | S1 One import per plan per burst |
 | **Status** | 0.2 merged (#351). S1 gathers a plan's changed files and imports it once they go quiet: at 50 changed files, 1 import and broadcast instead of 50, and the slowest answer meanwhile 56 ms instead of 1.9 s |
-| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; S1 building on `feat/phase-33-s1-one-import-per-burst`; S2 building on `feat/phase-33-s2-window-takes-a-burst`; R1 building on `feat/phase-33-r1-rule-files`; R2 building on `feat/phase-33-r2-base-rules`; R3 building on `feat/phase-33-r3-change-control`; R4 building on `feat/phase-33-r4-strength`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look` |
+| **In flight** | 0.3 building on `feat/phase-33-0-3-colour-audit`; S1 in review (#352) on `feat/phase-33-s1-one-import-per-burst`; S2 building on `feat/phase-33-s2-window-takes-a-burst`; R1 building on `feat/phase-33-r1-rule-files`; R2 building on `feat/phase-33-r2-base-rules`; R3 building on `feat/phase-33-r3-change-control`; R4 building on `feat/phase-33-r4-strength`; C1 building on `feat/phase-33-c1-scoped-checks`; C2 building on `feat/phase-33-c2-sarif`; C3 building on `feat/phase-33-c3-debt-ratchet`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G3 building on `feat/phase-33-g3-edge-toggles`; G4 building on `feat/phase-33-g4-full-screen`; G5 building on `feat/phase-33-g5-inspector-plan-items`; G6 building on `feat/phase-33-g6-open-shows-plan`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look` |
 | **Last merged** | 0.2 (#351, `b902134`) |
 | **Next action** | Merge S1, then S2 (the window takes a burst as one: one refetch, one toast) |
 | **Blockers** | None |
@@ -46,7 +46,7 @@
 - [ ] 0.3 Colour audit (every colour, its meaning and where), the draft visual vocabulary — building
 
 ### Track S: quiet under load
-- [ ] S1 One import per plan per burst (the watcher coalesces) — building
+- [ ] S1 One import per plan per burst (the watcher coalesces) (#352) — in review
 - [ ] S2 The window takes a burst as one (one refetch, one toast) — building
 - [ ] S3 Under load end to end (200 files, 5 plans; the owner's real `git pull`)
 
@@ -221,6 +221,18 @@ The suite was green at the start, so the three failures were ours:
   the slowest answer stays within twice the idle one (250 ms floor). The
   window still refetches and toasts per broadcast; S2 makes it take a
   burst as one.
+- **CI found what S1's wait opened** (#352, `plan-doc-guard`, ours). An
+  edit in the app writes the plan back to disk 200 ms later, from the
+  database. A disk change waiting in its burst lost that race: the export
+  overwrote the file before the import read it. And the import reads the
+  whole plan, so a `plan.yaml` still as we wrote it overwrote an edit made
+  in the app since. Two fixes, with a test that fails without them (`a
+  change on disk and an edit in the app at once: neither is lost`):
+  - the write-through imports the plan's waiting disk changes first;
+  - the watcher's import skips any file that still reads exactly as we
+    last wrote it, by the self-write tracker's content hash, so the
+    database keeps what changed in the app. An import someone asks for
+    still reads every file.
 
 ### 2026-10-06 — 0.1 merged (#350); 0.2 measures the storm
 

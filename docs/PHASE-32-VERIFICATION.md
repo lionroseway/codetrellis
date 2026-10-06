@@ -214,7 +214,7 @@ records that — but "✗ none" is proof of a gap.
 | c | `PUT /api/items/:uid/workstream` |  | ✗ none | 12 |  |  |  |
 | c | `PUT /api/plan-docs/:docUid` |  | ✗ none | 3 | ✓ 0.4c: exercised by plan-docs (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `PUT /api/plan-phases/:phaseUid` |  | ✗ none | 2 | ✓ 0.4c: exercised by full-loop, plan-phases (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
-| c | `PUT /api/plans/:uid` |  | ✗ none | 9 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
+| c | `PUT /api/plans/:uid` |  | ✗ none | 10 | ✓ 0.4c: exercised by cdev-central-oversight, cdev-stitched-view, filesystem-sinks, full-loop, +11 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
 | c | `PUT /api/plans/:uid/budget` |  | ✗ none | 1 | ✓ 0.4g: recorded with who and how (local-api / desktop), never flagged; invalid ceilings 400; unknown plan 404 (agent-ui-tools, budget-ceiling-validation) |  |  |
 | c | `PUT /api/recurring/:id` |  | ✗ none | 1 |  |  |  |
 | c | `PUT /api/recurring/:id/agent` |  | ✗ none | 1 |  |  |  |
