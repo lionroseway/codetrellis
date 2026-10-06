@@ -118,8 +118,24 @@ froze (0.1.17). Nothing since has changed the path.
   | Fuchsia | unplanned, unexpected live, diff mode |
   | Red / rose | removed, collision, diverged, drift edge |
 
+  - **0.3 measured it** ([COLOUR-AUDIT.md](COLOUR-AUDIT.md)): 27
+    collisions. Amber alone means about twenty things (modified, warning,
+    the Explorer's in progress, planned, inbound import, Claude Code…), blue
+    about fifteen, violet about fourteen. "Planned" is drawn in five hues,
+    "unexpected" in four, "missing" in three, and two plan panels swap the
+    colours of missing and unexpected. Agent identity tints reuse state
+    hues, and selection is the same blue as the plan footprint.
+  - **What the code sets is not what is drawn.** `ImportEdge` ignores the
+    `style` the graph builder gives an edge, so the cross-system protocol
+    tints, the inbound/outbound focus colours and the ghost edge never
+    render (G3 fixed cross-system); the minimap is one blue for every node;
+    the task page's status tints are defined and never shown.
+  - **G1's vocabulary is drafted** in the audit, §(d): one hue family per
+    meaning, a glyph and a word always, dashed for "not happened yet",
+    selection apart from state, identity hues kept for identity only.
   - The graph has no legend.
-  - Three small legends exist, each written separately:
+  - Fourteen small legends exist (audit §(c)), each written separately;
+    three of them:
     - plan canvas;
     - codebase orientation;
     - the file tree, which is the best one: it lists only states on screen,
