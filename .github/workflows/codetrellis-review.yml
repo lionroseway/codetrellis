@@ -1,0 +1,94 @@
+# CodeTrellis agent checks on this repository's own pull requests (Phase 33 C5).
+#
+# `codetrellis review` runs Claude Code headless on the change, held to the
+# review's contract (docs/claude/cli.md, "Agent checks"): no built-in tools at
+# all, so no shell, file access or web; one MCP server with two tools; an empty
+# folder and a scrubbed environment; every finding must cite the diff and is
+# checked by code; a second pass tries to refute each one (--verify). Each pass
+# is kept as a check run.
+#
+# Beside claude-review.yml, not instead of it. That one is Claude Code's own
+# review action; this is CodeTrellis's review on the user's own agent, the
+# thing the recipes in docs/recipes/ give everyone else.
+#
+# ADVISORY, PERMANENTLY. Not a required check, and the job cannot fail the pull
+# request: an LLM reviewer is not deterministic. What it keeps finding becomes a
+# rule, and the rules (ci.yml's conformity step) are what block.
+#
+# THE COST DIAL. Repository variable CODETRELLIS_REVIEW, in Settings ->
+# Variables, with no commit:
+#
+#   on-request (or unset)  only when the `codetrellis-review` label is added
+#   auto                   also when a pull request is opened or marked ready
+#   off                    never
+#
+# On request by default: the credential is CLAUDE_CODE_OAUTH_TOKEN, the same
+# subscription claude-review.yml draws on, and runs share its rate limit.
+#
+# NEVER pull_request_target. A fork's pull request gets no secrets here, and the
+# job says so and exits 0. A maintainer who has read the diff can add the label.
+name: CodeTrellis Review
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, labeled]
+
+permissions:
+  contents: read
+  # The findings on the changed lines, through code scanning.
+  security-events: write
+
+concurrency:
+  group: codetrellis-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: CodeTrellis review (advisory)
+    if: >-
+      github.event.pull_request.draft == false &&
+      vars.CODETRELLIS_REVIEW != 'off' &&
+      (
+        (github.event.action == 'labeled' && github.event.label.name == 'codetrellis-review') ||
+        (github.event.action != 'labeled' && vars.CODETRELLIS_REVIEW == 'auto')
+      )
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The review diffs this branch against its base.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # As ci.yml installs, and why (Phase 32 HD4c).
+      - name: Install
+        run: npm ci --ignore-scripts && npx patch-package && node scripts/check-patches.cjs
+
+      # The reviewer is the agent's own CLI, not anything of ours.
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Review
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CODETRELLIS_REVIEW: auto # the dial is decided by the job's `if` above
+          CODETRELLIS_AUTH: env:CLAUDE_CODE_OAUTH_TOKEN
+          CODETRELLIS_REVIEW_ARGS: --verify
+        run: |
+          npm link
+          sh docs/recipes/review.sh || true
+          if [ -f codetrellis-review.md ]; then cat codetrellis-review.md >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Upload the findings
+        if: always() && hashFiles('codetrellis-review.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: codetrellis-review.sarif
+          category: codetrellis-review

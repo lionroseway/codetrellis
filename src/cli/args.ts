@@ -16,7 +16,7 @@ export interface Parsed {
 }
 
 /** Flags that never take a value, so `--json foo` keeps `foo` as an argument. */
-const SWITCHES = new Set(['json', 'help', 'no-wait', 'quiet', 'share-task-state', 'top', 'page', 'strict', 'no-color']);
+const SWITCHES = new Set(['json', 'help', 'no-wait', 'quiet', 'share-task-state', 'top', 'page', 'strict', 'no-color', 'verify', 'post']);
 
 export function parseArgs(argv: readonly string[]): Parsed {
   const flags: Record<string, string | true> = {};
@@ -162,10 +162,14 @@ which; text, or --json):
   codetrellis report-tests <junit.xml>         tell CodeTrellis how the tests went
   codetrellis review [--agent claude-code] [--model <m>] [--endpoint <url>] [--auth env:<VAR>]
                      [--skills <dir>] [--suite <s> | --rule <id> | --path <p>] [--base <ref>] [--task <uid>]
-                     [--max-turns <n>] [--timeout <s>] [--max-tool-calls <n>] [--fail-on block,error] [--json]
+                     [--max-turns <n>] [--timeout <s>] [--max-tool-calls <n>] [--fail-on block,error] [--verify]
+                     [--format text|markdown|sarif|json] [--sarif-out <f>] [--markdown-out <f>] [--post [--pr <n>]]
                                                your own agent reviews the change, headless, with no shell,
                                                files or web; each finding must cite the diff, and each pass
-                                               is kept as a check run. Advisory: exit 3 only with --fail-on
+                                               is kept as a check run. --verify: a second pass tries to refute
+                                               each finding. --auth oidc:bedrock|vertex|foundry signs in through
+                                               your cloud. --post comments on the pull request. Advisory: exit 3
+                                               only with --fail-on
 
 Changing and committing the plan:
 

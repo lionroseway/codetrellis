@@ -20,6 +20,7 @@ import path from 'node:path';
 import { connectorLine, flag, headlessDataDir, parseArgs, USAGE, type Parsed } from './args';
 import { VERBS } from './verbs';
 import { PLAN_VERBS } from './plan-verbs';
+import { version as CLI_VERSION } from '../../package.json';
 
 const out = (s: string) => process.stdout.write(s.endsWith('\n') ? s : `${s}\n`);
 const fail = (s: string, code = 2): never => {
@@ -297,12 +298,35 @@ async function reviewCmd(p: Parsed): Promise<void> {
   }
   try {
     const sinkFor = (dir: string) => ({ command: process.execPath, args: [binPath(), 'review-sink', '--pass', dir] });
-    const { out: text, code } = await review(agent, opts, cwd, process.env, sinkFor, p.flags.json === true);
+    const post = opts.post ? await reviewPoster(opts.post, cwd) : undefined;
+    const { out: text, code, note } = await review(agent, opts, cwd, process.env, sinkFor, { post, version: CLI_VERSION });
     out(text);
+    // Where the review was posted, or why not: never on stdout, which may be SARIF.
+    if (note) process.stderr.write(`codetrellis review: ${note}\n`);
     process.exitCode = code;
   } finally {
     await agent.close();
   }
+}
+
+/**
+ * C5 — `--post`: the pull request from the CI's variables (or `--pr`), the
+ * host from `origin`, the token from `--post-token env:VAR` or the host's
+ * usual variable. Never handed to the agent: its environment is scrubbed.
+ */
+async function reviewPoster(post: { tokenVar: string | null; pr: number | null }, cwd: string): Promise<(markdown: string) => Promise<{ ok: boolean; says: string }>> {
+  const { detectProjectHost } = await import('../backend/services/review-host/detect');
+  const { DEFAULT_TOKEN, postComment, pullNumber } = await import('./review-post');
+  const host = detectProjectHost(cwd);
+  const pr = post.pr ?? pullNumber(process.env);
+  return async (markdown) => {
+    if (!host?.kind) return { ok: false, says: 'origin is not on GitHub, GitLab or Bitbucket; the review was not posted' };
+    if (!pr) return { ok: false, says: 'no pull request to post to (not a pull request job; --pr names one)' };
+    const tokenVar = post.tokenVar ?? DEFAULT_TOKEN[host.kind];
+    const token = process.env[tokenVar];
+    if (!token) return { ok: false, says: `${tokenVar} is not set; the review was not posted` };
+    return postComment(host, pr, token, markdown);
+  };
 }
 
 /** The review sink a reviewing agent's CLI starts over stdio (C4); stdout is the protocol alone. */

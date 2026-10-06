@@ -19,12 +19,23 @@ const opts = (line: string, env: NodeJS.ProcessEnv = {}) => reviewOptions(parseA
 test('flags: an agent we offer, a key by the variable that holds it, budgets in range, --fail-on block or error', () => {
   const o = opts('--auth env:KEY --max-turns 12 --timeout 90 --fail-on block,error', { KEY: 'k' });
   assert.equal(o.adapter.id, 'claude-code');
-  assert.equal(o.authVar, 'KEY');
+  assert.deepEqual(o.auth, { kind: 'key', var: 'KEY', value: 'k' });
   assert.equal(o.maxTurns, 12);
   assert.equal(o.timeoutMs, 90_000);
   assert.deepEqual([...o.failOn], ['block', 'error']);
   assert.throws(() => opts('--agent cursor'), ReviewUsageError);
   assert.throws(() => opts('--auth sk-live-123'), /env:<VARIABLE>/);
+  assert.deepEqual(opts('').auth, { kind: 'login' });
+  assert.deepEqual(opts('--auth oidc:bedrock').auth, { kind: 'oidc', provider: 'bedrock' });
+  assert.throws(() => opts('--auth oidc:openai'), /bedrock, vertex, foundry/);
+  assert.throws(() => opts('--agent codex --auth oidc:vertex'), /does not run on vertex/);
+  assert.equal(opts('--format sarif').format, 'sarif');
+  assert.equal(opts('--json').format, 'json');
+  assert.throws(() => opts('--format html'), /--format/);
+  assert.deepEqual(opts('--post --pr 12 --post-token env:GH').post, { tokenVar: 'GH', pr: 12 });
+  assert.deepEqual(opts('--post').post, { tokenVar: null, pr: null });
+  assert.throws(() => opts('--post --post-token ghp_abc'), /--post-token/);
+  assert.equal(opts('--verify').verify, true);
   assert.throws(() => opts('--auth env:KEY'), /KEY is not set/);
   assert.throws(() => opts('--agent codex'), /runs on a key/);
   assert.throws(() => opts('--max-turns 0'), /--max-turns/);
@@ -44,18 +55,30 @@ test('skills: each *.md, or a folder\'s SKILL.md, is a pass; none named is the b
   assert.throws(() => readSkills(path.join(dir, 'a', 'nope'), '/'), /no such folder/);
 });
 
-test('the agent\'s environment: enough to run and the one key named; nothing else of ours', () => {
-  const env = { PATH: '/bin', HOME: '/home/sam', KEY: 'k-123', GITHUB_TOKEN: 'ghp_x', AWS_SECRET_ACCESS_KEY: 's', CODETRELLIS_DATA_DIR: '/d', AWS_REGION: 'eu-west-2' };
-  const claude = agentEnv(env, { adapter: adapterFor('claude-code')!, authVar: 'KEY', endpoint: 'https://gw.acme.test', model: null });
-  assert.deepEqual(Object.keys(claude).sort(), ['ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'AWS_REGION', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', 'HOME', 'PATH']);
-  assert.equal(claude.ANTHROPIC_API_KEY, 'k-123');
-  const codex = agentEnv(env, { adapter: adapterFor('codex')!, authVar: 'KEY', endpoint: null, model: 'gpt-5' });
+test('the agent\'s environment: enough to run and its own sign-in; nothing else of ours', () => {
+  const env = { PATH: '/bin', HOME: '/home/sam', KEY: 'k-123', GITHUB_TOKEN: 'ghp_x', AWS_SECRET_ACCESS_KEY: 's', AWS_ACCESS_KEY_ID: 'a', CODETRELLIS_DATA_DIR: '/d', AWS_REGION: 'eu-west-2' };
+  const claude = adapterFor('claude-code')!;
+  const key = { kind: 'key' as const, var: 'KEY', value: 'k-123' };
+  const withKey = agentEnv(env, { adapter: claude, auth: key, endpoint: 'https://gw.acme.test', model: null });
+  assert.deepEqual(Object.keys(withKey).sort(), ['ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', 'HOME', 'PATH']);
+  assert.equal(withKey.ANTHROPIC_API_KEY, 'k-123');
+  // Claude Code's subscription token is its own variable, and --bare would not read it.
+  const oauth = { kind: 'key' as const, var: 'CLAUDE_CODE_OAUTH_TOKEN', value: 'sk-ant-oat01-xyz' };
+  assert.equal(agentEnv(env, { adapter: claude, auth: oauth, endpoint: null, model: null }).CLAUDE_CODE_OAUTH_TOKEN, 'sk-ant-oat01-xyz');
+  // A cloud provider: its own credentials, which the CI's OIDC step left, and nothing else.
+  const bedrock = agentEnv(env, { adapter: claude, auth: { kind: 'oidc', provider: 'bedrock' }, endpoint: null, model: null });
+  assert.deepEqual(Object.keys(bedrock).sort(), ['AWS_ACCESS_KEY_ID', 'AWS_REGION', 'AWS_SECRET_ACCESS_KEY', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', 'CLAUDE_CODE_USE_BEDROCK', 'HOME', 'PATH']);
+  assert.deepEqual(Object.keys(agentEnv(env, { adapter: claude, auth: { kind: 'login' }, endpoint: null, model: null })).sort(), ['CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', 'HOME', 'PATH']);
+  const codex = agentEnv(env, { adapter: adapterFor('codex')!, auth: key, endpoint: null, model: 'gpt-5' });
   assert.deepEqual(Object.keys(codex).sort(), ['CODETRELLIS_REVIEW_KEY', 'HOME', 'PATH']);
+
+  const bare = (auth: Parameters<typeof agentEnv>[1]['auth']) => claude.command({ instructions: 'I', message: 'M', sink: { command: 'n', args: [] }, model: null, endpoint: null, maxTurns: 3, dir: fs.mkdtempSync(path.join(os.tmpdir(), 'ct-cc-')), work: '/w', auth, tools: ['report_review'] }).args.includes('--bare');
+  assert.deepEqual([bare(key), bare(oauth), bare({ kind: 'login' }), bare({ kind: 'oidc', provider: 'vertex' })], [true, false, false, true]);
 });
 
 test('Codex: no shell, no web, read-only, its own home and provider, the sink\'s two tools approved; its JSONL read', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-codex-'));
-  const cmd = adapterFor('codex')!.command({ instructions: 'I', message: 'M', sink: { command: '/node', args: ['/ct.mjs', 'review-sink', '--pass', dir] }, model: 'gpt-5', endpoint: 'http://localhost:8000/v1', maxTurns: 5, dir, work: dir, withKey: true });
+  const cmd = adapterFor('codex')!.command({ instructions: 'I', message: 'M', sink: { command: '/node', args: ['/ct.mjs', 'review-sink', '--pass', dir] }, model: 'gpt-5', endpoint: 'http://localhost:8000/v1', maxTurns: 5, dir, work: dir, auth: { kind: 'key', var: 'K', value: 'k' }, tools: ['report_review', 'read_change_file'] });
   const sets = cmd.args.flatMap((a, i) => (cmd.args[i - 1] === '-c' ? [a] : []));
   for (const s of ['features.shell_tool=false', 'web_search="disabled"', 'features.view_image=false', 'features.multi_agent=false', 'project_doc_max_bytes=0',
     'mcp_servers.codetrellis_review.enabled_tools=["report_review", "read_change_file"]', 'mcp_servers.codetrellis_review.default_tools_approval_mode="approve"',

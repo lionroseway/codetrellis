@@ -15,7 +15,27 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { SINK_TOOLS } from './review-sink';
+
+/**
+ * How the agent signs in (`--auth`): the person's own login; a key in a
+ * variable (`env:VAR`, never the key itself); or a cloud provider's own
+ * credentials, which the CI's OIDC step put in the environment
+ * (`oidc:bedrock|vertex|foundry`).
+ */
+export const OIDC_PROVIDERS = ['bedrock', 'vertex', 'foundry'] as const;
+export type OidcProvider = typeof OIDC_PROVIDERS[number];
+
+export type ReviewAuth =
+  | { kind: 'login' }
+  | { kind: 'key'; var: string; value: string }
+  | { kind: 'oidc'; provider: OidcProvider };
+
+/** What each provider's own SDK reads, set by its OIDC step (aws-actions/configure-aws-credentials, google-github-actions/auth, azure/login). */
+export const OIDC_ENV: Record<OidcProvider, readonly string[]> = {
+  bedrock: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'AWS_REGION', 'AWS_DEFAULT_REGION', 'AWS_PROFILE', 'ANTHROPIC_BEDROCK_BASE_URL'],
+  vertex: ['GOOGLE_APPLICATION_CREDENTIALS', 'GOOGLE_CLOUD_PROJECT', 'CLOUDSDK_CORE_PROJECT', 'CLOUD_ML_REGION', 'ANTHROPIC_VERTEX_PROJECT_ID', 'ANTHROPIC_VERTEX_BASE_URL'],
+  foundry: ['ANTHROPIC_FOUNDRY_RESOURCE', 'ANTHROPIC_FOUNDRY_BASE_URL', 'AZURE_CLIENT_ID', 'AZURE_TENANT_ID', 'AZURE_FEDERATED_TOKEN_FILE', 'AZURE_AUTHORITY_HOST', 'AZURE_CONFIG_DIR'],
+};
 
 export interface AdapterCommand { args: string[]; stdin?: string; /** Set for this run only, over the scrubbed environment. */ env?: Record<string, string> }
 
@@ -41,11 +61,13 @@ export interface AgentAdapter {
   binEnv: string;
   /** It runs only on a key named by `--auth`, never the person's stored login. */
   needsAuth?: boolean;
-  /** Variables the CLI reads for its own provider set-up, passed through when set. */
+  /** The OIDC providers it can run on. */
+  oidc: readonly OidcProvider[];
+  /** Variables the CLI reads for its own set-up, passed through when set. */
   passEnv: readonly string[];
   /** The credential and endpoint, as this CLI reads them. */
-  env(o: { authVar: string | null; authValue: string | null; endpoint: string | null; model: string | null }): Record<string, string>;
-  command(o: { instructions: string; message: string; sink: { command: string; args: string[] }; model: string | null; endpoint: string | null; maxTurns: number; dir: string; work: string; withKey: boolean }): AdapterCommand;
+  env(o: { auth: ReviewAuth; endpoint: string | null; model: string | null }): Record<string, string>;
+  command(o: { instructions: string; message: string; sink: { command: string; args: string[] }; model: string | null; endpoint: string | null; maxTurns: number; dir: string; work: string; auth: ReviewAuth; tools: readonly string[] }): AdapterCommand;
   parse(stdout: string, stderr: string, code: number | null): AdapterRun;
 }
 
@@ -64,25 +86,34 @@ const SINK = 'codetrellis_review';
  *    prompt, and the denials are in the result's `permission_denials`.
  *  - `--max-turns`: the turn budget; the result's subtype is
  *    `error_max_turns` when it is reached.
- *  - `--bare` with a key (`--auth`): no hooks, plugins, CLAUDE.md or
- *    keychain; auth is strictly ANTHROPIC_API_KEY. Without `--auth` the
- *    person's own login is used, which `--bare` would not read.
+ *  - `--bare` with an API key or a cloud provider: no hooks, plugins,
+ *    CLAUDE.md or keychain; auth is strictly ANTHROPIC_API_KEY, or the
+ *    provider's own credentials. Not with the person's login, or the OAuth
+ *    token `claude setup-token` makes (CLAUDE_CODE_OAUTH_TOKEN), which
+ *    `--bare` would not read.
+ *  - A cloud provider (C5): CLAUDE_CODE_USE_BEDROCK / _VERTEX / _FOUNDRY,
+ *    with the credentials its OIDC step left in the environment.
  */
+const oauthToken = (a: ReviewAuth) => a.kind === 'key' && (a.var === 'CLAUDE_CODE_OAUTH_TOKEN' || a.value.startsWith('sk-ant-oat'));
 const claudeCode: AgentAdapter = {
   id: 'claude-code',
   label: 'Claude Code',
   bin: 'claude',
   binEnv: 'CODETRELLIS_REVIEW_CLAUDE',
-  passEnv: ['CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY', 'AWS_REGION', 'AWS_PROFILE', 'ANTHROPIC_VERTEX_PROJECT_ID', 'CLOUD_ML_REGION', 'GOOGLE_APPLICATION_CREDENTIALS'],
-  env({ authValue, endpoint }) {
-    return {
-      ...(authValue ? { ANTHROPIC_API_KEY: authValue } : {}),
-      ...(endpoint ? { ANTHROPIC_BASE_URL: endpoint } : {}),
+  oidc: ['bedrock', 'vertex', 'foundry'],
+  passEnv: [],
+  env({ auth, endpoint }) {
+    const out: Record<string, string> = {
       // No telemetry, error reports or update checks from a review.
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
     };
+    if (auth.kind === 'key') out[oauthToken(auth) ? 'CLAUDE_CODE_OAUTH_TOKEN' : 'ANTHROPIC_API_KEY'] = auth.value;
+    if (auth.kind === 'oidc') out[{ bedrock: 'CLAUDE_CODE_USE_BEDROCK', vertex: 'CLAUDE_CODE_USE_VERTEX', foundry: 'CLAUDE_CODE_USE_FOUNDRY' }[auth.provider]] = '1';
+    if (endpoint) out.ANTHROPIC_BASE_URL = endpoint;
+    return out;
   },
-  command({ instructions, message, sink, model, maxTurns, dir, withKey }) {
+  command({ instructions, message, sink, model, maxTurns, dir, auth, tools }) {
+    const withKey = auth.kind === 'oidc' || (auth.kind === 'key' && !oauthToken(auth));
     const mcp = path.join(dir, 'mcp.json');
     fs.writeFileSync(mcp, JSON.stringify({ mcpServers: { [SINK]: { type: 'stdio', command: sink.command, args: sink.args } } }));
     const system = path.join(dir, 'system.md');
@@ -94,7 +125,7 @@ const claudeCode: AgentAdapter = {
         '--output-format', 'json',
         '--tools', '',
         '--strict-mcp-config', '--mcp-config', mcp,
-        '--allowedTools', SINK_TOOLS.map((t) => `mcp__${SINK}__${t}`).join(','),
+        '--allowedTools', tools.map((t) => `mcp__${SINK}__${t}`).join(','),
         '--permission-mode', 'dontAsk',
         '--max-turns', String(maxTurns),
         '--system-prompt-file', system,
@@ -159,14 +190,15 @@ const codex: AgentAdapter = {
   label: 'Codex',
   bin: 'codex',
   binEnv: 'CODETRELLIS_REVIEW_CODEX',
+  oidc: [],
   passEnv: [],
   needsAuth: true,
-  env({ authValue }) {
+  env({ auth }) {
     const out: Record<string, string> = {};
-    if (authValue) out.CODETRELLIS_REVIEW_KEY = authValue;
+    if (auth.kind === 'key') out.CODETRELLIS_REVIEW_KEY = auth.value;
     return out;
   },
-  command({ instructions, message, sink, model, endpoint, dir }) {
+  command({ instructions, message, sink, model, endpoint, dir, tools }) {
     const home = path.join(dir, 'codex-home');
     fs.mkdirSync(home, { recursive: true });
     const server = `mcp_servers.${SINK}`;
@@ -181,7 +213,7 @@ const codex: AgentAdapter = {
         ...set('project_doc_max_bytes', '0'),
         ...set(`${server}.command`, toml(sink.command)),
         ...set(`${server}.args`, `[${sink.args.map(toml).join(', ')}]`),
-        ...set(`${server}.enabled_tools`, `[${SINK_TOOLS.map(toml).join(', ')}]`),
+        ...set(`${server}.enabled_tools`, `[${tools.map(toml).join(', ')}]`),
         ...set(`${server}.default_tools_approval_mode`, toml('approve')),
         ...set('model_providers.codetrellis_review.name', toml('codetrellis review')),
         ...set('model_providers.codetrellis_review.base_url', toml(endpoint ?? 'https://api.openai.com/v1')),

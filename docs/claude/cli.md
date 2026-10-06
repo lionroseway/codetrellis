@@ -393,6 +393,39 @@ API, and can be held to the contract, so nothing new is built for it. An
 endpoint serving only Chat Completions is not supported by Codex, and so not
 here.
 
+### In CI (Phase 33 C5)
+
+The same command. [`docs/recipes/review.sh`](../recipes/review.sh) is the
+whole job for any runner, and
+[`docs/recipes/github-actions-review.yml`](../recipes/github-actions-review.yml)
+calls it. This repository runs it too (`.github/workflows/codetrellis-review.yml`),
+advisory, beside `claude-review.yml`.
+
+- **The cost dial**: `CODETRELLIS_REVIEW` is `auto` (each pull request),
+  `on-request` (only when someone asks: a label, a comment, a manual run,
+  which sets `CODETRELLIS_REVIEW_ASKED=1`), or `off`. With no credential (a
+  fork's pull request gets no secrets) it says so and exits 0.
+- **Signing in**: `--auth env:ANTHROPIC_API_KEY`, or
+  `env:CLAUDE_CODE_OAUTH_TOKEN` (a subscription token from `claude
+  setup-token`; it runs without `--bare`, which would not read it).
+  `--auth oidc:bedrock|vertex|foundry` uses the short-lived credentials the
+  host's own OIDC step left (aws-actions/configure-aws-credentials,
+  google-github-actions/auth, azure/login). The agent gets those and nothing
+  else.
+- **`--verify`**: a second session, given the change and the findings, tries
+  to refute each. It has its own report tool (`report_verdicts`) and no
+  more reach than the first. What it refutes is dropped with why ("refuted
+  by a second pass: …"), and the run says what it did.
+- **Output for any host**: `--format text|markdown|sarif|json`. `--sarif-out`
+  and `--markdown-out` write the others too, so one run feeds the log, code
+  scanning and the job summary. SARIF puts a rule finding at its rule's
+  strength (block an error, warn a warning), a bug a warning, the rest notes.
+- **`--post`**: the markdown as one comment on the pull request, on GitHub,
+  GitLab or Bitbucket. The host comes from `origin` and the pull request from
+  the CI's own variables (or `--pr`). The token comes from `--post-token
+  env:VAR`, else `GITHUB_TOKEN`, `GITLAB_TOKEN` or `BITBUCKET_TOKEN`. The
+  agent's environment is scrubbed, so the model never sees it.
+
 ## Test runs that travel (D1.5a)
 
 With task state shared, each new run reported (`report-tests`) is also
