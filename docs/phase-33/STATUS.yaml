@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "S1 One import per plan per burst"
-  status: "0.2 merged (#351). S1 gathers a plan's changed files and imports it once they go quiet: at 50 changed files, 1 import and broadcast instead of 50, and the slowest answer meanwhile 56 ms instead of 1.9 s"
-  next: "Merge S1, then S2 (the window takes a burst as one: one refetch, one toast)"
+  step: "S2 The window takes a burst as one"
+  status: "S1 merged (#352), with a fix CI found: an edit in the app and a change on disk at once now lose neither. S2 gathers the backend's plan-imported broadcasts in the window too: one plan-list refetch and one notice for a pull that touches several plans"
+  next: "Merge S2, then S3 (200 files across 5 plans, end to end), then the rulebook (R1, R2, R4, R3)"
   blockers: "None"
   updated: 2026-10-06
 sections:
