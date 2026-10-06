@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "Setup PR into feat/phase-33; the owner's decisions recorded"
-  status: "The owner answered the open questions (2026-10-06): rules as YAML suites; loosening signed with the device key; agent checks free, on the user's own agent, model and key, built by driving the user's agent rather than writing one; no CI host first; review features V1, V2, V3 and V6; the name agent checks; go ahead"
-  next: "Merge the setup PR into feat/phase-33; then 0.1 Baseline on feat/phase-33-0-1-baseline (Node 26, clean npm ci --ignore-scripts, every suite)"
+  step: "0.2 Measure the plan reload storm"
+  status: "0.1 merged (#350). Measured: 1, 10 and 50 changed task files give 1, 10 and 50 whole-plan imports and broadcasts, and the backend's slowest answer during the burst grows to 1.9 s at 50 (idle 3–5 ms)"
+  next: "Merge 0.2, then S1 (one import per plan per burst) and S2 (the window takes a burst as one)"
   blockers: "None"
   updated: 2026-10-06
 sections:
@@ -28,9 +28,26 @@ sections:
       - title: Integration branch `feat/phase-33` cut from `main` (`5fb23f4`)
         status: done
       - title: Status tooling serves any phase (and reads Phase 32's D and E steps, which the old pattern missed)
+        status: done
+        prs:
+          - 346
       - title: The progress page, generated from the status (`npm run status:page`) and published as an artifact
+        status: done
+        prs:
+          - 346
       - title: Design, execution plan, status and this log
+        status: done
+        prs:
+          - 346
       - title: CLAUDE.md points every session here
+        status: done
+        prs:
+          - 346
+      - title: "A new advisory (sprintf-js, GHSA-hp3w-g68c-fv3c) failed the production audit on every branch: kept out of the tree by an override (into `main`)"
+        followUp: true
+        status: done
+        prs:
+          - 347
   - title: "Stage 0: ground truth"
     goal: Numbers to measure against, the freeze measured, and every colour the app draws written down.
     items:
