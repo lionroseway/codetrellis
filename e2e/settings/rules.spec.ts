@@ -25,6 +25,7 @@ test.describe('Settings → Architecture rules', () => {
   test('a rule written for the team says what already breaks it, and is stopped', async ({ page }) => {
     const rules: Array<Record<string, unknown>> = [];
     const puts: Array<{ id: string; body: Record<string, unknown> }> = [];
+    const deletes: Array<string | null> = [];
     await page.route((url) => url.pathname.startsWith('/api/rules'), async (route) => {
       const req = route.request();
       const { pathname } = new URL(req.url());
@@ -41,6 +42,13 @@ test.describe('Settings → Architecture rules', () => {
         });
       }
       const id = decodeURIComponent(pathname.split('/')[3] ?? '');
+      // R3: the preview, before anything is written.
+      if (req.method() === 'POST' && pathname.endsWith('/preview')) {
+        const body = req.postDataJSON() as Record<string, unknown>;
+        return route.fulfill({ json: body.remove
+          ? { change: { effect: 'loosens', allowed: [{ from: 'web/legacy/report.ts', to: 'db/client.ts' }] }, words: `✗ This change removes the rule “web/ may not import db/” (${id}): 1 import it forbade become allowed. Loosening a rule needs a person's approval in the app.`, needsConfirm: true }
+          : { change: { effect: 'tightens', allowed: [] }, words: '⚠ This change adds the rule', needsConfirm: false } });
+      }
       if (req.method() === 'PUT') {
         const body = req.postDataJSON() as Record<string, unknown>;
         puts.push({ id, body });
@@ -48,6 +56,7 @@ test.describe('Settings → Architecture rules', () => {
         return route.fulfill({ json: { rule: rules.at(-1) } });
       }
       if (req.method() === 'DELETE') {
+        deletes.push(new URL(req.url()).searchParams.get('confirm'));
         rules.splice(rules.findIndex((r) => r.id === id), 1);
         return route.fulfill({ json: { removed: id } });
       }
@@ -83,8 +92,19 @@ test.describe('Settings → Architecture rules', () => {
     await expect(section.getByTestId('rule-from')).toHaveValue('');
     await section.getByTestId('rules-list').screenshot({ path: path.join(OUT, 'rules-settings-rule.png') });
 
+    // R3: stopping it loosens it, so the app shows what that allows and waits.
     await section.getByTestId('rule-stop').click();
+    const panel = section.getByTestId('rule-confirm-panel');
+    await expect(panel.getByTestId('rule-confirm-words')).toHaveText('✗ This change removes the rule “web/ may not import db/” (web-not-db): 1 import it forbade become allowed. Loosening a rule needs a person\'s approval in the app.');
+    await panel.screenshot({ path: path.join(OUT, 'rules-settings-confirm-stop.png') });
+    await panel.getByTestId('rule-cancel').click();
+    await expect(panel).toHaveCount(0);
+    await expect(section.getByTestId('rule')).toHaveCount(1);
+    expect(deletes).toEqual([]);
+    await section.getByTestId('rule-stop').click();
+    await section.getByTestId('rule-confirm').click();
     await expect(section.getByTestId('rule')).toHaveCount(0);
+    expect(deletes).toEqual(['1']);
   });
 
   test('a rule the backend refuses says why', async ({ page }) => {
@@ -102,5 +122,44 @@ test.describe('Settings → Architecture rules', () => {
     await section.getByTestId('rule-may-not-import').fill('db/');
     await section.getByTestId('rule-save').click();
     await expect(section.getByTestId('rule-error')).toHaveText('from may not climb out of the project');
+  });
+});
+
+test.describe('Settings → Architecture rules: what agents propose (Phase 33 R3)', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('a proposed loosening shows what it allows, and is accepted only once confirmed', async ({ page }) => {
+    const words = '✗ This change removes the rule “web/ may not import db/” (web-not-db): 1 import it forbade become allowed. Loosening a rule needs a person\'s approval in the app.';
+    let open = true;
+    const decisions: unknown[] = [];
+    await page.route((url) => url.pathname.startsWith('/api/rules'), async (route) => {
+      const req = route.request();
+      const { pathname } = new URL(req.url());
+      if (req.method() === 'GET' && pathname === '/api/rules') return route.fulfill({ json: { rules: [] } });
+      if (req.method() === 'GET' && pathname === '/api/rules/proposals') {
+        return route.fulfill({ json: { proposals: open ? [{ uid: 'p1', ruleId: 'web-not-db', status: 'open', why: 'The report needs the DB client.', author: 'claude-code', createdAt: Date.now(), now: { words, needsConfirm: true } }] : [] } });
+      }
+      if (req.method() === 'POST' && pathname === '/api/rules/proposals/p1/decide') {
+        decisions.push(req.postDataJSON());
+        open = false;
+        return route.fulfill({ json: { proposal: { uid: 'p1', status: 'accepted' } } });
+      }
+      return route.fallback();
+    });
+    await gotoWithProject(page);
+    await page.locator('button[title*="Settings"]').click();
+    const dialog = page.getByRole('dialog', { name: 'Settings' });
+    await dialog.getByRole('button', { name: 'Architecture rules', exact: true }).click();
+    const box = dialog.getByTestId('rule-proposals');
+    await expect(box.getByTestId('rule-proposal-words')).toHaveText(words);
+    await expect(box).toContainText('claude-code: “The report needs the DB client.”');
+    await box.getByTestId('rule-proposal-accept').click();
+    expect(decisions).toEqual([]);
+    await expect(box.getByTestId('rule-confirm')).toHaveText('Accept it, signed as you');
+    fs.mkdirSync(OUT, { recursive: true });
+    await box.screenshot({ path: path.join(OUT, 'rules-settings-proposal.png') });
+    await box.getByTestId('rule-confirm').click();
+    await expect(dialog.getByTestId('rule-proposals')).toHaveCount(0);
+    expect(decisions).toEqual([{ decision: 'accept', confirm: true }]);
   });
 });

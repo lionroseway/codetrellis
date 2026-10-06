@@ -216,6 +216,8 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   get_play_forward: 'read',
   list_recurring: 'read',
   list_rules: 'read',
+  // Phase 33 R3: proposes only; a person decides in the app. No tool writes a rule.
+  propose_rule: 'write',
   get_spec_links: 'read',
   list_spec_proposals: 'read',
   reply_to_spec_proposal: 'write',

@@ -21,6 +21,11 @@
  *
  * Phase 33 R4: on a base where the rule is at warn, the same import is said
  * and the check passes; `--strict` fails it; at guide it is not checked.
+ *
+ * Phase 33 R3: Sam stops the rule in the app on a branch. The app signs his
+ * approval with his device key, which main already lists, and the check
+ * passes, saying who approved it. The same approval with a key the branch
+ * itself introduces does not count.
  */
 
 import fs from 'node:fs';
@@ -253,6 +258,49 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
       expect((JSON.parse(guide.out) as Gate).rules).toEqual([]);
     } finally {
       git(root, 'checkout', '-q', '-f', main);
+    }
+  });
+
+  test('R3: a loosening Sam confirms in the app is signed and passes, with a key main lists; a key the branch adds does not count', async () => {
+    const q = `project=${encodeURIComponent(root)}`;
+    const keysDir = path.join(root, '.codetrellis', 'keys');
+    const approvals = path.join(root, '.codetrellis', 'rules', 'approvals');
+    try {
+      // Sam's device key reaches main first, the way any key does: with an earlier change he made.
+      git(root, 'checkout', '-qB', 'r3-main', main);
+      expect((await h.client.raw('PUT', `/api/rules/scratch-rule?${q}`, { from: 'packages/web/', mayNotImport: 'packages/web/legacy/' })).status).toBe(200);
+      expect((await h.client.raw('DELETE', `/api/rules/scratch-rule?${q}&confirm=1`)).status).toBe(200);
+      expect(fs.readdirSync(keysDir).length).toBe(1);
+      git(root, 'add', '.codetrellis');
+      git(root, 'commit', '-qm', 'Sam\'s device key, with a rule he tried and stopped');
+
+      git(root, 'checkout', '-qB', 'r3-stops-the-rule');
+      const stop = await h.client.raw('DELETE', `/api/rules/routes-not-config?${q}&confirm=1`);
+      expect(stop.status, await stop.clone().text()).toBe(200);
+      const { approval } = (await stop.json()) as { approval: { file: string; how: string; as: string } };
+      expect(approval.how).toBe('device');
+      git(root, 'add', '.codetrellis');
+      git(root, 'commit', '-qm', 'Stop the routes rule (approved in the app)');
+
+      const r = ct('check', '--base', 'r3-main', '--json');
+      expect(r.code, r.err || r.out).toBe(0);
+      const g = JSON.parse(r.out) as Gate;
+      expect(g.rulebook).toEqual([expect.objectContaining({ rule: 'routes-not-config', change: 'removed', effect: 'loosens', approval: expect.objectContaining({ ok: true, how: 'device', file: approval.file }) })]);
+      expect(g.notes[0]).toMatch(new RegExp(`^✓ This change removes the rule “services/api/app/routes/ may not import services/api/app/config\\.py” \\(routes-not-config\\)\\. ${approval.as.replace(/[+/]/g, '\\$&')} approved it in the app, signed \\(${approval.file.replace(/\./g, '\\.')}\\)\\.$`));
+
+      // The same change on a base that does not list the key: the approval is there, and does not count.
+      git(root, 'checkout', '-q', '-f', main);
+      git(root, 'checkout', '-qB', 'r3-unlisted', main);
+      git(root, 'checkout', 'r3-stops-the-rule', '--', '.codetrellis');
+      git(root, 'commit', '-qm', 'Stop the routes rule, with a key main has never seen');
+      const unlisted = ct('check', '--base', main, '--json');
+      expect(unlisted.code, unlisted.err || unlisted.out).toBe(3);
+      const u = JSON.parse(unlisted.out) as Gate;
+      expect(u.says[0]).toMatch(/^✗ This change removes the rule .* Loosening a rule needs a person's approval in the app\. An approval is attached, but .*(base branch does not list|before this change's base)/);
+    } finally {
+      git(root, 'checkout', '-q', '-f', main);
+      fs.rmSync(approvals, { recursive: true, force: true });
+      fs.rmSync(keysDir, { recursive: true, force: true });
     }
   });
 });

@@ -30,7 +30,8 @@ import { enforceEdit, editView } from '../../services/code-breakpoints';
 import { checkChanges } from '../../services/conformity-gate';
 import { ruleImports } from '../../services/workstream-imports';
 import { rulesAt } from '../../services/rules-at';
-import { diffRules, type RuleChange } from '../../services/rule-changes';
+import { changeWords, diffRules, type RuleChange } from '../../services/rule-changes';
+import { approvalFor, approvalsHere, keysAt } from '../../services/rule-approvals';
 import { edgesIfLoaded, rulesOf } from '../../services/architecture-rules';
 import { getDependencyEdges } from '../../services/database';
 import { isSafeGitRef } from '../../services/git-safety';
@@ -383,6 +384,14 @@ export function register(server: McpServer, deps: ToolDeps): void {
         if (atBase) {
           judgeBy = atBase.rules;
           rulebook = diffRules(atBase.rules, rulesOf(root), edgesIfLoaded(root, deps.getActiveProjectPath(), getDependencyEdges) ?? []);
+          // R3: a loosening passes only with a person's signed approval, checked against the base's keys.
+          if (rulebook.some((c) => c.effect === 'loosens')) {
+            const approvals = approvalsHere(root);
+            const keys = keysAt(root, since);
+            try {
+              for (const c of rulebook) if (c.effect === 'loosens') c.approval = approvalFor(root, c, approvals, keys, since);
+            } finally { keys.done(); }
+          }
         } else {
           notes.push(`⚠ The rules at ${since.slice(0, 7)} could not be read, so this change was judged by its own rules. Fetch the base with its history.`);
         }
@@ -396,7 +405,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
           criteria: c.criteria.map((x) => ({ item_uid: x.itemUid, task: x.task, criterion: x.criterion, findings: x.findings })),
           docs: c.docs.map((d) => ({ uid: d.uid, title: d.title, slug: d.slug, verified_at: d.verifiedAt, files: d.files })),
           rules: c.rules.map((r) => ({ path: r.path, imports: r.imports, rule: r.rule, words: r.words, because: r.because, strength: r.strength })),
-          rulebook: c.rulebook.map((r) => ({ rule: r.rule, change: r.change, effect: r.effect, allowed: r.allowed, forbidden: r.forbidden, words: r.words })),
+          rulebook: c.rulebook.map((r) => ({ rule: r.rule, change: r.change, effect: r.effect, allowed: r.allowed, forbidden: r.forbidden, words: changeWords(r), ...(r.approval ? { approval: r.approval } : {}) })),
           notes: c.notes,
           ...(c.rulesChecked ? {} : { rules_note: 'The architecture rules were not checked: this project\'s imports are not loaded here. Open the project, or run `codetrellis start` in it.' }),
         }, null, 2) }],

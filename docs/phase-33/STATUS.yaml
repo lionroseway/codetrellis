@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "R4 Every rule has a strength: block, warn or guide"
-  status: "R2 merged (#358): the gate judges with the base branch's rules, so deleting a rule and breaking it fails. R4 in review: block fails the check, warn is said and passes, guide is never checked; a new rule starts at warn and an old one reads as block. G10 (findings where the code is) is built and waiting its turn"
-  next: "Merge R4, then R3 (change control), C1, C2, C3"
+  step: "R3 Change control: a loosening is previewed, confirmed and signed"
+  status: "R4 merged (#359): every rule has a strength. R3 in review: every rule change is previewed against the code; a loosening is confirmed, signed as the person and checked by CI against the base's keys; agents propose, a person decides. Built ahead: R9 (guide rules in scope) and R6 (symbol rules)"
+  next: "Merge R3, then C1 (scoped checks), C2 (SARIF), C3 (the debt ratchet)"
   blockers: "None"
   updated: 2026-10-06
 sections:

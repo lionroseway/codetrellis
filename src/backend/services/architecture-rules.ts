@@ -59,6 +59,28 @@ function suiteRules(projectRoot: string, suite: string): ArchitectureRule[] {
   return readRulebook(projectRoot).suites.find((s) => s.name === suite)?.rules ?? [];
 }
 
+/**
+ * The rule a set would write, and the one it replaces, without writing
+ * anything: what R3's preview compares. Throws `RuleError` as `setRule` would.
+ */
+export function proposedRule(projectRoot: string, raw: Record<string, unknown>, by: string, now = Date.now()): { rule: ArchitectureRule; existing: ArchitectureRule | null } {
+  const existing = rulesOf(projectRoot).find((r) => r.id === raw.id) ?? null;
+  const suite = raw.suite === undefined || raw.suite === '' ? existing?.suite ?? DEFAULT_SUITE : raw.suite;
+  if (!isSuiteName(suite)) throw new RuleError('suite must be a short name, like payments');
+  // A new rule starts at warn (R4): a blocking rule with false positives
+  // costs more trust than it earns. A changed rule keeps its strength unless
+  // this names one.
+  const strength = raw.strength ?? existing?.strength ?? 'warn';
+  const { rule: parsed, problems } = parseArchitectureRule({ ...raw, strength, since: existing?.since ?? new Date(now).toISOString(), by });
+  if (!parsed) throw new RuleError(problems.join('; '));
+  return { rule: { ...parsed, suite }, existing };
+}
+
+/** The rule with this id, or null. */
+export function findRule(projectRoot: string, id: string): ArchitectureRule | null {
+  return rulesOf(projectRoot).find((r) => r.id === id) ?? null;
+}
+
 function ruleOf(projectRoot: string, id: string): ArchitectureRule {
   const rule = rulesOf(projectRoot).find((r) => r.id === id);
   if (!rule) throw new RuleError(`No architecture rule "${id}" in this project`, 404);
@@ -72,16 +94,8 @@ function ruleOf(projectRoot: string, id: string): ArchitectureRule {
  * the config is taken out of it, since it now lives in a file.
  */
 export function setRule(projectRoot: string, raw: Record<string, unknown>, by: string, now = Date.now()): ArchitectureRule {
-  const existing = rulesOf(projectRoot).find((r) => r.id === raw.id);
-  const suite = raw.suite === undefined || raw.suite === '' ? existing?.suite ?? DEFAULT_SUITE : raw.suite;
-  if (!isSuiteName(suite)) throw new RuleError('suite must be a short name, like payments');
-  // A new rule starts at warn (R4): a blocking rule with false positives
-  // costs more trust than it earns. A changed rule keeps its strength unless
-  // this names one.
-  const strength = raw.strength ?? existing?.strength ?? 'warn';
-  const { rule: parsed, problems } = parseArchitectureRule({ ...raw, strength, since: existing?.since ?? new Date(now).toISOString(), by });
-  if (!parsed) throw new RuleError(problems.join('; '));
-  const rule: ArchitectureRule = { ...parsed, suite };
+  const { rule, existing } = proposedRule(projectRoot, raw, by, now);
+  const suite = rule.suite!;
   writeSuite(projectRoot, suite, suiteRules(projectRoot, suite).filter((r) => r.id !== rule.id).concat(rule));
   if (existing?.suite && existing.suite !== suite) {
     writeSuite(projectRoot, existing.suite, suiteRules(projectRoot, existing.suite).filter((r) => r.id !== rule.id));

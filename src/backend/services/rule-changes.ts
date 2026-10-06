@@ -31,6 +31,11 @@ export interface RuleChange {
   forbidden: Edge[];
   /** One line, the way the gate says it. */
   words: string;
+  /** The rule on the base, and on the branch (null when there is none). */
+  before: ArchitectureRule | null;
+  after: ArchitectureRule | null;
+  /** R3: for a loosening, the person's signed approval that travels with it, or why the one attached does not count. */
+  approval?: { ok: true; by: string; how: 'git' | 'device'; file: string } | { ok: false; why: string } | null;
 }
 
 const key = (e: Edge) => `${e.from}>${e.to}`;
@@ -72,7 +77,7 @@ export function diffRules(base: readonly ArchitectureRule[], head: readonly Arch
     if (!h) {
       const allowed = breaches(b, edges);
       out.push({
-        rule: id, change: 'removed', effect: 'loosens', allowed, forbidden: [],
+        rule: id, change: 'removed', effect: 'loosens', allowed, forbidden: [], before: b, after: null,
         words: `✗ This change removes the rule “${b.from} may not import ${b.mayNotImport}” (${id})${allowed.length ? `: ${imports(allowed.length)} it forbade become allowed` : ''}. Loosening a rule needs a person's approval in the app.`,
       });
       continue;
@@ -81,7 +86,7 @@ export function diffRules(base: readonly ArchitectureRule[], head: readonly Arch
     const strength = strengthEffect(b, h);
     if (text === 'same' && strength === 'same') {
       if (b.because !== h.because) {
-        out.push({ rule: id, change: 'changed', effect: 'reworded', allowed: [], forbidden: [], words: `· This change rewords why the rule ${id} exists.` });
+        out.push({ rule: id, change: 'changed', effect: 'reworded', allowed: [], forbidden: [], before: b, after: h, words: `· This change rewords why the rule ${id} exists.` });
       }
       continue;
     }
@@ -92,11 +97,11 @@ export function diffRules(base: readonly ArchitectureRule[], head: readonly Arch
       const n = was.length;
       out.push(strength === 'loosens'
         ? {
-          rule: id, change: 'changed', effect: 'loosens', allowed: b.strength === 'block' ? was : [], forbidden: [],
+          rule: id, change: 'changed', effect: 'loosens', allowed: b.strength === 'block' ? was : [], forbidden: [], before: b, after: h,
           words: `✗ This change lowers the rule ${id} from ${b.strength} to ${h.strength}${n && b.strength === 'block' ? `: ${imports(n)} that break it would no longer fail CI` : ''}. Loosening a rule needs a person's approval in the app.`,
         }
         : {
-          rule: id, change: 'changed', effect: 'tightens', allowed: [], forbidden: h.strength === 'block' ? now : [],
+          rule: id, change: 'changed', effect: 'tightens', allowed: [], forbidden: h.strength === 'block' ? now : [], before: b, after: h,
           words: `⚠ This change raises the rule ${id} from ${b.strength} to ${h.strength}${now.length && h.strength === 'block' ? `: ${imports(now.length)} already in the code would fail CI` : ''}.`,
         });
       continue;
@@ -107,7 +112,7 @@ export function diffRules(base: readonly ArchitectureRule[], head: readonly Arch
     const at = (r: ArchitectureRule) => (b.strength === h.strength ? '' : ` at ${r.strength}`);
     const what = `${stated(b)}${at(b)} to ${stated(h)}${at(h)}`;
     out.push({
-      rule: id, change: 'changed', effect, allowed, forbidden,
+      rule: id, change: 'changed', effect, allowed, forbidden, before: b, after: h,
       words: effect === 'loosens'
         ? `✗ This change loosens the rule ${id}, from ${what}${allowed.length ? `: ${imports(allowed.length)} it forbade become allowed` : ''}. Loosening a rule needs a person's approval in the app.`
         : `⚠ This change tightens the rule ${id}, from ${what}${forbidden.length ? `: ${imports(forbidden.length)} already in the code would break it` : ''}.`,
@@ -118,9 +123,18 @@ export function diffRules(base: readonly ArchitectureRule[], head: readonly Arch
     if (before.has(id)) continue;
     const forbidden = breaches(h, edges);
     out.push({
-      rule: id, change: 'added', effect: 'tightens', allowed: [], forbidden,
+      rule: id, change: 'added', effect: 'tightens', allowed: [], forbidden, before: null, after: h,
       words: `⚠ This change adds the rule “${h.from} may not import ${h.mayNotImport}” (${id}) at ${h.strength}${forbidden.length ? `: ${imports(forbidden.length)} already in the code would break it` : ''}. It is checked once it is on the base branch.`,
     });
   }
   return out;
+}
+
+const NEEDS = " Loosening a rule needs a person's approval in the app.";
+
+/** How the gate says a change, given its approval (R3): approved, it is a note; otherwise the line says what is missing. */
+export function changeWords(c: RuleChange): string {
+  if (c.effect !== 'loosens' || !c.approval) return c.words;
+  if (c.approval.ok) return `✓ ${c.words.replace(/^✗ /, '').replace(NEEDS, '')} ${c.approval.by} approved it in the app, signed (${c.approval.file}).`;
+  return `${c.words} An approval is attached, but ${c.approval.why}.`;
 }

@@ -6,7 +6,10 @@ import path from 'node:path';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
-import { breachWords, checkEdges, edgesIfLoaded, rulesOf, rulesView } from '../../services/architecture-rules';
+import { breachWords, checkEdges, edgesIfLoaded, findRule, proposedRule, RuleError, rulesOf, rulesView } from '../../services/architecture-rules';
+import { previewChange, previewJson } from '../../services/rule-preview';
+import { addRuleProposal } from '../../services/rule-proposals';
+import { authorFromExtra } from '../helpers';
 
 export function register(server: McpServer, deps: ToolDeps): void {
   server.registerTool(
@@ -151,4 +154,55 @@ export function register(server: McpServer, deps: ToolDeps): void {
     },
   );
 
+  server.registerTool(
+    'propose_rule',
+    {
+      description:
+        'Propose a change to one of the team\'s architecture rules (Phase 33 R3): a new rule, a changed one, or stopping one (remove). ' +
+        'Nothing changes: the proposal waits for a person, who sees what it would do against the code and accepts or rejects it in the app. ' +
+        'Returns what it would do now, in the words the check uses. You cannot change a rule yourself, and editing .codetrellis/rules/ directly is ' +
+        'caught by the check, which judges a branch by its base\'s rules.',
+      inputSchema: {
+        id: z.string().min(1).max(63).describe('The rule\'s id, a short slug like web-not-db: an existing rule to change or stop, or a new one.'),
+        from: z.string().max(300).optional().describe('The files it is about: a folder ending in / or a pattern. Required unless remove.'),
+        may_not_import: z.string().max(300).optional().describe('What they may not import. Required unless remove.'),
+        except: z.array(z.string().max(300)).max(50).optional().describe('Files they may import all the same.'),
+        because: z.string().max(200).optional().describe('Why the rule exists, in the team\'s words.'),
+        strength: z.enum(['block', 'warn', 'guide']).optional().describe('block fails the check; warn is said; guide is never checked. A new rule starts at warn.'),
+        suite: z.string().max(63).optional().describe('The suite file it belongs in, like payments.'),
+        remove: z.boolean().optional().describe('Propose stopping the rule.'),
+        why: z.string().min(1).max(1000).describe('Why you propose it: what you found, and the evidence.'),
+        project_path: z.string().optional().describe('An opened project. Omit for the one open in the app.'),
+      },
+    },
+    async (args, extra: any) => {
+      const root = args.project_path ?? deps.getActiveProjectPath();
+      if (!root) return { isError: true, content: [{ type: 'text' as const, text: 'No project is open.' }] };
+      const id = authorFromExtra(deps, extra);
+      const body = args.remove ? null : {
+        from: args.from, mayNotImport: args.may_not_import, except: args.except, because: args.because, strength: args.strength, suite: args.suite,
+      };
+      try {
+        if (!body && !findRule(root, args.id)) return { isError: true, content: [{ type: 'text' as const, text: `No architecture rule "${args.id}" in this project to stop.` }] };
+        const next = body ? proposedRule(root, { ...body, id: args.id }, id.author).rule : null;
+        const preview = previewChange(root, args.id, next, edgesIfLoaded(root, deps.getActiveProjectPath(), deps.getDependencyEdges));
+        if (!preview.change) return { isError: true, content: [{ type: 'text' as const, text: `${preview.words} Nothing to propose.` }] };
+        const proposal = addRuleProposal({
+          projectRoot: root, ruleId: args.id, body: body as Record<string, unknown> | null, why: args.why,
+          effect: preview.change.effect, words: preview.words, author: id.author, authorType: id.authorType, sessionId: deps.sessionId ?? null,
+        });
+        deps.broadcast?.('rules-changed', { project: root });
+        return {
+          _meta: { summary: `Proposed a change to ${args.id}; a person decides` },
+          content: [{ type: 'text' as const, text: JSON.stringify({
+            proposal: proposal.uid, status: proposal.status, ...previewJson(preview),
+            next: 'A person decides in the app. Until then the rule is as it was; carry on under it.',
+          }, null, 2) }],
+        };
+      } catch (err) {
+        if (err instanceof RuleError) return { isError: true, content: [{ type: 'text' as const, text: err.message }] };
+        throw err;
+      }
+    },
+  );
 }
