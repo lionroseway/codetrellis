@@ -431,8 +431,15 @@ jobs:
           git config --global user.name "CodeTrellis CI"
       - name: Install Playwright runner
         run: npx playwright install --with-deps chromium
+      # Shards balanced by weight, not cut into equal runs of tests (Phase 33
+      # follow-up): Playwright's --shard put most of e2e/plan/*, page tests
+      # at ~15 s each, in one shard, which ran 25 minutes while the others
+      # took 7. tools/e2e-shards/split.ts deals whole files out by weight;
+      # every shard computes the same split, and each file is in one.
       - name: Browser suite, ${{ matrix.project }} shard ${{ matrix.shard }}
-        run: npx playwright test --project=${{ matrix.project }} --shard=${{ matrix.shard }} --reporter=list,html
+        run: |
+          node --import tsx tools/e2e-shards/split.ts ${{ matrix.project }} ${{ matrix.shard }} > shard-files.txt
+          npx playwright test --project=${{ matrix.project }} --test-list shard-files.txt --reporter=list,html
       - name: What each failing page showed
         # The snapshot Playwright writes beside every failure, in the log itself.
         if: failure()
