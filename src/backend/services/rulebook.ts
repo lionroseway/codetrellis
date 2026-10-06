@@ -48,8 +48,11 @@ export interface Rulebook {
   problems: string[];
 }
 
+/** Names in the rules folder that are not suites: the debt baseline (C3). */
+const RESERVED = new Set(['baseline']);
+
 export function isSuiteName(name: unknown): name is string {
-  return typeof name === 'string' && SUITE_RE.test(name);
+  return typeof name === 'string' && SUITE_RE.test(name) && !RESERVED.has(name);
 }
 
 /** The suite file for a name, relative to the project. */

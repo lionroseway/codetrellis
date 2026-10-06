@@ -150,6 +150,25 @@ says what it checked: `Conforms to suite payments: …`. The same scopes are
 `suite`, `rule` and `path` on `check_changes` and `check_conformity`, and on
 `GET /api/rules`.
 
+### Old breaches may only fall (Phase 33 C3)
+
+A rule written over old code has imports that already break it. The check
+judges only what a change adds, so they never fail it, and nothing stops
+their number growing by other routes (a rule's scope changed, a merge
+nobody gated). `codetrellis rules baseline` writes them down, per rule, in
+`.codetrellis/rules/baseline.yaml`, to commit with the code. From then on:
+
+- the check judges the **whole tree** against the base's baseline: a
+  breach it does not list fails (at warn, it is said);
+- a rule with fewer breaches than its baseline says so
+  (`↓ routes-not-db: 1 breach left, down from 2`), and running
+  `rules baseline` again locks the lower count in;
+- the baseline **may only shrink**: a change that adds an entry for a rule
+  the base already baselined fails. `rules baseline` itself never adds one
+  for such a rule; a rule new to the file starts with what breaks it now.
+
+A baseline never excuses an import the change adds.
+
 ### How hard a rule holds (Phase 33 R4)
 
 Every rule has a `strength`:

@@ -33,6 +33,7 @@ import { rulesAt } from '../../services/rules-at';
 import { changeWords, diffRules, type RuleChange } from '../../services/rule-changes';
 import { approvalFor, approvalsHere, keysAt } from '../../services/rule-approvals';
 import { inScope, parseScope, scopeRules, scopeWords } from '../../services/rule-scope';
+import { baselineAt, ratchet, readBaseline, type RatchetFinding } from '../../services/rule-baseline';
 import { edgesIfLoaded, rulesOf } from '../../services/architecture-rules';
 import { getDependencyEdges } from '../../services/database';
 import { isSafeGitRef } from '../../services/git-safety';
@@ -403,7 +404,24 @@ export function register(server: McpServer, deps: ToolDeps): void {
           notes.push(`⚠ The rules at ${since.slice(0, 7)} could not be read, so this change was judged by its own rules. Fetch the base with its history.`);
         }
       }
-      const c = await checkChanges(root, paths, (uid) => deps.criterionLoop.checkCriterion(uid), (files) => ruleImports(root, files, since, judgeBy ?? (scope ? scopeRules(rulesOf(root), scope) : undefined)), rulebook, notes, strict === true, scope !== null);
+      // C3: with a baseline on the base, the whole tree is judged against it, by the base's rules.
+      let ratchetFound: Array<RatchetFinding & { strength: string }> = [];
+      const baseBaseline = since ? baselineAt(root, since) : null;
+      const headBaseline = readBaseline(root);
+      if (baseBaseline || headBaseline) {
+        const judged = judgeBy ?? scopeRules(rulesOf(root), scope);
+        const edges = edgesIfLoaded(root, deps.getActiveProjectPath(), getDependencyEdges);
+        if (edges) {
+          const strengthOf = new Map(judged.map((r) => [r.id, r.strength]));
+          const ids = new Set(judged.map((r) => r.id));
+          ratchetFound = ratchet(baseBaseline, headBaseline, judged, edges)
+            .filter((f) => ids.has(f.rule) || f.kind === 'grew')
+            .map((f) => ({ ...f, strength: strengthOf.get(f.rule) ?? 'block' }));
+        } else {
+          notes.push('⚠ The rules\' baseline was not checked: this project\'s imports are not loaded here.');
+        }
+      }
+      const c = await checkChanges(root, paths, (uid) => deps.criterionLoop.checkCriterion(uid), (files) => ruleImports(root, files, since, judgeBy ?? (scope ? scopeRules(rulesOf(root), scope) : undefined)), rulebook, notes, strict === true, scope !== null, ratchetFound);
       return {
         _meta: { summary: c.ok ? `Checked ${c.files.length} changed file${c.files.length === 1 ? '' : 's'}: conforms` : `Checked ${c.files.length} changed files: ${c.says.length} to act on` },
         content: [{ type: 'text' as const, text: JSON.stringify({
@@ -414,6 +432,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
           rules: c.rules.map((r) => ({ path: r.path, imports: r.imports, rule: r.rule, words: r.words, because: r.because, strength: r.strength })),
           rulebook: c.rulebook.map((r) => ({ rule: r.rule, change: r.change, effect: r.effect, allowed: r.allowed, forbidden: r.forbidden, words: changeWords(r), ...(r.approval ? { approval: r.approval } : {}) })),
           notes: c.notes,
+          ...(c.ratchet.length ? { ratchet: c.ratchet } : {}),
           ...(scope ? { scope: scopeWords(scope) } : {}),
           ...(c.rulesChecked ? {} : { rules_note: 'The architecture rules were not checked: this project\'s imports are not loaded here. Open the project, or run `codetrellis start` in it.' }),
         }, null, 2) }],

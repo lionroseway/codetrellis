@@ -156,6 +156,8 @@ which; text, or --json):
   codetrellis check --suite <s> | --rule <id> | --path <p>
                                                only those rules (comma-separated): one suite's, named
                                                rules, or the rules about a path
+  codetrellis rules baseline                   record each rule's breaches now; the check then fails on
+                                               any it does not list, and the file may only shrink
   codetrellis report-tests <junit.xml>         tell CodeTrellis how the tests went
 
 Changing and committing the plan:
