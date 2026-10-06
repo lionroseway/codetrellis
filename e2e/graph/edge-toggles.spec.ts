@@ -29,7 +29,7 @@ test.describe('Graph edge toggles', () => {
     // The nodes stay; only the lines go.
     await expect.poll(() => page.locator('.react-flow__node').count()).toBeGreaterThan(0);
 
-    await page.reload();
+    await gotoWithProject(page);
     await expect.poll(() => page.locator('.react-flow__node').count(), { timeout: 15_000 }).toBeGreaterThan(0);
     await expect(page.getByTestId('graph-edges')).toContainText('2/3');
     await expect(importEdges(page)).toHaveCount(0);
