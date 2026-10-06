@@ -164,3 +164,38 @@ sections:
         title: Phase review on a packaged build
       - id: Z3
         title: Into `main` and release
+# The screens the phase built, shown on the progress page under "See it",
+# taken by the browser suite into test-results/ux-audit/.
+shots:
+  - file: rules-view.png
+    step: G7
+    title: The Rules view
+    says: Its own workspace beside Code and Docs. Each suite says whether it holds; each rule its reason, its strength and its file; a new rule of any of five kinds; and the history of changes.
+  - file: rules-settings-proposal.png
+    step: R3
+    title: An agent proposes, a person decides
+    says: An agent asked to drop a rule. The card says what that would allow against the code today. Accepting signs it with your key, and CI counts it only if that key is already on the base branch.
+  - file: checks-view.png
+    step: G9
+    title: The Checks tab
+    says: Every check run, from the app or CI. Each finding with its fix and a way to the graph and the code; two runs compared into new, fixed and unchanged.
+  - file: checks-view-review.png
+    step: C4b
+    title: An agent's review, checked by code
+    says: Only findings that quote lines in the diff are kept. A planted "ignore your instructions" comment is flagged as suspicious, and a finding off the diff is dropped, with why.
+  - file: findings-inspector.png
+    step: G10
+    title: Findings where the code is
+    says: Select a file and the inspector says what the latest check found in it, with a ⊘ on the line in the code.
+  - file: findings-brief.png
+    step: G10
+    title: The rules in a task's brief
+    says: Which rules judge this task's files, what the latest check found in them, and what to do instead, for the person and the agent.
+  - file: awareness-drift-rule.png
+    step: R9
+    title: A rule in scope, in the overlap card
+    says: Work outside its scope names the rule that applies there, so the person and the agents see it before anything is checked.
+  - file: graph-overlays-menu.png
+    step: G1, G3
+    title: The graph's legend, Edges and Overlays
+    says: The legend lists only what is on screen. Each kind of edge can be turned off, and cross-system links are drawn dotted, apart from imports.

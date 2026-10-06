@@ -159,3 +159,19 @@ test('the progress page counts the steps that are work, says each state in words
   assert.match(html, /href="https:\/\/github.com\/lionroseway\/codetrellis\/pull\/247"/);
   assert.match(html, /Generated 2026-10-05 09:30 UTC/);
 });
+
+test('the progress page shows the phase\'s screens, each opening full size, and only those taken', async () => {
+  const { shotsHtml } = await import('./page');
+  const { problems } = await import('./status');
+  const shots = [
+    { file: 'rules-view.png', step: 'G7', title: 'The Rules view', says: 'Each suite, `whether` it holds.' },
+    { file: 'missing.png', title: 'Not taken', says: 'No image.' },
+  ];
+  const html = shotsHtml(shots, new Set(['rules-view.png']));
+  assert.match(html, /<a href="shots\/rules-view.png" target="_blank" rel="noopener"><img src="shots\/rules-view.png" alt="The Rules view" loading="lazy"><\/a>/);
+  assert.match(html, /<code>whether<\/code>/);
+  assert.doesNotMatch(html, /missing\.png/);
+  assert.equal(shotsHtml(shots, new Set()), '');
+  const now = { step: 's', status: 's', next: 'n', blockers: 'b', updated: 'u' };
+  assert.deepEqual(problems({ now, sections: [], shots: [{ file: '../etc/x.png', title: 't', says: 's' }] }), ['shots[0] needs a file: a screenshot\'s name, like rules-view.png.']);
+});

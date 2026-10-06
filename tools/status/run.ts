@@ -5,6 +5,7 @@
  *   npm run status -- --phase 32   # a named phase
  *   npm run status:check           # exit 1 if the block is behind what git says now
  *   npm run status:page            # also write the progress page (see page.ts)
+ *   npm run status:page -- --shots <dir>   # its screens from <dir>, not test-results/ux-audit
  *
  * Needs the integration branch's history (`git fetch origin feat/phase-<n>`).
  * See `status.ts` for what is written and what is read.
@@ -52,8 +53,21 @@ async function main(): Promise<void> {
   if (process.argv.includes('--page')) {
     const out = path.join(root, 'out', 'status', `phase-${phase}.html`);
     fs.mkdirSync(path.dirname(out), { recursive: true });
-    fs.writeFileSync(out, renderPage(status, facts, docs, new Date()));
-    console.log(`Wrote the progress page to ${path.relative(root, out)}; publish it to the progress artifact (the phase's EXECUTION §1.1)`);
+    // The screens, copied beside the page from where the browser suite wrote them
+    // (`--shots <dir>`, else test-results/ux-audit); published with it under shots/.
+    const i = process.argv.indexOf('--shots');
+    const from = path.resolve(root, i >= 0 ? process.argv[i + 1] : path.join('test-results', 'ux-audit'));
+    const shotsDir = path.join(path.dirname(out), 'shots');
+    const present = new Set<string>();
+    for (const shot of status.shots ?? []) {
+      const src = path.join(from, shot.file);
+      if (!fs.existsSync(src)) { console.log(`No ${shot.file} in ${path.relative(root, from)}: left off the page (run its browser spec to take it)`); continue; }
+      fs.mkdirSync(shotsDir, { recursive: true });
+      fs.copyFileSync(src, path.join(shotsDir, shot.file));
+      present.add(shot.file);
+    }
+    fs.writeFileSync(out, renderPage(status, facts, docs, new Date(), present));
+    console.log(`Wrote the progress page to ${path.relative(root, out)}${present.size ? ` with ${present.size} screens in ${path.relative(root, shotsDir)}/` : ''}; publish it, and its shots/, to the progress artifact (the phase's EXECUTION §1.1)`);
   }
 }
 

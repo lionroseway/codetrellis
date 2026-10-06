@@ -50,7 +50,14 @@ export interface Now {
   updated: string;
 }
 
-export interface Status { now: Now; sections: Section[] }
+/**
+ * A screen the phase built, for the progress page's "See it" (the owner's ask,
+ * 2026-10-06: the screenshots belong on the page, as Phase 32's had them).
+ * `file` is a screenshot the browser suite writes to `test-results/ux-audit/`.
+ */
+export interface Shot { file: string; title: string; says: string; step?: string }
+
+export interface Status { now: Now; sections: Section[]; shots?: Shot[] }
 
 /** An item with its state settled. */
 export interface Resolved extends Omit<Item, 'items' | 'status' | 'prs'> {
@@ -110,6 +117,10 @@ export function problems(s: Status): string[] {
     }
   };
   for (const sec of s.sections ?? []) walk(sec.items, sec.title);
+  for (const [i, shot] of (s.shots ?? []).entries()) {
+    if (typeof shot.file !== 'string' || !/^[a-z0-9][a-z0-9._-]*\.(png|jpe?g)$/i.test(shot.file)) out.push(`shots[${i}] needs a file: a screenshot's name, like rules-view.png.`);
+    if (!shot.title?.trim() || !shot.says?.trim()) out.push(`shots[${i}] (${shot.file}) needs a title and what it says.`);
+  }
   return out;
 }
 
