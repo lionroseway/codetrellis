@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Setup PR into feat/phase-33; the owner's decisions recorded |
-| **Status** | The owner answered the open questions (2026-10-06): rules as YAML suites; loosening signed with the device key; agent checks free, on the user's own agent, model and key, built by driving the user's agent rather than writing one; no CI host first; review features V1, V2, V3 and V6; the name agent checks; go ahead |
-| **In flight** | nothing open |
+| **Stage / step** | 0.1 Baseline |
+| **Status** | Setup merged (#346), with the sprintf-js audit fix (#347, into main) carried. Measuring every suite on Node 26.10.0 from a clean npm ci --ignore-scripts (as CI installs), in a 4-core cloud container |
+| **In flight** | 0.1 building on `feat/phase-33-0-1-baseline` |
 | **Last merged** | — |
-| **Next action** | Merge the setup PR into feat/phase-33; then 0.1 Baseline on feat/phase-33-0-1-baseline (Node 26, clean npm ci --ignore-scripts, every suite) |
+| **Next action** | Record typecheck, the lint warning count, test:unit, test:phone, test:harness and the browser suite in the log's Baseline; any failure is ours to fix before 0.2 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-06 |
 
-> Read from git at `origin/feat/phase-33` `5fb23f4`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `81db781`, with open PRs from GitHub.
 
 ---
 
@@ -34,13 +34,14 @@
 
 ### Setup
 - [x] Integration branch `feat/phase-33` cut from `main` (`5fb23f4`)
-- [ ] Status tooling serves any phase (and reads Phase 32's D and E steps, which the old pattern missed)
-- [ ] The progress page, generated from the status (`npm run status:page`) and published as an artifact
-- [ ] Design, execution plan, status and this log
-- [ ] CLAUDE.md points every session here
+- [x] Status tooling serves any phase (and reads Phase 32's D and E steps, which the old pattern missed) (#346)
+- [x] The progress page, generated from the status (`npm run status:page`) and published as an artifact (#346)
+- [x] Design, execution plan, status and this log (#346)
+- [x] CLAUDE.md points every session here (#346)
+- [x] Follow-up: A new advisory (sprintf-js, GHSA-hp3w-g68c-fv3c) failed the production audit on every branch: kept out of the tree by an override (into `main`) (#347)
 
 ### Stage 0: ground truth
-- [ ] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count)
+- [ ] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) — building
 - [ ] 0.2 Measure the plan reload storm in a harness test (imports, broadcasts, response time)
 - [ ] 0.3 Colour audit (every colour, its meaning and where), the draft visual vocabulary
 
@@ -172,6 +173,25 @@ lint warning count, `test:unit`, `test:harness`, the browser suite and
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-06 — Setup merged; 0.1 started
+
+- **#347 into `main`.** A moderate advisory published today against
+  `sprintf-js` (GHSA-hp3w-g68c-fv3c, every version affected) failed
+  `npm audit --omit=dev` on every branch. It reached production only through
+  `mammoth` → `argparse@1`, and only `mammoth`'s CLI uses `argparse`. An npm
+  override gives `mammoth` `argparse` 2, so `sprintf-js` leaves the
+  production tree.
+  - The lockfile change is only `mammoth`'s two nested entries. npm also
+    wanted to resync the root `bin` and `better-sqlite3`'s
+    `hasInstallScript`; I left those out, and `npm ci` accepts the result.
+  - Found on the way: with `node_modules` absent, `npm install
+    --package-lock-only` (npm 10 and 11 alike) leaves an override
+    unapplied. A full install applies it.
+- **#346 merged into `feat/phase-33`** (`81db781`), carrying the same fix,
+  and green on all 20 checks.
+- **0.1 started** on `feat/phase-33-0-1-baseline`, on Node 26.10.0 (npm
+  11.19.1).
 
 ### 2026-10-05 — Its own folder; agent checks, review and rendering designed
 
