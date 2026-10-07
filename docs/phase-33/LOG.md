@@ -20,7 +20,7 @@
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
 | **Status** | V1 in review (the architecture section at the top of every review); G2 merged (#372) |
-| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs` |
+| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 in review (#373) on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs` |
 | **Last merged** | G2 (#372, `3ddddbf`) |
 | **Next action** | Merge V1 when CI is green, then replay V2 (already verified on top of V1) |
 | **Blockers** | None |
@@ -90,7 +90,7 @@
 - [ ] G10 Findings where the code is (graph, code gutter, inspector, brief, phone) — building
 
 ### Track V: review (the owner's picks)
-- [ ] V1 What this change does to the architecture (structural diff at the top of every review) — building
+- [ ] V1 What this change does to the architecture (structural diff at the top of every review) (#373) — in review
 - [ ] V2 Review in order of risk (dependents, rule scope, test grounding, other work) — building
 - [ ] V3 Re-review only what changed since each reviewer's last look — building
 - [ ] V6 Did the change do what the task said (only when it is linked to a task) — building
@@ -223,6 +223,14 @@ The suite was green at the start, so the three failures were ours:
 - Checked before review on the replayed code: unit 2082 passing; 99 review,
   PR-draft and phone harness tests; the agent and review-regression browser
   specs (52 chromium, 52 serial).
+- **A race found in V1's CI, from G6.** An agent's `open_plan` waited for
+  the whole of `setActivePlan`, then brought the plan forward. But the plan
+  shows the moment it is active, and `setActivePlan` goes on (the projection,
+  the plan's own project). An Escape pressed in that gap was undone. Every
+  agent route to a plan (plan, split, timeline) now goes through `showPlan`,
+  which does not bring the plan back if the person left it after it
+  appeared. Shown on the failing spec, three runs out of three, and on the
+  agent, plan and MCP browser specs (249 chromium, 75 serial).
 
 ### 2026-10-07 — G1 merged (#371), the page's screens merged (#370); G2 in review
 

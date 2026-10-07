@@ -297,16 +297,11 @@ export function useWebSocket() {
               : breakpointRef ? { kind: 'breakpoint', id: breakpointRef, at: Date.now() } : null);
             if (target !== 'artefact') useArtefactViewStore.getState().close();
             if (target === 'plan' || target === 'plans') {
-              // Await setActivePlan so activePlanUid is set before the
-              // workspace mode flips — otherwise the render condition
-              // (workspaceMode === 'plan' && activePlanUid) fails when
-              // no plan was previously open.
-              (async () => {
-                if (planUid) {
-                  await usePlanStore.getState().setActivePlan(planUid);
-                }
-                useUiStore.getState().setWorkspaceMode('plan');
-              })();
+              // showPlan sets the plan before the workspace mode flips (the
+              // render condition needs activePlanUid), and does not push it
+              // back over a person who minimised it as it appeared (#373).
+              if (planUid) void import('../lib/open-plan-item').then((m) => m.showPlan(planUid, { leaveBrief: true }));
+              else useUiStore.getState().setWorkspaceMode('plan');
             } else if (target === 'awareness' || target === 'stack' || target === 'review') {
               // A tab of the side panel, opened as a person's click on it
               // would: the panel shows if it was hidden.
@@ -364,22 +359,16 @@ export function useWebSocket() {
                 });
               }
             } else if (target === 'split') {
-              (async () => {
-                if (planUid) {
-                  await usePlanStore.getState().setActivePlan(planUid);
-                }
-                useUiStore.getState().setSplitView(true);
-                useUiStore.getState().setWorkspaceMode('plan');
-              })();
+              useUiStore.getState().setSplitView(true);
+              if (planUid) void import('../lib/open-plan-item').then((m) => m.showPlan(planUid, { leaveBrief: true }));
+              else useUiStore.getState().setWorkspaceMode('plan');
             } else if (target === 'timeline') {
               // F11 — "timeline" means the plan event/activity feed. Open the
               // plan workspace AND its activity drawer so this is visibly
               // distinct from a plain 'plan' navigation (previously a no-op).
               (async () => {
-                if (planUid) {
-                  await usePlanStore.getState().setActivePlan(planUid);
-                }
-                useUiStore.getState().setWorkspaceMode('plan');
+                if (planUid) await (await import('../lib/open-plan-item')).showPlan(planUid, { leaveBrief: true });
+                else useUiStore.getState().setWorkspaceMode('plan');
                 if (!usePlanItemsStore.getState().activityDrawerOpen) {
                   usePlanItemsStore.getState().toggleActivityDrawer();
                 }
