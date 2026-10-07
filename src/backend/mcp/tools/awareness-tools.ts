@@ -437,13 +437,20 @@ export function register(server: McpServer, deps: ToolDeps): void {
           fix: z.string().max(500).optional().describe('What to do instead.'),
         })).max(200).describe('Your findings; empty when you found nothing.'),
         ran_in: z.string().max(80).optional().describe('Where this review runs, in words: the CLI says "GitHub Actions", "a terminal". Omit from a session.'),
+        // Phase 33 C4 — what `codetrellis review` knows of the agent it ran.
+        reviewer: z.string().max(80).optional().describe('`codetrellis review`: the agent it ran headless ("claude-code"). Omit from a session: you are the reviewer.'),
+        pass: z.string().max(80).optional().describe('`codetrellis review`: the skill the pass ran.'),
+        refused: z.array(z.string().max(300)).max(200).optional().describe('`codetrellis review`: tool calls the agent was refused.'),
+        retries: z.number().int().min(0).max(10).optional().describe('`codetrellis review`: runs retried because the agent ended without reporting.'),
+        error: z.string().max(500).optional().describe('`codetrellis review`: why the agent could not run (the model unreachable, the key refused).'),
       },
     },
-    async ({ bundle, inconclusive, findings, ran_in }, extra: any) => {
+    async ({ bundle, inconclusive, findings, ran_in, reviewer, pass, refused, retries, error }, extra: any) => {
       const by = authorFromExtra(deps, extra);
       const r = recordReview({
         report: { bundle, inconclusive: inconclusive ?? null, findings },
-        agent: by.author, by, ranIn: ran_in?.trim() || `${by.author}'s session`,
+        agent: reviewer?.trim() || by.author, by, ranIn: ran_in?.trim() || `${by.author}'s session`,
+        refused, error: error?.trim() || undefined, pass: pass?.trim() || null, retries,
       });
       if ('error' in r) return { isError: true, content: [{ type: 'text' as const, text: r.error }] };
       return {

@@ -275,6 +275,45 @@ async function verb(name: string, p: Parsed): Promise<void> {
   }
 }
 
+/**
+ * Phase 33 C4 — `codetrellis review`: agent checks on the person's own agent
+ * CLI, run headless, each pass recorded as a check run (src/cli/review.ts).
+ */
+async function reviewCmd(p: Parsed): Promise<void> {
+  const { agentName, connectAgent, dataDirFor, NotRunningError } = await import('./agent');
+  const { review, reviewOptions, ReviewUsageError } = await import('./review');
+  const cwd = process.cwd();
+  let opts;
+  try { opts = reviewOptions(p, cwd, process.env); } catch (err) {
+    if (err instanceof ReviewUsageError) fail(err.message);
+    throw err;
+  }
+  let agent;
+  try {
+    agent = await connectAgent({ dataDir: dataDirFor(flag(p, 'data-dir'), cwd, process.env), name: agentName(flag(p, 'as'), process.env), cwd });
+  } catch (err) {
+    if (err instanceof NotRunningError) fail(err.message, 1);
+    throw err;
+  }
+  try {
+    const sinkFor = (dir: string) => ({ command: process.execPath, args: [binPath(), 'review-sink', '--pass', dir] });
+    const { out: text, code } = await review(agent, opts, cwd, process.env, sinkFor, p.flags.json === true);
+    out(text);
+    process.exitCode = code;
+  } finally {
+    await agent.close();
+  }
+}
+
+/** The review sink a reviewing agent's CLI starts over stdio (C4); stdout is the protocol alone. */
+async function reviewSink(p: Parsed): Promise<void> {
+  const dir = flag(p, 'pass');
+  if (!dir) fail('review-sink needs --pass <dir>');
+  backendLogToStderr();
+  const { runReviewSink } = await import('./review-sink');
+  await runReviewSink(dir!);
+}
+
 /** This CLI's launcher, as an agent's config names it. */
 function binPath(): string {
   return path.resolve(__dirname, '..', '..', 'bin', 'codetrellis.mjs');
@@ -292,6 +331,8 @@ async function main(): Promise<void> {
     case 'mcp': return mcp(p);
     case 'start': return start(p);
     case 'stop': return stop(p);
+    case 'review': return reviewCmd(p);
+    case 'review-sink': return reviewSink(p);
     default:
       if (VERBS.has(p.command) || PLAN_VERBS.has(p.command)) return verb(p.command, p);
       fail(`unknown command "${p.command}". Run codetrellis --help.`);
