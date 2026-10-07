@@ -20,7 +20,7 @@
 |---|---|
 | **Stage / step** | B5: engine per rule |
 | **Status** | In review |
-| **In flight** | B5 building on `feat/phase-33-b5-engine`; B6 building on `feat/phase-33-b6-pipelines`; Z1 building on `feat/phase-33-z1-docs` |
+| **In flight** | B5 in review (#397) on `feat/phase-33-b5-engine`; B6 building on `feat/phase-33-b6-pipelines`; Z1 building on `feat/phase-33-z1-docs` |
 | **Last merged** | B4 (#396, `5c9abd5`) |
 | **Next action** | Merge B5 when CI is green, then B6 (pipelines), which is built |
 | **Blockers** | None |
@@ -107,7 +107,7 @@
 - [x] B2 Grep rules: text that must not, or must, appear, scoped by path, file:line findings, baselined (#394)
 - [x] B3 Fuzzy matching: look-alike names and near-duplicates, by a deterministic similarity score with a threshold (#395)
 - [x] B4 Your own patterns: what counts as a call, or as any entry (queue:, event:, flag:), without code (#396)
-- [ ] B5 Engine per rule: deterministic, fuzzy or agent, independent of strength; an agent rule blocks only when its owner says block — building
+- [ ] B5 Engine per rule: deterministic, fuzzy or agent, independent of strength; an agent rule blocks only when its owner says block (#397) — in review
 - [ ] B6 Pipelines: stages in order or in parallel, needs and when, and later stages grounded by earlier results — building
 - [ ] B7 Docs for the blocks: a worked example each in rules.md, and pipeline recipes
 
