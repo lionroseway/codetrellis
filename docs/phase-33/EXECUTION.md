@@ -130,6 +130,8 @@ rulebook's breadth.
 8. **R6–R9.** Symbol, call, folder and guide rules.
 9. **C4, C4b, C5, C6.** Agent checks locally, your own agent locally, then
    in CI, then graduation.
+   **R10**, this repository's own rulebook, follows C6 (the owner,
+   2026-10-07): deterministic rules before agent review in this repo's CI.
 10. **Track V**, the review features the owner chose (2026-10-06): V1, V2
     and V3, then V6.
 11. **Z.** Docs, phase review, into `main`, release.
@@ -310,6 +312,22 @@ and checked.
 
 Done when a task touching `src/payments/` shows the payments suite in its
 brief.
+
+**R10 This repository's own rulebook.** Added by the owner (2026-10-07),
+who deferred agent review in this repo's CI: on a public repository a pull
+request's code can read the repository's secrets, so architecture here is
+held by deterministic rules first.
+- `.codetrellis/rules/` for this repository, written from what CLAUDE.md
+  already says: the frontend, backend and shared layers, the native and
+  peer packages each kept to the module that wraps it, and the services
+  folder's naming.
+- Every rule measured against today's code first. A breach is either a
+  real exception, written into the rule with why, or counted debt in
+  `baseline.yaml`, which may only fall.
+- No AI and no secret: `ci.yml`'s conformity step already runs `codetrellis
+  check` on every pull request.
+
+Done when a pull request that breaks one of the rules fails that step.
 
 ### Track C: checks anywhere
 
