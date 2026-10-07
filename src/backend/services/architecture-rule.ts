@@ -154,7 +154,7 @@ function parseCallRule(r: Record<string, unknown>): { rule: ArchitectureRule | n
   const problems: string[] = [];
   if (typeof r.id !== 'string' || !ID_RE.test(r.id)) problems.push('id must be a short slug, like stripe-api-via-payments');
   const { value: target, match: m, threshold: t } = splitTarget(r.calls ?? r.mayNotImport);
-  const match = targetProblem(problems, target, m ?? r.match, callProblem, /^(?:http|sql):/, 'calls', 'http:*.stripe.com');
+  const match = targetProblem(problems, target, m ?? r.match, callProblem, /^[a-z][a-z0-9-]*:/, 'calls', 'http:*.stripe.com');
   const threshold = thresholdOf(problems, match, t ?? r.threshold);
   const fromProblem = r.from === undefined ? null : patternProblem('from', r.from);
   if (fromProblem) problems.push(fromProblem);
@@ -376,6 +376,8 @@ export function targetMatches(rule: Pick<ArchitectureRule, 'kind' | 'mayNotImpor
     const [ek, er] = [entry.slice(0, entry.indexOf(':')), entry.slice(entry.indexOf(':') + 1)];
     if (rk !== ek) return false;
     if (rk === 'sql') return wholly('glob', rr.toLowerCase(), er.toLowerCase());
+    // B4: a team's own kind is one name, which the glob covers whole: queue:orders.*.
+    if (rk !== 'http') return wholly('glob', rr, er);
     const split = (x: string) => { const i = x.indexOf('/'); return i < 0 ? [x, ''] : [x.slice(0, i), x.slice(i)]; };
     const [rh, rp] = split(rr);
     const [eh, ep] = split(er);
@@ -507,7 +509,7 @@ export function ruleStatement(rule: Pick<ArchitectureRule, 'kind' | 'from' | 'ma
   if (rule.kind === 'folder') return folderWords(rule.from, rule);
   if (rule.kind === 'calls') {
     const where = rule.from && rule.from !== '**' ? `in ${rule.from}, ` : '';
-    return `${where}only ${(rule.only ?? []).join(', ')} may ${rule.mayNotImport.startsWith('sql:') ? 'use' : 'call'} ${callWords(rule.mayNotImport)}`;
+    return `${where}only ${(rule.only ?? []).join(', ')} may ${callVerb(rule.mayNotImport)} ${callWords(rule.mayNotImport)}`;
   }
   if (rule.kind === 'symbol') {
     const where = rule.from && rule.from !== '**' ? `in ${rule.from}, ` : '';
@@ -515,6 +517,11 @@ export function ruleStatement(rule: Pick<ArchitectureRule, 'kind' | 'from' | 'ma
     return `${where}only ${(rule.only ?? []).join(', ')} may import ${sym ? `${sym.name} from ${sym.file}` : rule.mayNotImport}`;
   }
   return `${rule.from} may not import ${rule.mayNotImport}${except}`;
+}
+
+/** What a call rule's files may do to its target: call a host, use a table, or reach a team's own kind (B4). */
+function callVerb(target: string): string {
+  return target.startsWith('sql:') ? 'use' : target.startsWith('http:') ? 'call' : 'reach';
 }
 
 /** "web/ may not import db/ (except db/types.ts): web talks to db through the API" */

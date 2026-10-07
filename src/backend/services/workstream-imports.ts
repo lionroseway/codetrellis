@@ -22,6 +22,7 @@ import { symbolEntry } from '../../shared/lib/symbol-entry';
 import { callEntry } from '../../shared/lib/call-entry';
 import { exportCount, fileFact } from '../../shared/lib/folder-entry';
 import { grepEntries, grepKey } from '../../shared/lib/grep-entry';
+import { patternStamp } from './patterns';
 import { originsOf } from './importers';
 import { ruleFix } from '../../shared/lib/check-words';
 import { showAtAsync } from './branch-workstreams';
@@ -31,7 +32,8 @@ import { lookAlikeFix } from './architecture-rule';
 import type { RuleImport } from './conformity-gate';
 import type { ArchitectureRule } from '../../shared/types/architecture-rules';
 
-export interface ImportEdge { from: string; to: string }
+/** `line`: where the file names it, when its extractor knew (a callsite's, B4), so a pattern's entry has a place. */
+export interface ImportEdge { from: string; to: string; line?: number }
 
 const MAX_CACHED = 5_000;
 const cache = new Map<string, { stamp: string; added: ImportEdge[] }>();
@@ -68,7 +70,7 @@ export async function importsAdded(
   for (const f of w.changes.files) if (f.status !== 'deleted') known.add(path.join(projectRoot, f.path));
   const { aliasMap, systems } = getImportResolutionContext(projectRoot);
 
-  const targets = (rel: string, content: string | null, scopeRel = rel): Set<string> => {
+  const targets = (rel: string, content: string | null, scopeRel = rel, lines?: Map<string, number>): Set<string> => {
     const out = new Set<string>();
     if (content === null) return out;
     // B2: the lines it holds that grep rules read, by the file's path now, so a rename is not news.
@@ -80,7 +82,14 @@ export async function importsAdded(
     if (opts.files) out.add(fileFact(rel, parsed ? exportCount(parsed.language, parsed.symbols) : null));
     if (!parsed) return out;
     // R7: the calls it makes, for call rules to read (no resolver needed).
-    if (opts.calls) for (const cs of parsed.callsites ?? []) { const e = callEntry(cs); if (e) out.add(e); }
+    if (opts.calls) {
+      for (const cs of parsed.callsites ?? []) {
+        const e = callEntry(cs);
+        if (!e) continue;
+        out.add(e);
+        if (lines && cs.line && !lines.has(e)) lines.set(e, cs.line);
+      }
+    }
     const resolver = getResolverForLanguage(parsed.language);
     if (!resolver) return out;
     for (const imp of parsed.imports) {
@@ -106,14 +115,15 @@ export async function importsAdded(
   const edges: ImportEdge[] = [];
   for (const file of w.changes.files) {
     if (file.status === 'deleted') continue;
-    const key = `${folder}\0${file.path}\0${opts.packages ? 'p' : ''}${opts.symbols ? 's' : ''}${opts.calls ? 'c' : ''}${opts.files ? 'f' : ''}${(opts.grep ?? []).map((r) => `g${grepKey(r)}${r.in?.join(',')}|${r.except.join(',')}`).join('')}`;
+    const key = `${folder}\0${file.path}\0${opts.packages ? 'p' : ''}${opts.symbols ? 's' : ''}${opts.calls ? `c${patternStamp(projectRoot)}` : ''}${opts.files ? 'f' : ''}${(opts.grep ?? []).map((r) => `g${grepKey(r)}${r.in?.join(',')}|${r.except.join(',')}`).join('')}`;
     const stamp = stampOf(folder, base, file, branch);
     const hit = cache.get(key);
     if (hit && hit.stamp === stamp) { edges.push(...hit.added); continue; }
     const beforePath = file.status === 'renamed' && file.from ? file.from : file.path;
-    const after = targets(file.path, await read(file.path));
+    const lines = new Map<string, number>();
+    const after = targets(file.path, await read(file.path), file.path, lines);
     const before = file.status === 'added' || !base ? new Set<string>() : targets(beforePath, await baseContent(folder, base, beforePath), file.path);
-    const added = [...after].filter((t) => !before.has(t)).sort().map((to) => ({ from: file.path, to }));
+    const added = [...after].filter((t) => !before.has(t)).sort().map((to) => ({ from: file.path, to, ...(lines.has(to) ? { line: lines.get(to)! } : {}) }));
     if (cache.size >= MAX_CACHED) cache.clear();
     cache.set(key, { stamp, added });
     edges.push(...added);
@@ -149,10 +159,12 @@ export async function ruleImports(projectRoot: string, files: readonly string[],
     changes: { base, files: files.map((f) => ({ path: f, status: 'modified' as const })), truncated: false },
   }, null, { packages: true, symbols: rules.some((r) => r.kind === 'symbol'), calls: rules.some((r) => r.kind === 'calls'), files: rules.some((r) => r.kind === 'folder'), grep: rules.filter((r) => r.kind === 'grep' && r.strength !== 'guide') });
   const byId = new Map(rules.map((r) => [r.id, r]));
+  const lineOf = new Map(edges.filter((e) => e.line).map((e) => [`${e.from}>${e.to}`, e.line!]));
   return checkEdges(rules, edges).map((b) => {
     const rule = byId.get(b.rule)!;
+    const line = lineOf.get(`${b.from}>${b.to}`);
     return {
-      path: b.from, imports: b.to, rule: rule.id, words: ruleStatement({ ...rule, except: [] }), because: rule.because, strength: rule.strength === 'block' ? 'block' : 'warn',
+      path: b.from, imports: b.to, ...(line ? { line } : {}), rule: rule.id, words: ruleStatement({ ...rule, except: [] }), because: rule.because, strength: rule.strength === 'block' ? 'block' : 'warn',
       // B3: a look-alike's fix says how alike, and what it is like.
       suite: rule.suite ?? 'architecture', fix: lookAlikeFix(rule, b.to) ?? ruleFix(rule),
     };

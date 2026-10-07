@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | B3: fuzzy matching |
+| **Stage / step** | B4: your own patterns |
 | **Status** | In review |
-| **In flight** | B3 in review (#395) on `feat/phase-33-b3-fuzzy`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | B2 (#394, `affe4e4`) |
-| **Next action** | Merge B3 when CI is green, then build B4 (your own patterns) |
+| **In flight** | B4 in review (#396) on `feat/phase-33-b4-patterns`; B5 building on `feat/phase-33-b5-engine`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | B3 (#395, `bbc8fdc`) |
+| **Next action** | Merge B4 when CI is green, then B5 (engine per rule), which is built |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `affe4e4`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `bbc8fdc`, with open PRs from GitHub.
 
 ---
 
@@ -48,6 +48,7 @@
 - [ ] Follow-up: The plan-panel and inspector Allotment resize throws on load (minimumSize of undefined), caught and logged since Phase 31
 - [ ] Follow-up: C5 is not yet seen reviewing on this repo: it has no CLAUDE_CODE_OAUTH_TOKEN secret, so codetrellis-review.yml and claude-review.yml review nothing. Deferred by the owner (2026-10-07): a public repo's PRs can read its secrets, so agent review here waits; deterministic rules (R10) come first
 - [ ] Follow-up: Path patterns: should `**/` match no folder too (`src/backend/**/*.ts` misses `src/backend/server.ts`)? Widening only and except loosens existing rules, so the owner decides
+- [ ] Follow-up: Cross-system map: pair a team's own kinds (a queue's publishers with its consumers)
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
@@ -104,9 +105,9 @@
 ### Track B: building blocks
 - [x] B1 Matchers on every rule target: exact, glob, regex, fuzzy (absorbs the wildcard targets proposed as R11) (#393)
 - [x] B2 Grep rules: text that must not, or must, appear, scoped by path, file:line findings, baselined (#394)
-- [ ] B3 Fuzzy matching: look-alike names and near-duplicates, by a deterministic similarity score with a threshold (#395) — in review
-- [ ] B4 Your own patterns: what counts as a call, or as any entry (queue:, event:, flag:), without code
-- [ ] B5 Engine per rule: deterministic, fuzzy or agent, independent of strength; an agent rule blocks only when its owner says block
+- [x] B3 Fuzzy matching: look-alike names and near-duplicates, by a deterministic similarity score with a threshold (#395)
+- [ ] B4 Your own patterns: what counts as a call, or as any entry (queue:, event:, flag:), without code (#396) — in review
+- [ ] B5 Engine per rule: deterministic, fuzzy or agent, independent of strength; an agent rule blocks only when its owner says block — building
 - [ ] B6 Pipelines: stages in order or in parallel, needs and when, and later stages grounded by earlier results
 - [ ] B7 Docs for the blocks: a worked example each in rules.md, and pipeline recipes
 
@@ -219,6 +220,40 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — B3 merged; B4 built: your own patterns
+
+- **B3 (#395) merged.**
+- **B4: your own patterns.** `.codetrellis/patterns/*.yaml` turn source into
+  entries by a matcher, with `is`. No code is needed.
+  - **`is: http:` and `sql:`** become callsites like any extractor's,
+    normalised the same way. Call rules, the gate, reviews and the
+    cross-system map read them unchanged.
+  - **Any other lowercase kind** (`queue:`, `event:`, `flag:`) is the
+    team's own. A call rule holds it: "only billing may reach
+    queue:orders.*".
+  - **Patterns are found by the file's place:** the nearest
+    `.codetrellis/patterns/` above it. So the scan, the watcher, the gate
+    and reviews read the same ones, with nothing passed in.
+  - **A changed pattern:** an incremental scan redoes every file's pattern
+    finds without parsing it again.
+  - **The line:** the gate gives the line the pattern found the entry on,
+    because an entry like `http:api.stripe.com/v1/charges` is not in the
+    text of `paymentsClient.charge()`.
+  - **Done criterion, proved end to end:**
+    - the scan reads the checkout's `paymentsClient.charge()` as a call to
+      Stripe, which breaks a calls rule today;
+    - a branch's `paymentsClient.refund()` fails at line 3, and its
+      `publish("orders.cancelled")` fails `queue:orders.*` at line 2;
+    - the review says "Adds queue:orders.cancelled";
+    - a pattern added later is read by the next scan though no file
+      changed (that test fails without the refresh).
+  - **Not yet:**
+    - patterns read only the files a parser reads;
+    - the cross-system map does not pair a team's own kinds, such as a
+      queue's publishers with its consumers.
+  - **Locally:** unit 2213; 164 harness tests (with the cross-system,
+    callsite and review suites); 70 chromium and 10 serial browser tests.
 
 ### 2026-10-07 — B2 merged; B3 built: fuzzy matching
 

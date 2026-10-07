@@ -18,6 +18,7 @@
  */
 
 import { grepWords, isGrepEntry } from './grep-entry';
+import { isOwnKind } from './call-entry';
 
 export type Strength = 'block' | 'warn' | 'guide';
 
@@ -85,6 +86,8 @@ export function reachWords(target: string): string {
   if (target.startsWith('http:')) return `calls ${target.slice(5)}`;
   if (target.startsWith('sql:')) return `uses the table ${target.slice(4)}`;
   if (target.startsWith('folder:')) return target.slice(7);
+  // B4: a kind of the team's own, found by its patterns.
+  if (isOwnKind(target)) return `reaches ${target}`;
   return `imports ${target}`;
 }
 

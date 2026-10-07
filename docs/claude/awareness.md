@@ -590,6 +590,46 @@ A finding reads "calls api.stripe.com/v1/charges" or "uses the table
 invoices", on the line that names it. Subprocess commands and environment
 variables are in the design but no extractor finds them yet.
 
+**Your own patterns** (Phase 33 B4, `services/patterns.ts`) add what the
+extractors cannot see: a team's own clients, and kinds of entry of its own.
+
+```yaml
+# .codetrellis/patterns/payments.yaml
+patterns:
+  - id: payments-sdk
+    find: { match: regex, value: "paymentsClient\\.(charge|refund)\\(" }
+    is: http:api.stripe.com/v1/charges
+    method: POST
+  - id: orders-queue
+    in: [services/]
+    find: { match: regex, value: "publish\\(['\"]orders\\.(\\w+)" }
+    is: queue:orders.$1
+```
+
+- **`find`** is read line by line, as a grep rule's text is: literal, a glob,
+  or a regex (B1's limits). `$1`…`$9` in `is` are the regex's groups.
+- **`is: http:` or `sql:`** makes a callsite like any extractor's, normalised
+  the same way. So call rules, the gate, reviews and the cross-system map
+  read it unchanged. `method` lets the map pair it with a route; without
+  one it is `ANY`.
+- **Any other lowercase kind** (`queue:`, `event:`, `flag:`) is an entry of
+  the team's own. A call rule holds it as it holds an HTTP call: a name and
+  everything under it by `.`, `/` or `:`, or a glob, as in
+  `calls: queue:orders.*` ("only services/billing/ may reach
+  queue:orders.*"). A finding reads "now reaches queue:orders.cancelled".
+- **Which patterns a file gets:** those of the nearest folder above it with
+  a `.codetrellis/patterns/`, read through the confined-file helper. So the
+  scan, the watcher, the gate and reviews read the same ones. Each callsite
+  says which pattern found it (`pattern:<id>`), and the gate gives the line
+  it was found on.
+- **Changing patterns:** an incremental scan redoes every file's pattern
+  finds when the patterns changed, without parsing them again.
+- **Not yet:**
+  - patterns read only files a parser reads (the languages above), not
+    YAML or Markdown;
+  - the cross-system map does not pair a team's own kinds, such as a
+    queue's publishers with its consumers.
+
 A package, symbol or call target can be a pattern (Phase 33 B1,
 `src/shared/lib/matcher.ts`). A `*` makes it a **glob** without saying so:
 `*` is any run but `/`, `**` any run at all, so `http:*.stripe.com` is every

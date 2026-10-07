@@ -92,7 +92,7 @@ export function toSarif(
       ruleId: `rule/${id}`, level,
       // C8: the finding's own line, as every surface says it, and what to do after →.
       message: { text: `${findingLine({ path: file, imports, words: str(r.words) ?? id, because: str(r.because) ?? '' })}${str(r.fix) ? ` → ${str(r.fix)}` : ''}` },
-      locations: [at(file, text === null ? null : importLine(text, imports))],
+      locations: [at(file, text === null ? null : importLine(text, imports) ?? ((r as { line_found?: number }).line_found ?? null))],
       partialFingerprints: { 'codetrellis/import': `${id}:${file}>${imports}` },
     });
   }

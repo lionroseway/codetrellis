@@ -37,6 +37,8 @@ export interface RuleImport {
   /** C8: the suite the rule is kept in, and what to do instead when the rule says. */
   suite?: string;
   fix?: string | null;
+  /** B4: the line the extractor found it on, for an entry whose text the code does not hold (a pattern's). */
+  line?: number;
 }
 export type { RuleChange } from './rule-changes';
 import { changeWords, type RuleChange } from './rule-changes';
