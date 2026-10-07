@@ -2797,6 +2797,8 @@ function ruleBody(req: express.Request): Record<string, unknown> {
     // R5: a package rule's own fields; R6: a symbol rule's.
     ...(b.kind !== undefined ? { kind: b.kind } : {}), ...(b.package !== undefined ? { package: b.package } : {}), ...(b.only !== undefined ? { only: b.only } : {}),
     ...(b.symbol !== undefined ? { symbol: b.symbol } : {}), ...(b.calls !== undefined ? { calls: b.calls } : {}),
+    // B1: how a package, symbol or call target is matched.
+    ...(b.match !== undefined ? { match: b.match } : {}),
     // R8: a folder rule's own fields.
     ...(b.folder !== undefined ? { folder: b.folder } : {}), ...(b.files !== undefined ? { files: b.files } : {}),
     ...(b.kinds !== undefined ? { kinds: b.kinds } : {}), ...(b.exports !== undefined ? { exports: b.exports } : {}), ...(b.guide !== undefined ? { guide: b.guide } : {}),

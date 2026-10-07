@@ -94,6 +94,24 @@ export function exportedNames(filePath: string): Set<string> {
   return out;
 }
 
+/**
+ * Every exported name in the scanned project, by file (Phase 33 B1): what a
+ * symbol rule's glob or regex is matched against, the same names
+ * `exportedNames` reads one file at a time.
+ */
+export function exportedSymbols(): Array<{ path: string; rel: string; name: string }> {
+  const res = getDb().exec(
+    `SELECT f.path, f.relative_path, s.name, s.modifiers, f.language FROM symbols s JOIN files f ON s.file_id = f.id
+      WHERE s.parent_symbol_id IS NULL`,
+  );
+  const out: Array<{ path: string; rel: string; name: string }> = [];
+  for (const [p, rel, name, mods, lang] of res[0]?.values ?? []) {
+    const modifiers = JSON.parse((mods as string) || '[]') as string[];
+    if (modifiers.includes('export') || (lang === 'python' && !(name as string).startsWith('_'))) out.push({ path: p as string, rel: rel as string, name: name as string });
+  }
+  return out;
+}
+
 /** The absolute path a caller's path names, as the graph stores it. */
 function stored(filePath: string): string {
   const row = getDb().exec(

@@ -53,7 +53,8 @@ const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.l
  * code that does not exist yet. A person decides those (R3).
  */
 function textEffect(base: ArchitectureRule, head: ArchitectureRule): RuleEffect | 'same' {
-  const pathsSame = (base.kind ?? 'imports') === (head.kind ?? 'imports') && base.from === head.from && base.mayNotImport === head.mayNotImport;
+  // B1: what a glob or a regex covers is not proven from its text, so any change of matcher or pattern loosens.
+  const pathsSame = (base.kind ?? 'imports') === (head.kind ?? 'imports') && base.from === head.from && base.mayNotImport === head.mayNotImport && (base.match ?? null) === (head.match ?? null);
   // A package or symbol rule's `only` is who may: fewer is tighter, more or other is looser (R5, R6).
   const baseOnly = base.only ?? [];
   const headOnly = head.only ?? [];

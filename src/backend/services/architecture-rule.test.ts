@@ -119,7 +119,10 @@ test('a symbol rule reads as a person writes it: the export, who may, everywhere
 test('a symbol rule is refused without a file and a name, without who may, with an except, or climbing out', () => {
   const problems = (r: Record<string, unknown>) => parseArchitectureRule({ id: 'x', kind: 'symbol', ...r }).problems.join(' ');
   assert.match(problems({ symbol: 'src/payments/charge.ts', only: ['a/'] }), /a file and a name/);
-  assert.match(problems({ symbol: 'a.ts#*', only: ['a/'] }), /one export/);
+  // Since B1 a `*` is a glob, so `a.ts#*` is every export of a.ts (rule-matchers.test.ts); a glob is held to the same shape.
+  assert.equal(problems({ symbol: 'a.ts#*', only: ['a/'] }), '');
+  assert.match(problems({ symbol: '../a.ts#b*', only: ['a/'] }), /climb out/);
+  assert.match(problems({ symbol: '/a.ts#b*', only: ['a/'] }), /relative to the project/);
   assert.match(problems({ symbol: '../a.ts#b', only: ['a/'] }), /climb out/);
   assert.match(problems({ symbol: 'a.ts#b' }), /only must list/);
   assert.match(problems({ symbol: 'a.ts#b', only: ['a/'], except: ['c.ts'] }), /no except/);

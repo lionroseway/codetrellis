@@ -52,13 +52,16 @@ export interface RuleTerms {
   /** A package rule's (R5); absent for an imports rule, so approvals signed before R5 still read the same. */
   kind?: 'package' | 'symbol' | 'calls' | 'folder'; only?: string[];
   files?: string[]; kinds?: string[]; exports?: 'one';
+  /** B1: absent for an exact target, so approvals signed before it still read the same. */
+  match?: 'glob' | 'regex';
 }
 
 export function ruleTerms(r: ArchitectureRule | null | undefined): RuleTerms | null {
   if (!r) return null;
   const terms: RuleTerms = { from: r.from, mayNotImport: r.mayNotImport, except: [...r.except].sort(), strength: r.strength };
   if (r.kind === 'folder') return { ...terms, kind: 'folder', files: [...(r.files ?? [])].sort(), kinds: [...(r.kinds ?? [])].sort(), ...(r.exports ? { exports: r.exports } : {}) };
-  return r.kind === 'package' || r.kind === 'symbol' || r.kind === 'calls' ? { ...terms, kind: r.kind, only: [...(r.only ?? [])].sort() } : terms;
+  // B1: a matcher is part of what the rule means; absent, the terms are as they were signed before it.
+  return r.kind === 'package' || r.kind === 'symbol' || r.kind === 'calls' ? { ...terms, kind: r.kind, only: [...(r.only ?? [])].sort(), ...(r.match ? { match: r.match } : {}) } : terms;
 }
 
 export interface RuleChangeStatement {
