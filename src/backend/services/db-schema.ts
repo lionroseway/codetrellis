@@ -498,6 +498,8 @@ export const SCHEMA_PLANS_CORE = `
     findings TEXT NOT NULL,
     at INTEGER NOT NULL,
     verdict TEXT,
+    -- Phase 33 C4b: an agent's review, when the run is one.
+    review TEXT,
     PRIMARY KEY (project_root, id)
   );
   CREATE INDEX IF NOT EXISTS idx_rule_check_runs_at ON rule_check_runs(project_root, at);
