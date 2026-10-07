@@ -271,6 +271,22 @@ needs the project's imports resolved, which `serve` does when it scans the
 checkout; if they cannot be read (another project is loaded), the answer
 says the rules were not checked rather than passing them silently.
 
+## Check runs that travel (Phase 33 C7)
+
+Every check is a run: `codetrellis check`, `status`, an agent's
+`check_changes`, here or in CI. Each is kept with where it ran ("GitHub
+Actions", "GitLab CI", "a terminal", or the agent's session; the CLI reads
+the CI host from the job's environment), by whom, the commit, the base, the
+commit whose rulebook judged it, the scope, the outcome and its findings by
+rule. `GET /api/check-runs` and `list_check_runs` list them, newest first.
+
+With shared task state on (`--share-task-state` in a job), each device's
+latest is written to `.codetrellis/runs/checks/<writer>-<counter>.yaml`,
+signed as every record is, and a device removes its own older ones.
+`codetrellis commit` commits it with the plan's files; after a pull, the
+app lists the job's run beside the person's own, unverified until they
+trust the job's key. Turned off, teammates' runs are forgotten here.
+
 ## Test runs that travel (D1.5a)
 
 With task state shared, each new run reported (`report-tests`) is also

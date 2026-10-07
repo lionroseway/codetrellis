@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { baseRef, changedFiles, gateWords } from './conformity';
+import { baseRef, changedFiles, gateWords, ranIn } from './conformity';
 
 const GIT_ENV = { ...process.env, GIT_AUTHOR_NAME: 'Sam', GIT_AUTHOR_EMAIL: 's@x', GIT_COMMITTER_NAME: 'Sam', GIT_COMMITTER_EMAIL: 's@x' };
 
@@ -104,4 +104,15 @@ test('a scoped check says what it checked, and answers only that (C1)', () => {
     gateWords({ ...base, ok: false, rules: [rule], says: ['✗ web/a.ts now imports npm:stripe, which the rule “only src/payments/index.ts may import npm:stripe” forbids'] }),
     'Does not conform to suite payments (2 changed files since origin/main):\n\npayments  ✗ 1 blocks\n\n  ✗ stripe-via-wrapper   only src/payments/index.ts may import npm:stripe\n      web/a.ts imports npm:stripe\n      → use src/payments/index.ts instead\n\n1 finding blocks this change (exit 3).',
   );
+});
+
+test('a check run says where it ran: the CI host the job names, else CI, else a terminal (C7)', () => {
+  assert.equal(ranIn({ GITHUB_ACTIONS: 'true', CI: 'true' }), 'GitHub Actions');
+  assert.equal(ranIn({ GITLAB_CI: 'true' }), 'GitLab CI');
+  assert.equal(ranIn({ BITBUCKET_BUILD_NUMBER: '12' }), 'Bitbucket Pipelines');
+  assert.equal(ranIn({ TF_BUILD: 'True' }), 'Azure Pipelines');
+  assert.equal(ranIn({ JENKINS_URL: 'https://ci.acme.test/' }), 'Jenkins');
+  assert.equal(ranIn({ CI: 'true' }), 'CI');
+  assert.equal(ranIn({ CI: 'false' }), 'a terminal');
+  assert.equal(ranIn({}), 'a terminal');
 });

@@ -56,6 +56,8 @@ import {
 import { myRunCount, readTeammateRuns, RUNS_DIR, writeRunRecord } from './test-runs';
 import { forgetTeammateRuns, listTeammateRuns } from '../tests/teammate-runs';
 import { setReportListener } from '../tests/test-results';
+import { readTeammateCheckRuns, writeCheckRunRecord } from './check-runs';
+import { forgetTeammateCheckRuns, setCheckRunListener } from '../check-runs';
 import {
   checkContext, decideKey, listTeammateKeys, readKeyIntroductions, signRecord, signingWay, verifyTaskRecord,
   type CheckContext, type SigningWay, type TeammateKey, type Verdict,
@@ -112,7 +114,7 @@ export function writerId(): string {
   return writerId();
 }
 
-function writerName(projectRoot: string): string {
+export function writerName(projectRoot: string): string {
   return getSettings().identity.displayName || readGitIdentity(projectRoot).name || 'someone';
 }
 
@@ -201,6 +203,14 @@ setReportListener((run) => {
   writeRunRecord({ projectRoot: run.projectRoot, home, me: writerId(), name: writerName(run.projectRoot) }, run);
 });
 
+// Phase 33 C7: so is a check run made here.
+setCheckRunListener((run) => {
+  if (!isSharingTaskState(run.projectRoot)) return;
+  const home = plansHome(run.projectRoot);
+  if (!home) return;
+  writeCheckRunRecord({ projectRoot: run.projectRoot, home, me: writerId(), name: writerName(run.projectRoot) }, run);
+});
+
 function materialReadsStatus(projectRoot: string, sharing: boolean, home: string | null): SharedTaskStateStatus['materialReads'] {
   const choice = materialReadsChoice(projectRoot, sharing);
   const n = readCounts(projectRoot, home, writerId());
@@ -275,6 +285,8 @@ export function setSharedTaskState(projectRoot: string, enabled: boolean, by: st
     if (forgetTeammateReads(projectRoot)) splitsChanged(projectRoot);
     // And their test runs (D1.5a): nothing here is grounded on them now.
     if (forgetTeammateRuns({ projectRoot })) runsChanged(projectRoot);
+    // And their check runs (Phase 33 C7).
+    if (forgetTeammateCheckRuns({ projectRoot })) checkRunsChanged(projectRoot);
   }
   return getSharedTaskState(projectRoot);
 }
@@ -350,6 +362,10 @@ let runsListener: ((projectRoot: string) => void) | undefined;
 /** Told when teammates' test runs here changed (the server broadcasts it, so grounding is asked again). */
 export function setRunsChangedListener(fn: ((projectRoot: string) => void) | undefined): void { runsListener = fn; }
 function runsChanged(projectRoot: string): void { try { runsListener?.(projectRoot); } catch { /* a listener never stops a read */ } }
+let checkRunsListener: ((projectRoot: string) => void) | undefined;
+/** Told when teammates' check runs here changed (Phase 33 C7; the server broadcasts it). */
+export function setCheckRunsChangedListener(fn: ((projectRoot: string) => void) | undefined): void { checkRunsListener = fn; }
+function checkRunsChanged(projectRoot: string): void { try { checkRunsListener?.(projectRoot); } catch { /* a listener never stops a read */ } }
 
 export function setSplitChangedListener(fn: ((projectRoot: string) => void) | undefined): void {
   splitListener = fn;
@@ -508,6 +524,8 @@ export function readProjectRecords(projectRoot: string, onlyPlan?: string, onApp
   if (isSharingMaterialReads(projectRoot) && readTeammateReads(projectRoot, home, me, onlyPlan) > 0) changed = true;
   // Teammates' test runs (D1.5a).
   if (readTeammateRuns(projectRoot, home, me) > 0) runsChanged(projectRoot);
+  // Teammates' check runs (Phase 33 C7).
+  if (readTeammateCheckRuns(projectRoot, home, me) > 0) checkRunsChanged(projectRoot);
   if (changed) splitsChanged(projectRoot);
   return result;
 }
@@ -525,12 +543,14 @@ export function trustTeammateKey(writer: string, fingerprint: string, trust: boo
   // Its material reads and test runs are read again, so who made them is checked again (C3.5, D1.5a).
   forgetReadsBy(writer);
   forgetTeammateRuns({ writer });
+  forgetTeammateCheckRuns({ writer });
   const me = writerId();
   for (const v of getDb().exec('SELECT project_root FROM shared_task_state WHERE enabled = 1')[0]?.values ?? []) {
     const root = String(v[0]);
     const home = plansHome(root);
     if (home && isSharingMaterialReads(root) && readTeammateReads(root, home, me) > 0) splitsChanged(root);
     if (home && readTeammateRuns(root, home, me) > 0) runsChanged(root);
+    if (home && readTeammateCheckRuns(root, home, me) > 0) checkRunsChanged(root);
   }
   const rechecked: string[] = [];
   for (const h of headsBy(writer)) {

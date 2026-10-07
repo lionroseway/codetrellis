@@ -109,7 +109,7 @@ const REST_DOMAINS: Record<string, DomainKey> = {
   project: 'a', 'project-config': 'a', 'recent-projects': 'a', 'auto-detect': 'a', fs: 'a',
   identity: 'a', 'onboarding-state': 'a', stats: 'a', health: 'a', 'build-info': 'a', git: 'a',
   'architecture-summary': 'b', dependencies: 'b', symbols: 'b', file: 'b', trellis: 'b', replay: 'b',
-  playback: 'b', 'cross-system': 'b', systems: 'b', coverage: 'b', diff: 'b', rules: 'b',
+  playback: 'b', 'cross-system': 'b', systems: 'b', coverage: 'b', diff: 'b', rules: 'b', 'check-runs': 'b',
   plans: 'c', items: 'c', tasks: 'c', 'plan-docs': 'c', 'plan-history': 'c', 'plan-phases': 'c',
   'plan-templates': 'c', comments: 'c', attachments: 'c', refs: 'c', 'team-activity': 'c',
   contributions: 'c', 'contributor-branch': 'c', pantry: 'c', skills: 'c', stack: 'c', 'play-forward': 'c', recurring: 'c', 'spec-proposals': 'c',

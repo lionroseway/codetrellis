@@ -98,6 +98,7 @@ import { architectureMarkdown, architectureOf } from './services/review-architec
 import { lastMark, markReviewed, sinceLastLook } from './services/review-marks';
 import { taskMarkdown, taskOutcome } from './services/review-task';
 import { inScope, parseScope, scopeWords } from './services/rule-scope';
+import { getCheckRun, listCheckRuns } from './services/check-runs';
 import { decideRuleProposal, getRuleProposal, listRuleProposals } from './services/rule-proposals';
 import { writerId as taskRecordWriterId } from './services/task-records/shared-state';
 import type { ArchitectureRule } from '../shared/types/architecture-rules';
@@ -116,7 +117,7 @@ import { listTestReports, listTestResults, testsSummary } from './services/tests
 import { groundingMap, groundingMapAt, groundingOf, NotAFileError } from './services/tests/grounding';
 import { teammateRunSummaries } from './services/tests/teammate-runs';
 import { taskGrounding } from './services/task-grounding';
-import { getSharedTaskState, keepMyState, readAndTell, setRecordAppliedListener, setSharedMaterialReads, setSharedTaskState, setRunsChangedListener, setSplitChangedListener, startRecordWatcher, stopRecordWatcher, trustTeammateKey, writeRecordFor } from './services/task-records/shared-state';
+import { getSharedTaskState, keepMyState, readAndTell, setRecordAppliedListener, setSharedMaterialReads, setSharedTaskState, setRunsChangedListener, setCheckRunsChangedListener, setSplitChangedListener, startRecordWatcher, stopRecordWatcher, trustTeammateKey, writeRecordFor } from './services/task-records/shared-state';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
 import { buildPlaybackSequence } from './services/playback-service';
 import * as commentService from './services/comment-service';
@@ -2869,6 +2870,23 @@ app.delete('/api/rules/:id', async (req, res) => {
     if (err instanceof RuleError) { res.status(err.status).json({ error: err.message }); return; }
     throw err;
   }
+});
+
+// Phase 33 C7 — every check is a run: this device's, and teammates' latest
+// read from the plans folder, each saying where it ran and by whom.
+app.get('/api/check-runs', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const limit = Number(req.query.limit ?? 50);
+  res.json({ runs: listCheckRuns(projectRoot, Number.isFinite(limit) ? limit : 50) });
+});
+
+app.get('/api/check-runs/:id', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const run = getCheckRun(projectRoot, req.params.id);
+  if (!run) { res.status(404).json({ error: 'No such check run in this project' }); return; }
+  res.json(run);
 });
 
 // Phase 33 R3 — agents' proposals (`propose_rule`), each with what it would do now.
@@ -6622,6 +6640,8 @@ export async function initializeBackend(): Promise<void> {
   setSplitChangedListener((projectRoot) => { refreshSignals(projectRoot).catch((err) => console.warn('[Awareness] refresh failed:', err)); });
   // D1.5a: a teammate's test run arrived (or was forgotten): grounding is asked again.
   setRunsChangedListener((projectRoot) => { broadcast('tests-reported', { project: projectRoot }); });
+  // Phase 33 C7: a teammate's check run arrived (or sharing went off): the Checks view asks again.
+  setCheckRunsChangedListener((projectRoot) => { broadcast('check-runs-changed', { project: projectRoot }); });
   planItemService.setStatusChangeListener(({ planUid, itemUid }) => {
     const plan = planService.getPlan(planUid);
     if (!plan?.projectPath) return;
