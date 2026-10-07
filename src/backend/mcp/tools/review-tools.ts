@@ -12,12 +12,14 @@
  * same reasoning as Phase 24.
  */
 
+import { architectureMarkdown, architectureOf } from '../../services/review-architecture';
+import { isSafeGitRef } from '../../services/git-safety';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { compareSnapshots, comparandBranches, listComparands } from '../../services/snapshot-compare-service';
-import { reviewPlan, renderReviewMarkdown } from '../../services/plan-review-service';
-import { buildPrDraft } from '../../services/pr-draft-service';
+import { reviewPlan, renderReviewMarkdown, withArchitecture } from '../../services/plan-review-service';
+import { draftArchitecture, buildPrDraft } from '../../services/pr-draft-service';
 import { reviewQueue } from '../../services/review-queue-service';
 
 const COMPARAND_HELP =
@@ -88,10 +90,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ plan_uid, project_path, before, after, format }) => {
-      const result = reviewPlan({ planUid: plan_uid, projectPath: project_path, before, after });
-      if (!result.ok) {
-        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }], isError: true };
+      const reviewed = reviewPlan({ planUid: plan_uid, projectPath: project_path, before, after });
+      if (!reviewed.ok) {
+        return { content: [{ type: 'text' as const, text: JSON.stringify(reviewed, null, 2) }], isError: true };
       }
+      // V1 — what the change does to the architecture, at the top.
+      const result = { ok: true as const, review: await withArchitecture(reviewed.review, project_path) };
 
       if (format === 'markdown') {
         const plan = deps.planService.getPlan(plan_uid);
@@ -127,7 +131,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ plan_uid, project_path, before, after }) => {
-      const result = buildPrDraft({ planUid: plan_uid, projectPath: project_path, before, after });
+      const result = buildPrDraft({ planUid: plan_uid, projectPath: project_path, before, after, architecture: await draftArchitecture(project_path, before, after) });
       if (!result.ok) {
         return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }], isError: true };
       }
@@ -153,6 +157,36 @@ export function register(server: McpServer, deps: ToolDeps): void {
     async ({ project_path }) => {
       const queue = reviewQueue(project_path);
       return { content: [{ type: 'text' as const, text: JSON.stringify(queue, null, 2) }] };
+    },
+  );
+  // --- review_change (Phase 33 V1) ---
+  server.registerTool(
+    'review_change',
+    {
+      description:
+        'What a change does to the architecture, with no plan needed: between two commits (a branch and its base), the imports added and ' +
+        'removed between folders, outside packages added or dropped (package.json, requirements.txt, go.mod), HTTP calls, routes and SQL ' +
+        'added or dropped, imports across the team\'s rules, and what it does to the rulebook. Read it before the text diff. ' +
+        'format="markdown" gives the section for a pull request comment.',
+      inputSchema: {
+        base: z.string().max(200).describe('The commit or branch the change started from, e.g. origin/main.'),
+        head: z.string().max(200).optional().describe('The change: a commit or branch. Defaults to HEAD.'),
+        project_path: z.string().optional().describe('An opened project. Omit for the one open in the app.'),
+        format: z.enum(['json', 'markdown']).optional().describe('Defaults to json.'),
+      },
+    },
+    async ({ base, head, project_path, format }) => {
+      const root = project_path ?? deps.getActiveProjectPath();
+      if (!root) return { isError: true, content: [{ type: 'text' as const, text: 'No project is open.' }] };
+      if (!isSafeGitRef(base) || (head !== undefined && !isSafeGitRef(head))) {
+        return { isError: true, content: [{ type: 'text' as const, text: 'base and head must be commits or branch names.' }] };
+      }
+      const a = await architectureOf(root, base, head ?? 'HEAD');
+      if ('error' in a) return { isError: true, content: [{ type: 'text' as const, text: a.error }] };
+      return {
+        _meta: { summary: `${a.words.length} architecture finding${a.words.length === 1 ? '' : 's'} between ${base} and ${head ?? 'HEAD'}` },
+        content: [{ type: 'text' as const, text: format === 'markdown' ? architectureMarkdown(a) : JSON.stringify(a, null, 2) }],
+      };
     },
   );
 }

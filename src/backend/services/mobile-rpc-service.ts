@@ -36,13 +36,13 @@ import { recordPeerAudit, terminalAuditDetail } from './peer-audit-service';
 import { getPairedDevice } from './paired-device-service';
 import { readFileWithin, isWithin } from './confined-fs';
 import { listTrustedRoots, resolveTrustedPlanDir, resolveTrustedProjectRoot } from './trusted-roots';
-import { reviewPlan } from './plan-review-service';
+import { withArchitecture, reviewPlan } from './plan-review-service';
 import { reviewQueue } from './review-queue-service';
 import { buildStack } from './stack-service';
 import { buildPlayForward } from './play-forward';
 import { resequence, tellAgents, leaveOverlap, approvalNotices } from './planned-overlap-actions';
 import { planStatusFresh } from './plan-status';
-import { buildPrDraft } from './pr-draft-service';
+import { draftArchitecture, buildPrDraft } from './pr-draft-service';
 import { comparandBranches, listComparands, compareSnapshots } from './snapshot-compare-service';
 import {
   onChannelMessage,
@@ -1238,7 +1238,8 @@ async function routeMethod(
         after: params.after as string | undefined,
       });
       if (!result.ok) throw new Error(result.error);
-      return result.review;
+      // V1 — the phone reads the same review, architecture first.
+      return withArchitecture(result.review, projectPath);
     }
 
     case 'review.prDraft': {
@@ -1249,6 +1250,7 @@ async function routeMethod(
         projectPath,
         before: params.before as string | undefined,
         after: params.after as string | undefined,
+        architecture: await draftArchitecture(projectPath, params.before as string | undefined, params.after as string | undefined),
       });
       if (!result.ok) throw new Error(result.error ?? 'Could not build a PR draft');
       return result.draft;

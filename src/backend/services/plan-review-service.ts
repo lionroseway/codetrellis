@@ -1,3 +1,4 @@
+import { architectureMarkdown, architectureOf, type ArchitectureChange } from './review-architecture';
 import { listAllItems } from './plan-item-service';
 import { projectRelative } from './trusted-roots';
 import path from 'node:path';
@@ -89,6 +90,11 @@ export interface PlanReview {
    * nothing to say for this project.
    */
   otherWork: OtherWorkInFlight | null;
+  /**
+   * Phase 33 V1: what the change does to the architecture, when both sides
+   * are commits (`withArchitecture` adds it). Absent otherwise.
+   */
+  architecture?: ArchitectureChange;
   summary: {
     itemsLanded: number;
     itemsPartial: number;
@@ -285,6 +291,20 @@ export function reviewPlan(params: {
  * the app — which is most reviewers, most of the time. A panel only
  * helps the person who already opened CodeTrellis.
  */
+/** The commit a comparand names, or null for live, a baseline or a checkpoint. */
+function commitOfSpec(spec: string): string | null {
+  return spec.startsWith('commit:') ? spec.slice('commit:'.length) : null;
+}
+
+/** The review with its architecture section (V1), when both sides are commits. */
+export async function withArchitecture(review: PlanReview, projectPath: string): Promise<PlanReview> {
+  const base = commitOfSpec(review.comparison.before.spec);
+  const head = commitOfSpec(review.comparison.after.spec);
+  if (!base || !head) return review;
+  const a = await architectureOf(projectPath, base, head);
+  return 'error' in a ? review : { ...review, architecture: a };
+}
+
 export function renderReviewMarkdown(review: PlanReview, planTitle?: string): string {
   const lines: string[] = [];
   const s = review.summary;
@@ -296,6 +316,9 @@ export function renderReviewMarkdown(review: PlanReview, planTitle?: string): st
       `· ${s.filesChanged} file${s.filesChanged === 1 ? '' : 's'} changed`,
   );
   lines.push('');
+
+  // V1 — what the change does to the architecture, before anything else.
+  if (review.architecture) lines.push(architectureMarkdown(review.architecture), '');
 
   lines.push(
     `| Landed | Partial | Untouched | Unclaimed files | Unplanned edges |`,
