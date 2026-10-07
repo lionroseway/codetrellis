@@ -537,7 +537,7 @@ export function RulesView() {
               <label className="block space-y-1">
                 <span className="text-foreground-muted">Because</span>
                 <input className={inputCls.replace(' font-mono', '')} value={because} onChange={(e) => setBecause(e.target.value)}
-                  placeholder={kind === 'package' ? 'the wrapper sets idempotency keys and retries' : 'web talks to db through the API'} data-testid="rule-because" />
+                  placeholder={kind === 'package' ? 'the wrapper sets idempotency keys and retries' : kind === 'grep' ? 'the backend logs through services/logger, which redacts' : 'web talks to db through the API'} data-testid="rule-because" />
               </label>
               <label className="block space-y-1">
                 <span className="text-foreground-muted">Suite (optional)</span>

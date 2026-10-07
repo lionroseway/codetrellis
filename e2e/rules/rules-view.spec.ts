@@ -415,6 +415,8 @@ test.describe('The Rules view: an export (Phase 33 R6)', () => {
     await view.getByTestId('rule-grep-text').fill('console\\.(log|debug)\\(');
     await view.getByTestId('rule-grep-match').selectOption('regex');
     await view.getByTestId('rule-because').fill('The backend logs through services/logger, which redacts.');
+    fs.mkdirSync(OUT, { recursive: true });
+    await view.getByTestId('rule-form').screenshot({ path: path.join(OUT, 'rules-grep-form.png') });
     await view.getByTestId('rule-save').click();
     await expect.poll(() => puts).toEqual([{
       id: 'no-console-log-debug', kind: 'grep', in: ['src/backend/'], except: ['**/*.test.ts'], mustNot: 'console\\.(log|debug)\\(', match: 'regex',
@@ -422,7 +424,5 @@ test.describe('The Rules view: an export (Phase 33 R6)', () => {
     }]);
     await expect(view.getByTestId('rule-words')).toHaveText(words);
     await expect(view.getByText('1 line breaks this today')).toBeVisible();
-    fs.mkdirSync(OUT, { recursive: true });
-    await view.getByTestId('rule-form').screenshot({ path: path.join(OUT, 'rules-grep-form.png') });
   });
 });

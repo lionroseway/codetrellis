@@ -210,6 +210,10 @@ shots:
     step: R3
     title: An agent proposes, a person decides
     says: An agent asked to drop a rule. The card says what that would allow against the code today. Accepting signs it with your key, and CI counts it only if that key is already on the base branch.
+  - file: rules-grep-form.png
+    step: B2
+    title: A rule about text
+    says: Files that may not, or must, contain some text, read as itself, a glob or a regex. Any language, no parser. A change is judged on the lines it adds, so old lines are debt, not news.
   - file: checks-view.png
     step: G9
     title: The Checks tab
