@@ -17,8 +17,8 @@
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
   step: "Merging the built steps, in order"
-  status: "V1 in review (the architecture section at the top of every review); G2 merged (#372)"
-  next: "Merge V1 when CI is green, then replay V2 (already verified on top of V1)"
+  status: "V2 in review (review in order of risk); V1 merged (#373), with a race from G6 fixed"
+  next: "Merge V2 when CI is green, then replay V3"
   blockers: "None"
   updated: 2026-10-07
 sections:

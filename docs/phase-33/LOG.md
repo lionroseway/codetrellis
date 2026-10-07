@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
-| **Status** | V1 in review (the architecture section at the top of every review); G2 merged (#372) |
-| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 in review (#373) on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | G2 (#372, `3ddddbf`) |
-| **Next action** | Merge V1 when CI is green, then replay V2 (already verified on top of V1) |
+| **Status** | V2 in review (review in order of risk); V1 merged (#373), with a race from G6 fixed |
+| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | V1 (#373, `eea8a19`) |
+| **Next action** | Merge V2 when CI is green, then replay V3 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `3ddddbf`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `eea8a19`, with open PRs from GitHub.
 
 ---
 
@@ -90,7 +90,7 @@
 - [ ] G10 Findings where the code is (graph, code gutter, inspector, brief, phone) — building
 
 ### Track V: review (the owner's picks)
-- [ ] V1 What this change does to the architecture (structural diff at the top of every review) (#373) — in review
+- [x] V1 What this change does to the architecture (structural diff at the top of every review) (#373)
 - [ ] V2 Review in order of risk (dependents, rule scope, test grounding, other work) — building
 - [ ] V3 Re-review only what changed since each reviewer's last look — building
 - [ ] V6 Did the change do what the task said (only when it is linked to a task) — building
@@ -204,6 +204,26 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — V1 merged (#373), with a race fixed; V2 in review
+
+- **V1 merged** (#373): what a change does to the architecture, at the top
+  of every review. It also carries the fix for a race from G6, found by its
+  CI: an agent's `open_plan` no longer undoes a minimise made as the plan
+  appeared.
+- **V2: review in order of risk, each file saying why.** The changed files,
+  ordered by what a mistake there would cost:
+  - its tests failing (40), or older than the code (15);
+  - a rule holding it, at block (30) or warn (10);
+  - another line of work changing it (20 each);
+  - the files that depend on it (1 each, up to 50).
+
+  Ties go by path, so the order is stable, and each file says why it is
+  where it is. The list ends the architecture section of every review and
+  PR draft between commits, and replaces the Review tab's file list.
+- Checked before review on the replayed code: unit 2085 passing; 99 review,
+  PR-draft and phone harness tests; the agent and review-regression browser
+  specs (52 chromium; 52 serial, re-run on the merged V1).
 
 ### 2026-10-07 — G2 merged (#372); V1 in review
 
