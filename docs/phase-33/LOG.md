@@ -20,7 +20,7 @@
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
 | **Status** | R8 in review (folder rules); R7 merged (#386) |
-| **In flight** | R8 building on `feat/phase-33-r8-folder-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; Z1 building on `feat/phase-33-z1-docs` |
+| **In flight** | R8 in review (#387) on `feat/phase-33-r8-folder-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; Z1 building on `feat/phase-33-z1-docs` |
 | **Last merged** | R7 (#386, `55af7ab`) |
 | **Next action** | Merge R8 when CI is green, then replay C4b |
 | **Blockers** | None |
@@ -44,7 +44,7 @@
 - [ ] Follow-up: Call rules read HTTP and SQL callsites; no extractor finds subprocess commands or environment variables yet, so those calls cannot be ruled on
 - [x] Follow-up: Rebalance the browser shards: chromium 2/3 runs 185 tests in about 25 minutes, the others about 7 (#367)
 - [ ] Follow-up: Four browser specs fail in a local clone with many fetched branches and pass in CI (evolution, play-forward, navigate_to Awareness, signal-to-lines): find why
-- [ ] Follow-up: rules-overlay.spec drew no edges in CI twice: read what React Flow held when it next fails
+- [x] Follow-up: rules-overlay.spec drew no edges in CI: React Flow held every node measured and none with handle positions, and nothing measured them again; the canvas now does (`RemeasureHandles`) (#387)
 - [ ] Follow-up: The plan-panel and inspector Allotment resize throws on load (minimumSize of undefined), caught and logged since Phase 31
 
 ### Stage 0: ground truth
@@ -65,7 +65,7 @@
 - [x] R5 Package rules across all eleven languages (only the wrapper imports `stripe`) (#377)
 - [x] R6 Symbol rules (who may import a named export, through re-exports) (#385)
 - [x] R7 Call rules (HTTP hosts, commands, tables, env) (#386)
-- [ ] R8 Folder rules (what files in a folder are) — building
+- [ ] R8 Folder rules (what files in a folder are) (#387) — in review
 - [x] R9 Guide rules in scope (the brief, `get_brief`, drift names the rule) (#384)
 
 ### Track C: checks anywhere

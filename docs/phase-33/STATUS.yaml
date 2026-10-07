@@ -64,8 +64,11 @@ sections:
           - 367
       - title: "Four browser specs fail in a local clone with many fetched branches and pass in CI (evolution, play-forward, navigate_to Awareness, signal-to-lines): find why"
         followUp: true
-      - title: "rules-overlay.spec drew no edges in CI twice: read what React Flow held when it next fails"
+      - title: "rules-overlay.spec drew no edges in CI: React Flow held every node measured and none with handle positions, and nothing measured them again; the canvas now does (`RemeasureHandles`)"
         followUp: true
+        status: done
+        prs:
+          - 387
       - title: "The plan-panel and inspector Allotment resize throws on load (minimumSize of undefined), caught and logged since Phase 31"
         followUp: true
   - title: "Stage 0: ground truth"
