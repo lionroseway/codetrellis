@@ -196,13 +196,13 @@ test.describe.serial('Only the person sets the rules', () => {
     const root = encodeURIComponent(h.fixture.projectPath);
     const set = await h.client.raw('PUT', `/api/rules/web-not-db?project=${root}`, { from: 'web/', mayNotImport: 'db/' });
     expect(set.status).toBe(403);
-    expect(((await set.json()) as { error: string }).error).toBe('Only you can set an architecture rule — in the CodeTrellis app, Settings → Architecture rules.');
+    expect(((await set.json()) as { error: string }).error).toBe('Only you can set an architecture rule — in the CodeTrellis app\'s Rules view.');
     const stop = await h.client.raw('DELETE', `/api/rules/web-not-db?project=${root}`);
     expect(stop.status).toBe(403);
-    expect(((await stop.json()) as { error: string }).error).toBe('Only you can stop an architecture rule — in the CodeTrellis app, Settings → Architecture rules.');
+    expect(((await stop.json()) as { error: string }).error).toBe('Only you can stop an architecture rule — in the CodeTrellis app\'s Rules view.');
     const move = await h.client.raw('POST', `/api/rules/move-from-config?project=${root}`);
     expect(move.status).toBe(403);
-    expect(((await move.json()) as { error: string }).error).toBe('Only you can move the architecture rules — in the CodeTrellis app, Settings → Architecture rules.');
+    expect(((await move.json()) as { error: string }).error).toBe('Only you can move the architecture rules — in the CodeTrellis app\'s Rules view.');
     expect((await h.client.raw('GET', `/api/rules?project=${root}`)).status).toBe(200);
   });
 });

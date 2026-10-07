@@ -300,10 +300,12 @@ test.describe('Awareness tab', () => {
     await expandPanel(page);
     await shot(page, 'awareness-rule');
 
-    // If the import is right, the rule is what changes: the card opens it in Settings.
+    // If the import is right, the rule is what changes: the card opens the Rules view (Phase 33 G7).
+    await expect(r.getByTestId('awareness-rule-change')).toHaveText('See the rule in the Rules view');
     await r.getByTestId('awareness-rule-change').click();
-    await expect(page.getByTestId('rules-section')).toBeVisible();
-    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('rules-view')).toBeVisible();
+    await page.getByTestId('rules-view-close').click();
+    await expect(page.getByTestId('rules-view')).toHaveCount(0);
 
     await r.getByRole('button', { name: 'Intended' }).click();
     await expect.poll(() => sent).toEqual([{ id: 'r1', state: 'intended', project: expect.any(String) }]);

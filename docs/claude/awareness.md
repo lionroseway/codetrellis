@@ -519,7 +519,7 @@ run as a plain `codex` client with no hook and no watcher in
 ## Architecture rules: the team's boundaries (A7, M7)
 
 A rule is a boundary between two sets of paths, written once by a person in
-Settings → Architecture rules and committed in a suite file,
+the Rules view (Phase 33 G7; it was Settings → Architecture rules) and committed in a suite file,
 `.codetrellis/rules/<suite>.yaml` (Phase 33 R1; new rules go into
 `architecture.yaml`): `from` may not import `mayNotImport`, `except` some
 doors, `because` the team's reason. Files every laptop, agent and pipeline

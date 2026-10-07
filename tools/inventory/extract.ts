@@ -183,7 +183,7 @@ export function domainForRpc(method: string): DomainKey | null {
 }
 
 const COMPONENT_DIR_DOMAINS: Record<string, DomainKey> = {
-  graph: 'b', inspector: 'b',
+  graph: 'b', inspector: 'b', rules: 'b',
   plan: 'c',
   artefact: 'e', brief: 'e',
   presence: 'f',

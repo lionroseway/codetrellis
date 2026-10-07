@@ -76,6 +76,18 @@ test.describe.serial('R5: only the wrapper may import Stripe', () => {
     expect(rules.find((r) => r.rule.id === 'api-stripe-via-billing')!.breaches).toEqual([]);
   });
 
+  test('the Rules view\'s summaries: each suite, whether it holds and its debt; the history of changes (G7)', async () => {
+    const body = (await (await h.client.raw('GET', `/api/rules?${q()}`)).json()) as {
+      suites: Array<{ suite: string; rules: number; breaches: number | null; debt: number; status: string; words: string }>;
+      rules: Array<{ rule: { id: string }; debt: number }>;
+    };
+    expect(body.suites).toEqual([{ suite: 'payments', where: '.codetrellis/rules/payments.yaml', rules: 2, breaches: 0, debt: 0, status: 'holds', words: '2 rules · nothing breaks them today' }]);
+    expect(body.rules.map((r) => r.debt)).toEqual([0, 0]);
+    const history = ((await (await h.client.raw('GET', `/api/rules/history?${q()}`)).json()) as { history: Array<{ ruleId: string; change: string; words: string }> }).history;
+    expect(history.map((e) => `${e.ruleId} ${e.change}`)).toEqual(['api-stripe-via-billing set', 'stripe-via-wrapper set']);
+    expect(history[0].words).toMatch(/api-stripe-via-billing|pypi:stripe/);
+  });
+
   test('a branch importing Stripe outside the wrappers fails the check, in TypeScript and in Python', async () => {
     git('checkout', '-qb', 'stripe-direct');
     const api = path.join(root, API);

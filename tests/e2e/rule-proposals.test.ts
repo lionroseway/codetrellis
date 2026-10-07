@@ -138,7 +138,7 @@ test.describe.serial('Only the person decides a proposed rule', () => {
     const root = encodeURIComponent(h.fixture.projectPath);
     const decide = await h.client.raw('POST', `/api/rules/proposals/any/decide?project=${root}`, { decision: 'accept', confirm: true });
     expect(decide.status).toBe(403);
-    expect(((await decide.json()) as { error: string }).error).toBe('Only you can decide a proposed rule — in the CodeTrellis app, Settings → Architecture rules.');
+    expect(((await decide.json()) as { error: string }).error).toBe('Only you can decide a proposed rule — in the CodeTrellis app\'s Rules view.');
     expect((await h.client.raw('GET', `/api/rules/proposals?project=${root}`)).status).toBe(200);
   });
 });

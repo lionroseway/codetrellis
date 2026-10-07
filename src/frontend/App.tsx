@@ -1,3 +1,4 @@
+import { RulesView } from './components/rules/RulesView';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Allotment, type AllotmentHandle } from 'allotment';
 import 'allotment/dist/style.css';
@@ -384,6 +385,13 @@ export function App() {
         {workspaceMode === 'brief' && (
           <div className="absolute inset-0 z-30 bg-background">
             <BriefWorkspace />
+          </div>
+        )}
+
+        {/* Phase 33 G7 — the Rules view, a workspace of its own. */}
+        {workspaceMode === 'rules' && (
+          <div className="absolute inset-0 z-30 bg-background">
+            <RulesView />
           </div>
         )}
 
