@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | C5: the review in CI — a second pass, output for any host, OIDC |
+| **Stage / step** | C6: graduation — what agent reviews keep finding becomes a proposed rule |
 | **Status** | In review |
-| **In flight** | C5 in review (#390) on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | C4 (#389, `e23e4aa`) |
-| **Next action** | Merge C5 when CI is green (its labelled run reviewed nothing: the repo has no CLAUDE_CODE_OAUTH_TOKEN secret, a follow-up for the owner), then C6 and Z1, both already passing locally stacked on C5 |
+| **In flight** | C6 in review (#391) on `feat/phase-33-c6-graduation`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | C5 (#390, `3fb036a`) |
+| **Next action** | Merge C6 when CI is green, then build R10 (this repository's own rulebook, measured against today's code), then Z1 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `e23e4aa`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `3fb036a`, with open PRs from GitHub.
 
 ---
 
@@ -46,7 +46,7 @@
 - [ ] Follow-up: Four browser specs fail in a local clone with many fetched branches and pass in CI (evolution, play-forward, navigate_to Awareness, signal-to-lines): find why
 - [x] Follow-up: rules-overlay.spec drew no edges in CI: React Flow held every node measured and none with handle positions, and nothing measured them again; the canvas now does (`RemeasureHandles`) (#387)
 - [ ] Follow-up: The plan-panel and inspector Allotment resize throws on load (minimumSize of undefined), caught and logged since Phase 31
-- [ ] Follow-up: C5 is not yet seen reviewing on this repo: it has no CLAUDE_CODE_OAUTH_TOKEN secret, so codetrellis-review.yml and claude-review.yml review nothing (owner: add the secret, then label a PR codetrellis-review)
+- [ ] Follow-up: C5 is not yet seen reviewing on this repo: it has no CLAUDE_CODE_OAUTH_TOKEN secret, so codetrellis-review.yml and claude-review.yml review nothing. Deferred by the owner (2026-10-07): a public repo's PRs can read its secrets, so agent review here waits; deterministic rules (R10) come first
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
@@ -68,6 +68,7 @@
 - [x] R7 Call rules (HTTP hosts, commands, tables, env) (#386)
 - [x] R8 Folder rules (what files in a folder are) (#387)
 - [x] R9 Guide rules in scope (the brief, `get_brief`, drift names the rule) (#384)
+- [ ] R10 This repository's own rulebook: its layering, the native packages and its folder conventions, checked on every pull request with no AI and no secret
 
 ### Track C: checks anywhere
 - [x] C1 Scoped checks (`--suite`, `--rule`, `--path`; MCP and REST alike) (#361)
@@ -75,8 +76,8 @@
 - [x] C3 Debt ratchet (existing breaches may only fall) (#363)
 - [x] C4 Agent checks locally on the user's own agent: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes) (#389)
 - [ ] C4b Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified)
-- [ ] C5 Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass) (#390) — in review
-- [ ] C6 Graduation (a repeated finding proposes a rule) — building
+- [x] C5 Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass) (#390)
+- [ ] C6 Graduation (a repeated finding proposes a rule) (#391) — in review
 - [x] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran (#379)
 - [x] C8 One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words (#378)
 
@@ -207,6 +208,35 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — C5 merged (#390); C6 in review; R10 added, agent review here deferred
+
+- **C5 merged** (#390): the review in CI.
+- **The owner's decision.** The owner deferred agent review in this
+  repository's CI. The repository is public, and a pull request's code can
+  read the repository's secrets, so no `CLAUDE_CODE_OAUTH_TOKEN` is added.
+  - **The workflow stays:** it is advisory and on request. Without the secret
+    it says in the job summary that it reviewed nothing.
+  - **C5's done criterion** waits as a follow-up.
+- **R10 is added after C6: this repository's own rulebook.** The conformity
+  step in `ci.yml` already runs `codetrellis check` on every pull request,
+  with no AI and no secret, but the repository has no rulebook, so it holds
+  no architecture.
+  - **What R10 writes down:** what CLAUDE.md already says, as rules:
+    - the frontend, backend and shared layers;
+    - the native and peer packages, each kept to the module that wraps it;
+    - the services folder's naming.
+  - **Measured first:** each rule is checked against today's code before it
+    is committed.
+- **C6: graduation.** A reviewer names each bug or risk with a `topic`.
+  - When a review keeps a finding whose topic an earlier review kept,
+    CodeTrellis proposes a rule at `guide` strength through the proposals
+    inbox. Nothing changes until a person accepts it.
+  - It proposes once per topic.
+  - It needs no secret: its tests use a stand-in agent.
+- Checked before review: unit 2177 passing; 95 review, rule, check, CLI and
+  capability harness tests; the rules, settings and agent browser specs (121
+  chromium, 23 serial).
 
 ### 2026-10-07 — C4 merged (#389); C5 in review
 

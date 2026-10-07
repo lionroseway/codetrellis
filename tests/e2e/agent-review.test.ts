@@ -131,6 +131,29 @@ test.describe.serial('C4b: Sam\'s own agent reviews his change, and only what it
     expect(run.words).toMatch(/claude-code's review: ⚠ 2 findings · \? 1 question · 3 dropped$/);
   });
 
+  // Phase 33 C6 — graduation: what reviews keep finding is proposed as a rule.
+  test('C6: a topic kept in two reviews proposes a guide rule, once; a person decides', async () => {
+    const bug = { kind: 'bug', file: API, start_line: 2, end_line: 2, quote: "fetch('https://api.stripe.com/v1/charges'", says: 'A charge is sent with no idempotency key, so a retry charges twice.', fix: `call charge() from ${CLIENT}`, topic: 'charge-without-idempotency-key' };
+    const first = JSON.parse((await call('report_review', { bundle: bundle.id, findings: [bug] })).text) as { proposed?: unknown };
+    expect(first.proposed).toBeUndefined();
+    const second = JSON.parse((await call('report_review', { bundle: bundle.id, findings: [bug] })).text) as { proposed?: Array<{ rule: string; words: string }> };
+    expect(second.proposed).toEqual([expect.objectContaining({ rule: 'charge-without-idempotency-key' })]);
+    // A third finds it again: still the one proposal.
+    const third = JSON.parse((await call('report_review', { bundle: bundle.id, findings: [bug] })).text) as { proposed?: unknown };
+    expect(third.proposed).toBeUndefined();
+
+    const proposals = ((await (await h.client.raw('GET', `/api/rules/proposals?${q()}`)).json()) as { proposals: Array<{ ruleId: string; status: string; author: string; body: Record<string, unknown>; why: string }> }).proposals
+      .filter((p) => p.ruleId === 'charge-without-idempotency-key');
+    expect(proposals).toHaveLength(1);
+    expect(proposals[0]).toMatchObject({ status: 'open', author: 'claude-code' });
+    expect(proposals[0].body).toMatchObject({ kind: 'folder', folder: 'packages/web/src/', strength: 'guide', suite: 'agent-reviews', guide: `${bug.says} Instead: ${bug.fix}` });
+    expect(proposals[0].body.because).toBe('Agent reviews found this 2 times in 2 reviews (charge-without-idempotency-key).');
+    expect(proposals[0].why).toBe(`Graduated from agent reviews: ${API}:2, ${API}:2.`);
+    // Nothing changed until a person accepts it.
+    const rules = ((await (await h.client.raw('GET', `/api/rules?${q()}`)).json()) as { rules: Array<{ id: string }> }).rules;
+    expect(rules.map((r) => r.id)).not.toContain('charge-without-idempotency-key');
+  });
+
   test('a review whose every finding fails is inconclusive; nothing found is a pass; an unknown bundle is refused', async () => {
     const none = JSON.parse((await call('report_review', { bundle: bundle.id, findings: [{ kind: 'bug', file: API, start_line: 900, end_line: 900, quote: 'x', says: 'nowhere' }] })).text) as { outcome: string; says: string };
     expect(none.outcome).toBe('inconclusive');

@@ -24,7 +24,12 @@ export interface ReportedFinding {
   says: string;
   rule?: string | null;
   fix?: string | null;
+  /** C6: what kind of problem, as a short slug the agent uses every time it sees it ("stripe-outside-client"). */
+  topic?: string | null;
 }
+
+/** C6: a topic is a slug, like a rule's id, since a repeated one may become a rule. */
+export const TOPIC_RE = /^[a-z0-9][a-z0-9-]{1,62}$/;
 
 /** A finding that held: grounded in the change. */
 export interface AgentFinding {
@@ -36,6 +41,8 @@ export interface AgentFinding {
   says: string;
   rule: string | null;
   fix: string | null;
+  /** C6: its topic, when the agent gave one. */
+  topic?: string | null;
 }
 
 export type ReviewOutcome = 'pass' | 'findings' | 'inconclusive' | 'error';
@@ -143,7 +150,8 @@ export function verifyFindings(diff: DiffLines, rules: ReadonlySet<string>, repo
     const key = `${kind}|${path}|${start}|${end}|${squash(says)}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    kept.push({ kind, path, start, end, quote, says, rule: kind === 'rule' ? rule : rule && rules.has(rule) ? rule : null, fix: text(r.fix, 500) });
+    const topic = typeof r.topic === 'string' && TOPIC_RE.test(r.topic.trim()) ? r.topic.trim() : null;
+    kept.push({ kind, path, start, end, quote, says, rule: kind === 'rule' ? rule : rule && rules.has(rule) ? rule : null, fix: text(r.fix, 500), topic });
   }
   if (reported.length > MAX_FINDINGS) dropped.push({ says: `${reported.length - MAX_FINDINGS} more`, why: `a review reports at most ${MAX_FINDINGS} findings` });
   return { kept, dropped };
@@ -195,7 +203,8 @@ export function parseAgentReview(raw: unknown): AgentReview | null {
     if (!kind || !says) return [];
     const n = (v: unknown) => (Number.isSafeInteger(v) && (v as number) > 0 ? v as number : null);
     const p = typeof f.path === 'string' && f.path && !f.path.startsWith('/') && !f.path.split('/').includes('..') ? f.path.slice(0, 500) : null;
-    return [{ kind, path: p, start: n(f.start), end: n(f.end), quote: text(f.quote, 2000), says, rule: text(f.rule, 63), fix: text(f.fix, 500) }];
+    const topic = typeof f.topic === 'string' && TOPIC_RE.test(f.topic) ? f.topic : null;
+    return [{ kind, path: p, start: n(f.start), end: n(f.end), quote: text(f.quote, 2000), says, rule: text(f.rule, 63), fix: text(f.fix, 500), topic }];
   });
   const dropped = (Array.isArray(r.dropped) ? r.dropped : []).slice(0, 200).flatMap((x) => {
     const d = x && typeof x === 'object' ? x as Record<string, unknown> : {};

@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "C5: the review in CI — a second pass, output for any host, OIDC"
+  step: "C6: graduation — what agent reviews keep finding becomes a proposed rule"
   status: "In review"
-  next: "Merge C5 when CI is green (its labelled run reviewed nothing: the repo has no CLAUDE_CODE_OAUTH_TOKEN secret, a follow-up for the owner), then C6 and Z1, both already passing locally stacked on C5"
+  next: "Merge C6 when CI is green, then build R10 (this repository's own rulebook, measured against today's code), then Z1"
   blockers: "None"
   updated: 2026-10-07
 sections:
@@ -71,7 +71,7 @@ sections:
           - 387
       - title: "The plan-panel and inspector Allotment resize throws on load (minimumSize of undefined), caught and logged since Phase 31"
         followUp: true
-      - title: "C5 is not yet seen reviewing on this repo: it has no CLAUDE_CODE_OAUTH_TOKEN secret, so codetrellis-review.yml and claude-review.yml review nothing (owner: add the secret, then label a PR codetrellis-review)"
+      - title: "C5 is not yet seen reviewing on this repo: it has no CLAUDE_CODE_OAUTH_TOKEN secret, so codetrellis-review.yml and claude-review.yml review nothing. Deferred by the owner (2026-10-07): a public repo's PRs can read its secrets, so agent review here waits; deterministic rules (R10) come first"
         followUp: true
   - title: "Stage 0: ground truth"
     goal: Numbers to measure against, the freeze measured, and every colour the app draws written down.
@@ -112,6 +112,8 @@ sections:
         title: Folder rules (what files in a folder are)
       - id: R9
         title: Guide rules in scope (the brief, `get_brief`, drift names the rule)
+      - id: R10
+        title: "This repository's own rulebook: its layering, the native packages and its folder conventions, checked on every pull request with no AI and no secret"
   - title: "Track C: checks anywhere"
     goal: Any rule, suite or path checked on a laptop or in any CI, and agent checks on the team's own model.
     items:

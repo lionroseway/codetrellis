@@ -92,9 +92,9 @@ records that — but "✗ none" is proof of a gap.
 | b | `GET /api/playback` |  | ✗ none | 2 | ✓ 0.4b: discrete frames between comparands (playback) |  |  |
 | b | `GET /api/replay/frames` |  | ✗ none | 1 |  |  |  |
 | b | `GET /api/replay/state` |  | ✗ none | 3 |  |  |  |
-| b | `GET /api/rules` |  | ✗ none | 7 |  |  |  |
+| b | `GET /api/rules` |  | ✗ none | 8 |  |  |  |
 | b | `GET /api/rules/history` |  | ✗ none | 1 |  |  |  |
-| b | `GET /api/rules/proposals` |  | ✗ none | 1 |  |  |  |
+| b | `GET /api/rules/proposals` |  | ✗ none | 2 |  |  |  |
 | b | `GET /api/symbols/file` |  | ✗ none | 6 | ✓ 0.4b: flat qualified symbols per language (go/ruby/jvm-apple support, smoke) |  |  |
 | b | `GET /api/symbols/search` |  | ✗ none | 3 | ✓ 0.4b: finds symbols by name, incl. through a workspace alias (smoke, input-validation) |  |  |
 | b | `GET /api/systems` |  | ✗ none | 3 | ✓ 0.4b: the fixture's services by path (graph-rest) |  |  |
