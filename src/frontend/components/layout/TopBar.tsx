@@ -360,9 +360,12 @@ function RulesToggle() {
           : 'border-border text-foreground-muted hover:text-foreground hover:border-border-glow hover:shadow-[0_0_8px_rgba(59,130,246,0.1)]'
       }`}
       title={active ? 'Back to graph' : 'Architecture rules'}
+      aria-label="Rules"
     >
       <ShieldCheck size={12} />
-      Rules
+      {/* The word from 1280px; narrower, the icon and its name, so the bar
+          still fits the 900px minimum window (workstream-strip.spec). */}
+      <span className="hidden xl:inline">Rules</span>
     </button>
   );
 }
