@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | C4: codetrellis review — agent checks on your own agent, headless |
+| **Stage / step** | C5: the review in CI — a second pass, output for any host, OIDC |
 | **Status** | In review |
-| **In flight** | C4 in review (#389) on `feat/phase-33-c4-agent-checks`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | R8 (#387, `bcea46d`) |
-| **Next action** | Merge C4 when CI is green, then C5 (agent checks in CI; label its PR codetrellis-review once) and C6, both already passing locally stacked on C4 |
+| **In flight** | C5 in review (#390) on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | C4 (#389, `e23e4aa`) |
+| **Next action** | Merge C5 when CI is green (its labelled run reviewed nothing: the repo has no CLAUDE_CODE_OAUTH_TOKEN secret, a follow-up for the owner), then C6 and Z1, both already passing locally stacked on C5 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `2f7d09e`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `e23e4aa`, with open PRs from GitHub.
 
 ---
 
@@ -46,6 +46,7 @@
 - [ ] Follow-up: Four browser specs fail in a local clone with many fetched branches and pass in CI (evolution, play-forward, navigate_to Awareness, signal-to-lines): find why
 - [x] Follow-up: rules-overlay.spec drew no edges in CI: React Flow held every node measured and none with handle positions, and nothing measured them again; the canvas now does (`RemeasureHandles`) (#387)
 - [ ] Follow-up: The plan-panel and inspector Allotment resize throws on load (minimumSize of undefined), caught and logged since Phase 31
+- [ ] Follow-up: C5 is not yet seen reviewing on this repo: it has no CLAUDE_CODE_OAUTH_TOKEN secret, so codetrellis-review.yml and claude-review.yml review nothing (owner: add the secret, then label a PR codetrellis-review)
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
@@ -72,9 +73,9 @@
 - [x] C1 Scoped checks (`--suite`, `--rule`, `--path`; MCP and REST alike) (#361)
 - [x] C2 SARIF output, host-neutral; recipes are examples for any CI (no host first) (#362)
 - [x] C3 Debt ratchet (existing breaches may only fall) (#363)
-- [ ] C4 Agent checks locally on the user's own agent: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes) (#389) — in review
+- [x] C4 Agent checks locally on the user's own agent: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes) (#389)
 - [ ] C4b Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified)
-- [ ] C5 Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass) — building
+- [ ] C5 Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass) (#390) — in review
 - [ ] C6 Graduation (a repeated finding proposes a rule) — building
 - [x] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran (#379)
 - [x] C8 One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words (#378)
@@ -206,6 +207,49 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — C4 merged (#389); C5 in review
+
+- **C4 merged** (#389): `codetrellis review`.
+  - **Secret scan:** it first failed the secret scan. A test's list of file
+    names put a public-key file name straight after one containing "keys",
+    which gitleaks' `generic-api-key` rule takes for a key and its value;
+    it is not a credential. The list is reordered, in the commit itself, so no commit in
+    the history carries it.
+  - **Leak scan:** the replay now runs the same rule, with gitleaks' own
+    allowlists, before anything is pushed. It finds nothing in C5, C6 or Z1.
+- **C5: the review in CI.** The same `codetrellis review` runs in a
+  pipeline.
+  - **`--verify`:** a second session, given the change and the first pass's
+    findings, tries to refute each, with its own report tool and no more
+    reach. What it refutes is dropped, with the reason.
+  - **Output for any host:** `--format text|markdown|sarif|json`, plus
+    `--sarif-out` and `--markdown-out`, so one run feeds the log, code
+    scanning and the job summary. The SARIF validates against the 2.1.0
+    schema.
+  - **Signing in:** `--auth oidc:bedrock|vertex|foundry` passes the
+    credentials the host's own OIDC step left, and nothing else.
+  - **`--post`:** posts the markdown as one comment on GitHub, GitLab or
+    Bitbucket, with a token the agent never sees.
+  - **Recipes:** `docs/recipes/review.sh` (any runner, with the cost dial
+    auto | on-request | off) and `github-actions-review.yml`.
+  - **This repository:** `.github/workflows/codetrellis-review.yml` runs it
+    beside `claude-review.yml`, advisory, on request: the
+    `codetrellis-review` label. It triggers on `pull_request`, never
+    `pull_request_target`, and a fork gets no secrets.
+- Checked before review: unit 2175 passing; 94 review, rule, check, CLI,
+  SARIF and capability harness tests; the rules, settings and agent browser
+  specs (121 chromium, 23 serial).
+- **The labelled run (#390) reviewed nothing.** The workflow ran on its own
+  PR, advisory, and exited 0, because this repository has no
+  `CLAUDE_CODE_OAUTH_TOKEN` secret. `claude-review.yml` skips for the same
+  reason: its review step has been skipped on every PR here, while the check
+  stayed green.
+  - **Fix:** the job summary now says "nothing was reviewed" and why, and
+    the recipe's message names both causes (no such secret, or a fork).
+  - **What is left is the owner's:** add the secret, then label a pull
+    request `codetrellis-review`. That run is C5's done criterion, and a
+    follow-up holds it.
 
 ### 2026-10-07 — C4b merged (#388); C4 in review
 
