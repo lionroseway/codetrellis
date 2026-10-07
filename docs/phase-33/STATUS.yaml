@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "B3: fuzzy matching"
+  step: "B4: your own patterns"
   status: "In review"
-  next: "Merge B3 when CI is green, then build B4 (your own patterns)"
+  next: "Merge B4 when CI is green, then B5 (engine per rule), which is built"
   blockers: "None"
   updated: 2026-10-07
 sections:
@@ -74,6 +74,8 @@ sections:
       - title: "C5 is not yet seen reviewing on this repo: it has no CLAUDE_CODE_OAUTH_TOKEN secret, so codetrellis-review.yml and claude-review.yml review nothing. Deferred by the owner (2026-10-07): a public repo's PRs can read its secrets, so agent review here waits; deterministic rules (R10) come first"
         followUp: true
       - title: "Path patterns: should `**/` match no folder too (`src/backend/**/*.ts` misses `src/backend/server.ts`)? Widening only and except loosens existing rules, so the owner decides"
+        followUp: true
+      - title: "Cross-system map: pair a team's own kinds (a queue's publishers with its consumers)"
         followUp: true
   - title: "Stage 0: ground truth"
     goal: Numbers to measure against, the freeze measured, and every colour the app draws written down.
