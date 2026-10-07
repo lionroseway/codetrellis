@@ -18,7 +18,7 @@ import { getProjectConfig, updateProjectConfig } from './project-config-service'
 import { checkEdges, parseArchitectureRule, ruleWords } from './architecture-rule';
 import { splitSymbol } from '../../shared/lib/symbol-entry';
 import { isSuiteName, readRulebook, suiteFile, writeSuite } from './rulebook';
-import { getPackageEdges } from './database';
+import { getCallEdges, getPackageEdges } from './database';
 import { importersOf } from './importers';
 
 export { breachWords, breaks, checkEdges, inPattern, parseArchitectureRule, ruleStatement, ruleWords } from './architecture-rule';
@@ -185,7 +185,7 @@ export function edgesIfLoaded(
 function callEdgesOfGraph(rules: readonly ArchitectureRule[]): Array<{ sourceRelative: string; targetRelative: string }> {
   if (!rules.some((r) => r.kind === 'calls')) return [];
   try {
-    return (require('./database') as typeof import('./database')).getCallEdges();
+    return getCallEdges();
   } catch {
     return [];
   }
