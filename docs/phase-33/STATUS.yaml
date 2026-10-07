@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "B2: grep rules"
+  step: "B3: fuzzy matching"
   status: "In review"
-  next: "Merge B2 when CI is green, then build B3 (fuzzy matching)"
+  next: "Merge B3 when CI is green, then build B4 (your own patterns)"
   blockers: "None"
   updated: 2026-10-07
 sections:
