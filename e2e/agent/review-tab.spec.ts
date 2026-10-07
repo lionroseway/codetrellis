@@ -127,6 +127,43 @@ test.describe('Review tab', () => {
     await shot(page, 'review-tab-line');
   });
 
+  test('since your last look: what moved, and marking the line reviewed (V3)', async ({ page }) => {
+    await serve(page, QUEUE);
+    let marked = false;
+    const posts: unknown[] = [];
+    await page.route('**/api/review/architecture?*', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify(marked
+        ? { words: [], since: { words: 'Nothing changed since you looked at a1b2c3d.', changed: [], addressed: [], added: [] } }
+        : { words: [], since: {
+            words: 'Since you looked at 9f8e7d6: 2 files changed, 1 finding addressed, 1 new.',
+            changed: ['packages/web/src/Extra.ts', 'packages/shared/src/validators.ts'],
+            addressed: ['✗ packages/web/src/Extra.ts now imports packages/shared/src/validators.ts, which it forbids (web-through-shared-index)'],
+            added: ['Adds an HTTP call to POST /api/refunds (packages/web/src/Extra.ts:9)'],
+          } }),
+    }));
+    await page.route('**/api/review/seen?*', (route) => {
+      posts.push(route.request().postDataJSON());
+      marked = true;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ target: 'billing-v2', commit: 'a1b2c3d4e5f6', reviewerType: 'human', findings: [] }) });
+    });
+    await gotoWithProject(page);
+    await tabButton(page).click();
+    await page.getByTestId('review-line').first().getByRole('button').first().click();
+
+    const since = page.getByTestId('review-since');
+    await expect(since.getByTestId('review-since-words')).toHaveText('Since you looked at 9f8e7d6: 2 files changed, 1 finding addressed, 1 new.');
+    await expect(since.getByTestId('review-since-addressed')).toHaveText(/^✗ packages\/web\/src\/Extra\.ts now imports/);
+    await expect(since.getByTestId('review-since-added')).toHaveText('New: Adds an HTTP call to POST /api/refunds (packages/web/src/Extra.ts:9)');
+    await expandPanel(page);
+    await shot(page, 'review-tab-since');
+
+    await since.getByTestId('review-mark-reviewed').click();
+    await expect(since.getByTestId('review-since-marked')).toHaveText('Marked reviewed at a1b2c3d.');
+    await expect(since.getByTestId('review-since-words')).toHaveText('Nothing changed since you looked at a1b2c3d.');
+    expect(posts).toEqual([{ base: 'main', head: 'billing-v2' }]);
+  });
+
   test('nothing in review says how a line gets there', async ({ page }) => {
     await serve(page, { base: 'main', lines: [] });
     await gotoWithProject(page);

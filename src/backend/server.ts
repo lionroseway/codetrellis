@@ -95,6 +95,7 @@ import type { RuleChange } from './services/rule-changes';
 import { previewChange, previewJson, type RulePreview } from './services/rule-preview';
 import { signRuleChange } from './services/rule-approvals';
 import { architectureMarkdown, architectureOf } from './services/review-architecture';
+import { lastMark, markReviewed, sinceLastLook } from './services/review-marks';
 import { inScope, parseScope, scopeWords } from './services/rule-scope';
 import { decideRuleProposal, getRuleProposal, listRuleProposals } from './services/rule-proposals';
 import { writerId as taskRecordWriterId } from './services/task-records/shared-state';
@@ -4777,8 +4778,26 @@ app.get('/api/review/architecture', async (req, res) => {
   if (!base || !isSafeGitRef(base) || !isSafeGitRef(head)) { res.status(400).json({ error: 'base (and head, default HEAD) must be commits or branch names' }); return; }
   const a = await architectureOf(projectPath, base, head);
   if ('error' in a) { res.status(400).json(a); return; }
-  if (req.query.format === 'markdown') { res.type('text/markdown').send(architectureMarkdown(a)); return; }
-  res.json(a);
+  // V3 — what moved since this reviewer's last look at the line of work.
+  const mark = lastMark(projectPath, head, personFrom(req).author);
+  const since = mark ? sinceLastLook(projectPath, mark, a.head, a.words) : null;
+  if (req.query.format === 'markdown') { res.type('text/markdown').send(`${since ? `${since.words}\n\n` : ''}${architectureMarkdown(a)}`); return; }
+  res.json({ ...a, ...(since ? { since } : {}) });
+});
+
+// Phase 33 V3 — a reviewer marks a line of work reviewed at its head now,
+// keeping what the review says, so the next look shows only what moved.
+app.post('/api/review/seen', async (req, res) => {
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const base = typeof b.base === 'string' ? b.base : '';
+  const head = typeof b.head === 'string' && b.head ? b.head : 'HEAD';
+  if (!base || !isSafeGitRef(base) || !isSafeGitRef(head)) { res.status(400).json({ error: 'base (and head, default HEAD) must be commits or branch names' }); return; }
+  const a = await architectureOf(projectPath, base, head);
+  if ('error' in a) { res.status(400).json(a); return; }
+  const person = personFrom(req);
+  res.json(markReviewed(projectPath, { target: head, reviewer: person.author, reviewerType: person.authorType, base: a.base, commit: a.head, findings: a.words }));
 });
 
 // --- Budgets (Phase 23) ---

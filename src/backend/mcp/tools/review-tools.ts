@@ -13,6 +13,8 @@
  */
 
 import { architectureMarkdown, architectureOf } from '../../services/review-architecture';
+import { lastMark, markReviewed, sinceLastLook } from '../../services/review-marks';
+import { authorFromExtra } from '../helpers';
 import { isSafeGitRef } from '../../services/git-safety';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -173,9 +175,11 @@ export function register(server: McpServer, deps: ToolDeps): void {
         head: z.string().max(200).optional().describe('The change: a commit or branch. Defaults to HEAD.'),
         project_path: z.string().optional().describe('An opened project. Omit for the one open in the app.'),
         format: z.enum(['json', 'markdown']).optional().describe('Defaults to json.'),
+        mark_reviewed: z.boolean().optional().describe(
+          'Remember that you reviewed it at its head now. Your next review_change of the same head says what moved since, and which of these findings the pushes addressed.'),
       },
     },
-    async ({ base, head, project_path, format }) => {
+    async ({ base, head, project_path, format, mark_reviewed }, extra: any) => {
       const root = project_path ?? deps.getActiveProjectPath();
       if (!root) return { isError: true, content: [{ type: 'text' as const, text: 'No project is open.' }] };
       if (!isSafeGitRef(base) || (head !== undefined && !isSafeGitRef(head))) {
@@ -183,9 +187,18 @@ export function register(server: McpServer, deps: ToolDeps): void {
       }
       const a = await architectureOf(root, base, head ?? 'HEAD');
       if ('error' in a) return { isError: true, content: [{ type: 'text' as const, text: a.error }] };
+      // V3 — since this agent's last look at the same head, then (if asked) remember this one.
+      const who = authorFromExtra(deps, extra);
+      const target = head ?? 'HEAD';
+      const mark = lastMark(root, target, who.author);
+      const since = mark ? sinceLastLook(root, mark, a.head, a.words) : null;
+      if (mark_reviewed) markReviewed(root, { target, reviewer: who.author, reviewerType: who.authorType, base: a.base, commit: a.head, findings: a.words });
+      if (format === 'markdown') {
+        return { content: [{ type: 'text' as const, text: `${since ? `${since.words}\n\n` : ''}${architectureMarkdown(a)}` }] };
+      }
       return {
         _meta: { summary: `${a.words.length} architecture finding${a.words.length === 1 ? '' : 's'} between ${base} and ${head ?? 'HEAD'}` },
-        content: [{ type: 'text' as const, text: format === 'markdown' ? architectureMarkdown(a) : JSON.stringify(a, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify({ ...a, ...(since ? { since } : {}) }, null, 2) }],
       };
     },
   );
