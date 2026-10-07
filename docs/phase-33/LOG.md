@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | R10: this repository's own rulebook |
+| **Stage / step** | B1: matchers |
 | **Status** | In review |
-| **In flight** | R10 in review (#392) on `feat/phase-33-r10-own-rulebook`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | C6 (#391, `f6ef82e`) |
-| **Next action** | Merge R10 when CI is green, then build B1 (matchers) |
+| **In flight** | B1 building on `feat/phase-33-b1-matchers`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | R10 (#392, `b652871`) |
+| **Next action** | Merge B1 when CI is green, then build B2 (grep rules) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `f6ef82e`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `b652871`, with open PRs from GitHub.
 
 ---
 
@@ -68,7 +68,7 @@
 - [x] R7 Call rules (HTTP hosts, commands, tables, env) (#386)
 - [x] R8 Folder rules (what files in a folder are) (#387)
 - [x] R9 Guide rules in scope (the brief, `get_brief`, drift names the rule) (#384)
-- [ ] R10 This repository's own rulebook: its layering, the native packages and its folder conventions, checked on every pull request with no AI and no secret (#392) — in review
+- [x] R10 This repository's own rulebook: its layering, the native packages and its folder conventions, checked on every pull request with no AI and no secret (#392)
 
 ### Track C: checks anywhere
 - [x] C1 Scoped checks (`--suite`, `--rule`, `--path`; MCP and REST alike) (#361)
@@ -101,7 +101,7 @@
 - [x] V6 Did the change do what the task said (only when it is linked to a task) (#376)
 
 ### Track B: building blocks
-- [ ] B1 Matchers on every rule target: exact, glob, regex, fuzzy (absorbs the wildcard targets proposed as R11)
+- [ ] B1 Matchers on every rule target: exact, glob, regex, fuzzy (absorbs the wildcard targets proposed as R11) — building
 - [ ] B2 Grep rules: text that must not, or must, appear, scoped by path, file:line findings, baselined
 - [ ] B3 Fuzzy matching: look-alike names and near-duplicates, by a deterministic similarity score with a threshold
 - [ ] B4 Your own patterns: what counts as a call, or as any entry (queue:, event:, flag:), without code
@@ -218,6 +218,36 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — R10 merged; B1 built: globs and regexes on rule targets
+
+- **R10 (#392) merged.** One browser test failed on CI first, and it was
+  ours: the Overlays menu on the graph ignored Escape. The rules-overlay
+  spec pressed Escape and then clicked a file under the still-open menu,
+  so the click never landed. Escape now closes the menu and hands focus
+  back to its button. Both overlay specs assert it closed. With the old
+  code they failed locally every time; with the fix, 6 passed.
+- **B1: matchers.** A package, symbol or call rule can name its target by
+  a pattern.
+  - **Glob:** a `*` makes it a glob without saying so. `http:*.stripe.com`
+    is every Stripe host, but not `stripe.com` and not `evilstripe.com`.
+    `sql:payments_*`, `npm:@aws-sdk/*` and `src/db.ts#raw*` work the same
+    way.
+  - **Regex:** `match: regex` is anchored at both ends and holds over the
+    whole entry. It may be at most 200 characters, and a group that repeats
+    a repeat (`(a+)+`) is refused, because CI runs what a pull request
+    writes.
+  - **Where the matcher lives:** the suite keeps `match:` beside the target,
+    and signed approvals carry it. Changing a matcher or a pattern counts
+    as a loosening. Rule words say "may make a call matching /…/".
+  - **One deliberate change:** `a.ts#*` used to be refused as "not one
+    export". It is now a glob over every export of `a.ts`. A glob is still
+    held to a relative path inside the project.
+  - **Proved:** a branch that calls files.stripe.com and api.paypal.com
+    fails under each rule, on the right line. The client's own calls pass.
+    A runaway regex is refused with the reason.
+  - **Locally:** unit 2189; 62 harness tests; 69 chromium and 10 serial
+    browser tests.
 
 ### 2026-10-07 — C6 merged (#391); R10 in review; the agent review proved on a real repository; Track B and C9 added
 

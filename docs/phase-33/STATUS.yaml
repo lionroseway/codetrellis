@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "R10: this repository's own rulebook"
+  step: "B1: matchers"
   status: "In review"
-  next: "Merge R10 when CI is green, then build B1 (matchers)"
+  next: "Merge B1 when CI is green, then build B2 (grep rules)"
   blockers: "None"
   updated: 2026-10-07
 sections:
