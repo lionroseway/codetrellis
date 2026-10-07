@@ -1,0 +1,36 @@
+# This repository's native and peer packages (Phase 33 R10): each is wrapped
+# by one module, so an upgrade or a platform problem has one place to look.
+# See CLAUDE.md's Tech Stack. Owned by the maintainers.
+suite: native
+because: Native bindings break per platform and per runtime; one wrapper each keeps that in one place.
+rules:
+  - id: sqlite-via-database
+    kind: package
+    package: npm:better-sqlite3
+    only: [src/backend/services/database.ts, 'src/**/*.test.ts']
+    strength: block
+    because: database.ts is the sql.js-shaped facade over native SQLite; Electron and better-sqlite3 move together.
+  - id: pty-via-terminal-service
+    kind: package
+    package: npm:node-pty
+    only: [src/backend/services/terminal-service.ts]
+    strength: block
+    because: node-pty is native and cannot cross-compile; terminals go through terminal-service.
+  - id: werift-via-webrtc-service
+    kind: package
+    package: npm:werift
+    only: [src/backend/services/webrtc-service.ts, tests/]
+    strength: block
+    because: werift is patched (patches/) and peer identity comes from its DTLS transport; one module holds it, and the peer tests.
+  - id: tree-sitter-via-ast-parser
+    kind: package
+    package: npm:web-tree-sitter
+    only: [src/backend/services/ast-parser.ts, 'src/**/*.test.ts']
+    strength: block
+    because: Grammars load through ast-parser, which pins them to resources/tree-sitter and their recorded hashes.
+  - id: electron-in-the-shell
+    kind: package
+    package: npm:electron
+    only: [src/electron/, src/backend/services/secret-store.ts, tools/]
+    strength: block
+    because: The backend runs headless too; only the shell, the secret store's safeStorage and the checks CI runs under Electron (tools/) may need it.

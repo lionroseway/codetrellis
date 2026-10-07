@@ -1,0 +1,17 @@
+# This repository's conventions that a check cannot hold yet (Phase 33 R10):
+# guides, shown to people and agents where they work. Owned by the maintainers.
+suite: conventions
+because: CLAUDE.md's Key Conventions, where work on them happens.
+rules:
+  - id: services-are-services
+    kind: folder
+    from: src/backend/services/
+    strength: guide
+    guide: A new service is a `*-service.ts` file under src/backend/services/, grouped by domain as docs/claude/architecture.md lists them; per-language plugins go in parsers/, resolvers/ and callsites/ and are registered in their index.ts.
+    because: CLAUDE.md, Key Conventions.
+  - id: github-api-two-callers
+    kind: calls
+    calls: http:api.github.com
+    only: [src/backend/services/update-service.ts, src/backend/services/review-host/github.ts, tools/, 'src/**/*.test.ts']
+    strength: warn
+    because: The update check is the only request the app makes on its own; the review host posts only when asked; tools/ is the repo's own dev tooling.

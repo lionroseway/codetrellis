@@ -379,6 +379,19 @@ installed here; `fnm exec --using=26 -- <cmd>` or putting
 
 ## Key Conventions
 
+- **This repository's architecture is held by its own rulebook**,
+  `.codetrellis/rules/` (Phase 33 R10):
+  - **`layers`:** frontend, backend, shared and electron import only what
+    they may.
+  - **`native`:** better-sqlite3, node-pty, werift, web-tree-sitter and
+    electron each stay in the one module that wraps it.
+  - **`conventions`:** guides, and calls to GitHub's API.
+
+  `ci.yml`'s conformity step runs `codetrellis check` on every pull request,
+  with no AI and no secret, and a breach fails it. Breaches that already
+  existed are counted in `baseline.yaml`, which may only shrink. Change a rule
+  through the app's Rules view or `propose_rule`, never by editing the suites
+  in a pull request: a loosening fails the check without a signed approval.
 - Plan / phase / spec-doc / proposed-change / template authoring lives
   in dedicated services under `src/backend/services/plan-*-service.ts`.
 - Plan templates are pure data in `services/plan-templates.ts`.
