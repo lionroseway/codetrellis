@@ -17,6 +17,7 @@ import type { ArchitectureRule, RuleView } from '../../shared/types/architecture
 import { getProjectConfig, updateProjectConfig } from './project-config-service';
 import { checkEdges, parseArchitectureRule, ruleWords } from './architecture-rule';
 import { isSuiteName, readRulebook, suiteFile, writeSuite } from './rulebook';
+import { getPackageEdges } from './database';
 
 export { breachWords, breaks, checkEdges, inPattern, parseArchitectureRule, ruleStatement, ruleWords } from './architecture-rule';
 
@@ -175,7 +176,7 @@ export function edgesIfLoaded(
 
 function packageEdgesOfGraph(): Array<{ sourceRelative: string; targetRelative: string }> {
   try {
-    return (require('./database') as typeof import('./database')).getPackageEdges();
+    return getPackageEdges();
   } catch {
     return [];
   }
