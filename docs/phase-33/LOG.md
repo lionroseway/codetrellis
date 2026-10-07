@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
-| **Status** | G7 in review (the Rules view); C7 merged (#379) |
-| **In flight** | R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | C7 (#379, `ec41fbe`) |
-| **Next action** | Merge G7 when CI is green, then replay G8 (being verified on top of G7) |
+| **Status** | G8 in review (rules on the graph); G7 merged (#380) |
+| **In flight** | R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | G7 (#380, `2c44428`) |
+| **Next action** | Merge G8 when CI is green, then replay G9 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `ec41fbe`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `2c44428`, with open PRs from GitHub.
 
 ---
 
@@ -84,7 +84,7 @@
 - [x] G4 Graph full screen and back; hidden panes leave no gap (#369)
 - [x] G5 Selecting a file lists the plans and tasks that touch it (#366)
 - [x] G6 Opening a plan always shows it, from a chip too (#365)
-- [ ] G7 The Rules view (its own workspace, not Settings) — building
+- [x] G7 The Rules view (its own workspace, not Settings) (#380)
 - [ ] G8 Rules on the graph (breaches drawn, rules for the selected file) — building
 - [ ] G9 The Checks view (run any check from the app, CI runs beside local ones, compare runs) — building
 - [ ] G10 Findings where the code is (graph, code gutter, inspector, brief, phone) — building
@@ -204,6 +204,23 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — G7 merged (#380); G8 in review
+
+- **G7 merged** (#380): the Rules view, a workspace of its own.
+- **G8: rules on the graph.** With the Rules overlay on (Overlays → Rules):
+  - an import that breaks a rule is drawn in the breach style: the blocked
+    tone, ⊘, and "breaks <rule>" on hover. This applies on a file edge, or
+    on a cluster edge that holds one;
+  - the file or cluster it starts from carries a ⊘ mark with the count;
+  - the legend explains both.
+
+  The inspector lists the rules about the selected file and what breaks
+  them there. Its "Show the … suite" fades every node that no rule of the
+  suite is about, until "Show all", and it links to the Rules view.
+- Checked before review on the replayed code: unit 2118 passing; the graph,
+  inspector, rules, agent, review-regression and screenshot browser specs
+  (105 chromium, 124 serial).
 
 ### 2026-10-07 — C7 merged (#379); G7 in review
 

@@ -267,6 +267,8 @@ export const EDGE = {
   added: { tone: 'added', glyph: '+', word: 'added' },
   removed: { tone: 'deleted', glyph: '−', word: 'removed', dash: '1 5' },
   unexpected: { tone: 'drift', glyph: '◆', word: 'unplanned' },
+  // Phase 33 G8 — an import that breaks an architecture rule.
+  breach: { tone: 'blocked', glyph: '⊘', word: 'rule breach' },
 } as const satisfies Record<string, StateVisual>;
 
 export type EdgeState = keyof typeof EDGE;

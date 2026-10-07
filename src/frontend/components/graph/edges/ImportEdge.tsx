@@ -13,6 +13,8 @@ interface ImportEdgeData {
   protocol?: string;
   emphasized?: boolean;
   muted?: boolean;
+  /** Phase 33 G8 — the rules this import breaks, with the Rules overlay on. */
+  breaches?: string[];
 }
 
 /**
@@ -31,7 +33,8 @@ function ImportEdgeComponent(props: EdgeProps) {
   const [isHovered, setIsHovered] = useState(false);
   // One colour for every cross-system edge; the protocol is in its label,
   // in words, rather than in four more hues that already meant states.
-  const visual = edgeVisual(edgeStateOf(edgeData.importState));
+  const breaks = edgeData.breaches && edgeData.breaches.length > 0 ? edgeData.breaches : null;
+  const visual = edgeVisual(breaks ? 'breach' : edgeStateOf(edgeData.importState));
   const isCrossSystem = edgeData.importState === 'cross_system';
   const pathId = `${useId()}-${id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
   const [edgePath, labelX, labelY] = getBezierPath({
@@ -51,19 +54,22 @@ function ImportEdgeComponent(props: EdgeProps) {
   // A status edge in performance mode has no glow to set it apart, so it
   // gets the weight instead. Same rule as the cards: the signal moves
   // from a filter to geometry, it does not go away.
-  const hasStatus = Boolean(edgeData.importState) && edgeData.importState !== 'symbol_link' && edgeData.importState !== 'cross_system' && edgeData.importState !== 'regular';
+  const hasStatus = !!breaks || (Boolean(edgeData.importState) && edgeData.importState !== 'symbol_link' && edgeData.importState !== 'cross_system' && edgeData.importState !== 'regular');
   const statusBoost = perf && hasStatus ? 1.5 : 0;
   const strokeWidth = (edgeData.emphasized ? baseStrokeWidth + 1.5 : baseStrokeWidth) + statusBoost;
   const plainLabel = symbolNames.length > 0 ? `{ ${symbolNames.slice(0, 4).join(', ')}${symbolNames.length > 4 ? ', ...' : ''} }` : typeof label === 'string' ? label : '';
-  const labelText = isCrossSystem
-    ? [EDGE.cross_system.glyph, edgeData.protocol ?? EDGE.cross_system.word, typeof label === 'string' ? label : ''].filter(Boolean).join(' ')
-    : plainLabel;
+  const labelText = breaks
+    ? `${EDGE.breach.glyph} breaks ${breaks.join(', ')}`
+    : isCrossSystem
+      ? [EDGE.cross_system.glyph, edgeData.protocol ?? EDGE.cross_system.word, typeof label === 'string' ? label : ''].filter(Boolean).join(' ')
+      : plainLabel;
   const showLabel = Boolean(labelText && (edgeData.alwaysShowLabel || selected || isHovered || edgeData.emphasized));
 
   return (
     <>
       <g onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
         <path id={pathId} d={edgePath} fill="none" stroke="transparent" strokeWidth={strokeWidth + 12} />
+        {breaks && <title data-testid="edge-breach" data-rules={breaks.join(' ')}>{labelText}</title>}
         <BaseEdge
           id={id}
           path={edgePath}

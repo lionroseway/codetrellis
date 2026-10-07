@@ -133,6 +133,9 @@ interface UiState {
   /** Phase 32 B3.3 — the graph overlays that are on. */
   graphOverlays: OverlayId[];
   toggleGraphOverlay: (id: OverlayId) => void;
+  /** Phase 33 G8 — "Show this suite": the suite whose rules the graph keeps lit, the rest faded; null for none. */
+  ruleSuiteFocus: string | null;
+  setRuleSuiteFocus: (suite: string | null) => void;
   /** Phase 33 G3 — the kinds of edge the graph draws. */
   graphEdges: EdgeKind[];
   toggleGraphEdge: (id: EdgeKind) => void;
@@ -217,6 +220,16 @@ export const useUiStore = create<UiState>((set) => ({
     try { localStorage.setItem(GRAPH_STYLE_KEY, graphStyle); } catch { /* private window — session only */ }
     set({ graphStyle });
   },
+  ruleSuiteFocus: null,
+  setRuleSuiteFocus: (ruleSuiteFocus) => set((s) => {
+    // Showing a suite turns the Rules overlay on, so what it is about is drawn.
+    if (ruleSuiteFocus && !s.graphOverlays.includes('rules')) {
+      const graphOverlays = [...s.graphOverlays, 'rules' as OverlayId];
+      try { localStorage.setItem(GRAPH_OVERLAYS_KEY, JSON.stringify(graphOverlays)); } catch { /* private window — session only */ }
+      return { ruleSuiteFocus, graphOverlays };
+    }
+    return { ruleSuiteFocus };
+  }),
   graphOverlays: readGraphOverlays(),
   toggleGraphOverlay: (id) => set((s) => {
     const graphOverlays = s.graphOverlays.includes(id) ? s.graphOverlays.filter((x) => x !== id) : [...s.graphOverlays, id];

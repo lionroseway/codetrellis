@@ -38,6 +38,7 @@ known(ofState('mark:footprint', MARKS.footprint));
 known(ofState('mark:plannedOverlap', MARKS.plannedOverlap));
 known(ofState('mark:collision', ATTENTION.collision));
 known(ofState('mark:paused', ATTENTION.paused));
+known(ofState('mark:breach', ATTENTION.breach));
 for (const [k, s] of Object.entries(TESTS)) known(ofState(`tests:${k}`, s));
 for (const [k, s] of Object.entries(EDGE)) known(ofState(`edge:${k}`, s, true));
 for (const [k, s] of Object.entries(TASK)) known(ofState(`task:${k}`, s));
@@ -63,14 +64,17 @@ export function nodeLegendKeys(data: Record<string, unknown> | undefined): strin
   if (d.plannedOverlap) keys.push('mark:plannedOverlap');
   if (d.collisionTitle) keys.push('mark:collision');
   if (d.breakpointTitle) keys.push('mark:paused');
+  if (d.ruleBreach) keys.push('mark:breach');
   const g = d.grounding && typeof d.grounding === 'object' ? str((d.grounding as Record<string, unknown>).state) : null;
   if (g && g in TESTS) keys.push(`tests:${g}`);
   return keys;
 }
 
-/** The state a graph edge draws: its import state, an import when it has none. */
+/** The state a graph edge draws: a rule breach (G8) over its import state, an import when it has none. */
 export function edgeLegendKeys(data: Record<string, unknown> | undefined): string[] {
-  const s = str((data ?? {}).importState);
+  const d = data ?? {};
+  if (Array.isArray(d.breaches) && d.breaches.length > 0) return ['edge:breach'];
+  const s = str(d.importState);
   return [`edge:${s && s in EDGE ? s : 'import'}`];
 }
 

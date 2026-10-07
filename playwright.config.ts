@@ -121,6 +121,7 @@ export const FIXTURE_SPECS = [
   // tools/e2e-serial/serial-specs.test.ts, which fails on the next one.
   '**/graph/canvas-rescan-wait.spec.ts',
   '**/graph/grounding-overlay.spec.ts',
+  '**/graph/rules-overlay.spec.ts',
   '**/graph/nodes-stay-drawn.spec.ts',
   '**/live-agent/multi-agent-contention.spec.ts',
   '**/plan/play-forward.spec.ts',
