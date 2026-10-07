@@ -1,7 +1,7 @@
 import type { Database } from 'sql.js';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ParsedFile, ParsedSymbol, AliasMapping, DiscoveredSystem, SupportedLanguage } from '../../shared/types';
+import type { Callsite, ParsedFile, ParsedSymbol, AliasMapping, DiscoveredSystem, SupportedLanguage } from '../../shared/types';
 import { getDataDir, ensureDataDir } from './persistence';
 import { getResolverForLanguage } from './resolvers';
 import { packageEntry } from '../../shared/lib/package-entry';
@@ -845,6 +845,44 @@ export function getFileFacts(): Array<{ sourceRelative: string; targetRelative: 
  * Phase 33 R7: each file and the calls it makes, as call entries
  * (`http:api.stripe.com/v1/charges`, `sql:payments`), for call rules.
  */
+/**
+ * Phase 33 B4: replace what a project's patterns found in each of these files
+ * (callsites whose context is `pattern:<id>`), leaving every extractor's own.
+ * For when the patterns changed and the files did not. Absolute paths.
+ */
+export function replacePatternCallsites(found: ReadonlyArray<{ path: string; callsites: readonly Callsite[] }>): number {
+  const d = getDb();
+  let n = 0;
+  d.run('BEGIN');
+  try {
+    for (const f of found) {
+      const row = d.exec(`SELECT id FROM files WHERE path = ?`, [f.path])[0]?.values?.[0];
+      if (!row) continue;
+      const fileId = Number(row[0]);
+      d.run(`DELETE FROM callsites WHERE file_id = ? AND context LIKE 'pattern:%'`, [fileId]);
+      for (const cs of f.callsites) {
+        d.run(`INSERT INTO callsites (file_id, kind, protocol, method, url_pattern, sql_text, line, context, host) VALUES (?,?,?,?,?,?,?,?,?)`,
+          [fileId, cs.kind, cs.protocol, cs.method ?? null, cs.urlPattern ?? null, cs.sqlText ?? null, cs.line ?? null, cs.context ?? null, cs.host ?? null]);
+        n++;
+      }
+    }
+    d.run('COMMIT');
+  } catch (err) {
+    d.run('ROLLBACK');
+    throw err;
+  }
+  return n;
+}
+
+/** Whether anything in the graph was found by a pattern (B4). */
+export function hasPatternCallsites(): boolean {
+  try {
+    return (getDb().exec(`SELECT 1 FROM callsites WHERE context LIKE 'pattern:%' LIMIT 1`)[0]?.values?.length ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
 export function getCallEdges(): Array<{ sourceRelative: string; targetRelative: string }> {
   let results;
   try {
@@ -852,7 +890,7 @@ export function getCallEdges(): Array<{ sourceRelative: string; targetRelative: 
       SELECT DISTINCT f.relative_path, c.kind, c.url_pattern, c.host
       FROM callsites c
       JOIN files f ON c.file_id = f.id
-      WHERE c.kind IN ('http_call', 'sql_query')
+      WHERE c.kind IN ('http_call', 'sql_query', 'entry')
       ORDER BY f.relative_path
     `);
   } catch {

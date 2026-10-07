@@ -123,6 +123,8 @@ const ECOSYSTEM: Record<string, PackageChange['ecosystem']> = { 'package.json': 
 function describeCall(c: Callsite): string | null {
   if ((c.kind === 'http_call' || c.kind === 'http_route') && c.urlPattern) return `${c.method ? `${c.method} ` : ''}${c.urlPattern}`;
   if (c.kind === 'sql_query') return c.sqlText?.trim().split(/\s+/).slice(0, 6).join(' ') ?? c.context ?? null;
+  // B4: a team's own kind, as its pattern named it.
+  if (c.kind === 'entry' && c.urlPattern) return c.urlPattern;
   return null;
 }
 
@@ -145,7 +147,7 @@ export function callChanges(file: string, before: Callsite[], after: Callsite[])
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const CALL_WORDS: Record<CallsiteKind, string> = {
-  http_call: 'an HTTP call to', http_route: 'a route,', sql_query: 'SQL:', subprocess: 'a command:', env_lookup: 'an environment variable:',
+  http_call: 'an HTTP call to', http_route: 'a route,', sql_query: 'SQL:', subprocess: 'a command:', env_lookup: 'an environment variable:', entry: '',
 };
 
 /** What a change between two commits does to the architecture. Never throws; what cannot be read is said. */
@@ -183,8 +185,9 @@ export async function architectureOf(projectRoot: string, baseRef: string, headR
     const after = at(projectRoot, head, f);
     let b: Callsite[] = [];
     let h: Callsite[] = [];
-    try { b = before !== null ? parseVirtualFile(f, before)?.callsites ?? [] : []; } catch { b = []; }
-    try { h = after !== null ? parseVirtualFile(f, after)?.callsites ?? [] : []; } catch { h = []; }
+    // Parsed at its place in the project, so the project's own patterns (B4) read it too.
+    try { b = before !== null ? parseVirtualFile(path.join(projectRoot, f), before)?.callsites ?? [] : []; } catch { b = []; }
+    try { h = after !== null ? parseVirtualFile(path.join(projectRoot, f), after)?.callsites ?? [] : []; } catch { h = []; }
     calls.push(...callChanges(f, b, h));
   }
 
@@ -205,7 +208,7 @@ export async function architectureOf(projectRoot: string, baseRef: string, headR
 
   const words: string[] = [];
   for (const r of rules.filter((x) => x.kind === 'breach' || x.kind === 'loosens')) words.push(r.kind === 'breach' ? `✗ ${r.detail} (${r.rule})` : r.detail);
-  for (const c of calls.filter((x) => x.change === 'added')) words.push(`Adds ${CALL_WORDS[c.kind]} ${c.what} (${c.file}:${c.line})`);
+  for (const c of calls.filter((x) => x.change === 'added')) words.push(`Adds ${CALL_WORDS[c.kind] ? `${CALL_WORDS[c.kind]} ` : ''}${c.what} (${c.file}:${c.line})`);
   for (const p of packages) {
     if (p.added.length) words.push(`Adds ${plural(p.added.length, `${p.ecosystem} package`)}: ${p.added.join(', ')} (${p.manifest})`);
     if (p.removed.length) words.push(`Drops ${plural(p.removed.length, `${p.ecosystem} package`)}: ${p.removed.join(', ')} (${p.manifest})`);
@@ -214,7 +217,7 @@ export async function architectureOf(projectRoot: string, baseRef: string, headR
     const bits = [l.added ? `${plural(l.added, 'import')} added` : '', l.removed ? `${plural(l.removed, 'import')} removed` : ''].filter(Boolean).join(', ');
     words.push(`${l.from} → ${l.to}: ${bits}`);
   }
-  for (const c of calls.filter((x) => x.change === 'removed')) words.push(`Drops ${CALL_WORDS[c.kind]} ${c.what} (${c.file})`);
+  for (const c of calls.filter((x) => x.change === 'removed')) words.push(`Drops ${CALL_WORDS[c.kind] ? `${CALL_WORDS[c.kind]} ` : ''}${c.what} (${c.file})`);
   for (const r of rules.filter((x) => x.kind === 'tightens' || x.kind === 'reworded')) words.push(r.detail);
   if (!edgesKnown) words.push('The imports between folders are not known: one side\'s import graph could not be read.');
 

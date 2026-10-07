@@ -174,6 +174,13 @@ patterns:
 - **Explained:** each entry says which pattern found it, so a surprising edge can
   be explained.
 
+Built in B4. Patterns are found by the file's place (the nearest
+`.codetrellis/patterns/` above it), so every path that parses a file reads
+them. A scan redoes their finds when they change. A team's own kinds are
+held by call rules (`calls: queue:orders.*`). Two things are left for later:
+pairing a team's own kinds in the cross-system map, and reading files no
+parser reads.
+
 ## B5 Engine and strength, per rule
 
 ```yaml

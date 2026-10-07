@@ -7,6 +7,7 @@ import { listTaggedLanguages, listTaggedExtensions } from './project-scanner';
 import { getCallsiteExtractor } from './callsites';
 import { extractSqlSymbols, extractTableRefs, sqlRefsToCallsites, applyMigrationFold } from './sql';
 import { extractEmbeddedSql } from './sql/embedded';
+import { patternCallsitesFor } from './patterns';
 
 /**
  * Dynamically load `web-tree-sitter` — same pattern as sql.js in
@@ -330,6 +331,10 @@ function parseSource(filePath: string, content: string): ParsedFile | null {
   } catch (err) {
     console.warn(`[AST] Embedded SQL extraction failed for ${filePath}:`, err);
   }
+
+  // Phase 33 B4: the project's own patterns, found by the file's place in it,
+  // so the scan, the watcher, the gate and reviews read the same ones.
+  callsites = [...callsites, ...patternCallsitesFor(filePath, content)];
 
   return {
     path: filePath,

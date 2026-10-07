@@ -105,7 +105,9 @@ export function gateMarkdown(g: Gate, read?: (rel: string) => string | null): st
 export function withPlaces(g: Gate, read?: (rel: string) => string | null): CheckResult {
   const rules = (g.rules as RuleFinding[]).map((r) => {
     const text = read ? read(r.path) : null;
-    const line = text === null ? null : importLine(text, r.imports);
+    // B4: where the text names it, else where the extractor found it (a pattern's entry is not in the text).
+    const found = (r as { line_found?: number }).line_found ?? null;
+    const line = (text === null ? null : importLine(text, r.imports)) ?? (text !== null && found ? found : null);
     return { ...r, line, text: line ? text!.split('\n')[line - 1] : null };
   });
   return { ...g, rules, rulebook: g.rulebook as RulebookFinding[] };

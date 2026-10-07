@@ -74,6 +74,7 @@ import { listWorktrees, listWorktreesWithPlans, createWorktree, WorktreeError } 
 import { checkoutGitDir, currentBranch, hasCommits, localBranches } from './services/git-checkout';
 import { startAutoSave, saveNow } from './services/persistence';
 import { exportDatabase } from './services/database';
+import { notePatternsRead, refreshPatternFinds } from './services/pattern-scan';
 import * as planService from './services/plan-service';
 import * as budgetService from './services/budget-service';
 import { compareSnapshots, comparandBranches, listComparands, readFileAt } from './services/snapshot-compare-service';
@@ -1385,10 +1386,15 @@ async function runScan(projectPath: string): Promise<ScanStats> {
       console.log(`[Scan] Incremental: ${toParse.length} changed / ${filePaths.length} total files (${stalePaths.length} removed)`);
       parsedFiles = await parseFiles(toParse);
       await storeParsedFiles(parsedFiles, projectPath);
+      // Phase 33 B4: the project's patterns changed, and the files did not.
+      const reparsed = new Set(toParse);
+      const refreshed = refreshPatternFinds(projectPath, filePaths.filter((f) => !reparsed.has(f)));
+      if (refreshed !== null) console.log(`[Scan] Patterns changed: ${refreshed} finds redone`);
     } else {
       clearAstData();
       parsedFiles = await parseFiles(filePaths);
       await storeParsedFiles(parsedFiles, projectPath);
+      notePatternsRead(projectPath);
     }
 
     lastScannedProject = projectPath;
