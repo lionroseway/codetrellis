@@ -26,6 +26,7 @@ import { buildDigest } from '../../shared/lib/awareness-digest';
 import { listCheckRuns } from './check-runs';
 import { outcomeWords } from './task-records/check-run-record';
 import { blockingRuns } from '../../shared/lib/open-findings';
+import { reachWords } from '../../shared/lib/check-words';
 import { kindWords, sideWords, type SideWords } from '../../shared/lib/signal-words';
 import { sideLabel } from '../../shared/lib/workstream-words';
 import { SETTABLE_SIGNAL_STATES } from '../../shared/types';
@@ -100,7 +101,7 @@ export function phoneChecks(projectRoot: string): PhoneCheckRun[] {
     const failing = r.findings.filter((f) => f.failing);
     return {
       id: r.id, who: r.who, ranIn: r.ranIn, scope: r.scope, at: r.at, outcome: outcomeWords(r.outcome),
-      findings: failing.slice(0, PHONE_FINDINGS).map((f) => ({ where: `${f.path} imports ${f.imports}`, rule: f.rule, fix: f.fix })),
+      findings: failing.slice(0, PHONE_FINDINGS).map((f) => ({ where: `${f.path} ${reachWords(f.imports)}`, rule: f.rule, fix: f.fix })),
       more: Math.max(0, failing.length - PHONE_FINDINGS),
     };
   });

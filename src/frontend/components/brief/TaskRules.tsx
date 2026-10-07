@@ -3,6 +3,7 @@ import { useProjectStore } from '../../stores/project-store';
 import { useUiStore } from '../../stores/ui-store';
 import { absoluteFilePath, openFileAt } from '../../lib/open-file-at';
 import { ATTENTION, chipClass } from '../../lib/visual-language';
+import { reachWords } from '../../../shared/lib/check-words';
 
 interface TaskRulesBody {
   files: string[];
@@ -52,7 +53,7 @@ export function TaskRules({ taskUid }: { taskUid: string }) {
           {findings.map((f) => (
             <li key={`${f.rule}${f.path}${f.imports}`} className="rounded-md border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[12.5px] space-y-0.5" data-testid="brief-rule-finding">
               <div className="flex flex-wrap items-baseline gap-2">
-                <span className={`rounded-full border px-1.5 text-[11px] ${chipClass(ATTENTION.breach.tone)}`}>{ATTENTION.breach.glyph} {f.path} imports {f.imports}</span>
+                <span className={`rounded-full border px-1.5 text-[11px] ${chipClass(ATTENTION.breach.tone)}`}>{ATTENTION.breach.glyph} {f.path} {reachWords(f.imports)}</span>
                 <span className="text-foreground-muted">{f.failing ? '✗' : '⚠'} {f.rule}</span>
               </div>
               <div className="text-foreground-muted">{f.words}</div>

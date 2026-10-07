@@ -17,8 +17,8 @@
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
   step: "Merging the built steps, in order"
-  status: "R6 in review (symbol rules); R9 merged (#384)"
-  next: "Merge R6 when CI is green, then replay R7"
+  status: "R7 in review (call rules); R6 merged (#385)"
+  next: "Merge R7 when CI is green, then replay R8"
   blockers: "None"
   updated: 2026-10-07
 sections:

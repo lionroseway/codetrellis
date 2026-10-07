@@ -62,7 +62,7 @@ export function taskRules(item: Pick<PlanItem, 'fileSpecs' | 'scopePath'>, proje
   const in_scope = rulesOf(projectRoot)
     // The rules that judge its files: an imports rule over them; a package or
     // symbol rule over the files of its own language (npm:stripe is not about a .py file).
-    .filter((r) => files.some((f) => inPattern(r.from, f) && (r.kind !== 'package' && r.kind !== 'symbol' ? true : ruleCovers(r, f))))
+    .filter((r) => files.some((f) => inPattern(r.from, f) && (r.kind !== 'package' && r.kind !== 'symbol' && r.kind !== 'calls' ? true : ruleCovers(r, f))))
     .map((r) => ({ rule: r.id, suite: r.suite ?? 'architecture', strength: r.strength, words: ruleStatement(r), because: r.because }));
   const open = openFindings(listCheckRuns(projectRoot), files);
   const latest_run = open && {

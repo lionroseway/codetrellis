@@ -123,7 +123,7 @@ test('a symbol rule is refused without a file and a name, without who may, with 
   assert.match(problems({ symbol: '../a.ts#b', only: ['a/'] }), /climb out/);
   assert.match(problems({ symbol: 'a.ts#b' }), /only must list/);
   assert.match(problems({ symbol: 'a.ts#b', only: ['a/'], except: ['c.ts'] }), /no except/);
-  assert.match(parseArchitectureRule({ id: 'x', kind: 'calls' }).problems.join(' '), /imports, package or symbol/);
+  assert.match(parseArchitectureRule({ id: 'x', kind: 'nonsense' }).problems.join(' '), /imports, package, symbol or calls/);
 });
 
 test('only the named files may import the export, directly, through a barrel or as a namespace; the module that defines it may', () => {
@@ -140,4 +140,26 @@ test('only the named files may import the export, directly, through a barrel or 
   assert.equal(breaks(web, 'src/web/a.ts', sym), false);
   assert.equal(breaks(web, 'src/web/a.ts', 'src/payments/charge.ts'), true);
   assert.deepEqual(checkEdges([CHARGE], [{ from: 'src/api.ts', to: sym }, { from: 'src/payments/x.ts', to: sym }]), [{ rule: 'charges-via-payments', from: 'src/api.ts', to: sym }]);
+});
+
+// Phase 33 R7 — a call rule: only these files may make a call.
+const STRIPE_API = parseArchitectureRule({ id: 'stripe-api-via-payments', kind: 'calls', calls: 'http:API.stripe.com', only: ['src/payments/'], strength: 'block' }).rule!;
+
+test('a call rule reads as a person writes it, and says call or use', () => {
+  assert.equal(STRIPE_API.kind, 'calls');
+  assert.equal(STRIPE_API.mayNotImport, 'http:api.stripe.com');
+  assert.equal(ruleStatement(STRIPE_API), 'only src/payments/ may call api.stripe.com');
+  const table = parseArchitectureRule({ id: 'ledger', kind: 'calls', calls: 'sql:ledger', from: 'services/', only: ['services/billing/'] }).rule!;
+  assert.equal(ruleStatement(table), 'in services/, only services/billing/ may use the table ledger');
+  assert.match(parseArchitectureRule({ id: 'x', kind: 'calls', calls: 'stripe', only: ['a/'] }).problems.join(' '), /http: and a host/);
+  assert.match(parseArchitectureRule({ id: 'x', kind: 'calls', calls: 'sql:x' }).problems.join(' '), /only must list/);
+});
+
+test('only the named files may make the call; an imports rule never reads a call as a file', () => {
+  assert.equal(breaks(STRIPE_API, 'src/api.ts', 'http:api.stripe.com/v1/charges'), true);
+  assert.equal(breaks(STRIPE_API, 'src/payments/client.ts', 'http:api.stripe.com/v1/charges'), false);
+  assert.equal(breaks(STRIPE_API, 'src/api.ts', 'http:files.stripe.com/v1/files'), false);
+  assert.equal(breaks(STRIPE_API, 'src/api.ts', 'npm:stripe'), false);
+  const any = parseArchitectureRule({ id: 'web-not-api', from: 'src/web/', mayNotImport: 'src/api/' }).rule!;
+  assert.equal(breaks(any, 'src/web/a.ts', 'http:/api/users'), false);
 });

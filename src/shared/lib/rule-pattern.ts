@@ -37,6 +37,10 @@ export interface CoveringRule {
  */
 export function ruleCovers(rule: CoveringRule, file: string): boolean {
   if (rule.kind === 'package') return (inRulePattern(rule.from, file) && packageApplies(rule.mayNotImport, file)) || (rule.only ?? []).some((o) => inRulePattern(o, file));
+  if (rule.kind === 'calls') {
+    // R7: the files under it that can make calls (code), and the files that may.
+    return (rule.only ?? []).some((o) => inRulePattern(o, file)) || (inRulePattern(rule.from, file) && ecosystemOfPath(file) !== null);
+  }
   if (rule.kind === 'symbol') {
     // R6: the file that defines it, the files that may, and the files under it in the same language.
     const sym = splitSymbol(rule.mayNotImport);

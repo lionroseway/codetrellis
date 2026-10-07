@@ -568,7 +568,28 @@ import of the module may use any of its names, and counts. The module that
 defines it, and the files in `only`, may. `from` limits where it applies;
 it has no `except`. The gate reads each named import a change adds
 (`src/shared/lib/symbol-entry.ts`); the rules view reads the graph's
-importers of the symbol. Everything below holds for every kind.
+importers of the symbol.
+
+A **call rule** (Phase 33 R7) says who alone may make a call out of the
+code: to an HTTP host or path, or into a SQL table.
+
+```yaml
+  - id: stripe-api-via-clients
+    kind: calls
+    calls: http:api.stripe.com
+    only: [src/payments/client.ts, services/api/app/billing.py]
+    strength: block
+```
+
+It reads the callsites the extractors already find (`services/callsites/`,
+`services/sql/`): `http:api.stripe.com` matches any path on that host,
+`http:api.stripe.com/v1/charges` that path and under it, `http:/api/admin`
+that path on any host, and `sql:invoices` the table. The host is kept on each
+HTTP callsite for this (`callsites.host`; pairing still uses the path alone).
+A finding reads "calls api.stripe.com/v1/charges" or "uses the table
+invoices", on the line that names it. Subprocess commands and environment
+variables are in the design but no extractor finds them yet. Everything below
+holds for every kind.
 
 - **On the graph** (Phase 33 G8): the Rules overlay (Overlays → Rules)
   draws an import that breaks a rule in the breach style (red, ⊘, the rule
