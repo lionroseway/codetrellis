@@ -17,6 +17,8 @@
  * Pure: a check's result in, text out.
  */
 
+import { grepWords, isGrepEntry } from './grep-entry';
+
 export type Strength = 'block' | 'warn' | 'guide';
 
 /** An import a change adds across a rule, as `check_changes` reports it. */
@@ -78,6 +80,8 @@ export function ruleFix(rule: { kind?: string; only?: string[]; except: string[]
  * invoices".
  */
 export function reachWords(target: string): string {
+  // B2: a line the file holds, or text it never does.
+  if (isGrepEntry(target)) return grepWords(target);
   if (target.startsWith('http:')) return `calls ${target.slice(5)}`;
   if (target.startsWith('sql:')) return `uses the table ${target.slice(4)}`;
   if (target.startsWith('folder:')) return target.slice(7);

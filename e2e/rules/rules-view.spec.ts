@@ -378,4 +378,51 @@ test.describe('The Rules view: an export (Phase 33 R6)', () => {
     await expect(view.getByTestId('rule-guide')).toHaveText(guide);
     await expect(view.getByTestId('rule-words')).toHaveText('files in src/backend/services/ are named *-service.ts and export one thing each');
   });
+
+  test('the owner keeps console.log out of the backend (Phase 33 B2): files, the text read as a regex, and what breaks it today', async ({ page }) => {
+    const puts: Array<Record<string, unknown>> = [];
+    let made = false;
+    const words = 'no file in src/backend/ (except **/*.test.ts) may contain a line matching /console\\.(log|debug)\\(/: The backend logs through services/logger, which redacts.';
+    const rule = {
+      id: 'no-console-log-debug', kind: 'grep', from: '**', mayNotImport: 'console\\.(log|debug)\\(', match: 'regex', in: ['src/backend/'],
+      except: ['**/*.test.ts'], because: 'The backend logs through services/logger, which redacts.', strength: 'warn', suite: 'architecture', since: '2026-10-07T12:00:00.000Z', by: 'Sam Lee',
+    };
+    await page.route((url) => url.pathname.startsWith('/api/rules'), async (route) => {
+      const req = route.request();
+      const { pathname } = new URL(req.url());
+      if (req.method() === 'GET' && pathname === '/api/rules') {
+        return route.fulfill({ json: { rules: made ? [{ rule, where: '.codetrellis/rules/architecture.yaml', words, breaches: [{ rule: rule.id, from: 'src/backend/server.ts', to: 'grep:0a1b2c3d:+console.log(\'listening\', port);' }], breachWords: '1 line breaks this today', debt: 0 }] : [], suites: [], inConfig: 0, problems: [] } });
+      }
+      if (req.method() === 'GET' && pathname === '/api/rules/proposals') return route.fulfill({ json: { proposals: [] } });
+      if (req.method() === 'GET' && pathname === '/api/rules/history') return route.fulfill({ json: { history: [] } });
+      if (req.method() === 'POST' && pathname.endsWith('/preview')) return route.fulfill({ json: { change: { effect: 'tightens', allowed: [] }, words: '⚠ This change adds the rule.', needsConfirm: false } });
+      if (req.method() === 'PUT') {
+        puts.push({ id: decodeURIComponent(pathname.split('/')[3]), ...(req.postDataJSON() as Record<string, unknown>) });
+        made = true;
+        return route.fulfill({ json: { rule } });
+      }
+      return route.fallback();
+    });
+
+    await gotoWithProject(page);
+    await page.getByRole('button', { name: 'Rules', exact: true }).click();
+    const view = page.getByTestId('rules-view');
+    await view.getByTestId('rule-kind-grep').check();
+    await expect(view.getByTestId('rule-form')).toContainText('read line by line, in any language');
+    await view.getByTestId('rule-grep-in').fill('src/backend/');
+    await expect(view.getByTestId('rule-save')).toBeDisabled();
+    await view.getByTestId('rule-except').fill('**/*.test.ts');
+    await view.getByTestId('rule-grep-text').fill('console\\.(log|debug)\\(');
+    await view.getByTestId('rule-grep-match').selectOption('regex');
+    await view.getByTestId('rule-because').fill('The backend logs through services/logger, which redacts.');
+    await view.getByTestId('rule-save').click();
+    await expect.poll(() => puts).toEqual([{
+      id: 'no-console-log-debug', kind: 'grep', in: ['src/backend/'], except: ['**/*.test.ts'], mustNot: 'console\\.(log|debug)\\(', match: 'regex',
+      because: 'The backend logs through services/logger, which redacts.', strength: 'warn',
+    }]);
+    await expect(view.getByTestId('rule-words')).toHaveText(words);
+    await expect(view.getByText('1 line breaks this today')).toBeVisible();
+    fs.mkdirSync(OUT, { recursive: true });
+    await view.getByTestId('rule-form').screenshot({ path: path.join(OUT, 'rules-grep-form.png') });
+  });
 });

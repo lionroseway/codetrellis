@@ -2802,6 +2802,9 @@ function ruleBody(req: express.Request): Record<string, unknown> {
     // R8: a folder rule's own fields.
     ...(b.folder !== undefined ? { folder: b.folder } : {}), ...(b.files !== undefined ? { files: b.files } : {}),
     ...(b.kinds !== undefined ? { kinds: b.kinds } : {}), ...(b.exports !== undefined ? { exports: b.exports } : {}), ...(b.guide !== undefined ? { guide: b.guide } : {}),
+    // B2: a grep rule's own fields.
+    ...(b.in !== undefined ? { in: b.in } : {}), ...(b.must !== undefined ? { must: b.must } : {}),
+    ...(b.mustNot !== undefined ? { mustNot: b.mustNot } : {}), ...(b.ignoreCase !== undefined ? { ignoreCase: b.ignoreCase } : {}),
   };
 }
 

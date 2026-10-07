@@ -21,11 +21,12 @@ import { packageEntry } from '../../shared/lib/package-entry';
 import { symbolEntry } from '../../shared/lib/symbol-entry';
 import { callEntry } from '../../shared/lib/call-entry';
 import { exportCount, fileFact } from '../../shared/lib/folder-entry';
+import { grepEntries, grepKey } from '../../shared/lib/grep-entry';
 import { originsOf } from './importers';
 import { ruleFix } from '../../shared/lib/check-words';
 import { showAtAsync } from './branch-workstreams';
 import { baseContent, currentContent } from './workstream-symbols';
-import { checkEdges, ruleStatement, rulesOf } from './architecture-rules';
+import { checkEdges, grepReads, ruleStatement, rulesOf } from './architecture-rules';
 import type { RuleImport } from './conformity-gate';
 import type { ArchitectureRule } from '../../shared/types/architecture-rules';
 
@@ -55,7 +56,7 @@ export async function importsAdded(
   projectRoot: string,
   w: Pick<Workstream, 'root' | 'shape' | 'head' | 'changes'>,
   mainRoot: string | null,
-  opts: { packages?: boolean; symbols?: boolean; calls?: boolean; files?: boolean } = {},
+  opts: { packages?: boolean; symbols?: boolean; calls?: boolean; files?: boolean; grep?: readonly ArchitectureRule[] } = {},
 ): Promise<ImportEdge[]> {
   const base = w.changes.base;
   const branch = w.shape === 'branch' && w.head && mainRoot ? w.head : null;
@@ -66,9 +67,11 @@ export async function importsAdded(
   for (const f of w.changes.files) if (f.status !== 'deleted') known.add(path.join(projectRoot, f.path));
   const { aliasMap, systems } = getImportResolutionContext(projectRoot);
 
-  const targets = (rel: string, content: string | null): Set<string> => {
+  const targets = (rel: string, content: string | null, scopeRel = rel): Set<string> => {
     const out = new Set<string>();
     if (content === null) return out;
+    // B2: the lines it holds that grep rules read, by the file's path now, so a rename is not news.
+    for (const rule of opts.grep ?? []) if (grepReads(rule, scopeRel)) for (const e of grepEntries(rule, content)) out.add(e);
     const abs = path.join(projectRoot, rel);
     let parsed: ReturnType<typeof parseVirtualFile> = null;
     try { parsed = parseVirtualFile(abs, content); } catch { parsed = null; }
@@ -102,13 +105,13 @@ export async function importsAdded(
   const edges: ImportEdge[] = [];
   for (const file of w.changes.files) {
     if (file.status === 'deleted') continue;
-    const key = `${folder}\0${file.path}\0${opts.packages ? 'p' : ''}${opts.symbols ? 's' : ''}${opts.calls ? 'c' : ''}${opts.files ? 'f' : ''}`;
+    const key = `${folder}\0${file.path}\0${opts.packages ? 'p' : ''}${opts.symbols ? 's' : ''}${opts.calls ? 'c' : ''}${opts.files ? 'f' : ''}${(opts.grep ?? []).map((r) => `g${grepKey(r)}${r.in?.join(',')}|${r.except.join(',')}`).join('')}`;
     const stamp = stampOf(folder, base, file, branch);
     const hit = cache.get(key);
     if (hit && hit.stamp === stamp) { edges.push(...hit.added); continue; }
     const beforePath = file.status === 'renamed' && file.from ? file.from : file.path;
     const after = targets(file.path, await read(file.path));
-    const before = file.status === 'added' || !base ? new Set<string>() : targets(beforePath, await baseContent(folder, base, beforePath));
+    const before = file.status === 'added' || !base ? new Set<string>() : targets(beforePath, await baseContent(folder, base, beforePath), file.path);
     const added = [...after].filter((t) => !before.has(t)).sort().map((to) => ({ from: file.path, to }));
     if (cache.size >= MAX_CACHED) cache.clear();
     cache.set(key, { stamp, added });
@@ -143,7 +146,7 @@ export async function ruleImports(projectRoot: string, files: readonly string[],
   const edges = await importsAdded(projectRoot, {
     root: projectRoot, shape: 'shared', head: null,
     changes: { base, files: files.map((f) => ({ path: f, status: 'modified' as const })), truncated: false },
-  }, null, { packages: true, symbols: rules.some((r) => r.kind === 'symbol'), calls: rules.some((r) => r.kind === 'calls'), files: rules.some((r) => r.kind === 'folder') });
+  }, null, { packages: true, symbols: rules.some((r) => r.kind === 'symbol'), calls: rules.some((r) => r.kind === 'calls'), files: rules.some((r) => r.kind === 'folder'), grep: rules.filter((r) => r.kind === 'grep' && r.strength !== 'guide') });
   const byId = new Map(rules.map((r) => [r.id, r]));
   return checkEdges(rules, edges).map((b) => {
     const rule = byId.get(b.rule)!;

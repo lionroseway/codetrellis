@@ -107,6 +107,11 @@ language and every file type.
 - **Change control:** the gate reads only the lines a change adds, so an edited
   file is not blamed for its old lines.
 
+Built in B2. Grep text is literal unless `match` says otherwise, and a `*` in
+it stays a `*`, unlike a package, symbol or call target. A line is keyed by its
+text, so an edit above an old line does not make it new. The Rules view has a
+**Text** kind for it.
+
 ## B3 Fuzzy matching
 
 `match: fuzzy` compares normalised strings. It lowercases them and splits them

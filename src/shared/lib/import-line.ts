@@ -8,6 +8,8 @@
  * line. Pure: no file is read here.
  */
 
+import { grepLine, isGrepEntry } from './grep-entry';
+
 const PACKAGE = /^(npm|pypi|go|cargo|maven|nuget|gem|composer|swift):(.+)$/;
 const CALL = /^(http|sql):(.+)$/;
 const SYMBOL = /^([^#\s:]+)#([^#\s/]+)$/;
@@ -17,6 +19,8 @@ const basename = (p: string): string => p.slice(p.lastIndexOf('/') + 1);
 
 /** The line that imports `target` in `text`, 1-based; null when no import line names it. */
 export function importLine(text: string, target: string): number | null {
+  // A grep rule's line (B2) is the one with its text; a pattern the file never holds is about the whole file.
+  if (isGrepEntry(target)) return grepLine(text, target);
   // A call (R7) is not an import: the line that names its host or path, or its table.
   const call = CALL.exec(target);
   if (call) return callLine(text, call[1], call[2]);

@@ -205,6 +205,22 @@ function written(rule: ArchitectureRule): Record<string, unknown> {
       ...(rule.by ? { by: rule.by } : {}),
     };
   }
+  if (rule.kind === 'grep') {
+    // B2: the files it reads, and the text they must not, or must, hold.
+    return {
+      id: rule.id,
+      kind: 'grep',
+      in: rule.in ?? [],
+      ...(rule.except.length ? { except: rule.except } : {}),
+      [rule.must ? 'must' : 'mustNot']: rule.mayNotImport,
+      ...(rule.match ? { match: rule.match } : {}),
+      ...(rule.ignoreCase ? { ignoreCase: true } : {}),
+      strength: rule.strength,
+      ...(rule.because ? { because: rule.because } : {}),
+      since: rule.since,
+      ...(rule.by ? { by: rule.by } : {}),
+    };
+  }
   if (rule.kind === 'symbol') {
     // R6: the same shape, naming the export.
     return {

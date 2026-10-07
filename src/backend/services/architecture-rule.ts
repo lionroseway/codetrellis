@@ -11,6 +11,7 @@ import { isSymbolEntry, splitSymbol, symbolMatches, symbolProblem } from '../../
 import { callMatches, callProblem, callWords, isCallEntry, normaliseCall } from '../../shared/lib/call-entry';
 import { folderProblem, folderWords, isFileFact } from '../../shared/lib/folder-entry';
 import { matcherOf, regexProblem, splitTarget, underPattern, wholly, type MatchKind } from '../../shared/lib/matcher';
+import { grepKey, grepPatternWords, grepWords, isGrepEntry, splitGrep } from '../../shared/lib/grep-entry';
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const MAX_BECAUSE = 200;
@@ -31,8 +32,9 @@ export function parseArchitectureRule(raw: unknown): { rule: ArchitectureRule | 
   if (r.kind === 'symbol') return parseSymbolRule(r);
   if (r.kind === 'calls') return parseCallRule(r);
   if (r.kind === 'folder') return parseFolderRule(r);
+  if (r.kind === 'grep') return parseGrepRule(r);
   const problems: string[] = [];
-  if (r.kind !== undefined && r.kind !== 'imports') problems.push('kind must be imports, package, symbol, calls or folder');
+  if (r.kind !== undefined && r.kind !== 'imports') problems.push('kind must be imports, package, symbol, calls, folder or grep');
   if (typeof r.id !== 'string' || !ID_RE.test(r.id)) problems.push('id must be a short slug, like web-not-db');
   const fromProblem = patternProblem('from', r.from);
   if (fromProblem) problems.push(fromProblem);
@@ -217,6 +219,66 @@ function parseFolderRule(r: Record<string, unknown>): { rule: ArchitectureRule |
   };
 }
 
+const MAX_GREP = 200;
+
+/**
+ * A grep rule (Phase 33 B2): the files `in` (a pattern or a list) less
+ * `except`, and `mustNot` the text no line of theirs may hold, or `must` the
+ * text one line of each must. The text is literal, or `{ match: glob | regex,
+ * value }` (or `match:` beside it); a `*` in literal text is a `*`, since code
+ * is full of them. `ignoreCase: true` reads it in any case.
+ */
+function parseGrepRule(r: Record<string, unknown>): { rule: ArchitectureRule | null; problems: string[] } {
+  const problems: string[] = [];
+  if (typeof r.id !== 'string' || !ID_RE.test(r.id)) problems.push('id must be a short slug, like no-console-in-backend');
+  const list = (v: unknown): string[] | null => (v === undefined ? [] : typeof v === 'string' ? [v] : Array.isArray(v) && v.every((x) => typeof x === 'string') ? v as string[] : null);
+  const within = list(r.in);
+  if (within === null || within.length === 0) problems.push('in must list the files it reads, like src/backend/');
+  for (const w of within ?? []) {
+    const p = patternProblem('in', w);
+    if (p) { problems.push(p); break; }
+  }
+  const except = list(r.except);
+  if (except === null) problems.push('except must be a list of files or patterns');
+  for (const e of except ?? []) {
+    const p = patternProblem('except', e);
+    if (p) { problems.push(p); break; }
+  }
+  const must = r.must !== undefined;
+  if (must === (r.mustNot !== undefined)) problems.push('a grep rule says mustNot (text no line may hold) or must (text one line must), not both');
+  const { value, match: m } = splitTarget(must ? r.must : r.mustNot);
+  const written = m ?? r.match;
+  const match: MatchKind | null = written === undefined || written === null || written === 'exact' ? null : written === 'glob' || written === 'regex' ? written : null;
+  if (written !== undefined && written !== null && written !== 'exact' && match === null) problems.push('match must be exact, glob or regex');
+  if (typeof value !== 'string' || value.trim() === '') problems.push(`${must ? 'must' : 'mustNot'} must be the text to look for, like console.log(`);
+  else if (value.length > MAX_GREP) problems.push(`the text is at most ${MAX_GREP} characters`);
+  else if (match === 'regex') { const p = regexProblem(value.trim()); if (p) problems.push(p); }
+  if (r.ignoreCase !== undefined && typeof r.ignoreCase !== 'boolean') problems.push('ignoreCase is true or false');
+  if (r.only !== undefined) problems.push('a grep rule has no only: say in which files it reads');
+  commonProblems(r, problems);
+  if (problems.length > 0) return { rule: null, problems };
+  return {
+    rule: {
+      id: r.id as string,
+      kind: 'grep',
+      from: '**',
+      mayNotImport: (value as string).trim(),
+      ...(match ? { match } : {}),
+      in: within!.map(normalise),
+      ...(must ? { must: true } : {}),
+      ...(r.ignoreCase === true ? { ignoreCase: true } : {}),
+      except: except!.map(normalise),
+      ...common(r),
+    },
+    problems: [],
+  };
+}
+
+/** Whether a grep rule reads this file: in one of its `in`, and in none of its `except`. */
+export function grepReads(rule: Pick<ArchitectureRule, 'in' | 'except'>, relPath: string): boolean {
+  return (rule.in ?? []).some((p) => inPattern(p, relPath)) && !rule.except.some((e) => inPattern(e, relPath));
+}
+
 /**
  * A package, symbol or call target, exact or by a matcher (B1): the matcher
  * it is written with, after adding to `problems` what is wrong with it. An
@@ -305,6 +367,10 @@ const escape = (s: string) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
 
 /** Whether `from` importing `to` crosses this rule. A file already inside the forbidden set is not "from" outside it. */
 export function breaks(rule: ArchitectureRule, from: string, to: string): boolean {
+  if (rule.kind === 'grep') {
+    // B2: `to` is a line the file holds, or a pattern it never does, keyed by the rule's terms.
+    return splitGrep(to)?.key === grepKey(rule) && grepReads(rule, from);
+  }
   if (rule.kind === 'package') {
     // R5: `to` is a package entry; only the rule's own files may import it.
     if (!isPackageEntry(to) || !targetMatches(rule, to)) return false;
@@ -328,7 +394,7 @@ export function breaks(rule: ArchitectureRule, from: string, to: string): boolea
     return inPattern(rule.from, from) && !(rule.only ?? []).some((o) => inPattern(o, from));
   }
   // An outside package, a named export, a call or a file's fact is no file in a folder.
-  if (isPackageEntry(to) || isSymbolEntry(to) || isCallEntry(to) || isFileFact(to)) return false;
+  if (isPackageEntry(to) || isSymbolEntry(to) || isCallEntry(to) || isFileFact(to) || isGrepEntry(to)) return false;
   if (!inPattern(rule.from, from) || inPattern(rule.mayNotImport, from)) return false;
   if (!inPattern(rule.mayNotImport, to)) return false;
   return !rule.except.some((e) => inPattern(e, to));
@@ -354,8 +420,13 @@ export function checkEdges(rules: ArchitectureRule[], edges: Array<{ from: strin
  * "only src/payments/index.ts may import npm:stripe" ("in src/, only …"
  * when it applies to a folder).
  */
-export function ruleStatement(rule: Pick<ArchitectureRule, 'kind' | 'from' | 'mayNotImport' | 'except' | 'only'> & Partial<Pick<ArchitectureRule, 'files' | 'kinds' | 'exports' | 'match'>>): string {
+export function ruleStatement(rule: Pick<ArchitectureRule, 'kind' | 'from' | 'mayNotImport' | 'except' | 'only'> & Partial<Pick<ArchitectureRule, 'files' | 'kinds' | 'exports' | 'match' | 'in' | 'must' | 'ignoreCase'>>): string {
   const except = rule.except.length > 0 ? ` (except ${rule.except.join(', ')})` : '';
+  if (rule.kind === 'grep') {
+    // B2: "no file in src/backend/ may contain “console.log(”", "every file in src/routes/*.ts must contain “requireAuth”".
+    const files = `${(rule.in ?? []).join(', ')}${except}`;
+    return rule.must ? `every file in ${files} must contain ${grepPatternWords(rule)}` : `no file in ${files} may contain ${grepPatternWords(rule)}`;
+  }
   // B1: a regex target is said as one; a glob reads as it is written.
   if (rule.match === 'regex' && (rule.kind === 'package' || rule.kind === 'calls' || rule.kind === 'symbol')) {
     const where = rule.from && rule.from !== '**' ? `in ${rule.from}, ` : '';
@@ -386,5 +457,5 @@ export function ruleWords(rule: ArchitectureRule): string {
 
 /** "web/reports.ts imports db/client.ts, which “web-not-db” forbids: web talks to db through the API" */
 export function breachWords(rule: ArchitectureRule, b: { from: string; to: string }): string {
-  return `${b.from} imports ${b.to}, which the rule “${ruleStatement({ ...rule, except: [] })}” forbids${rule.because ? `: ${rule.because}` : ''}`;
+  return `${b.from} ${isGrepEntry(b.to) ? grepWords(b.to) : `imports ${b.to}`}, which the rule “${ruleStatement({ ...rule, except: [] })}” forbids${rule.because ? `: ${rule.because}` : ''}`;
 }
