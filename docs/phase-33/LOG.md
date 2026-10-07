@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
-| **Status** | C8 in review (one renderer); R5 merged (#377) |
-| **In flight** | R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | R5 (#377, `30c5999`) |
-| **Next action** | Merge C8 when CI is green, then replay C7 (already verified on top of C8) |
+| **Status** | C7 in review (check runs are records that travel); C8 merged (#378) |
+| **In flight** | R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | C8 (#378, `422aada`) |
+| **Next action** | Merge C7 when CI is green, then replay G7 (being verified on top of C7) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `30c5999`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `422aada`, with open PRs from GitHub.
 
 ---
 
@@ -75,7 +75,7 @@
 - [ ] C5 Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass) — building
 - [ ] C6 Graduation (a repeated finding proposes a rule) — building
 - [ ] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran — building
-- [ ] C8 One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words — building
+- [x] C8 One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words (#378)
 
 ### Track G: graph and clarity
 - [x] G1 One visual vocabulary (colour, glyph, dash, words) with a guard test (#371)
@@ -204,6 +204,26 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — C8 merged (#378); C7 in review
+
+- **C8 merged** (#378): every finding in the same words, everywhere.
+- **C7: check runs are records that travel.** Every check is a run:
+  `codetrellis check`, `status`, or an agent's `check_changes`, here or in
+  CI. Each run is kept with:
+  - where it ran (the CI host read from the job's environment, a terminal,
+    or an agent's session) and by whom;
+  - the commit, the base, and the commit whose rulebook judged it;
+  - the scope, the outcome and its findings by rule.
+
+  With shared task state on, each device's latest run is written to
+  `.codetrellis/runs/checks/`, signed as every record is. Teammates read it
+  after a pull, so CI's run shows in their app. Off, runs are forgotten
+  here. `list_check_runs` and `GET /api/check-runs` list them, and
+  Settings → Shared task state shows where each ran.
+- Checked before review on the replayed code: unit 2114 passing; 101 shared
+  state, task-record, check and CLI harness tests; the settings browser
+  specs (63 chromium, 8 serial).
 
 ### 2026-10-07 — R5 merged (#377), with a packaging bug caught; C8 in review
 
