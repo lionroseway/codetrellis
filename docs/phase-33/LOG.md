@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
-| **Status** | G2 in review (one legend, listing only what is drawn); G1 merged (#371); the page's screens merged (#370) |
-| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G2 building on `feat/phase-33-g2-legend`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | G1 (#371, `e0fd1f1`) |
-| **Next action** | Merge G2 when CI is green, then replay V1 |
+| **Status** | V1 in review (the architecture section at the top of every review); G2 merged (#372) |
+| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | G2 (#372, `3ddddbf`) |
+| **Next action** | Merge V1 when CI is green, then replay V2 (already verified on top of V1) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `e0fd1f1`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `3ddddbf`, with open PRs from GitHub.
 
 ---
 
@@ -79,7 +79,7 @@
 
 ### Track G: graph and clarity
 - [x] G1 One visual vocabulary (colour, glyph, dash, words) with a guard test (#371)
-- [ ] G2 The legend on the graph, plan canvas, file tree and Timeline — building
+- [x] G2 The legend on the graph, plan canvas, file tree and Timeline (#372)
 - [x] G3 Edge toggles (imports, cross-system, symbol links) (#368)
 - [x] G4 Graph full screen and back; hidden panes leave no gap (#369)
 - [x] G5 Selecting a file lists the plans and tasks that touch it (#366)
@@ -204,6 +204,25 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — G2 merged (#372); V1 in review
+
+- **G2 merged** (#372): one legend, listing only what is drawn.
+- **V1: what a change does to the architecture, at the top of every
+  review.** Between two commits, with no plan needed, one sentence each,
+  breaches of the rules first:
+  - imports added or removed between folders;
+  - outside packages added or dropped;
+  - HTTP calls, routes and SQL added or dropped;
+  - imports that cross the base's rules;
+  - what the change does to the rulebook.
+
+  An agent asks for it with `review_change`, and `GET /api/review/architecture`
+  serves it. A plan's review between commits opens with it, in the app, over
+  MCP and on the phone. So do the PR draft and the Review tab.
+- Checked before review on the replayed code: unit 2082 passing; 99 review,
+  PR-draft and phone harness tests; the agent and review-regression browser
+  specs (52 chromium, 52 serial).
 
 ### 2026-10-07 — G1 merged (#371), the page's screens merged (#370); G2 in review
 
