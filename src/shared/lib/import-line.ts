@@ -20,6 +20,8 @@ export function importLine(text: string, target: string): number | null {
   // A call (R7) is not an import: the line that names its host or path, or its table.
   const call = CALL.exec(target);
   if (call) return callLine(text, call[1], call[2]);
+  // A folder rule (R8) is about the file as a whole: its first line.
+  if (target.startsWith('folder:')) return text.length ? 1 : null;
   // A package (R5) is named as the code names it: `npm:stripe` is `stripe`, `go:github.com/x/y` is `y`.
   const pkg = PACKAGE.exec(target);
   // A symbol (R6) is named by its name, however it was reached: `a.ts#createCharge` is `createCharge`.

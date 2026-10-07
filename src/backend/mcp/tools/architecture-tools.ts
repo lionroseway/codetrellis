@@ -172,12 +172,17 @@ export function register(server: McpServer, deps: ToolDeps): void {
         'caught by the check, which judges a branch by its base\'s rules.',
       inputSchema: {
         id: z.string().min(1).max(63).describe('The rule\'s id, a short slug like web-not-db: an existing rule to change or stop, or a new one.'),
-        kind: z.enum(['imports', 'package', 'symbol', 'calls']).optional().describe('imports (the default): files in from may not import files in may_not_import. package: only the files in only may import the outside package named in package. symbol: only the files in only may import the export named in symbol, directly or through a barrel. calls: only the files in only may make the call named in calls.'),
+        kind: z.enum(['imports', 'package', 'symbol', 'calls', 'folder']).optional().describe('imports (the default): files in from may not import files in may_not_import. package: only the files in only may import the outside package named in package. symbol: only the files in only may import the export named in symbol, directly or through a barrel. calls: only the files in only may make the call named in calls. folder: the files in folder are named to files, of kinds, and export one name each when exports is one.'),
         from: z.string().max(300).optional().describe('The files it is about: a folder ending in / or a pattern. Required for an imports rule unless remove; for a package rule, where it applies (everywhere if omitted).'),
         may_not_import: z.string().max(300).optional().describe('What they may not import. Required for an imports rule unless remove.'),
         package: z.string().max(300).optional().describe('A package rule\'s outside package, ecosystem and name: npm:stripe, pypi:requests, go:github.com/stripe/stripe-go, maven:com.stripe.'),
         symbol: z.string().max(300).optional().describe('A symbol rule\'s export, a file and a name: src/payments/charge.ts#createCharge.'),
         calls: z.string().max(300).optional().describe('A call rule\'s call: http: and a host or path (http:api.stripe.com, http:/api/admin), or sql: and a table (sql:payments).'),
+        folder: z.string().max(300).optional().describe('A folder rule\'s folder, like src/backend/services/.'),
+        files: z.array(z.string().max(100)).max(20).optional().describe('A folder rule\'s name patterns, like *-service.ts.'),
+        kinds: z.array(z.string().max(20)).max(20).optional().describe('A folder rule\'s file kinds, by extension, like ts.'),
+        exports: z.enum(['one']).optional().describe('A folder rule: one, each file exports one name.'),
+        guide: z.string().max(1000).optional().describe('A folder rule\'s judgement half, in prose: shown to people and agents, never checked.'),
         only: z.array(z.string().max(300)).max(50).optional().describe('A package, symbol or call rule\'s files that alone may import it or make the call, like src/payments/index.ts.'),
         except: z.array(z.string().max(300)).max(50).optional().describe('Files they may import all the same.'),
         because: z.string().max(200).optional().describe('Why the rule exists, in the team\'s words.'),
@@ -196,6 +201,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         from: args.from, mayNotImport: args.may_not_import, except: args.except, because: args.because, strength: args.strength, suite: args.suite,
         ...(args.kind ? { kind: args.kind } : {}), ...(args.package ? { package: args.package } : {}), ...(args.only ? { only: args.only } : {}),
         ...(args.symbol ? { symbol: args.symbol } : {}), ...(args.calls ? { calls: args.calls } : {}),
+        ...(args.folder ? { folder: args.folder } : {}), ...(args.files ? { files: args.files } : {}), ...(args.kinds ? { kinds: args.kinds } : {}),
+        ...(args.exports ? { exports: args.exports } : {}), ...(args.guide ? { guide: args.guide } : {}),
       };
       try {
         if (!body && !findRule(root, args.id)) return { isError: true, content: [{ type: 'text' as const, text: `No architecture rule "${args.id}" in this project to stop.` }] };

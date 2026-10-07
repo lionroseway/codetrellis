@@ -173,6 +173,22 @@ function written(rule: ArchitectureRule): Record<string, unknown> {
       ...(rule.by ? { by: rule.by } : {}),
     };
   }
+  if (rule.kind === 'folder') {
+    // R8: written as the design writes it.
+    return {
+      id: rule.id,
+      kind: 'folder',
+      folder: rule.from,
+      ...(rule.files?.length ? { files: rule.files.length === 1 ? rule.files[0] : rule.files } : {}),
+      ...(rule.kinds?.length ? { kinds: rule.kinds } : {}),
+      ...(rule.exports ? { exports: rule.exports } : {}),
+      strength: rule.strength,
+      ...(rule.because ? { because: rule.because } : {}),
+      ...(rule.guide ? { guide: rule.guide } : {}),
+      since: rule.since,
+      ...(rule.by ? { by: rule.by } : {}),
+    };
+  }
   if (rule.kind === 'calls') {
     // R7: the same shape, naming the call.
     return {

@@ -32,7 +32,9 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import type { AwarenessSignal, ChangedFile, SignalKind, SignalSeverity } from '../../shared/types';
 import { ruleStatement } from './architecture-rule';
+import type { RuleKind } from '../../shared/types/architecture-rules';
 import { ruleCovers } from '../../shared/lib/rule-pattern';
+import { reachWords } from '../../shared/lib/check-words';
 
 export interface FootprintInput {
   root: string;
@@ -56,7 +58,7 @@ export interface FootprintInput {
    * rule. Looked up by the caller, since that needs the parser and the
    * project's import context; absent when there are no rules.
    */
-  ruleBreaches?: Array<{ rule: { id: string; from: string; mayNotImport: string; because: string; strength?: 'block' | 'warn' | 'guide' }; edges: Array<{ from: string; to: string }> }>;
+  ruleBreaches?: Array<{ rule: { id: string; kind?: RuleKind; from: string; mayNotImport: string; because: string; strength?: 'block' | 'warn' | 'guide' }; edges: Array<{ from: string; to: string }> }>;
   /**
    * Phase 33 R9: the project's rules, guides included, so drift can name the
    * ones about the files it reaches. Given only when there is a scope to
@@ -289,13 +291,18 @@ export function computeSignals(footprints: readonly FootprintInput[]): SignalDra
       if (edges.length === 0) continue;
       const sorted = [...edges].sort((x, y) => x.from.localeCompare(y.from) || x.to.localeCompare(y.to));
       const shown = sorted.slice(0, 2).map((e) => `${e.from} → ${e.to}`).join(', ') + (sorted.length > 2 ? ` and ${sorted.length - 2} more` : '');
+      // An imports rule says what crossed it; a package, symbol, call or folder
+      // rule (R5–R8) says what the file now does, in the check's own words.
+      const what = !rule.kind || rule.kind === 'imports'
+        ? ` now imports ${rule.mayNotImport} from ${rule.from} (${shown})`
+        : `: ${sorted.slice(0, 2).map((e) => `${e.from} ${reachWords(e.to)}`).join(', ')}${sorted.length > 2 ? ` and ${sorted.length - 2} more` : ''}`;
       const words = ruleStatement({ ...rule, except: [] });
       out.push(draft('rule', rule.strength === 'warn' ? 'medium' : 'high', `${w.root}\0${rule.id}`, {
         files: [...new Set(sorted.map((e) => e.from))],
         rule: { id: rule.id, words, because: rule.because },
         edges: sorted,
       }, [w.root],
-      `\`${workstreamLabel(w)}\` now imports ${rule.mayNotImport} from ${rule.from} (${shown}), which the rule “${words}” forbids${rule.because ? `: ${rule.because}` : ''}`,
+      `\`${workstreamLabel(w)}\`${what}, which the rule “${words}” forbids${rule.because ? `: ${rule.because}` : ''}`,
       sorted.map((e) => `${e.from}>${e.to}`).join(',')));
     }
   }

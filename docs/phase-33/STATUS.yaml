@@ -17,8 +17,8 @@
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
   step: "Merging the built steps, in order"
-  status: "R7 in review (call rules); R6 merged (#385)"
-  next: "Merge R7 when CI is green, then replay R8"
+  status: "R8 in review (folder rules); R7 merged (#386)"
+  next: "Merge R8 when CI is green, then replay C4b"
   blockers: "None"
   updated: 2026-10-07
 sections:
@@ -64,8 +64,11 @@ sections:
           - 367
       - title: "Four browser specs fail in a local clone with many fetched branches and pass in CI (evolution, play-forward, navigate_to Awareness, signal-to-lines): find why"
         followUp: true
-      - title: "rules-overlay.spec drew no edges in CI twice: read what React Flow held when it next fails"
+      - title: "rules-overlay.spec drew no edges in CI: React Flow held every node measured and none with handle positions, and nothing measured them again; the canvas now does (`RemeasureHandles`)"
         followUp: true
+        status: done
+        prs:
+          - 387
       - title: "The plan-panel and inspector Allotment resize throws on load (minimumSize of undefined), caught and logged since Phase 31"
         followUp: true
   - title: "Stage 0: ground truth"

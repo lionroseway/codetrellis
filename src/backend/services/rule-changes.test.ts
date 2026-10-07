@@ -100,3 +100,16 @@ test('a symbol rule letting more files import it loosens; fewer tightens; anothe
   const [other] = diffRules([charge(['src/payments/'])], [charge(['src/payments/'], 'src/payments/charge.ts#refund')], edges);
   assert.equal(other.effect, 'loosens');
 });
+
+test('a folder rule: naming fewer or more exact file names, or one export, tightens; allowing more loosens (R8)', () => {
+  const services = (over: Partial<ArchitectureRule>) => rule('services', { kind: 'folder', from: 'src/services/', mayNotImport: '', except: [], files: ['*-service.ts'], ...over });
+  const facts = [{ from: 'src/services/helpers.ts', to: 'file:helpers.ts:2' }];
+  assert.equal(diffRules([services({})], [services({})], facts)[0]?.effect ?? 'none', 'none');
+  assert.equal(diffRules([services({ files: [] })], [services({})], facts)[0].effect, 'tightens');
+  assert.equal(diffRules([services({ files: ['*-service.ts', '*-helpers.ts'] })], [services({})], facts)[0].effect, 'tightens');
+  const wider = diffRules([services({})], [services({ files: ['*-service.ts', '*.ts'] })], facts)[0];
+  assert.equal(wider.effect, 'loosens');
+  assert.deepEqual(wider.allowed, [{ from: 'src/services/helpers.ts', to: 'folder:is named helpers.ts, not *-service.ts' }]);
+  assert.equal(diffRules([services({})], [services({ exports: 'one' })], facts)[0].effect, 'tightens');
+  assert.equal(diffRules([services({ exports: 'one' })], [services({})], facts)[0].effect, 'loosens');
+});

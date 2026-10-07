@@ -20,6 +20,7 @@ import { getResolverForLanguage } from './resolvers';
 import { packageEntry } from '../../shared/lib/package-entry';
 import { symbolEntry } from '../../shared/lib/symbol-entry';
 import { callEntry } from '../../shared/lib/call-entry';
+import { exportCount, fileFact } from '../../shared/lib/folder-entry';
 import { originsOf } from './importers';
 import { ruleFix } from '../../shared/lib/check-words';
 import { showAtAsync } from './branch-workstreams';
@@ -54,7 +55,7 @@ export async function importsAdded(
   projectRoot: string,
   w: Pick<Workstream, 'root' | 'shape' | 'head' | 'changes'>,
   mainRoot: string | null,
-  opts: { packages?: boolean; symbols?: boolean; calls?: boolean } = {},
+  opts: { packages?: boolean; symbols?: boolean; calls?: boolean; files?: boolean } = {},
 ): Promise<ImportEdge[]> {
   const base = w.changes.base;
   const branch = w.shape === 'branch' && w.head && mainRoot ? w.head : null;
@@ -70,7 +71,9 @@ export async function importsAdded(
     if (content === null) return out;
     const abs = path.join(projectRoot, rel);
     let parsed: ReturnType<typeof parseVirtualFile> = null;
-    try { parsed = parseVirtualFile(abs, content); } catch { return out; }
+    try { parsed = parseVirtualFile(abs, content); } catch { parsed = null; }
+    // R8: the file's own fact (its name, what it exports), parsed or not, for folder rules.
+    if (opts.files) out.add(fileFact(rel, parsed ? exportCount(parsed.language, parsed.symbols) : null));
     if (!parsed) return out;
     // R7: the calls it makes, for call rules to read (no resolver needed).
     if (opts.calls) for (const cs of parsed.callsites ?? []) { const e = callEntry(cs); if (e) out.add(e); }
@@ -99,7 +102,7 @@ export async function importsAdded(
   const edges: ImportEdge[] = [];
   for (const file of w.changes.files) {
     if (file.status === 'deleted') continue;
-    const key = `${folder}\0${file.path}\0${opts.packages ? 'p' : ''}${opts.symbols ? 's' : ''}${opts.calls ? 'c' : ''}`;
+    const key = `${folder}\0${file.path}\0${opts.packages ? 'p' : ''}${opts.symbols ? 's' : ''}${opts.calls ? 'c' : ''}${opts.files ? 'f' : ''}`;
     const stamp = stampOf(folder, base, file, branch);
     const hit = cache.get(key);
     if (hit && hit.stamp === stamp) { edges.push(...hit.added); continue; }
@@ -140,7 +143,7 @@ export async function ruleImports(projectRoot: string, files: readonly string[],
   const edges = await importsAdded(projectRoot, {
     root: projectRoot, shape: 'shared', head: null,
     changes: { base, files: files.map((f) => ({ path: f, status: 'modified' as const })), truncated: false },
-  }, null, { packages: true, symbols: rules.some((r) => r.kind === 'symbol'), calls: rules.some((r) => r.kind === 'calls') });
+  }, null, { packages: true, symbols: rules.some((r) => r.kind === 'symbol'), calls: rules.some((r) => r.kind === 'calls'), files: rules.some((r) => r.kind === 'folder') });
   const byId = new Map(rules.map((r) => [r.id, r]));
   return checkEdges(rules, edges).map((b) => {
     const rule = byId.get(b.rule)!;

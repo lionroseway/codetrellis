@@ -38,7 +38,8 @@ export interface RuleChange {
   approval?: { ok: true; by: string; how: 'git' | 'device'; file: string } | { ok: false; why: string } | null;
 }
 
-const key = (e: Edge) => `${e.from}>${e.to}`;
+// A folder breach (R8) says what is wrong in words, which change with the rule's terms: it is keyed by its file.
+const key = (e: Edge) => (e.to.startsWith('folder:') ? `${e.from}>folder` : `${e.from}>${e.to}`);
 const breaches = (rule: ArchitectureRule, edges: readonly Edge[]): Edge[] =>
   checkEdges([rule], edges as Edge[]).map((b) => ({ from: b.from, to: b.to }));
 const minus = (a: Edge[], b: Edge[]): Edge[] => { const drop = new Set(b.map(key)); return a.filter((e) => !drop.has(key(e))); };
@@ -58,8 +59,16 @@ function textEffect(base: ArchitectureRule, head: ArchitectureRule): RuleEffect 
   const headOnly = head.only ?? [];
   const onlySame = sameSet(baseOnly, headOnly);
   const onlyShrank = headOnly.every((o) => baseOnly.includes(o));
-  if (pathsSame && onlySame && sameSet(base.except, head.except)) return 'same';
-  if (pathsSame && onlyShrank && head.except.every((e) => base.except.includes(e))) return 'tightens';
+  // A folder rule's terms (R8): an empty list allows anything, so naming some
+  // where there were none, or fewer, tightens; dropping "one export" loosens.
+  const allowed = (b: readonly string[] = [], h: readonly string[] = []) =>
+    sameSet(b, h) ? 'same' : (b.length === 0 && h.length > 0) || (h.length > 0 && h.every((x) => b.includes(x))) ? 'tightens' : 'loosens';
+  const folder = [allowed(base.files, head.files), allowed(base.kinds, head.kinds),
+    base.exports === head.exports ? 'same' : head.exports === 'one' ? 'tightens' : 'loosens'];
+  const folderSame = folder.every((f) => f === 'same');
+  const folderTighter = folder.every((f) => f !== 'loosens');
+  if (pathsSame && onlySame && sameSet(base.except, head.except) && folderSame) return 'same';
+  if (pathsSame && onlyShrank && head.except.every((e) => base.except.includes(e)) && folderTighter) return 'tightens';
   return 'loosens';
 }
 

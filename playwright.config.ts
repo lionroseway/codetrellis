@@ -153,6 +153,9 @@ export const SERIAL_SPECS = [
   // "No agents connected" is a fact about the whole backend: any parallel
   // spec's MCP client makes it false (#367, once shards were balanced).
   '**/agent/connected-agents.spec.ts',
+  // "The last session is closed" is too: terminals are the whole backend's,
+  // so a parallel spec's shell is in its window, and it deletes every one.
+  '**/terminal/empty-state.spec.ts',
   // Opens throwaway projects, which swaps the one project every parallel spec
   // reads: the re-exports spec read a temporary folder's graph (#370).
   '**/onboarding/recent-projects.spec.ts',

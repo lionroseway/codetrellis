@@ -65,8 +65,12 @@ export function RulesView() {
   // Which suite the list shows; null for every suite.
   const [shownSuite, setShownSuite] = useState<string | null>(null);
   // R5 — a rule is an import boundary, or who alone may import an outside package;
-  // R6 — or who alone may import one named export; R7 — or make one call.
-  const [kind, setKind] = useState<'imports' | 'package' | 'symbol' | 'calls'>('imports');
+  // R6 — or who alone may import one named export; R7 — or make one call;
+  // R8 — or what the files in a folder are.
+  const [kind, setKind] = useState<'imports' | 'package' | 'symbol' | 'calls' | 'folder'>('imports');
+  const [fileNames, setFileNames] = useState('');
+  const [oneExport, setOneExport] = useState(false);
+  const [guide, setGuide] = useState('');
   const [pkg, setPkg] = useState('');
   const [sym, setSym] = useState('');
   const [callTarget, setCallTarget] = useState('');
@@ -194,7 +198,7 @@ export function RulesView() {
   };
 
   const clearForm = () => {
-    setFrom(''); setMayNotImport(''); setExcept(''); setBecause(''); setPkg(''); setSym(''); setCallTarget(''); setOnly(''); setSuite(''); setStrength('warn');
+    setFrom(''); setMayNotImport(''); setExcept(''); setBecause(''); setPkg(''); setSym(''); setCallTarget(''); setFileNames(''); setOneExport(false); setGuide(''); setOnly(''); setSuite(''); setStrength('warn');
   };
 
   if (!root) return <p className="p-6 text-[12px] text-foreground-muted">Open a project to write down its architecture rules.</p>;
@@ -203,7 +207,8 @@ export function RulesView() {
   const ready = kind === 'package' ? !!pkg.trim() && list(only).length > 0
     : kind === 'symbol' ? sym.includes('#') && list(only).length > 0
       : kind === 'calls' ? /^(http|sql):./.test(callTarget.trim()) && list(only).length > 0
-        : !!from.trim() && !!mayNotImport.trim();
+        : kind === 'folder' ? !!from.trim() && (list(fileNames).length > 0 || oneExport)
+          : !!from.trim() && !!mayNotImport.trim();
 
   const save = async () => {
     const id = kind === 'package'
@@ -212,14 +217,18 @@ export function RulesView() {
         ? slug(`${sym.split('#')[1] ?? ''}-only-${list(only)[0] ?? ''}`) || 'symbol-rule'
         : kind === 'calls'
           ? slug(`${callTarget.replace(/^(http|sql):/, '')}-only-${list(only)[0] ?? ''}`) || 'call-rule'
-          : slug(`${from}-not-${mayNotImport}`) || 'rule';
+          : kind === 'folder'
+            ? slug(`${from}-files`) || 'folder-rule'
+            : slug(`${from}-not-${mayNotImport}`) || 'rule';
     const body: Record<string, unknown> = kind === 'package'
       ? { kind: 'package', package: pkg.trim(), only: list(only), because: because.trim(), strength }
       : kind === 'symbol'
         ? { kind: 'symbol', symbol: sym.trim(), only: list(only), because: because.trim(), strength }
         : kind === 'calls'
           ? { kind: 'calls', calls: callTarget.trim(), only: list(only), because: because.trim(), strength }
-          : { from: from.trim(), mayNotImport: mayNotImport.trim(), because: because.trim(), except: list(except), strength };
+          : kind === 'folder'
+            ? { kind: 'folder', folder: from.trim(), files: list(fileNames), ...(oneExport ? { exports: 'one' } : {}), ...(guide.trim() ? { guide: guide.trim() } : {}), because: because.trim(), strength }
+            : { from: from.trim(), mayNotImport: mayNotImport.trim(), because: because.trim(), except: list(except), strength };
     if (suite.trim()) body.suite = suite.trim();
     // A rule that already exists and would hold less tightly: shown first, then confirmed.
     const p = await preview(id, body);
@@ -347,6 +356,7 @@ export function RulesView() {
                         {STRENGTH_GLYPH[v.rule.strength]} {v.rule.strength}
                       </span>
                     </div>
+                    {v.rule.guide && <p className="text-[11.5px] text-foreground-muted italic" data-testid="rule-guide">{v.rule.guide}</p>}
                     <div className="text-[11px] text-foreground-muted">
                       {v.breaches && v.breaches.length > 0 ? (
                         <button type="button" className="text-amber-300 hover:underline" onClick={() => setOpen(open === v.rule.id ? null : v.rule.id)} data-testid="rule-breach-words">
@@ -399,6 +409,10 @@ export function RulesView() {
                 <input type="radio" name="rule-kind" checked={kind === 'calls'} onChange={() => setKind('calls')} data-testid="rule-kind-calls" />
                 <span className="text-foreground">A call</span><span className="text-[11px] text-foreground-subtle">who alone may call a host or use a table</span>
               </label>
+              <label className="flex items-baseline gap-1.5">
+                <input type="radio" name="rule-kind" checked={kind === 'folder'} onChange={() => setKind('folder')} data-testid="rule-kind-folder" />
+                <span className="text-foreground">A folder</span><span className="text-[11px] text-foreground-subtle">what its files are named and export</span>
+              </label>
             </fieldset>
             {kind === 'imports' ? (
               <>
@@ -417,6 +431,27 @@ export function RulesView() {
                   <input className={inputCls} value={except} onChange={(e) => setExcept(e.target.value)} placeholder="db/types.ts" data-testid="rule-except" />
                 </label>
               </>
+            ) : kind === 'folder' ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block space-y-1">
+                    <span className="text-foreground-muted">Files in</span>
+                    <input className={inputCls} value={from} onChange={(e) => setFrom(e.target.value)} placeholder="src/backend/services/" data-testid="rule-folder" />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-foreground-muted">are named (comma-separated)</span>
+                    <input className={inputCls} value={fileNames} onChange={(e) => setFileNames(e.target.value)} placeholder="*-service.ts" data-testid="rule-files" />
+                  </label>
+                </div>
+                <label className="flex items-baseline gap-2">
+                  <input type="checkbox" checked={oneExport} onChange={(e) => setOneExport(e.target.checked)} data-testid="rule-one-export" />
+                  <span className="text-foreground-muted">and export one thing each</span>
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-foreground-muted">Guide (optional): what a person or an agent should know, never checked</span>
+                  <input className={inputCls} value={guide} onChange={(e) => setGuide(e.target.value)} placeholder="One service per file, named for its domain; pure helpers go in lib/." data-testid="rule-guide-input" />
+                </label>
+              </div>
             ) : kind === 'calls' ? (
               <div className="grid grid-cols-2 gap-3">
                 <label className="block space-y-1">
@@ -479,6 +514,8 @@ export function RulesView() {
                   ? 'An export is the file that defines it and its name. Importing it through a barrel (an index file that passes it on) counts too.'
                   : kind === 'calls'
                     ? 'A call is http: and a host or a path (http:api.stripe.com, http:/api/admin), or sql: and a table (sql:invoices).'
+                    : kind === 'folder'
+                      ? 'A name pattern uses * within the name: *-service.ts. Files already there that break it are its debt; a change is judged on the files it adds or renames.'
                   : 'A folder ends in /; a pattern may use * within a name and ** across folders, like src/**/ui/**.'}
               {' '}You see what it does against the code before it is saved.
             </p>

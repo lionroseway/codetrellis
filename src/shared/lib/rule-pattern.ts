@@ -37,6 +37,8 @@ export interface CoveringRule {
  */
 export function ruleCovers(rule: CoveringRule, file: string): boolean {
   if (rule.kind === 'package') return (inRulePattern(rule.from, file) && packageApplies(rule.mayNotImport, file)) || (rule.only ?? []).some((o) => inRulePattern(o, file));
+  // R8: a folder rule is about the files in its folder.
+  if (rule.kind === 'folder') return inRulePattern(rule.from, file);
   if (rule.kind === 'calls') {
     // R7: the files under it that can make calls (code), and the files that may.
     return (rule.only ?? []).some((o) => inRulePattern(o, file)) || (inRulePattern(rule.from, file) && ecosystemOfPath(file) !== null);

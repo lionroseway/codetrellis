@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
-| **Status** | R7 in review (call rules); R6 merged (#385) |
-| **In flight** | R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | R6 (#385, `175872a`) |
-| **Next action** | Merge R7 when CI is green, then replay R8 |
+| **Status** | R8 in review (folder rules); R7 merged (#386) |
+| **In flight** | R8 in review (#387) on `feat/phase-33-r8-folder-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | R7 (#386, `55af7ab`) |
+| **Next action** | Merge R8 when CI is green, then replay C4b |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `175872a`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `55af7ab`, with open PRs from GitHub.
 
 ---
 
@@ -44,7 +44,7 @@
 - [ ] Follow-up: Call rules read HTTP and SQL callsites; no extractor finds subprocess commands or environment variables yet, so those calls cannot be ruled on
 - [x] Follow-up: Rebalance the browser shards: chromium 2/3 runs 185 tests in about 25 minutes, the others about 7 (#367)
 - [ ] Follow-up: Four browser specs fail in a local clone with many fetched branches and pass in CI (evolution, play-forward, navigate_to Awareness, signal-to-lines): find why
-- [ ] Follow-up: rules-overlay.spec drew no edges in CI twice: read what React Flow held when it next fails
+- [x] Follow-up: rules-overlay.spec drew no edges in CI: React Flow held every node measured and none with handle positions, and nothing measured them again; the canvas now does (`RemeasureHandles`) (#387)
 - [ ] Follow-up: The plan-panel and inspector Allotment resize throws on load (minimumSize of undefined), caught and logged since Phase 31
 
 ### Stage 0: ground truth
@@ -64,8 +64,8 @@
 - [x] R4 Strength: block, warn, guide (exit codes, `--strict`, signals) (#359)
 - [x] R5 Package rules across all eleven languages (only the wrapper imports `stripe`) (#377)
 - [x] R6 Symbol rules (who may import a named export, through re-exports) (#385)
-- [ ] R7 Call rules (HTTP hosts, commands, tables, env) — building
-- [ ] R8 Folder rules (what files in a folder are) — building
+- [x] R7 Call rules (HTTP hosts, commands, tables, env) (#386)
+- [ ] R8 Folder rules (what files in a folder are) (#387) — in review
 - [x] R9 Guide rules in scope (the brief, `get_brief`, drift names the rule) (#384)
 
 ### Track C: checks anywhere
@@ -206,6 +206,30 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — R7 merged (#386); R8 in review
+
+- **R7 merged** (#386): call rules.
+- **R8: folder rules — services are *-service.ts, one export each.** A rule
+  of kind `folder` says what the files in a folder are:
+  - named to a pattern (`files: "*-service.ts"`);
+  - of given kinds (`kinds: [ts]`);
+  - exporting one name each (`exports: one`);
+  - with the judgement half as a `guide`, which is shown and never checked.
+
+  A breach says what is wrong, for example "is named helpers.ts, not
+  *-service.ts" or "exports 2 names, not one". The gate reads only the files
+  a change adds, renames, or whose exports it changes, so an old file it
+  merely edits is not new. The Rules view lists every file that breaks it
+  today. Rule signals for package, symbol, call and folder rules now say
+  what the file does ("src/api.ts calls api.stripe.com/v1/charges"). This
+  repository's own convention for `src/backend/services/` is written as one
+  and checked by a unit test.
+- The replay's bundle guard caught R8's `require('./database')`; it is now a
+  static import. That was the last of the four (R5 to R8).
+- Checked before review on the replayed code: unit 2156 passing; 244 rules,
+  cross-system, callsite, awareness, CLI and phone harness tests; the rules,
+  graph, agent and inspector browser specs (98 chromium, 77 serial).
 
 ### 2026-10-07 — R6 merged (#385); R7 in review
 

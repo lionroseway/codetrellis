@@ -336,4 +336,46 @@ test.describe('The Rules view: an export (Phase 33 R6)', () => {
       id: 'api-stripe-com-only-src-payments', kind: 'calls', calls: 'http:api.stripe.com', only: ['src/payments/'], because: '', strength: 'warn',
     }]);
   });
+
+  test('the owner writes the services convention (Phase 33 R8): a folder, its names, one export, and the guide shown on the rule', async ({ page }) => {
+    const puts: Array<Record<string, unknown>> = [];
+    let made = false;
+    const guide = 'One service per file, named for its domain; pure helpers go in lib/.';
+    const rule = {
+      id: 'src-backend-services-files', kind: 'folder', from: 'src/backend/services/', mayNotImport: '', files: ['*-service.ts'], exports: 'one', guide,
+      except: [], because: '', strength: 'warn', suite: 'architecture', since: '2026-10-06T12:00:00.000Z', by: 'Sam Lee',
+    };
+    await page.route((url) => url.pathname.startsWith('/api/rules'), async (route) => {
+      const req = route.request();
+      const { pathname } = new URL(req.url());
+      if (req.method() === 'GET' && pathname === '/api/rules') {
+        return route.fulfill({ json: { rules: made ? [{ rule, where: '.codetrellis/rules/architecture.yaml', words: 'files in src/backend/services/ are named *-service.ts and export one thing each', breaches: [], breachWords: 'Nothing breaks this today', debt: 0 }] : [], suites: [], inConfig: 0, problems: [] } });
+      }
+      if (req.method() === 'GET' && pathname === '/api/rules/proposals') return route.fulfill({ json: { proposals: [] } });
+      if (req.method() === 'GET' && pathname === '/api/rules/history') return route.fulfill({ json: { history: [] } });
+      if (req.method() === 'POST' && pathname.endsWith('/preview')) return route.fulfill({ json: { change: { effect: 'tightens', allowed: [] }, words: '⚠ This change adds the rule.', needsConfirm: false } });
+      if (req.method() === 'PUT') {
+        puts.push({ id: decodeURIComponent(pathname.split('/')[3]), ...(req.postDataJSON() as Record<string, unknown>) });
+        made = true;
+        return route.fulfill({ json: { rule } });
+      }
+      return route.fallback();
+    });
+
+    await gotoWithProject(page);
+    await page.getByRole('button', { name: 'Rules', exact: true }).click();
+    const view = page.getByTestId('rules-view');
+    await view.getByTestId('rule-kind-folder').check();
+    await view.getByTestId('rule-folder').fill('src/backend/services/');
+    await expect(view.getByTestId('rule-save')).toBeDisabled();
+    await view.getByTestId('rule-files').fill('*-service.ts');
+    await view.getByTestId('rule-one-export').check();
+    await view.getByTestId('rule-guide-input').fill(guide);
+    await view.getByTestId('rule-save').click();
+    await expect.poll(() => puts).toEqual([{
+      id: 'src-backend-services-files', kind: 'folder', folder: 'src/backend/services/', files: ['*-service.ts'], exports: 'one', guide, because: '', strength: 'warn',
+    }]);
+    await expect(view.getByTestId('rule-guide')).toHaveText(guide);
+    await expect(view.getByTestId('rule-words')).toHaveText('files in src/backend/services/ are named *-service.ts and export one thing each');
+  });
 });

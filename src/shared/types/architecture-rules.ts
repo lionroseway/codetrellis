@@ -16,7 +16,7 @@ export type RuleStrength = 'block' | 'warn' | 'guide';
 
 export const RULE_STRENGTHS: readonly RuleStrength[] = ['block', 'warn', 'guide'];
 
-export type RuleKind = 'imports' | 'package' | 'symbol' | 'calls';
+export type RuleKind = 'imports' | 'package' | 'symbol' | 'calls' | 'folder';
 
 export interface ArchitectureRule {
   /** A slug, unique in the project: `web-not-db`. */
@@ -30,7 +30,9 @@ export interface ArchitectureRule {
    * export in `mayNotImport` (`src/payments/charge.ts#createCharge`), from
    * its file or through any barrel that passes it on. `calls` (R7): only the
    * files in `only` may make the call in `mayNotImport`: an HTTP host or path
-   * (`http:api.stripe.com`) or a SQL table (`sql:payments`).
+   * (`http:api.stripe.com`) or a SQL table (`sql:payments`). `folder` (R8):
+   * the files in the folder `from` are named to `files`, of the `kinds`, and
+   * export one name each when `exports` is `one`; `mayNotImport` is empty.
    */
   kind?: RuleKind;
   /** The files the rule is about: `web/`. */
@@ -39,6 +41,14 @@ export interface ArchitectureRule {
   mayNotImport: string;
   /** A package rule's files that alone may import it: `src/payments/index.ts`. */
   only?: string[];
+  /** A folder rule's name patterns (R8): `*-service.ts`. */
+  files?: string[];
+  /** A folder rule's file kinds, by extension (R8): `ts`. */
+  kinds?: string[];
+  /** A folder rule's `one`: each file exports one name (R8). */
+  exports?: 'one';
+  /** The judgement half of a folder rule, in prose, for people and agents (R8). Never checked. */
+  guide?: string;
   /** Files they may import all the same: `db/types.ts`; for a package rule, parts of it they may (`npm:stripe/types`). */
   except: string[];
   /** Why, in the team's words: "web talks to db through the API". */

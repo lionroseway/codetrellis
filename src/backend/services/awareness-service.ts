@@ -129,7 +129,7 @@ async function ruleEntry(projectRoot: string, w: Workstream, mainRoot: string | 
   const rules = rulesOf(projectRoot);
   if (rules.length === 0 || w.changes.files.length === 0) return {};
   if (!importsReadableFor(projectRoot)) return {};
-  const breaches = checkEdges(rules, await importsAdded(projectRoot, w, mainRoot, { packages: true, symbols: rules.some((r) => r.kind === 'symbol'), calls: rules.some((r) => r.kind === 'calls') }));
+  const breaches = checkEdges(rules, await importsAdded(projectRoot, w, mainRoot, { packages: true, symbols: rules.some((r) => r.kind === 'symbol'), calls: rules.some((r) => r.kind === 'calls'), files: rules.some((r) => r.kind === 'folder') }));
   if (breaches.length === 0) return {};
   return {
     ruleBreaches: rules

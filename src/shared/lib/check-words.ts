@@ -80,6 +80,7 @@ export function ruleFix(rule: { kind?: string; only?: string[]; except: string[]
 export function reachWords(target: string): string {
   if (target.startsWith('http:')) return `calls ${target.slice(5)}`;
   if (target.startsWith('sql:')) return `uses the table ${target.slice(4)}`;
+  if (target.startsWith('folder:')) return target.slice(7);
   return `imports ${target}`;
 }
 

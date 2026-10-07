@@ -588,8 +588,32 @@ that path on any host, and `sql:invoices` the table. The host is kept on each
 HTTP callsite for this (`callsites.host`; pairing still uses the path alone).
 A finding reads "calls api.stripe.com/v1/charges" or "uses the table
 invoices", on the line that names it. Subprocess commands and environment
-variables are in the design but no extractor finds them yet. Everything below
-holds for every kind.
+variables are in the design but no extractor finds them yet.
+
+A **folder rule** (Phase 33 R8) says what the files in a folder are, and
+carries the judgement half as a guide:
+
+```yaml
+  - id: services-are-services
+    kind: folder
+    folder: src/backend/services/
+    files: "*-service.ts"
+    exports: one
+    strength: warn
+    guide: One service per file, named for its domain; pure helpers go in lib/.
+```
+
+`files` are name patterns (`*` within the name), `kinds` file extensions,
+and `exports: one` one exported name per file (counted the same on a branch
+and in the scan: `export`-marked names in TypeScript and JavaScript, public
+names in Python; other languages are not judged on it). Each file gives one
+fact (`file:<name>:<exports>`, `src/shared/lib/folder-entry.ts`), so the
+gate judges the files a change adds, renames or re-exports from, never an old
+file it only edits; the rules view lists the old ones as what breaks it today.
+A finding says what is wrong: "is named helpers.ts, not *-service.ts",
+"exports 2 names, not one". The guide is never checked; it is shown on the
+rule in the Rules view and in a task's brief. Everything below holds for
+every kind.
 
 - **On the graph** (Phase 33 G8): the Rules overlay (Overlays → Rules)
   draws an import that breaks a rule in the breach style (red, ⊘, the rule

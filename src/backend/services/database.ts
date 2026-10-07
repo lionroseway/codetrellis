@@ -6,6 +6,7 @@ import { getDataDir, ensureDataDir } from './persistence';
 import { getResolverForLanguage } from './resolvers';
 import { packageEntry } from '../../shared/lib/package-entry';
 import { callEntry } from '../../shared/lib/call-entry';
+import { exportCount, fileFact } from '../../shared/lib/folder-entry';
 import { reconcileSchemaFromSql } from './schema-reconciler';
 // Called, never read at load: the two modules name each other.
 import { importersOf } from './importers';
@@ -815,6 +816,31 @@ export function getDependencyEdges(): Array<{
  * The edges package rules are checked against; relative imports and the
  * standard library are left out.
  */
+/**
+ * Phase 33 R8: each scanned file's own fact, its name and how many names it
+ * exports (as a parse on a branch counts them), for folder rules.
+ */
+export function getFileFacts(): Array<{ sourceRelative: string; targetRelative: string }> {
+  let files;
+  let symbols;
+  try {
+    files = getDb().exec(`SELECT id, relative_path, language FROM files`);
+    symbols = getDb().exec(`SELECT file_id, name, modifiers FROM symbols WHERE parent_symbol_id IS NULL`);
+  } catch {
+    return [];
+  }
+  const byFile = new Map<number, Array<{ name: string; modifiers: string[] }>>();
+  for (const [fileId, name, mods] of symbols[0]?.values ?? []) {
+    const list = byFile.get(Number(fileId)) ?? [];
+    list.push({ name: String(name), modifiers: JSON.parse((mods as string) || '[]') as string[] });
+    byFile.set(Number(fileId), list);
+  }
+  return (files[0]?.values ?? []).map(([id, rel, lang]) => ({
+    sourceRelative: String(rel),
+    targetRelative: fileFact(String(rel), exportCount(String(lang ?? ''), byFile.get(Number(id)) ?? [])),
+  }));
+}
+
 /**
  * Phase 33 R7: each file and the calls it makes, as call entries
  * (`http:api.stripe.com/v1/charges`, `sql:payments`), for call rules.
