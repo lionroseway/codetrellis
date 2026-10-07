@@ -54,7 +54,7 @@ test('a grep rule is refused without its files, with both texts or neither, with
   assert.match(why({ in: ['a/'], mustNot: '' }), /the text to look for/);
   assert.match(why({ in: ['a/'], mustNot: 'x'.repeat(201) }), /at most 200/);
   assert.match(why({ in: ['a/'], mustNot: { match: 'regex', value: '(a+)+' } }), /repeat a group that itself repeats/);
-  assert.match(why({ in: ['a/'], mustNot: { match: 'fuzzy', value: 'x' } }), /match must be exact, glob or regex/);
+  assert.match(why({ in: ['a/'], mustNot: { match: 'soundex', value: 'x' } }), /match must be exact, glob, regex or fuzzy/);
   assert.match(why({ in: ['a/'], mustNot: 'x', only: ['b/'] }), /no only/);
   assert.match(why({ in: ['../a/'], mustNot: 'x' }), /climb out/);
   assert.match(why({ in: ['a/'], mustNot: 'x', ignoreCase: 'yes' }), /ignoreCase is true or false/);

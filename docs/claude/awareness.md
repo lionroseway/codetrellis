@@ -614,6 +614,30 @@ target's pattern or matcher counts as loosening: what a pattern covers is not
 proven from its text. Paths (`from`, `only`, `except`) are prefixes or globs,
 as before.
 
+**Fuzzy** (Phase 33 B3, `src/shared/lib/fuzzy.ts`) is a look-alike: like the
+target, and not the target itself.
+
+```yaml
+  - id: no-requests-lookalikes
+    kind: package
+    package: { match: fuzzy, value: pypi:requests }   # threshold 0.85 unless said
+    strength: block
+```
+
+- **The score:** both names are normalised (split at case, `-`, `_`, `.`,
+  `/`, `:`, `@`, lowercased). The score is one less the edit distance (a swap
+  of two side by side counts one) over the longer name's length. So
+  `reqeusts` is 0.88 like `requests`, on every run.
+- **What is compared:** a package's name in the same ecosystem; an export's
+  name in any file (a second `formatMoney`); a call's host, or its host and
+  path when the target names one.
+- **`only` may be empty,** and then nothing may use a look-alike.
+- **The finding's fix** says how alike, and to what: "pypi:reqeusts is 0.88
+  like pypi:requests: did you mean it?".
+- **Grep:** a fuzzy grep rule reads whole words (`mustNot` only).
+- **Change control:** a lower `threshold` tightens, and a higher one
+  loosens.
+
 A **folder rule** (Phase 33 R8) says what the files in a folder are, and
 carries the judgement half as a guide:
 

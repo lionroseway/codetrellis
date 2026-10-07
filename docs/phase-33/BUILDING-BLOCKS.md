@@ -123,11 +123,25 @@ and matches at or above `threshold` (default 0.85).
   - **near-duplicates:** a second `formatMoney` in another folder;
   - **renamed copies:** `stripeClient2.ts`.
 - **What it says:** the score and what it was close to, for example "`reqeusts`
-  is 0.93 like `requests`".
+  is 0.88 like `requests`".
+- **The score** is one less the edit distance over the longer name's length,
+  where an edit is a letter added, dropped, changed, or two side by side
+  swapped (optimal string alignment). One swap in `requests` is 1 − 1/8.
+  An earlier draft of this page said 0.93, which was a number made up for the
+  example.
 - **Determinism:** the same inputs always give the same score. There is no model
   and no network.
 - **Grep:** `kind: grep` with `match: fuzzy` matches whole tokens, never
   substrings, so it doesn't fire on every partial word.
+
+Built in B3, on package, symbol, call and grep targets. Fuzzy means "like it,
+and not it": the name itself never matches, which is what a look-alike is. So
+a fuzzy rule may leave `only` empty, and then nothing may import a look-alike.
+On a symbol it compares export names in any file, which catches a second
+`formatMoney` someone imports from somewhere else. A finding's fix says
+"`npm:reqeusts` is 0.88 like `npm:requests`: did you mean it?". A lower
+threshold tightens and a higher one loosens. Renamed copies of files
+(`stripeClient2.ts`) need fuzzy paths, which no rule kind has yet.
 
 ## B4 Your own patterns: what counts as a call
 

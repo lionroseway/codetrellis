@@ -59,6 +59,8 @@ const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.l
 function textEffect(base: ArchitectureRule, head: ArchitectureRule): RuleEffect | 'same' {
   // B1: what a glob or a regex covers is not proven from its text, so any change of matcher or pattern loosens.
   const pathsSame = (base.kind ?? 'imports') === (head.kind ?? 'imports') && base.from === head.from && base.mayNotImport === head.mayNotImport && (base.match ?? null) === (head.match ?? null);
+  // B3: a lower threshold matches more look-alikes (tighter), a higher one fewer (looser).
+  const threshold = (base.threshold ?? null) === (head.threshold ?? null) ? 'same' : (head.threshold ?? 1) < (base.threshold ?? 1) ? 'tightens' : 'loosens';
   // A package or symbol rule's `only` is who may: fewer is tighter, more or other is looser (R5, R6).
   const baseOnly = base.only ?? [];
   const headOnly = head.only ?? [];
@@ -72,8 +74,8 @@ function textEffect(base: ArchitectureRule, head: ArchitectureRule): RuleEffect 
     base.exports === head.exports ? 'same' : head.exports === 'one' ? 'tightens' : 'loosens'];
   // B2: a grep rule reading other files, requiring rather than forbidding, or in another case, is not proven tighter.
   const grepSame = sameSet(base.in ?? [], head.in ?? []) && !!base.must === !!head.must && !!base.ignoreCase === !!head.ignoreCase;
-  const folderSame = folder.every((f) => f === 'same') && grepSame;
-  const folderTighter = folder.every((f) => f !== 'loosens') && grepSame;
+  const folderSame = folder.every((f) => f === 'same') && grepSame && threshold === 'same';
+  const folderTighter = folder.every((f) => f !== 'loosens') && grepSame && threshold !== 'loosens';
   if (pathsSame && onlySame && sameSet(base.except, head.except) && folderSame) return 'same';
   if (pathsSame && onlyShrank && head.except.every((e) => base.except.includes(e)) && folderTighter) return 'tightens';
   return 'loosens';

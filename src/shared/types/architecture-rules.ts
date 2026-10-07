@@ -47,7 +47,12 @@ export interface ArchitectureRule {
    * absent, exactly as it always was; `glob` (`http:*.stripe.com`); `regex`
    * (`http:api\\.(stripe|paypal)\\.com(/.*)?`). See shared/lib/matcher.ts.
    */
-  match?: 'glob' | 'regex';
+  match?: 'glob' | 'regex' | 'fuzzy';
+  /**
+   * A fuzzy target's threshold (Phase 33 B3): how alike, above 0.5 and below
+   * 1, an entry must be to match; 0.85 unless the rule says.
+   */
+  threshold?: number;
   /** A grep rule's files (B2): `src/backend/`, `src/routes/*.ts`. */
   in?: string[];
   /** A grep rule that requires its text, rather than forbidding it (B2). */

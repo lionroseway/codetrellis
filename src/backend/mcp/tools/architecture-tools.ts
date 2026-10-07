@@ -178,7 +178,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         package: z.string().max(300).optional().describe('A package rule\'s outside package, ecosystem and name: npm:stripe, pypi:requests, go:github.com/stripe/stripe-go, maven:com.stripe.'),
         symbol: z.string().max(300).optional().describe('A symbol rule\'s export, a file and a name: src/payments/charge.ts#createCharge.'),
         calls: z.string().max(300).optional().describe('A call rule\'s call: http: and a host or path (http:api.stripe.com, http:/api/admin), or sql: and a table (sql:payments). A * makes it a glob: http:*.stripe.com, sql:payments_*.'),
-        match: z.enum(['exact', 'glob', 'regex']).optional().describe('How a package, symbol or call rule\'s target is matched (B1): exact (the default), glob (a * in the target says so too), or regex over the whole entry, like http:api\\.(stripe|paypal)\\.com(/.*)?. For a grep rule, how its text is: exact (the default, literal, a * is a *), glob, or regex searched in each line.'),
+        match: z.enum(['exact', 'glob', 'regex', 'fuzzy']).optional().describe('How a package, symbol or call rule\'s target is matched (B1): exact (the default), glob (a * in the target says so too), or regex over the whole entry, like http:api\\.(stripe|paypal)\\.com(/.*)?. For a grep rule, how its text is: exact (the default, literal, a * is a *), glob, or regex searched in each line. fuzzy (B3): like it and not it, a look-alike, at or above threshold; then only may be empty (nothing may).'),
+        threshold: z.number().gt(0.5).lt(1).optional().describe('For match fuzzy: how alike, 0.85 unless said. A swapped pair in an 8-letter name is 0.88.'),
         in: z.array(z.string().max(300)).max(50).optional().describe('A grep rule\'s files, like src/backend/ or src/routes/*.ts.'),
         must_not: z.string().max(200).optional().describe('A grep rule\'s text no line may hold, like console.log(.'),
         must: z.string().max(200).optional().describe('A grep rule\'s text each file must hold on some line, like requireAuth.'),
@@ -205,7 +206,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const body = args.remove ? null : {
         from: args.from, mayNotImport: args.may_not_import, except: args.except, because: args.because, strength: args.strength, suite: args.suite,
         ...(args.kind ? { kind: args.kind } : {}), ...(args.package ? { package: args.package } : {}), ...(args.only ? { only: args.only } : {}),
-        ...(args.symbol ? { symbol: args.symbol } : {}), ...(args.calls ? { calls: args.calls } : {}), ...(args.match ? { match: args.match } : {}),
+        ...(args.symbol ? { symbol: args.symbol } : {}), ...(args.calls ? { calls: args.calls } : {}), ...(args.match ? { match: args.match } : {}), ...(args.threshold !== undefined ? { threshold: args.threshold } : {}),
         ...(args.folder ? { folder: args.folder } : {}), ...(args.files ? { files: args.files } : {}), ...(args.kinds ? { kinds: args.kinds } : {}),
         ...(args.exports ? { exports: args.exports } : {}), ...(args.guide ? { guide: args.guide } : {}),
         ...(args.in ? { in: args.in } : {}), ...(args.must_not !== undefined ? { mustNot: args.must_not } : {}),

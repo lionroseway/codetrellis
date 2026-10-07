@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | B2: grep rules |
+| **Stage / step** | B3: fuzzy matching |
 | **Status** | In review |
-| **In flight** | B2 in review (#394) on `feat/phase-33-b2-grep-rules`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | B1 (#393, `4e4271b`) |
-| **Next action** | Merge B2 when CI is green, then build B3 (fuzzy matching) |
+| **In flight** | B3 in review (#395) on `feat/phase-33-b3-fuzzy`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | B2 (#394, `affe4e4`) |
+| **Next action** | Merge B3 when CI is green, then build B4 (your own patterns) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `4e4271b`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `affe4e4`, with open PRs from GitHub.
 
 ---
 
@@ -103,8 +103,8 @@
 
 ### Track B: building blocks
 - [x] B1 Matchers on every rule target: exact, glob, regex, fuzzy (absorbs the wildcard targets proposed as R11) (#393)
-- [ ] B2 Grep rules: text that must not, or must, appear, scoped by path, file:line findings, baselined (#394) — in review
-- [ ] B3 Fuzzy matching: look-alike names and near-duplicates, by a deterministic similarity score with a threshold
+- [x] B2 Grep rules: text that must not, or must, appear, scoped by path, file:line findings, baselined (#394)
+- [ ] B3 Fuzzy matching: look-alike names and near-duplicates, by a deterministic similarity score with a threshold (#395) — in review
 - [ ] B4 Your own patterns: what counts as a call, or as any entry (queue:, event:, flag:), without code
 - [ ] B5 Engine per rule: deterministic, fuzzy or agent, independent of strength; an agent rule blocks only when its owner says block
 - [ ] B6 Pipelines: stages in order or in parallel, needs and when, and later stages grounded by earlier results
@@ -219,6 +219,35 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — B2 merged; B3 built: fuzzy matching
+
+- **B2 (#394) merged.** The Rules view's form has a **Text** kind, which is
+  on the progress page.
+- **B3: fuzzy matching.** `match: fuzzy` on package, symbol, call and grep
+  targets means a look-alike: like the target, and not the target itself.
+  - **The score:** both names are normalised (split at case and
+    separators, lowercased). The score is one less the edit distance (a
+    swap of two side by side counts one) over the longer name's length.
+    It is deterministic, with no model and no network.
+  - **What it catches:**
+    - a package one typo from one the team uses;
+    - a second `formatMoney` imported from another file;
+    - a look-alike host;
+    - in grep, a word like `requireAuth` (whole words only).
+  - **`only` may be empty:** then nothing may use a look-alike.
+  - **The fix says how alike:** "pypi:reqeusts is 0.88 like pypi:requests:
+    did you mean it?". A lower threshold tightens, and a higher one loosens.
+  - **The plan's number was wrong:** it said 0.93, a number made up before
+    the measure was chosen. The measure gives 0.88 for one swap in eight
+    letters, and EXECUTION and BUILDING-BLOCKS now say so.
+  - **Done criterion, proved end to end:** a branch importing `reqeusts`
+    fails on that line with that fix. Two runs give the same result, and
+    `requests` on the line above passes.
+  - **Not built:** fuzzy paths, for renamed copies like `stripeClient2.ts`.
+    No rule kind has them yet.
+  - **Locally:** unit 2205; 85 harness tests; 70 chromium and 10 serial
+    browser tests.
 
 ### 2026-10-07 — B1 merged; B2 built: grep rules
 

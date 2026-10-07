@@ -10,7 +10,8 @@ import { isPackageEntry, packageMatches, packageProblem } from '../../shared/lib
 import { isSymbolEntry, splitSymbol, symbolMatches, symbolProblem } from '../../shared/lib/symbol-entry';
 import { callMatches, callProblem, callWords, isCallEntry, normaliseCall } from '../../shared/lib/call-entry';
 import { folderProblem, folderWords, isFileFact } from '../../shared/lib/folder-entry';
-import { matcherOf, regexProblem, splitTarget, underPattern, wholly, type MatchKind } from '../../shared/lib/matcher';
+import { matcherOf, regexProblem, splitTarget, thresholdProblem, underPattern, wholly, type TargetMatch } from '../../shared/lib/matcher';
+import { DEFAULT_THRESHOLD, comparedNames, fuzzyScore, scoreWords } from '../../shared/lib/fuzzy';
 import { grepKey, grepPatternWords, grepWords, isGrepEntry, splitGrep } from '../../shared/lib/grep-entry';
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
@@ -69,12 +70,13 @@ export function parseArchitectureRule(raw: unknown): { rule: ArchitectureRule | 
 function parsePackageRule(r: Record<string, unknown>): { rule: ArchitectureRule | null; problems: string[] } {
   const problems: string[] = [];
   if (typeof r.id !== 'string' || !ID_RE.test(r.id)) problems.push('id must be a short slug, like stripe-via-wrapper');
-  const { value: pkg, match: m } = splitTarget(r.package ?? r.mayNotImport);
+  const { value: pkg, match: m, threshold: t } = splitTarget(r.package ?? r.mayNotImport);
   const match = targetProblem(problems, pkg, m ?? r.match, packageProblem, /^[a-z]+:/, 'package', 'npm:@aws-sdk/*');
+  const threshold = thresholdOf(problems, match, t ?? r.threshold);
   const fromProblem = r.from === undefined ? null : patternProblem('from', r.from);
   if (fromProblem) problems.push(fromProblem);
   const only = Array.isArray(r.only) ? r.only : r.only === undefined ? [] : null;
-  if (only === null || only.length === 0) problems.push('only must list the files that may import it, like src/payments/index.ts');
+  if (only === null || (only.length === 0 && match !== 'fuzzy')) problems.push('only must list the files that may import it, like src/payments/index.ts');
   for (const o of only ?? []) {
     const p = patternProblem('only', o);
     if (p) { problems.push(p); break; }
@@ -94,6 +96,7 @@ function parsePackageRule(r: Record<string, unknown>): { rule: ArchitectureRule 
       from: r.from === undefined ? '**' : normalise(r.from as string),
       mayNotImport: (pkg as string).trim(),
       ...(match ? { match } : {}),
+      ...(threshold !== undefined ? { threshold } : {}),
       only: (only as string[]).map(normalise),
       except: (except as string[]).map((e) => e.trim()),
       ...common(r),
@@ -110,14 +113,15 @@ function parsePackageRule(r: Record<string, unknown>): { rule: ArchitectureRule 
 function parseSymbolRule(r: Record<string, unknown>): { rule: ArchitectureRule | null; problems: string[] } {
   const problems: string[] = [];
   if (typeof r.id !== 'string' || !ID_RE.test(r.id)) problems.push('id must be a short slug, like charges-via-payments');
-  const { value: sym, match: m } = splitTarget(r.symbol ?? r.mayNotImport);
+  const { value: sym, match: m, threshold: t } = splitTarget(r.symbol ?? r.mayNotImport);
   const match = targetProblem(problems, sym, m ?? r.match, symbolProblem, /#/, 'symbol', 'src/db.ts#raw*');
+  const threshold = thresholdOf(problems, match, t ?? r.threshold);
   // A glob is still a file and a name, relative and inside the project.
   if (match === 'glob') { const p = symbolProblem((sym as string).replace(/\*/g, 'x')); if (p) problems.push(p); }
   const fromProblem = r.from === undefined ? null : patternProblem('from', r.from);
   if (fromProblem) problems.push(fromProblem);
   const only = Array.isArray(r.only) ? r.only : r.only === undefined ? [] : null;
-  if (only === null || only.length === 0) problems.push('only must list the files that may import it, like src/payments/');
+  if (only === null || (only.length === 0 && match !== 'fuzzy')) problems.push('only must list the files that may import it, like src/payments/');
   for (const o of only ?? []) {
     const p = patternProblem('only', o);
     if (p) { problems.push(p); break; }
@@ -132,6 +136,7 @@ function parseSymbolRule(r: Record<string, unknown>): { rule: ArchitectureRule |
       from: r.from === undefined ? '**' : normalise(r.from as string),
       mayNotImport: normalise(sym as string),
       ...(match ? { match } : {}),
+      ...(threshold !== undefined ? { threshold } : {}),
       only: (only as string[]).map(normalise),
       except: [],
       ...common(r),
@@ -148,12 +153,13 @@ function parseSymbolRule(r: Record<string, unknown>): { rule: ArchitectureRule |
 function parseCallRule(r: Record<string, unknown>): { rule: ArchitectureRule | null; problems: string[] } {
   const problems: string[] = [];
   if (typeof r.id !== 'string' || !ID_RE.test(r.id)) problems.push('id must be a short slug, like stripe-api-via-payments');
-  const { value: target, match: m } = splitTarget(r.calls ?? r.mayNotImport);
+  const { value: target, match: m, threshold: t } = splitTarget(r.calls ?? r.mayNotImport);
   const match = targetProblem(problems, target, m ?? r.match, callProblem, /^(?:http|sql):/, 'calls', 'http:*.stripe.com');
+  const threshold = thresholdOf(problems, match, t ?? r.threshold);
   const fromProblem = r.from === undefined ? null : patternProblem('from', r.from);
   if (fromProblem) problems.push(fromProblem);
   const only = Array.isArray(r.only) ? r.only : r.only === undefined ? [] : null;
-  if (only === null || only.length === 0) problems.push('only must list the files that may make the call, like src/payments/');
+  if (only === null || (only.length === 0 && match !== 'fuzzy')) problems.push('only must list the files that may make the call, like src/payments/');
   for (const o of only ?? []) {
     const p = patternProblem('only', o);
     if (p) { problems.push(p); break; }
@@ -166,8 +172,9 @@ function parseCallRule(r: Record<string, unknown>): { rule: ArchitectureRule | n
       id: r.id as string,
       kind: 'calls',
       from: r.from === undefined ? '**' : normalise(r.from as string),
-      mayNotImport: match ? (target as string).trim() : normaliseCall(target as string),
+      mayNotImport: match && match !== 'fuzzy' ? (target as string).trim() : normaliseCall(target as string),
       ...(match ? { match } : {}),
+      ...(threshold !== undefined ? { threshold } : {}),
       only: (only as string[]).map(normalise),
       except: [],
       ...common(r),
@@ -246,10 +253,14 @@ function parseGrepRule(r: Record<string, unknown>): { rule: ArchitectureRule | n
   }
   const must = r.must !== undefined;
   if (must === (r.mustNot !== undefined)) problems.push('a grep rule says mustNot (text no line may hold) or must (text one line must), not both');
-  const { value, match: m } = splitTarget(must ? r.must : r.mustNot);
+  const { value, match: m, threshold: t } = splitTarget(must ? r.must : r.mustNot);
   const written = m ?? r.match;
-  const match: MatchKind | null = written === undefined || written === null || written === 'exact' ? null : written === 'glob' || written === 'regex' ? written : null;
-  if (written !== undefined && written !== null && written !== 'exact' && match === null) problems.push('match must be exact, glob or regex');
+  const match: TargetMatch | null = written === undefined || written === null || written === 'exact' ? null : written === 'glob' || written === 'regex' || written === 'fuzzy' ? written : null;
+  if (written !== undefined && written !== null && written !== 'exact' && match === null) problems.push('match must be exact, glob, regex or fuzzy');
+  // B3: a word like the text. A file can only be required to hold the text itself.
+  if (match === 'fuzzy' && must) problems.push('a must rule needs its text, not one like it: fuzzy is for mustNot');
+  if (match === 'fuzzy' && typeof value === 'string' && !/^[A-Za-z_$][\w$]*$/.test(value.trim())) problems.push('a fuzzy grep rule looks for a word like one name, like requireAuth');
+  const threshold = thresholdOf(problems, match, t ?? r.threshold);
   if (typeof value !== 'string' || value.trim() === '') problems.push(`${must ? 'must' : 'mustNot'} must be the text to look for, like console.log(`);
   else if (value.length > MAX_GREP) problems.push(`the text is at most ${MAX_GREP} characters`);
   else if (match === 'regex') { const p = regexProblem(value.trim()); if (p) problems.push(p); }
@@ -264,6 +275,7 @@ function parseGrepRule(r: Record<string, unknown>): { rule: ArchitectureRule | n
       from: '**',
       mayNotImport: (value as string).trim(),
       ...(match ? { match } : {}),
+      ...(threshold !== undefined ? { threshold } : {}),
       in: within!.map(normalise),
       ...(must ? { must: true } : {}),
       ...(r.ignoreCase === true ? { ignoreCase: true } : {}),
@@ -285,19 +297,64 @@ export function grepReads(rule: Pick<ArchitectureRule, 'in' | 'except'>, relPath
  * exact target is held to its kind's own shape; a glob or a regex to the
  * prefix the kind's entries start with, and a regex to what cannot run away.
  */
-function targetProblem(problems: string[], value: unknown, match: unknown, exact: (v: unknown) => string | null, prefix: RegExp, name: string, example: string): MatchKind | null {
+function targetProblem(problems: string[], value: unknown, match: unknown, exact: (v: unknown) => string | null, prefix: RegExp, name: string, example: string): TargetMatch | null {
   if (typeof value !== 'string' || !value.trim()) { problems.push(exact(value) ?? `${name} must be written`); return null; }
   const kind = matcherOf(match, value.trim());
-  if (kind === 'bad') { problems.push('match must be exact, glob or regex'); return null; }
+  if (kind === 'bad') { problems.push('match must be exact, glob, regex or fuzzy'); return null; }
   if (kind === null) { const p = exact(value); if (p) problems.push(p); return null; }
+  // B3: a look-alike is of a real name, written exactly.
+  if (kind === 'fuzzy') { const p = exact(value); if (p) { problems.push(p); return null; } return kind; }
   if (!prefix.test(value.trim())) { problems.push(`a ${kind} ${name} starts the way its entries do, like ${example}`); return null; }
   const p = kind === 'regex' ? regexProblem(value.trim()) : value.length > 200 ? 'a glob is at most 200 characters' : null;
   if (p) { problems.push(p); return null; }
   return kind;
 }
 
-/** Whether a rule's package, symbol or call target is this entry: exactly, or by its matcher (B1). */
-export function targetMatches(rule: Pick<ArchitectureRule, 'kind' | 'mayNotImport' | 'match'>, entry: string): boolean {
+/** A fuzzy target's threshold (B3): what it says, else 0.85; none for any other matcher. */
+function thresholdOf(problems: string[], match: TargetMatch | null, t: unknown): number | undefined {
+  if (match !== 'fuzzy') {
+    if (t !== undefined) problems.push('threshold is only for match: fuzzy');
+    return undefined;
+  }
+  if (t === undefined) return DEFAULT_THRESHOLD;
+  const p = thresholdProblem(t);
+  if (p) problems.push(p);
+  return p ? undefined : t as number;
+}
+
+/**
+ * What to do about a look-alike (B3), with how alike it is: “npm:reqeusts is
+ * 0.88 like npm:requests: did you mean it?”. Null when the rule is not fuzzy.
+ */
+export function lookAlikeFix(rule: ArchitectureRule, entry: string): string | null {
+  const score = lookAlike(rule, entry);
+  if (score === null) return null;
+  // A package or a call is said whole (npm:reqeusts); an export by its name.
+  const [want, got] = rule.kind === 'symbol' ? comparedNames(rule.kind, rule.mayNotImport, entry)! : [rule.mayNotImport, entry];
+  return `${got} is ${scoreWords(score)} like ${want}: did you mean it?`;
+}
+
+/** Whether the exact target names this entry, as the rule would without a matcher. */
+function exactly(kind: ArchitectureRule['kind'], target: string, entry: string): boolean {
+  if (kind === 'package') return packageMatches(target, entry);
+  if (kind === 'symbol') return symbolMatches(target, entry);
+  if (kind === 'calls') return callMatches(target, entry);
+  return target === entry;
+}
+
+/**
+ * How alike an entry is to a fuzzy rule's target (B3), or null when the rule
+ * is not fuzzy, the entry is the target itself, or the two cannot be alike.
+ */
+export function lookAlike(rule: Pick<ArchitectureRule, 'kind' | 'mayNotImport' | 'match' | 'threshold'>, entry: string): number | null {
+  if (rule.match !== 'fuzzy' || exactly(rule.kind, rule.mayNotImport, entry) || !comparedNames(rule.kind, rule.mayNotImport, entry)) return null;
+  const score = fuzzyScore(rule.kind, rule.mayNotImport, entry);
+  return score >= (rule.threshold ?? DEFAULT_THRESHOLD) ? score : null;
+}
+
+/** Whether a rule's package, symbol or call target is this entry: exactly, or by its matcher (B1, B3). */
+export function targetMatches(rule: Pick<ArchitectureRule, 'kind' | 'mayNotImport' | 'match' | 'threshold'>, entry: string): boolean {
+  if (rule.match === 'fuzzy') return lookAlike(rule, entry) !== null;
   const m = rule.match;
   if (rule.kind === 'package') return m ? underPattern(m, rule.mayNotImport, entry) : packageMatches(rule.mayNotImport, entry);
   if (rule.kind === 'symbol') {
@@ -420,12 +477,22 @@ export function checkEdges(rules: ArchitectureRule[], edges: Array<{ from: strin
  * "only src/payments/index.ts may import npm:stripe" ("in src/, only …"
  * when it applies to a folder).
  */
-export function ruleStatement(rule: Pick<ArchitectureRule, 'kind' | 'from' | 'mayNotImport' | 'except' | 'only'> & Partial<Pick<ArchitectureRule, 'files' | 'kinds' | 'exports' | 'match' | 'in' | 'must' | 'ignoreCase'>>): string {
+export function ruleStatement(rule: Pick<ArchitectureRule, 'kind' | 'from' | 'mayNotImport' | 'except' | 'only'> & Partial<Pick<ArchitectureRule, 'files' | 'kinds' | 'exports' | 'match' | 'in' | 'must' | 'ignoreCase' | 'threshold'>>): string {
   const except = rule.except.length > 0 ? ` (except ${rule.except.join(', ')})` : '';
   if (rule.kind === 'grep') {
     // B2: "no file in src/backend/ may contain “console.log(”", "every file in src/routes/*.ts must contain “requireAuth”".
     const files = `${(rule.in ?? []).join(', ')}${except}`;
     return rule.must ? `every file in ${files} must contain ${grepPatternWords(rule)}` : `no file in ${files} may contain ${grepPatternWords(rule)}`;
+  }
+  // B3: a look-alike, and who alone may use one (nothing, when only is empty).
+  if (rule.match === 'fuzzy' && (rule.kind === 'package' || rule.kind === 'calls' || rule.kind === 'symbol')) {
+    const where = rule.from && rule.from !== '**' ? `in ${rule.from}, ` : '';
+    const who = (rule.only ?? []).length ? `only ${(rule.only ?? []).join(', ')} may` : 'nothing may';
+    const sym = rule.kind === 'symbol' ? splitSymbol(rule.mayNotImport) : null;
+    const what = rule.kind === 'calls'
+      ? `${rule.mayNotImport.startsWith('sql:') ? 'use a table' : 'make a call'} like ${callWords(rule.mayNotImport)}`
+      : `import a look-alike of ${sym ? `${sym.name} from ${sym.file}` : rule.mayNotImport}`;
+    return `${where}${who} ${what} (${scoreWords(rule.threshold ?? DEFAULT_THRESHOLD)} or closer)${except}`;
   }
   // B1: a regex target is said as one; a glob reads as it is written.
   if (rule.match === 'regex' && (rule.kind === 'package' || rule.kind === 'calls' || rule.kind === 'symbol')) {

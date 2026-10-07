@@ -606,7 +606,8 @@ old one already in the file is not.
 
 **B3 Fuzzy matching.** A deterministic similarity score over normalised
 names, with a `threshold`. It says what a name was close to, and how close.
-Done when `npm:reqeusts` is reported as 0.93 like `npm:requests`, the same way
+Done when `npm:reqeusts` is reported as 0.88 like `npm:requests` (the draft
+said 0.93, a number made up before the measure was chosen), the same way
 on every run.
 
 **B4 Your own patterns.** `.codetrellis/patterns/*.yaml` turn source into
