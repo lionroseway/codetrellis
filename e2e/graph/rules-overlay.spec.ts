@@ -14,10 +14,27 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { gotoWithProject, reachableNodes, FIXTURE_PATH } from '../helpers/setup';
 
 const OUT = path.join('test-results', 'ux-audit');
+
+/** What the canvas drew, for a failure to say. */
+function canvasEdges(page: Page) {
+  return page.evaluate(() => {
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>('.react-flow__node'));
+    const pane = document.querySelector('.react-flow')?.getBoundingClientRect();
+    return {
+      nodes: nodes.length,
+      zeroSizeNodes: nodes.filter((n) => { const r = n.getBoundingClientRect(); return r.width === 0 || r.height === 0; }).length,
+      edges: document.querySelectorAll('.react-flow__edge').length,
+      edgeIds: Array.from(document.querySelectorAll('.react-flow__edge')).slice(0, 3).map((e) => e.getAttribute('data-id')),
+      pane: pane ? [Math.round(pane.width), Math.round(pane.height)] : null,
+      viewport: (document.querySelector('.react-flow__viewport') as HTMLElement | null)?.style.transform ?? null,
+      legend: Array.from(document.querySelectorAll('[data-testid="legend-entry"]')).map((e) => e.getAttribute('data-key')),
+    };
+  });
+}
 
 test.describe('Rules on the graph', () => {
   test.setTimeout(120_000);
@@ -25,6 +42,8 @@ test.describe('Rules on the graph', () => {
 
   test('a breaching import is drawn and named, its file marked, the legend says both; the inspector shows the suite', async ({ page }) => {
     let rules: unknown[] = [];
+    const said: string[] = [];
+    page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') said.push(m.text().slice(0, 200)); });
     await page.route((url) => url.pathname === '/api/rules', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ rules }) }));
     await page.addInitScript(() => { try { localStorage.setItem('codetrellis.graphOverlays', JSON.stringify(['plan'])); } catch { /* */ } });
 
@@ -41,7 +60,11 @@ test.describe('Rules on the graph', () => {
         if (m && !m[1].includes('::') && !m[2].includes('::')) { [, from, to] = m; return true; }
       }
       return false;
-    }, { timeout: 20_000 }).toBe(true);
+    }, { timeout: 20_000 }).toBe(true).catch(async (err: Error) => {
+      // CI's serial run once drew the files and none of their imports
+      // (#381), which no local run reproduced: say what the canvas held.
+      throw new Error(`no import between two files was drawn: ${JSON.stringify(await canvasEdges(page))}; the console said ${JSON.stringify(said.slice(-8))}\n${err.message}`);
+    });
     const edge = page.locator(`.react-flow__edge[data-id="hub:${from}->${to}"]`);
     const folder = from.split('/').slice(0, -1).join('/') + '/';
     rules = [{
