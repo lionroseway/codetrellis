@@ -4,19 +4,20 @@
  * Covers: creating sessions, tab rendering, killing sessions via API.
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIResponse } from '@playwright/test';
 import { gotoWithProject, API } from '../helpers/setup';
 
 test.describe('Terminal tabs', () => {
+  // Only the sessions this file started: terminals are the whole backend's,
+  // and deleting every one killed a parallel spec's shell under it (#387).
+  const mine: string[] = [];
+  const started = async (res: APIResponse) => {
+    const session = await res.json();
+    if (session?.id) mine.push(session.id);
+    return session;
+  };
   test.afterEach(async ({ request }) => {
-    // Clean up all terminal sessions
-    const res = await request.get(`${API}/terminals`);
-    if (res.ok()) {
-      const sessions = await res.json();
-      for (const s of sessions) {
-        await request.delete(`${API}/terminals/${s.id}`);
-      }
-    }
+    for (const id of mine.splice(0)) await request.delete(`${API}/terminals/${id}`);
   });
 
   test('creating a session via API returns session info', async ({ request }) => {
@@ -24,19 +25,19 @@ test.describe('Terminal tabs', () => {
       data: { preset: 'shell', cwd: process.cwd(), title: 'Tab Test Shell' },
     });
     expect(res.ok()).toBeTruthy();
-    const session = await res.json();
+    const session = await started(res);
     expect(session.id).toBeTruthy();
     expect(session.alive).toBe(true);
     expect(session.preset).toBe('shell');
   });
 
   test('multiple sessions can coexist', async ({ request }) => {
-    await request.post(`${API}/terminals`, {
+    await started(await request.post(`${API}/terminals`, {
       data: { preset: 'shell', cwd: process.cwd(), title: 'Tab A' },
-    });
-    await request.post(`${API}/terminals`, {
+    }));
+    await started(await request.post(`${API}/terminals`, {
       data: { preset: 'shell', cwd: process.cwd(), title: 'Tab B' },
-    });
+    }));
 
     const res = await request.get(`${API}/terminals`);
     const sessions = await res.json();
@@ -47,7 +48,7 @@ test.describe('Terminal tabs', () => {
     const createRes = await request.post(`${API}/terminals`, {
       data: { preset: 'shell', cwd: process.cwd(), title: 'Kill Test' },
     });
-    const session = await createRes.json();
+    const session = await started(createRes);
 
     await request.delete(`${API}/terminals/${session.id}`);
 
