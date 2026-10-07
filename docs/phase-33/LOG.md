@@ -20,7 +20,7 @@
 |---|---|
 | **Stage / step** | B1: matchers |
 | **Status** | In review |
-| **In flight** | B1 building on `feat/phase-33-b1-matchers`; Z1 building on `feat/phase-33-z1-docs` |
+| **In flight** | B1 in review (#393) on `feat/phase-33-b1-matchers`; Z1 building on `feat/phase-33-z1-docs` |
 | **Last merged** | R10 (#392, `b652871`) |
 | **Next action** | Merge B1 when CI is green, then build B2 (grep rules) |
 | **Blockers** | None |
@@ -101,7 +101,7 @@
 - [x] V6 Did the change do what the task said (only when it is linked to a task) (#376)
 
 ### Track B: building blocks
-- [ ] B1 Matchers on every rule target: exact, glob, regex, fuzzy (absorbs the wildcard targets proposed as R11) — building
+- [ ] B1 Matchers on every rule target: exact, glob, regex, fuzzy (absorbs the wildcard targets proposed as R11) (#393) — in review
 - [ ] B2 Grep rules: text that must not, or must, appear, scoped by path, file:line findings, baselined
 - [ ] B3 Fuzzy matching: look-alike names and near-duplicates, by a deterministic similarity score with a threshold
 - [ ] B4 Your own patterns: what counts as a call, or as any entry (queue:, event:, flag:), without code
