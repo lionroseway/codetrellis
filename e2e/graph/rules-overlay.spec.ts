@@ -63,7 +63,14 @@ test.describe('Rules on the graph', () => {
     }, { timeout: 20_000 }).toBe(true).catch(async (err: Error) => {
       // CI's serial run once drew the files and none of their imports
       // (#381), which no local run reproduced: say what the canvas held.
-      throw new Error(`no import between two files was drawn: ${JSON.stringify(await canvasEdges(page))}; the console said ${JSON.stringify(said.slice(-8))}\n${err.message}`);
+      const before = await canvasEdges(page);
+      // React Flow draws no edge until it knows the pane's size, and it skips
+      // measuring a pane that is not visible: does a resize bring them?
+      const visible = await page.evaluate(() => (document.querySelector('.react-flow') as HTMLElement | null)?.checkVisibility?.() ?? null);
+      await page.evaluate(() => window.dispatchEvent(new Event('resize')));
+      await page.waitForTimeout(1000);
+      const afterResize = (await canvasEdges(page)).edges;
+      throw new Error(`no import between two files was drawn: ${JSON.stringify(before)}; pane visible ${visible}; edges after a resize event ${afterResize}; the console said ${JSON.stringify(said.slice(-8))}\n${err.message}`);
     });
     const edge = page.locator(`.react-flow__edge[data-id="hub:${from}->${to}"]`);
     const folder = from.split('/').slice(0, -1).join('/') + '/';
