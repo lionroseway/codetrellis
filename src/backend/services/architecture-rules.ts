@@ -19,6 +19,7 @@ import { checkEdges, parseArchitectureRule, ruleWords } from './architecture-rul
 import { splitSymbol } from '../../shared/lib/symbol-entry';
 import { isSuiteName, readRulebook, suiteFile, writeSuite } from './rulebook';
 import { getPackageEdges } from './database';
+import { importersOf } from './importers';
 
 export { breachWords, breaks, checkEdges, inPattern, parseArchitectureRule, ruleStatement, ruleWords } from './architecture-rule';
 
@@ -193,7 +194,6 @@ function symbolEdgesOfGraph(projectRoot: string, rules: readonly ArchitectureRul
     const sym = splitSymbol(rule.mayNotImport);
     if (!sym) continue;
     try {
-      const { importersOf } = require('./importers') as typeof import('./importers');
       for (const i of importersOf(path.join(projectRoot, sym.file), [sym.name])) out.push({ sourceRelative: i.relativePath, targetRelative: rule.mayNotImport });
     } catch { /* no scan yet, or no database */ }
   }
