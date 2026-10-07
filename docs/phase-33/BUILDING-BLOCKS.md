@@ -67,6 +67,12 @@ Every rule target can say how it matches. The default stays as today.
 | `regex` | a regular expression, anchored | `http:api\.(stripe\|paypal)\.com/.*` |
 | `fuzzy` | similar enough, with a `threshold` (B3) | `npm:requests`, threshold 0.85 |
 
+Built in B1: `glob` and `regex` on package, symbol and call targets. A `*` in a
+name already means `glob`, so `http:*.stripe.com` needs no `match:`. In the
+suite file the matcher is written beside the target (`calls: …` and
+`match: regex`). Folder names and grep text gain matchers with their kinds
+(B2), `fuzzy` with B3.
+
 A matcher works on packages, call hosts and paths, SQL tables, export names,
 folder names and grep text alike. One matcher, every kind, so a developer learns
 it once.

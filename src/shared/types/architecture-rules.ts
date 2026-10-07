@@ -39,6 +39,12 @@ export interface ArchitectureRule {
   from: string;
   /** What they may not import: `db/`, or for a package rule the package, `npm:stripe`. */
   mayNotImport: string;
+  /**
+   * How a package, symbol or call rule's target is matched (Phase 33 B1):
+   * absent, exactly as it always was; `glob` (`http:*.stripe.com`); `regex`
+   * (`http:api\\.(stripe|paypal)\\.com(/.*)?`). See shared/lib/matcher.ts.
+   */
+  match?: 'glob' | 'regex';
   /** A package rule's files that alone may import it: `src/payments/index.ts`. */
   only?: string[];
   /** A folder rule's name patterns (R8): `*-service.ts`. */

@@ -590,6 +590,30 @@ A finding reads "calls api.stripe.com/v1/charges" or "uses the table
 invoices", on the line that names it. Subprocess commands and environment
 variables are in the design but no extractor finds them yet.
 
+A package, symbol or call target can be a pattern (Phase 33 B1,
+`src/shared/lib/matcher.ts`). A `*` makes it a **glob** without saying so:
+`*` is any run but `/`, `**` any run at all, so `http:*.stripe.com` is every
+Stripe host (not `stripe.com` itself, nor `evilstripe.com`), `sql:payments_*`
+every such table, `npm:@aws-sdk/*` the scope, `src/db.ts#raw*` the exports
+named so. A **regex** is written as `{ match: regex, value: … }` and holds
+over the whole entry, anchored at both ends:
+
+```yaml
+  - id: providers-via-client
+    kind: calls
+    calls: { match: regex, value: "http:api\\.(stripe|paypal)\\.com(/.*)?" }
+    only: [src/payments/client.ts]
+    strength: block
+```
+
+The suite file keeps it as `calls:` plus `match: regex` (`match: glob` for a
+glob), and the words say it: "only … may make a call matching /…/". A regex
+is at most 200 characters and may not repeat a group that itself repeats
+(`(a+)+`), since a pull request can change it and CI runs it. Changing a
+target's pattern or matcher counts as loosening: what a pattern covers is not
+proven from its text. Paths (`from`, `only`, `except`) are prefixes or globs,
+as before.
+
 A **folder rule** (Phase 33 R8) says what the files in a folder are, and
 carries the judgement half as a guide:
 

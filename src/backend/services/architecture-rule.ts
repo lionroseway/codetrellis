@@ -10,6 +10,7 @@ import { isPackageEntry, packageMatches, packageProblem } from '../../shared/lib
 import { isSymbolEntry, splitSymbol, symbolMatches, symbolProblem } from '../../shared/lib/symbol-entry';
 import { callMatches, callProblem, callWords, isCallEntry, normaliseCall } from '../../shared/lib/call-entry';
 import { folderProblem, folderWords, isFileFact } from '../../shared/lib/folder-entry';
+import { matcherOf, regexProblem, splitTarget, underPattern, wholly, type MatchKind } from '../../shared/lib/matcher';
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const MAX_BECAUSE = 200;
@@ -66,9 +67,8 @@ export function parseArchitectureRule(raw: unknown): { rule: ArchitectureRule | 
 function parsePackageRule(r: Record<string, unknown>): { rule: ArchitectureRule | null; problems: string[] } {
   const problems: string[] = [];
   if (typeof r.id !== 'string' || !ID_RE.test(r.id)) problems.push('id must be a short slug, like stripe-via-wrapper');
-  const pkg = r.package ?? r.mayNotImport;
-  const pkgProblem = packageProblem(pkg);
-  if (pkgProblem) problems.push(pkgProblem);
+  const { value: pkg, match: m } = splitTarget(r.package ?? r.mayNotImport);
+  const match = targetProblem(problems, pkg, m ?? r.match, packageProblem, /^[a-z]+:/, 'package', 'npm:@aws-sdk/*');
   const fromProblem = r.from === undefined ? null : patternProblem('from', r.from);
   if (fromProblem) problems.push(fromProblem);
   const only = Array.isArray(r.only) ? r.only : r.only === undefined ? [] : null;
@@ -91,6 +91,7 @@ function parsePackageRule(r: Record<string, unknown>): { rule: ArchitectureRule 
       kind: 'package',
       from: r.from === undefined ? '**' : normalise(r.from as string),
       mayNotImport: (pkg as string).trim(),
+      ...(match ? { match } : {}),
       only: (only as string[]).map(normalise),
       except: (except as string[]).map((e) => e.trim()),
       ...common(r),
@@ -107,9 +108,10 @@ function parsePackageRule(r: Record<string, unknown>): { rule: ArchitectureRule 
 function parseSymbolRule(r: Record<string, unknown>): { rule: ArchitectureRule | null; problems: string[] } {
   const problems: string[] = [];
   if (typeof r.id !== 'string' || !ID_RE.test(r.id)) problems.push('id must be a short slug, like charges-via-payments');
-  const sym = r.symbol ?? r.mayNotImport;
-  const symProblem = symbolProblem(sym);
-  if (symProblem) problems.push(symProblem);
+  const { value: sym, match: m } = splitTarget(r.symbol ?? r.mayNotImport);
+  const match = targetProblem(problems, sym, m ?? r.match, symbolProblem, /#/, 'symbol', 'src/db.ts#raw*');
+  // A glob is still a file and a name, relative and inside the project.
+  if (match === 'glob') { const p = symbolProblem((sym as string).replace(/\*/g, 'x')); if (p) problems.push(p); }
   const fromProblem = r.from === undefined ? null : patternProblem('from', r.from);
   if (fromProblem) problems.push(fromProblem);
   const only = Array.isArray(r.only) ? r.only : r.only === undefined ? [] : null;
@@ -127,6 +129,7 @@ function parseSymbolRule(r: Record<string, unknown>): { rule: ArchitectureRule |
       kind: 'symbol',
       from: r.from === undefined ? '**' : normalise(r.from as string),
       mayNotImport: normalise(sym as string),
+      ...(match ? { match } : {}),
       only: (only as string[]).map(normalise),
       except: [],
       ...common(r),
@@ -143,9 +146,8 @@ function parseSymbolRule(r: Record<string, unknown>): { rule: ArchitectureRule |
 function parseCallRule(r: Record<string, unknown>): { rule: ArchitectureRule | null; problems: string[] } {
   const problems: string[] = [];
   if (typeof r.id !== 'string' || !ID_RE.test(r.id)) problems.push('id must be a short slug, like stripe-api-via-payments');
-  const target = r.calls ?? r.mayNotImport;
-  const targetProblem = callProblem(target);
-  if (targetProblem) problems.push(targetProblem);
+  const { value: target, match: m } = splitTarget(r.calls ?? r.mayNotImport);
+  const match = targetProblem(problems, target, m ?? r.match, callProblem, /^(?:http|sql):/, 'calls', 'http:*.stripe.com');
   const fromProblem = r.from === undefined ? null : patternProblem('from', r.from);
   if (fromProblem) problems.push(fromProblem);
   const only = Array.isArray(r.only) ? r.only : r.only === undefined ? [] : null;
@@ -162,7 +164,8 @@ function parseCallRule(r: Record<string, unknown>): { rule: ArchitectureRule | n
       id: r.id as string,
       kind: 'calls',
       from: r.from === undefined ? '**' : normalise(r.from as string),
-      mayNotImport: normaliseCall(target as string),
+      mayNotImport: match ? (target as string).trim() : normaliseCall(target as string),
+      ...(match ? { match } : {}),
       only: (only as string[]).map(normalise),
       except: [],
       ...common(r),
@@ -214,6 +217,55 @@ function parseFolderRule(r: Record<string, unknown>): { rule: ArchitectureRule |
   };
 }
 
+/**
+ * A package, symbol or call target, exact or by a matcher (B1): the matcher
+ * it is written with, after adding to `problems` what is wrong with it. An
+ * exact target is held to its kind's own shape; a glob or a regex to the
+ * prefix the kind's entries start with, and a regex to what cannot run away.
+ */
+function targetProblem(problems: string[], value: unknown, match: unknown, exact: (v: unknown) => string | null, prefix: RegExp, name: string, example: string): MatchKind | null {
+  if (typeof value !== 'string' || !value.trim()) { problems.push(exact(value) ?? `${name} must be written`); return null; }
+  const kind = matcherOf(match, value.trim());
+  if (kind === 'bad') { problems.push('match must be exact, glob or regex'); return null; }
+  if (kind === null) { const p = exact(value); if (p) problems.push(p); return null; }
+  if (!prefix.test(value.trim())) { problems.push(`a ${kind} ${name} starts the way its entries do, like ${example}`); return null; }
+  const p = kind === 'regex' ? regexProblem(value.trim()) : value.length > 200 ? 'a glob is at most 200 characters' : null;
+  if (p) { problems.push(p); return null; }
+  return kind;
+}
+
+/** Whether a rule's package, symbol or call target is this entry: exactly, or by its matcher (B1). */
+export function targetMatches(rule: Pick<ArchitectureRule, 'kind' | 'mayNotImport' | 'match'>, entry: string): boolean {
+  const m = rule.match;
+  if (rule.kind === 'package') return m ? underPattern(m, rule.mayNotImport, entry) : packageMatches(rule.mayNotImport, entry);
+  if (rule.kind === 'symbol') {
+    if (!m) return symbolMatches(rule.mayNotImport, entry);
+    const got = splitSymbol(entry);
+    if (!got) return false;
+    // A namespace import takes the whole module: it matches when the file does.
+    if (got.name === '*') {
+      const at = rule.mayNotImport.lastIndexOf('#');
+      return at > 0 && wholly(m, rule.mayNotImport.slice(0, at), got.file);
+    }
+    return wholly(m, rule.mayNotImport, entry);
+  }
+  if (rule.kind === 'calls') {
+    if (!m) return callMatches(rule.mayNotImport, entry);
+    if (m === 'regex') return wholly('regex', rule.mayNotImport, entry);
+    // A glob keeps a call rule's shape: a host, then a path everything under which it covers.
+    const [rk, rr] = [rule.mayNotImport.slice(0, rule.mayNotImport.indexOf(':')), rule.mayNotImport.slice(rule.mayNotImport.indexOf(':') + 1)];
+    const [ek, er] = [entry.slice(0, entry.indexOf(':')), entry.slice(entry.indexOf(':') + 1)];
+    if (rk !== ek) return false;
+    if (rk === 'sql') return wholly('glob', rr.toLowerCase(), er.toLowerCase());
+    const split = (x: string) => { const i = x.indexOf('/'); return i < 0 ? [x, ''] : [x.slice(0, i), x.slice(i)]; };
+    const [rh, rp] = split(rr);
+    const [eh, ep] = split(er);
+    if (rh !== '' && !wholly('glob', rh.toLowerCase(), eh.toLowerCase())) return false;
+    return rp === '' || underPattern('glob', rp, ep);
+  }
+  return false;
+}
+
 function commonProblems(r: Record<string, unknown>, problems: string[]): void {
   if (r.because !== undefined && (typeof r.because !== 'string' || r.because.length > MAX_BECAUSE)) problems.push(`because must be words, at most ${MAX_BECAUSE} characters`);
   if (r.strength !== undefined && !RULE_STRENGTHS.includes(r.strength as RuleStrength)) problems.push('strength must be block, warn or guide');
@@ -255,15 +307,15 @@ const escape = (s: string) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
 export function breaks(rule: ArchitectureRule, from: string, to: string): boolean {
   if (rule.kind === 'package') {
     // R5: `to` is a package entry; only the rule's own files may import it.
-    if (!isPackageEntry(to) || !packageMatches(rule.mayNotImport, to)) return false;
+    if (!isPackageEntry(to) || !targetMatches(rule, to)) return false;
     if (!inPattern(rule.from, from) || (rule.only ?? []).some((o) => inPattern(o, from))) return false;
     return !rule.except.some((e) => packageMatches(e, to));
   }
   if (rule.kind === 'symbol') {
     // R6: `to` is a symbol entry; only the rule's own files, and the file that
     // defines it, may import it.
-    if (!isSymbolEntry(to) || !symbolMatches(rule.mayNotImport, to)) return false;
-    if (from === splitSymbol(rule.mayNotImport)!.file) return false;
+    if (!isSymbolEntry(to) || !targetMatches(rule, to)) return false;
+    if (from === splitSymbol(to)!.file) return false;
     return inPattern(rule.from, from) && !(rule.only ?? []).some((o) => inPattern(o, from));
   }
   if (rule.kind === 'folder') {
@@ -272,7 +324,7 @@ export function breaks(rule: ArchitectureRule, from: string, to: string): boolea
   }
   if (rule.kind === 'calls') {
     // R7: `to` is a call the code makes; only the rule's own files may make it.
-    if (!isCallEntry(to) || !callMatches(rule.mayNotImport, to)) return false;
+    if (!isCallEntry(to) || !targetMatches(rule, to)) return false;
     return inPattern(rule.from, from) && !(rule.only ?? []).some((o) => inPattern(o, from));
   }
   // An outside package, a named export, a call or a file's fact is no file in a folder.
@@ -302,8 +354,14 @@ export function checkEdges(rules: ArchitectureRule[], edges: Array<{ from: strin
  * "only src/payments/index.ts may import npm:stripe" ("in src/, only …"
  * when it applies to a folder).
  */
-export function ruleStatement(rule: Pick<ArchitectureRule, 'kind' | 'from' | 'mayNotImport' | 'except' | 'only'> & Partial<Pick<ArchitectureRule, 'files' | 'kinds' | 'exports'>>): string {
+export function ruleStatement(rule: Pick<ArchitectureRule, 'kind' | 'from' | 'mayNotImport' | 'except' | 'only'> & Partial<Pick<ArchitectureRule, 'files' | 'kinds' | 'exports' | 'match'>>): string {
   const except = rule.except.length > 0 ? ` (except ${rule.except.join(', ')})` : '';
+  // B1: a regex target is said as one; a glob reads as it is written.
+  if (rule.match === 'regex' && (rule.kind === 'package' || rule.kind === 'calls' || rule.kind === 'symbol')) {
+    const where = rule.from && rule.from !== '**' ? `in ${rule.from}, ` : '';
+    const verb = rule.kind === 'calls' ? 'make a call' : 'import anything';
+    return `${where}only ${(rule.only ?? []).join(', ')} may ${verb} matching /${rule.mayNotImport}/${except}`;
+  }
   if (rule.kind === 'package') {
     const where = rule.from && rule.from !== '**' ? `in ${rule.from}, ` : '';
     return `${where}only ${(rule.only ?? []).join(', ')} may import ${rule.mayNotImport}${except}`;
