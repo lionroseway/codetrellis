@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
-| **Status** | R6 in review (symbol rules); R9 merged (#384) |
-| **In flight** | R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | R9 (#384, `1b32993`) |
-| **Next action** | Merge R6 when CI is green, then replay R7 |
+| **Status** | R7 in review (call rules); R6 merged (#385) |
+| **In flight** | R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | R6 (#385, `175872a`) |
+| **Next action** | Merge R7 when CI is green, then replay R8 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `1b32993`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `175872a`, with open PRs from GitHub.
 
 ---
 
@@ -63,7 +63,7 @@
 - [x] R3 Change control: preview the effect, a person confirms, loosening is signed, `propose_rule` for agents (#360)
 - [x] R4 Strength: block, warn, guide (exit codes, `--strict`, signals) (#359)
 - [x] R5 Package rules across all eleven languages (only the wrapper imports `stripe`) (#377)
-- [ ] R6 Symbol rules (who may import a named export, through re-exports) — building
+- [x] R6 Symbol rules (who may import a named export, through re-exports) (#385)
 - [ ] R7 Call rules (HTTP hosts, commands, tables, env) — building
 - [ ] R8 Folder rules (what files in a folder are) — building
 - [x] R9 Guide rules in scope (the brief, `get_brief`, drift names the rule) (#384)
@@ -206,6 +206,28 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — R6 merged (#385); R7 in review
+
+- **R6 merged** (#385): symbol rules.
+- **R7: call rules — only the clients may call Stripe.** A rule of kind
+  `calls` says which files alone may make a call out of the code:
+  - `calls: http:api.stripe.com`, which can be a host, a host and a path
+    prefix, or a path on any host;
+  - `calls: sql:invoices`, a table.
+
+  HTTP callsites now keep their host, in TypeScript, Python and Go. A new
+  column is added by the schema reconciler. Pairing calls across systems
+  still uses the path alone. A call finding reads "calls
+  api.stripe.com/v1/charges" or "uses the table invoices", the same in the
+  terminal, the Checks view, the inspector, the Brief and the phone, on the
+  line that names it. Subprocess commands and environment variables are in
+  the design but no extractor finds them yet, so they stay a follow-up.
+- The replay's bundle guard caught R7's relative `require('./database')`; it
+  is now a static import, as R5's and R6's are.
+- Checked before review on the replayed code: unit 2148 passing; 240 rules,
+  cross-system, callsite, SQL, awareness, CLI and phone harness tests; the
+  rules, graph, agent and inspector browser specs (97 chromium, 77 serial).
 
 ### 2026-10-07 — R9 merged (#384); R6 in review, with a packaging bug fixed
 
