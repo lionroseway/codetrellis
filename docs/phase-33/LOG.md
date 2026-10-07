@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
-| **Status** | G8 in review (rules on the graph); G7 merged (#380) |
-| **In flight** | R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | G7 (#380, `2c44428`) |
-| **Next action** | Merge G8 when CI is green, then replay G9 |
+| **Status** | G9 in review (the Checks view); G8 merged (#381) |
+| **In flight** | R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | G8 (#381, `9e585d7`) |
+| **Next action** | Merge G9 when CI is green, then replay G10 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `2c44428`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `9e585d7`, with open PRs from GitHub.
 
 ---
 
@@ -44,6 +44,8 @@
 - [ ] Follow-up: Call rules read HTTP and SQL callsites; no extractor finds subprocess commands or environment variables yet, so those calls cannot be ruled on
 - [x] Follow-up: Rebalance the browser shards: chromium 2/3 runs 185 tests in about 25 minutes, the others about 7 (#367)
 - [ ] Follow-up: Four browser specs fail in a local clone with many fetched branches and pass in CI (evolution, play-forward, navigate_to Awareness, signal-to-lines): find why
+- [ ] Follow-up: rules-overlay.spec drew no edges in CI twice: read what React Flow held when it next fails
+- [ ] Follow-up: The plan-panel and inspector Allotment resize throws on load (minimumSize of undefined), caught and logged since Phase 31
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
@@ -85,7 +87,7 @@
 - [x] G5 Selecting a file lists the plans and tasks that touch it (#366)
 - [x] G6 Opening a plan always shows it, from a chip too (#365)
 - [x] G7 The Rules view (its own workspace, not Settings) (#380)
-- [ ] G8 Rules on the graph (breaches drawn, rules for the selected file) — building
+- [x] G8 Rules on the graph (breaches drawn, rules for the selected file) (#381)
 - [ ] G9 The Checks view (run any check from the app, CI runs beside local ones, compare runs) — building
 - [ ] G10 Findings where the code is (graph, code gutter, inspector, brief, phone) — building
 
@@ -204,6 +206,36 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — G8 merged (#381), one CI failure not yet explained; G9 in review
+
+- **G8 merged** (#381): rules on the graph. Its CI found two things:
+  - **G7's Rules view spec** read the captured preview requests the moment
+    Save's click returned, before the app had sent one. It now waits for
+    them.
+  - **G8's own rules-overlay spec** twice drew the sample app's 21 files and
+    none of their imports in CI's serial run. It then passed three times,
+    and 15 of 15 locally. The legend listed the edges, so React Flow had
+    them, and the pane and viewport matched a local run that drew 25. I could
+    not reproduce it with CI's shard order, with 40 scans first, or with the
+    CPU slowed 8×. The spec now reads React Flow's own store when it fails
+    (pane size, edges, measured nodes, handles) and tries a resize, so the
+    next failure says which condition for drawing an edge was not met. This
+    is a follow-up, open.
+- **G9: the Checks view.** Run a check from the app, using the same code as
+  `check_changes`. Scope it to everything, a suite, a rule or a path, against
+  a chosen base. The Rules view's Checks tab:
+  - lists every run: the app's, the terminal's, agents', and CI's once pulled;
+  - filters to failing runs, mine, or CI's;
+  - opens a run into its findings, with links to the fix, the graph and the
+    code;
+  - compares two runs into new, fixed and unchanged findings.
+
+  The view's Rules / Checks switch is a tablist, so it no longer reads as a
+  second pressed "Rules" button beside the top bar's.
+- Checked before review on the replayed code: unit 2120 passing; 145 rules,
+  check, CLI, awareness and shared-state harness tests; the rules, settings
+  and agent browser specs (116 chromium, 22 serial).
 
 ### 2026-10-07 — G7 merged (#380); G8 in review
 

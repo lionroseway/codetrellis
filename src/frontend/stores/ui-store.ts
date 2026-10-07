@@ -135,6 +135,9 @@ interface UiState {
   toggleGraphOverlay: (id: OverlayId) => void;
   /** Phase 33 G8 — "Show this suite": the suite whose rules the graph keeps lit, the rest faded; null for none. */
   ruleSuiteFocus: string | null;
+  /** Phase 33 G9 — the Rules view's tab: what the rules are, or what the checks say. */
+  rulesViewTab: 'rules' | 'checks';
+  setRulesViewTab: (tab: 'rules' | 'checks') => void;
   setRuleSuiteFocus: (suite: string | null) => void;
   /** Phase 33 G3 — the kinds of edge the graph draws. */
   graphEdges: EdgeKind[];
@@ -221,6 +224,8 @@ export const useUiStore = create<UiState>((set) => ({
     set({ graphStyle });
   },
   ruleSuiteFocus: null,
+  rulesViewTab: 'rules',
+  setRulesViewTab: (rulesViewTab) => set({ rulesViewTab }),
   setRuleSuiteFocus: (ruleSuiteFocus) => set((s) => {
     // Showing a suite turns the Rules overlay on, so what it is about is drawn.
     if (ruleSuiteFocus && !s.graphOverlays.includes('rules')) {

@@ -136,6 +136,22 @@ test.describe.serial('R5: only the wrapper may import Stripe', () => {
     expect(md.out).toContain(`- ✗ **\`${API}:1 imports npm:stripe\`** · \`stripe-via-wrapper\` (block)  \n  only ${WRAPPER} may import npm:stripe: ${BECAUSE}  \n  → use ${WRAPPER} instead`);
   });
 
+  test('the Checks view runs the same check: the payments suite from the app finds what the CLI printed (G9)', async () => {
+    const cli = JSON.parse(ct('check', '--base', main, '--suite', 'payments', '--json').out) as Gate;
+    const res = await h.client.raw('POST', `/api/check-runs?${q()}`, { base: main, suite: 'payments' });
+    expect(res.status, await res.clone().text()).toBe(200);
+    const app = (await res.json()) as Gate & { run: string; base: string };
+    expect(app.ok).toBe(false);
+    expect(app.base).toBe(main);
+    const where = (g: Gate) => g.rules.map((r) => `${r.rule} ${r.path} ${r.imports}`).sort();
+    expect(where(app)).toEqual(where(cli));
+    expect(where(app)).toHaveLength(2);
+    // Kept as a run, saying where it ran (plain HTTP here: the local API, not the app window).
+    const runs = ((await (await h.client.raw('GET', `/api/check-runs?${q()}`)).json()) as { runs: Array<{ id: string; ranIn: string; scope: string | null; outcome: { blocks: number } }> }).runs;
+    expect(runs[0]).toMatchObject({ id: app.run, ranIn: 'the local API', scope: 'suite payments', outcome: { blocks: 2 } });
+    expect((await h.client.raw('POST', `/api/check-runs?${q()}`, { base: 'no-such-branch' })).status).toBe(400);
+  });
+
   test('opened on the branch, the rules view shows what breaks each today, from the graph', async () => {
     await h.client.scanProject(root);
     const rules = await rulesNow();

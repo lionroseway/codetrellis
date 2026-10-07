@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
 import { useUiStore } from '../../stores/ui-store';
+import { ChecksView } from './ChecksView';
 import { RULE_STRENGTHS, type RuleStrength, type RuleView } from '../../../shared/types/architecture-rules';
 
 interface Preview { change: { effect: string; allowed: unknown[] } | null; words: string; needsConfirm: boolean }
@@ -69,6 +70,8 @@ export function RulesView() {
   const [only, setOnly] = useState('');
   const [suite, setSuite] = useState('');
   const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
+  const tab = useUiStore((s) => s.rulesViewTab);
+  const setTab = useUiStore((s) => s.setRulesViewTab);
   const [inConfig, setInConfig] = useState(0);
   const [problems, setProblems] = useState<string[]>([]);
   const [from, setFrom] = useState('');
@@ -238,6 +241,15 @@ export function RulesView() {
     <div className="h-full flex flex-col" data-testid="rules-view">
       <header className="shrink-0 border-b border-border px-6 py-3 flex items-baseline gap-4">
         <h2 className="flex items-center gap-2 text-[14px] font-semibold text-foreground"><ShieldCheck size={15} /> Rules</h2>
+        {/* G9 — one place, two tabs: what the rules are, and what the checks say. */}
+        <div role="tablist" className="flex gap-1 shrink-0" aria-label="Rules view">
+          {(['rules', 'checks'] as const).map((t) => (
+            <button key={t} type="button" role="tab" onClick={() => setTab(t)} aria-selected={tab === t} data-testid={`rules-tab-${t}`}
+              className={`px-2.5 py-0.5 rounded text-[12px] ${tab === t ? 'bg-accent/15 text-foreground' : 'text-foreground-muted hover:bg-white/[0.04]'}`}>
+              {t === 'rules' ? 'Rules' : 'Checks'}
+            </button>
+          ))}
+        </div>
         <p className="text-[12px] text-foreground-muted min-w-0">
           Where one part of the code may not reach into another, and why. Kept in <span className="font-mono">.codetrellis/rules/</span>, committed with the
           code: the team, every agent and the pipeline check the same ones, and a pull request shows any change to them.
@@ -246,7 +258,7 @@ export function RulesView() {
           Back to graph
         </button>
       </header>
-      <div className="flex-1 min-h-0 flex">
+      {tab === 'checks' ? <ChecksView /> : <div className="flex-1 min-h-0 flex">
         <aside className="w-64 shrink-0 border-r border-border overflow-y-auto p-3 space-y-1 text-[12px]" data-testid="rules-suites">
           <div className="text-[10px] uppercase tracking-wide text-foreground-subtle px-2 pb-1">Suites</div>
           <button type="button" onClick={() => setShownSuite(null)} data-testid="rules-suite-all"
@@ -442,7 +454,7 @@ export function RulesView() {
               ))}
           </section>
         </main>
-      </div>
+      </div>}
     </div>
   );
 }
