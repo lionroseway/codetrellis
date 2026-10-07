@@ -429,7 +429,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
           breakpoints: c.breakpoints, tests: c.tests,
           criteria: c.criteria.map((x) => ({ item_uid: x.itemUid, task: x.task, criterion: x.criterion, findings: x.findings })),
           docs: c.docs.map((d) => ({ uid: d.uid, title: d.title, slug: d.slug, verified_at: d.verifiedAt, files: d.files })),
-          rules: c.rules.map((r) => ({ path: r.path, imports: r.imports, rule: r.rule, words: r.words, because: r.because, strength: r.strength })),
+          rules: c.rules.map((r) => ({ path: r.path, imports: r.imports, rule: r.rule, words: r.words, because: r.because, strength: r.strength, suite: r.suite ?? 'architecture', fix: r.fix ?? null })),
+          // C8: the rules judged by, so a suite can say how many hold.
+          checked: (judgeBy ?? scopeRules(rulesOf(root), scope)).map((r) => ({ rule: r.id, suite: r.suite ?? 'architecture', strength: r.strength })),
           rulebook: c.rulebook.map((r) => ({ rule: r.rule, change: r.change, effect: r.effect, allowed: r.allowed, forbidden: r.forbidden, words: changeWords(r), ...(r.approval ? { approval: r.approval } : {}) })),
           notes: c.notes,
           ...(c.ratchet.length ? { ratchet: c.ratchet } : {}),

@@ -31,7 +31,7 @@ import { toSarif, ruleFileIn } from './sarif';
 import { BASELINE_FILE, baselineYaml, readBaseline, type Baseline } from '../backend/services/rule-baseline';
 import { writeFileWithin } from '../backend/services/confined-fs';
 import { version as CLI_VERSION } from '../../package.json';
-import { changedFiles, gate, gateWords } from './conformity';
+import { changedFiles, gate, gateMarkdown, gateWords, wantsColor, withPlaces } from './conformity';
 import type { Agent, ToolAnswer } from './agent';
 
 export const VERBS = new Set(['next', 'claim', 'update', 'stuck', 'done', 'request', 'brief', 'awareness', 'check', 'report-tests', 'rules']);
@@ -261,9 +261,15 @@ async function conforms(ctx: Ctx, root: string): Promise<Outcome> {
     };
     return { out: JSON.stringify(toSarif(g, { version: CLI_VERSION, root, read, ruleFile: ruleFileIn(root) }), null, 2), code: g.ok ? 0 : 3 };
   }
-  if (format === 'json') return { out: JSON.stringify(g), code: g.ok ? 0 : 3 };
-  if (format !== 'text') throw new UsageError(`--format is text, json or sarif, not ${format}`);
-  return { out: gateWords(g), code: g.ok ? 0 : 3 };
+  const read = (rel: string): string | null => {
+    try { return fs.readFileSync(path.join(root, rel), 'utf8'); } catch { return null; }
+  };
+  // C8: JSON carries what the text says, each finding's line and import text included.
+  if (format === 'json') return { out: JSON.stringify({ ...g, rules: withPlaces(g, read).rules }), code: g.ok ? 0 : 3 };
+  // C8: the same words in every format; colour only for a terminal that wants it.
+  if (format === 'markdown') return { out: gateMarkdown(g, read), code: g.ok ? 0 : 3 };
+  if (format !== 'text') throw new UsageError(`--format is text, json, markdown or sarif, not ${format}`);
+  return { out: gateWords(g, { read, color: wantsColor(process.stdout, process.env, ctx.p.flags['no-color'] === true) }), code: g.ok ? 0 : 3 };
 }
 
 /**

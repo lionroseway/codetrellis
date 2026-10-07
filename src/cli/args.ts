@@ -16,7 +16,7 @@ export interface Parsed {
 }
 
 /** Flags that never take a value, so `--json foo` keeps `foo` as an argument. */
-const SWITCHES = new Set(['json', 'help', 'no-wait', 'quiet', 'share-task-state', 'top', 'page', 'strict']);
+const SWITCHES = new Set(['json', 'help', 'no-wait', 'quiet', 'share-task-state', 'top', 'page', 'strict', 'no-color']);
 
 export function parseArgs(argv: readonly string[]): Parsed {
   const flags: Record<string, string | true> = {};
@@ -152,7 +152,8 @@ which; text, or --json):
                                                done task fails its checks, a doc describing it is stale,
                                                it adds an import a rule at block forbids, or it loosens a
                                                rule; a rule at warn is said and passes (--strict: it fails)
-  codetrellis check --format sarif             the same, as SARIF 2.1.0 for any CI host (or text, json)
+  codetrellis check --format sarif             the same, as SARIF 2.1.0 for any CI host (or text, json, markdown)
+  codetrellis check --no-color                 plain text in a terminal too (NO_COLOR does the same)
   codetrellis check --suite <s> | --rule <id> | --path <p>
                                                only those rules (comma-separated): one suite's, named
                                                rules, or the rules about a path

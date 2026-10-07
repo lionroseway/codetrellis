@@ -48,7 +48,7 @@ test.describe.serial('codetrellis in sessions and pipelines', () => {
   const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', env: { ...process.env, ...ENV } }).trim();
   const ct = (...args: string[]) => {
     const r = spawnSync(process.execPath, [BIN, ...args, '--data-dir', h.fixture.dataDir], {
-      cwd: root, env: { ...(process.env as Record<string, string>), ...ENV, CLAUDECODE: '1', CODETRELLIS_AGENT: '', GITHUB_BASE_REF: '' }, encoding: 'utf8', timeout: 120_000,
+      cwd: root, env: { ...(process.env as Record<string, string>), ...ENV, CLAUDECODE: '1', CODETRELLIS_AGENT: '', FORCE_COLOR: '', GITHUB_BASE_REF: '' }, encoding: 'utf8', timeout: 120_000,
     });
     return { code: r.status, out: r.stdout.trim(), err: r.stderr.trim() };
   };
@@ -132,7 +132,7 @@ test.describe.serial('codetrellis in sessions and pipelines', () => {
     git('commit', '-qam', 'Strict exports');
     const text = ct('check', '--base', base);
     expect(text.code, text.err).toBe(0);
-    expect(text.out).toBe(`Conforms: 1 changed file since ${base}. No breakpoint holds them, none of their tests fail or are older than the code, no done task fails its checks, no doc that describes them is stale, they add no import an architecture rule forbids, and they loosen no rule.`);
+    expect(text.out).toBe(`Conforms: 1 changed file since ${base}. No breakpoint holds them, none of their tests fail or are older than the code, no done task fails its checks, no doc that describes them is stale, they add no import an architecture rule forbids, and they loosen no rule.\n\nNothing blocks this change (exit 0).`);
   });
 
   test('a breakpoint Sam set on a changed file fails it, and nothing is held by the check', async () => {
@@ -218,7 +218,7 @@ test.describe.serial('codetrellis in sessions and pipelines', () => {
     expect(s.conformity.says).toEqual(gate().g.says);
     const text = ct('status', '--base', base);
     expect(text.code).toBe(3);
-    expect(text.out).toMatch(new RegExp(`Does not conform \\(\\d+ changed files? since ${base}\\):\\n  ■ ${CODE}: sam@acme.test set a breakpoint on it; ask them before changing it`));
+    expect(text.out).toMatch(new RegExp(`Does not conform \\(\\d+ changed files? since ${base}\\):\\n\\nalso\\n  ■ ${CODE}: sam@acme.test set a breakpoint on it; ask them before changing it`));
     await h.client.raw('DELETE', `/api/breakpoints/${set.breakpoint.id}`);
     expect(ct('status', '--base', base).code).toBe(0);
 

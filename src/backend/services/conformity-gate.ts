@@ -34,9 +34,13 @@ export interface RuleImport {
   path: string; imports: string; rule: string; words: string; because: string;
   /** R4: a `block` breach fails the gate; a `warn` one is said and passes, unless strict. */
   strength: 'block' | 'warn';
+  /** C8: the suite the rule is kept in, and what to do instead when the rule says. */
+  suite?: string;
+  fix?: string | null;
 }
 export type { RuleChange } from './rule-changes';
 import { changeWords, type RuleChange } from './rule-changes';
+import { findingLine } from '../../shared/lib/check-words';
 import type { RatchetFinding } from './rule-baseline';
 
 /** The imports these changed files add across the rules, or null when they could not be read (injected). */
@@ -127,7 +131,7 @@ export async function checkChanges(
   const found = files.length && checkRules ? await checkRules(files) : [];
   const rules = found ?? [];
   for (const r of rules) {
-    const line = `${r.path} now imports ${r.imports}, which the rule “${r.words}” forbids${r.because ? `: ${r.because}` : ''}`;
+    const line = findingLine(r); // C8: in the words every surface uses
     if (r.strength === 'block' || strict) says.push(`✗ ${line}`);
     else said.push(`⚠ ${line} (the rule warns; it does not fail the check)`);
   }

@@ -35,9 +35,10 @@ test.describe.serial('R5: only the wrapper may import Stripe', () => {
   let root: string;
   let main: string;
   const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', env: { ...process.env, ...ENV } }).trim();
-  const ct = (...args: string[]) => {
+  const ct = (...args: string[]) => ctWith({}, ...args);
+  const ctWith = (env: Record<string, string>, ...args: string[]) => {
     const r = spawnSync(process.execPath, [BIN, ...args, '--data-dir', h.fixture.dataDir], {
-      cwd: root, env: { ...(process.env as Record<string, string>), ...ENV, CLAUDECODE: '1', CODETRELLIS_AGENT: '', GITHUB_BASE_REF: '' }, encoding: 'utf8', timeout: 120_000,
+      cwd: root, env: { ...(process.env as Record<string, string>), ...ENV, CLAUDECODE: '1', CODETRELLIS_AGENT: '', FORCE_COLOR: '', GITHUB_BASE_REF: '', ...env }, encoding: 'utf8', timeout: 120_000,
     });
     return { code: r.status, out: r.stdout.trim(), err: r.stderr.trim() };
   };
@@ -90,15 +91,37 @@ test.describe.serial('R5: only the wrapper may import Stripe', () => {
     const g = JSON.parse(r.out) as Gate;
     expect(g.ok).toBe(false);
     expect(g.rules).toEqual(expect.arrayContaining([
-      { path: API, imports: 'npm:stripe', rule: 'stripe-via-wrapper', words: `only ${WRAPPER} may import npm:stripe`, because: BECAUSE, strength: 'block' },
-      { path: ROUTE, imports: 'pypi:stripe', rule: 'api-stripe-via-billing', words: `only ${BILLING} may import pypi:stripe`, because: BECAUSE, strength: 'block' },
+      { path: API, imports: 'npm:stripe', rule: 'stripe-via-wrapper', words: `only ${WRAPPER} may import npm:stripe`, because: BECAUSE, strength: 'block', suite: 'payments', fix: `use ${WRAPPER} instead`, line: 1, text: "import Stripe from 'stripe';" },
+      { path: ROUTE, imports: 'pypi:stripe', rule: 'api-stripe-via-billing', words: `only ${BILLING} may import pypi:stripe`, because: BECAUSE, strength: 'block', suite: 'payments', fix: `use ${BILLING} instead`, line: 1, text: 'import stripe' },
     ]));
     expect(g.rules).toHaveLength(2);
 
     const text = ct('check', '--base', main);
     expect(text.code).toBe(3);
-    expect(text.out).toContain(`✗ ${API} now imports npm:stripe, which the rule “only ${WRAPPER} may import npm:stripe” forbids: ${BECAUSE}`);
-    expect(text.out).toContain(`✗ ${ROUTE} now imports pypi:stripe, which the rule “only ${BILLING} may import pypi:stripe” forbids: ${BECAUSE}`);
+    // C8: by suite, then rule, then where, with what to do instead.
+    expect(text.out).toContain([
+      'payments  ✗ 2 block', '',
+      `  ✗ api-stripe-via-billing   only ${BILLING} may import pypi:stripe: ${BECAUSE}`,
+      `      ${ROUTE}:1 imports pypi:stripe   import stripe`,
+      `      → use ${BILLING} instead`, '',
+      `  ✗ stripe-via-wrapper   only ${WRAPPER} may import npm:stripe: ${BECAUSE}`,
+      `      ${API}:1 imports npm:stripe   import Stripe from 'stripe';`,
+      `      → use ${WRAPPER} instead`,
+    ].join('\n'));
+    expect(text.out).toMatch(/\n\n2 findings block this change \(exit 3\)\.$/);
+
+    // C8: a pipe gets plain text (above); colour only when asked, and NO_COLOR wins. The words are the same.
+    const coloured = ctWith({ FORCE_COLOR: '1' }, 'check', '--base', main);
+    expect(coloured.out).toContain('\x1b[31m✗\x1b[0m');
+    // eslint-disable-next-line no-control-regex
+    expect(coloured.out.replace(/\x1b\[[0-9;]*m/g, '')).toBe(text.out);
+    expect(ctWith({ FORCE_COLOR: '1', NO_COLOR: '1' }, 'check', '--base', main).out).toBe(text.out);
+    expect(ctWith({ FORCE_COLOR: '1' }, 'check', '--base', main, '--no-color').out).toBe(text.out);
+
+    // The same finding, as markdown for a pull request comment.
+    const md = ct('check', '--base', main, '--format', 'markdown');
+    expect(md.code).toBe(3);
+    expect(md.out).toContain(`- ✗ **\`${API}:1 imports npm:stripe\`** · \`stripe-via-wrapper\` (block)  \n  only ${WRAPPER} may import npm:stripe: ${BECAUSE}  \n  → use ${WRAPPER} instead`);
   });
 
   test('opened on the branch, the rules view shows what breaks each today, from the graph', async () => {
