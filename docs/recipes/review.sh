@@ -44,7 +44,7 @@ case "$auth" in
   env:*)
     var="${auth#env:}"
     if [ -z "$(printenv "$var" 2>/dev/null)" ]; then
-      echo "codetrellis review: $var is not set (a fork's pull request gets no secrets); nothing reviewed"; exit 0
+      echo "codetrellis review: $var is not set (no such secret here, or a fork's pull request, which gets none); nothing reviewed"; exit 0
     fi ;;
   oidc:*|"") ;;
   *) echo "codetrellis review: CODETRELLIS_AUTH is env:<VARIABLE> or oidc:<provider>" >&2; exit 2 ;;

@@ -66,8 +66,10 @@ jobs:
           # GITHUB_TOKEN in env), --fail-on block.
           CODETRELLIS_REVIEW_ARGS: --verify
         run: |
-          sh "$RUNNER_TEMP/codetrellis/docs/recipes/review.sh" || true
-          if [ -f codetrellis-review.md ]; then cat codetrellis-review.md >> "$GITHUB_STEP_SUMMARY"; fi
+          sh "$RUNNER_TEMP/codetrellis/docs/recipes/review.sh" 2>&1 | tee "$RUNNER_TEMP/review.log" || true
+          # A run that reviewed nothing says so in the summary, not only the log.
+          if [ -f codetrellis-review.md ]; then cat codetrellis-review.md >> "$GITHUB_STEP_SUMMARY"
+          else { echo "**CodeTrellis review: nothing was reviewed.**"; echo; tail -n 5 "$RUNNER_TEMP/review.log"; } >> "$GITHUB_STEP_SUMMARY"; fi
       - name: Upload the findings
         if: always() && hashFiles('codetrellis-review.sarif') != ''
         continue-on-error: true
