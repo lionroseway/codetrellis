@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "C4b: bring your own agent — get_review_bundle and report_review"
+  step: "C4: codetrellis review — agent checks on your own agent, headless"
   status: "In review"
-  next: "Merge C4b when CI is green, then replay C4 (codetrellis review) onto it; C4 already passes locally stacked on C4b"
+  next: "Merge C4 when CI is green, then C5 (agent checks in CI; label its PR codetrellis-review once) and C6, both already passing locally stacked on C4"
   blockers: "None"
   updated: 2026-10-07
 sections:

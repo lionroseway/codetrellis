@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | C4b: bring your own agent — get_review_bundle and report_review |
+| **Stage / step** | C4: codetrellis review — agent checks on your own agent, headless |
 | **Status** | In review |
-| **In flight** | C4 building on `feat/phase-33-c4-agent-checks`; C4b in review (#388) on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; Z1 building on `feat/phase-33-z1-docs` |
+| **In flight** | C4 in review (#389) on `feat/phase-33-c4-agent-checks`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; Z1 building on `feat/phase-33-z1-docs` |
 | **Last merged** | R8 (#387, `bcea46d`) |
-| **Next action** | Merge C4b when CI is green, then replay C4 (codetrellis review) onto it; C4 already passes locally stacked on C4b |
+| **Next action** | Merge C4 when CI is green, then C5 (agent checks in CI; label its PR codetrellis-review once) and C6, both already passing locally stacked on C4 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `bcea46d`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `2f7d09e`, with open PRs from GitHub.
 
 ---
 
@@ -72,8 +72,8 @@
 - [x] C1 Scoped checks (`--suite`, `--rule`, `--path`; MCP and REST alike) (#361)
 - [x] C2 SARIF output, host-neutral; recipes are examples for any CI (no host first) (#362)
 - [x] C3 Debt ratchet (existing breaches may only fall) (#363)
-- [ ] C4 Agent checks locally on the user's own agent: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes) — building
-- [ ] C4b Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified) (#388) — in review
+- [ ] C4 Agent checks locally on the user's own agent: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes) (#389) — in review
+- [ ] C4b Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified)
 - [ ] C5 Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass) — building
 - [ ] C6 Graduation (a repeated finding proposes a rule) — building
 - [x] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran (#379)
@@ -206,6 +206,41 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — C4b merged (#388); C4 in review
+
+- **C4b merged** (#388): bring your own agent (`get_review_bundle`,
+  `report_review`).
+- **C4: `codetrellis review`.** It runs the person's own agent CLI headless,
+  on their own model and key, over the C4b bundle, and records each pass as
+  a check run. CodeTrellis builds no agent.
+  - **Adapters** hold each CLI to a tool set that denies by default, through
+    the CLI's own settings:
+    - **Claude Code** runs in print mode: no built-in tools, our MCP config
+      only, two tools pre-approved, `dontAsk`, a turn limit.
+    - **Codex** runs `exec` with shell, web, images and sub-agents off, a
+      read-only sandbox, a fresh `CODEX_HOME`, and its own provider, so any
+      endpoint serving the Responses API works.
+  - **The review sink** is the agent's one MCP server. It has two tools:
+    `report_review`, and `read_change_file` (changed files only, confined).
+    Every other call is refused and recorded, and so is every call past the
+    tool-call budget.
+  - **The orchestrator:**
+    - runs one pass per skill, in an empty folder with a scrubbed
+      environment;
+    - retries once a run that never reports;
+    - turns a question with nobody to ask into a finding;
+    - ends a pass that runs out of a budget as inconclusive;
+    - reports a refused key as an error, with the key scrubbed;
+    - takes `--fail-on block|error`.
+  - Files named as holding secrets (`.env`, private keys, `.npmrc`) are
+    withheld from every review bundle, whether or not git ignores them.
+- Checked before review: unit 2170 passing; 91 review, rule, check, CLI and
+  capability harness tests, among them 8 scenarios against a stand-in for
+  `claude -p` with a planted prompt injection; the rules, settings and agent
+  browser specs (121 chromium, 23 serial). The replayed tree is the one
+  tested.
+- C5 and C6 are replayed on top of C4 and pass the same checks locally.
 
 ### 2026-10-07 — R8 merged (#387); C4b in review
 
