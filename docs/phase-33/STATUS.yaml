@@ -17,10 +17,10 @@
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
   step: "Merging the built steps, in order"
-  status: "G1 in review (one visual vocabulary); G4 merged (#369); the page's screens in review (#370)"
-  next: "Merge G1 and #370 when CI is green, then replay G2"
+  status: "G2 in review (one legend, listing only what is drawn); G1 merged (#371); the page's screens merged (#370)"
+  next: "Merge G2 when CI is green, then replay V1"
   blockers: "None"
-  updated: 2026-10-06
+  updated: 2026-10-07
 sections:
   - title: Setup
     goal: The phase can be picked up cold by any session, and its progress read on one page.
