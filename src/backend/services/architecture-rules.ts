@@ -15,13 +15,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { ArchitectureRule, RuleView } from '../../shared/types/architecture-rules';
 import { getProjectConfig, updateProjectConfig } from './project-config-service';
-import { checkEdges, parseArchitectureRule, ruleWords, targetMatches } from './architecture-rule';
+import { checkEdges, grepReads, parseArchitectureRule, ruleWords, targetMatches } from './architecture-rule';
+import { grepEntries } from '../../shared/lib/grep-entry';
+import { readFileWithin, resolveWithin } from './confined-fs';
+import { execFileSync } from 'node:child_process';
 import { splitSymbol, symbolEntry } from '../../shared/lib/symbol-entry';
 import { isSuiteName, readRulebook, suiteFile, writeSuite } from './rulebook';
-import { getCallEdges, getFileFacts, getPackageEdges } from './database';
+import { getAllFileHashes, getCallEdges, getFileFacts, getPackageEdges } from './database';
 import { exportedSymbols, importersOf } from './importers';
 
-export { breachWords, breaks, checkEdges, inPattern, parseArchitectureRule, ruleStatement, ruleWords } from './architecture-rule';
+export { breachWords, breaks, checkEdges, grepReads, inPattern, parseArchitectureRule, ruleStatement, ruleWords } from './architecture-rule';
 
 export class RuleError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
@@ -152,9 +155,15 @@ export function rulesView(projectRoot: string, edges: Array<{ from: string; to: 
         ? 'A guide: shown to agents whose work touches it, never checked'
         : breaches === null
         ? 'Open this project to see what breaks it today'
-        : breaches.length === 0 ? 'Nothing breaks this today' : `${breaches.length} ${breaches.length === 1 ? 'import breaks' : 'imports break'} this today`,
+        : breaches.length === 0 ? 'Nothing breaks this today' : `${breaches.length} ${breakers(rule, breaches.length)} this today`,
     };
   });
+}
+
+/** What breaks a rule, counted: imports, or for a grep rule (B2) lines, or files that lack its text. */
+function breakers(rule: ArchitectureRule, n: number): string {
+  const [one, many] = rule.kind === 'grep' ? (rule.must ? ['file breaks', 'files break'] : ['line breaks', 'lines break']) : ['import breaks', 'imports break'];
+  return n === 1 ? one : many;
 }
 
 /**
@@ -177,8 +186,40 @@ export function edgesIfLoaded(
   // Files importing files, then files importing outside packages (R5), which
   // only package rules read, then the named exports symbol rules name (R6).
   const rules = [...rulesOf(projectRoot), ...alsoRules];
-  return [...edges(), ...packages(), ...symbolEdgesOfGraph(projectRoot, rules), ...callEdgesOfGraph(rules), ...fileFactsOfGraph(rules)]
+  return [...edges(), ...packages(), ...symbolEdgesOfGraph(projectRoot, rules), ...callEdgesOfGraph(rules), ...fileFactsOfGraph(rules), ...grepEdgesOfTree(projectRoot, rules)]
     .map((e) => ({ from: e.sourceRelative, to: e.targetRelative }));
+}
+
+const MAX_GREP_FILES = 20_000;
+const MAX_GREP_BYTES = 1024 * 1024;
+
+/**
+ * What grep rules (B2) read in the tree: every file git knows (tracked, and
+ * untracked but not ignored), else every scanned file, that a grep rule's
+ * `in` covers, read through the confined-file helper, up to 1 MB each.
+ */
+function grepEdgesOfTree(projectRoot: string, rules: readonly ArchitectureRule[]): Array<{ sourceRelative: string; targetRelative: string }> {
+  const grep = rules.filter((r) => r.kind === 'grep' && r.strength !== 'guide');
+  if (grep.length === 0) return [];
+  let files: string[];
+  try {
+    files = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: projectRoot, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] })
+      .split('\0').filter(Boolean);
+  } catch {
+    files = [...getAllFileHashes().keys()].map((abs) => path.relative(projectRoot, abs).split(path.sep).join('/')).filter((rel) => !rel.startsWith('..'));
+  }
+  const out: Array<{ sourceRelative: string; targetRelative: string }> = [];
+  for (const rel of [...new Set(files)].slice(0, MAX_GREP_FILES)) {
+    const reading = grep.filter((r) => grepReads(r, rel));
+    if (reading.length === 0) continue;
+    let text: string;
+    try {
+      if (fs.statSync(resolveWithin(projectRoot, rel)).size > MAX_GREP_BYTES) continue;
+      text = readFileWithin(projectRoot, rel).toString('utf-8');
+    } catch { continue; }
+    for (const rule of reading) for (const e of grepEntries(rule, text)) out.push({ sourceRelative: rel, targetRelative: e });
+  }
+  return out;
 }
 
 /** Each scanned file's own fact (R8), when a folder rule would read them. */

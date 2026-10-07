@@ -43,7 +43,11 @@ const key = (e: Edge) => (e.to.startsWith('folder:') ? `${e.from}>folder` : `${e
 const breaches = (rule: ArchitectureRule, edges: readonly Edge[]): Edge[] =>
   checkEdges([rule], edges as Edge[]).map((b) => ({ from: b.from, to: b.to }));
 const minus = (a: Edge[], b: Edge[]): Edge[] => { const drop = new Set(b.map(key)); return a.filter((e) => !drop.has(key(e))); };
-const imports = (n: number) => `${n} import${n === 1 ? '' : 's'}`;
+// B2: a grep rule is broken by lines, or by files that lack its text, not imports.
+const imports = (n: number, r?: ArchitectureRule | null) => {
+  const noun = r?.kind === 'grep' ? (r.must ? 'file' : 'line') : 'import';
+  return `${n} ${noun}${n === 1 ? '' : 's'}`;
+};
 const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.length && [...a].sort().every((x, i) => x === [...b].sort()[i]);
 
 /**
@@ -66,8 +70,10 @@ function textEffect(base: ArchitectureRule, head: ArchitectureRule): RuleEffect 
     sameSet(b, h) ? 'same' : (b.length === 0 && h.length > 0) || (h.length > 0 && h.every((x) => b.includes(x))) ? 'tightens' : 'loosens';
   const folder = [allowed(base.files, head.files), allowed(base.kinds, head.kinds),
     base.exports === head.exports ? 'same' : head.exports === 'one' ? 'tightens' : 'loosens'];
-  const folderSame = folder.every((f) => f === 'same');
-  const folderTighter = folder.every((f) => f !== 'loosens');
+  // B2: a grep rule reading other files, requiring rather than forbidding, or in another case, is not proven tighter.
+  const grepSame = sameSet(base.in ?? [], head.in ?? []) && !!base.must === !!head.must && !!base.ignoreCase === !!head.ignoreCase;
+  const folderSame = folder.every((f) => f === 'same') && grepSame;
+  const folderTighter = folder.every((f) => f !== 'loosens') && grepSame;
   if (pathsSame && onlySame && sameSet(base.except, head.except) && folderSame) return 'same';
   if (pathsSame && onlyShrank && head.except.every((e) => base.except.includes(e)) && folderTighter) return 'tightens';
   return 'loosens';
@@ -93,7 +99,7 @@ export function diffRules(base: readonly ArchitectureRule[], head: readonly Arch
       const allowed = breaches(b, edges);
       out.push({
         rule: id, change: 'removed', effect: 'loosens', allowed, forbidden: [], before: b, after: null,
-        words: `✗ This change removes the rule “${ruleStatement({ ...b, except: [] })}” (${id})${allowed.length ? `: ${imports(allowed.length)} it forbade become allowed` : ''}. Loosening a rule needs a person's approval in the app.`,
+        words: `✗ This change removes the rule “${ruleStatement({ ...b, except: [] })}” (${id})${allowed.length ? `: ${imports(allowed.length, b)} it forbade become allowed` : ''}. Loosening a rule needs a person's approval in the app.`,
       });
       continue;
     }
@@ -113,11 +119,11 @@ export function diffRules(base: readonly ArchitectureRule[], head: readonly Arch
       out.push(strength === 'loosens'
         ? {
           rule: id, change: 'changed', effect: 'loosens', allowed: b.strength === 'block' ? was : [], forbidden: [], before: b, after: h,
-          words: `✗ This change lowers the rule ${id} from ${b.strength} to ${h.strength}${n && b.strength === 'block' ? `: ${imports(n)} that break it would no longer fail CI` : ''}. Loosening a rule needs a person's approval in the app.`,
+          words: `✗ This change lowers the rule ${id} from ${b.strength} to ${h.strength}${n && b.strength === 'block' ? `: ${imports(n, b)} that break it would no longer fail CI` : ''}. Loosening a rule needs a person's approval in the app.`,
         }
         : {
           rule: id, change: 'changed', effect: 'tightens', allowed: [], forbidden: h.strength === 'block' ? now : [], before: b, after: h,
-          words: `⚠ This change raises the rule ${id} from ${b.strength} to ${h.strength}${now.length && h.strength === 'block' ? `: ${imports(now.length)} already in the code would fail CI` : ''}.`,
+          words: `⚠ This change raises the rule ${id} from ${b.strength} to ${h.strength}${now.length && h.strength === 'block' ? `: ${imports(now.length, h)} already in the code would fail CI` : ''}.`,
         });
       continue;
     }
@@ -129,8 +135,8 @@ export function diffRules(base: readonly ArchitectureRule[], head: readonly Arch
     out.push({
       rule: id, change: 'changed', effect, allowed, forbidden, before: b, after: h,
       words: effect === 'loosens'
-        ? `✗ This change loosens the rule ${id}, from ${what}${allowed.length ? `: ${imports(allowed.length)} it forbade become allowed` : ''}. Loosening a rule needs a person's approval in the app.`
-        : `⚠ This change tightens the rule ${id}, from ${what}${forbidden.length ? `: ${imports(forbidden.length)} already in the code would break it` : ''}.`,
+        ? `✗ This change loosens the rule ${id}, from ${what}${allowed.length ? `: ${imports(allowed.length, b)} it forbade become allowed` : ''}. Loosening a rule needs a person's approval in the app.`
+        : `⚠ This change tightens the rule ${id}, from ${what}${forbidden.length ? `: ${imports(forbidden.length, h)} already in the code would break it` : ''}.`,
     });
   }
 
@@ -139,7 +145,7 @@ export function diffRules(base: readonly ArchitectureRule[], head: readonly Arch
     const forbidden = breaches(h, edges);
     out.push({
       rule: id, change: 'added', effect: 'tightens', allowed: [], forbidden, before: null, after: h,
-      words: `⚠ This change adds the rule “${ruleStatement({ ...h, except: [] })}” (${id}) at ${h.strength}${forbidden.length ? `: ${imports(forbidden.length)} already in the code would break it` : ''}. It is checked once it is on the base branch.`,
+      words: `⚠ This change adds the rule “${ruleStatement({ ...h, except: [] })}” (${id}) at ${h.strength}${forbidden.length ? `: ${imports(forbidden.length, h)} already in the code would break it` : ''}. It is checked once it is on the base branch.`,
     });
   }
   return out;

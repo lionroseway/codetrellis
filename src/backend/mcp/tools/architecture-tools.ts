@@ -172,13 +172,17 @@ export function register(server: McpServer, deps: ToolDeps): void {
         'caught by the check, which judges a branch by its base\'s rules.',
       inputSchema: {
         id: z.string().min(1).max(63).describe('The rule\'s id, a short slug like web-not-db: an existing rule to change or stop, or a new one.'),
-        kind: z.enum(['imports', 'package', 'symbol', 'calls', 'folder']).optional().describe('imports (the default): files in from may not import files in may_not_import. package: only the files in only may import the outside package named in package. symbol: only the files in only may import the export named in symbol, directly or through a barrel. calls: only the files in only may make the call named in calls. folder: the files in folder are named to files, of kinds, and export one name each when exports is one.'),
+        kind: z.enum(['imports', 'package', 'symbol', 'calls', 'folder', 'grep']).optional().describe('imports (the default): files in from may not import files in may_not_import. package: only the files in only may import the outside package named in package. symbol: only the files in only may import the export named in symbol, directly or through a barrel. calls: only the files in only may make the call named in calls. folder: the files in folder are named to files, of kinds, and export one name each when exports is one. grep: no line of the files in in may hold must_not, or each must hold must.'),
         from: z.string().max(300).optional().describe('The files it is about: a folder ending in / or a pattern. Required for an imports rule unless remove; for a package rule, where it applies (everywhere if omitted).'),
         may_not_import: z.string().max(300).optional().describe('What they may not import. Required for an imports rule unless remove.'),
         package: z.string().max(300).optional().describe('A package rule\'s outside package, ecosystem and name: npm:stripe, pypi:requests, go:github.com/stripe/stripe-go, maven:com.stripe.'),
         symbol: z.string().max(300).optional().describe('A symbol rule\'s export, a file and a name: src/payments/charge.ts#createCharge.'),
         calls: z.string().max(300).optional().describe('A call rule\'s call: http: and a host or path (http:api.stripe.com, http:/api/admin), or sql: and a table (sql:payments). A * makes it a glob: http:*.stripe.com, sql:payments_*.'),
-        match: z.enum(['exact', 'glob', 'regex']).optional().describe('How a package, symbol or call rule\'s target is matched (B1): exact (the default), glob (a * in the target says so too), or regex over the whole entry, like http:api\\.(stripe|paypal)\\.com(/.*)?.'),
+        match: z.enum(['exact', 'glob', 'regex']).optional().describe('How a package, symbol or call rule\'s target is matched (B1): exact (the default), glob (a * in the target says so too), or regex over the whole entry, like http:api\\.(stripe|paypal)\\.com(/.*)?. For a grep rule, how its text is: exact (the default, literal, a * is a *), glob, or regex searched in each line.'),
+        in: z.array(z.string().max(300)).max(50).optional().describe('A grep rule\'s files, like src/backend/ or src/routes/*.ts.'),
+        must_not: z.string().max(200).optional().describe('A grep rule\'s text no line may hold, like console.log(.'),
+        must: z.string().max(200).optional().describe('A grep rule\'s text each file must hold on some line, like requireAuth.'),
+        ignore_case: z.boolean().optional().describe('A grep rule: read its text in any case.'),
         folder: z.string().max(300).optional().describe('A folder rule\'s folder, like src/backend/services/.'),
         files: z.array(z.string().max(100)).max(20).optional().describe('A folder rule\'s name patterns, like *-service.ts.'),
         kinds: z.array(z.string().max(20)).max(20).optional().describe('A folder rule\'s file kinds, by extension, like ts.'),
@@ -204,6 +208,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         ...(args.symbol ? { symbol: args.symbol } : {}), ...(args.calls ? { calls: args.calls } : {}), ...(args.match ? { match: args.match } : {}),
         ...(args.folder ? { folder: args.folder } : {}), ...(args.files ? { files: args.files } : {}), ...(args.kinds ? { kinds: args.kinds } : {}),
         ...(args.exports ? { exports: args.exports } : {}), ...(args.guide ? { guide: args.guide } : {}),
+        ...(args.in ? { in: args.in } : {}), ...(args.must_not !== undefined ? { mustNot: args.must_not } : {}),
+        ...(args.must !== undefined ? { must: args.must } : {}), ...(args.ignore_case !== undefined ? { ignoreCase: args.ignore_case } : {}),
       };
       try {
         if (!body && !findRule(root, args.id)) return { isError: true, content: [{ type: 'text' as const, text: `No architecture rule "${args.id}" in this project to stop.` }] };

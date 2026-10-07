@@ -77,3 +77,26 @@ export function splitTarget(v: unknown): { value: unknown; match: unknown } {
   }
   return { value: v, match: undefined };
 }
+
+const lineCompiled = new Map<string, RegExp>();
+const MAX_LINE = 2000;
+
+/**
+ * Whether a line of text holds the pattern anywhere in it (B2, grep rules).
+ * Exact (`null`) is the text itself; a glob's `*` is any run of characters,
+ * since a line has no folders; a regex is searched for, not anchored. A line
+ * is read to its first 2000 characters, so a minified file costs no more than
+ * a long line.
+ */
+export function lineMatches(kind: MatchKind | null, pattern: string, line: string, ignoreCase = false): boolean {
+  const text = line.length > MAX_LINE ? line.slice(0, MAX_LINE) : line;
+  if (kind === null) return ignoreCase ? text.toLowerCase().includes(pattern.toLowerCase()) : text.includes(pattern);
+  const key = `${kind}\u0000${ignoreCase ? 'i' : ''}\u0000${pattern}`;
+  let re = lineCompiled.get(key);
+  if (!re) {
+    re = new RegExp(kind === 'glob' ? pattern.split('*').map(escapeRe).join('.*') : pattern, ignoreCase ? 'i' : '');
+    if (lineCompiled.size > 500) lineCompiled.clear();
+    lineCompiled.set(key, re);
+  }
+  return re.test(text);
+}

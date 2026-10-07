@@ -16,7 +16,7 @@ export type RuleStrength = 'block' | 'warn' | 'guide';
 
 export const RULE_STRENGTHS: readonly RuleStrength[] = ['block', 'warn', 'guide'];
 
-export type RuleKind = 'imports' | 'package' | 'symbol' | 'calls' | 'folder';
+export type RuleKind = 'imports' | 'package' | 'symbol' | 'calls' | 'folder' | 'grep';
 
 export interface ArchitectureRule {
   /** A slug, unique in the project: `web-not-db`. */
@@ -33,6 +33,9 @@ export interface ArchitectureRule {
    * (`http:api.stripe.com`) or a SQL table (`sql:payments`). `folder` (R8):
    * the files in the folder `from` are named to `files`, of the `kinds`, and
    * export one name each when `exports` is `one`; `mayNotImport` is empty.
+   * `grep` (B2): the files in `in` (less `except`) may not hold the text in
+   * `mayNotImport` on any line, or with `must`, must hold it on one; `from`
+   * is `**`.
    */
   kind?: RuleKind;
   /** The files the rule is about: `web/`. */
@@ -45,6 +48,12 @@ export interface ArchitectureRule {
    * (`http:api\\.(stripe|paypal)\\.com(/.*)?`). See shared/lib/matcher.ts.
    */
   match?: 'glob' | 'regex';
+  /** A grep rule's files (B2): `src/backend/`, `src/routes/*.ts`. */
+  in?: string[];
+  /** A grep rule that requires its text, rather than forbidding it (B2). */
+  must?: boolean;
+  /** A grep rule's text, in any case (B2). */
+  ignoreCase?: boolean;
   /** A package rule's files that alone may import it: `src/payments/index.ts`. */
   only?: string[];
   /** A folder rule's name patterns (R8): `*-service.ts`. */

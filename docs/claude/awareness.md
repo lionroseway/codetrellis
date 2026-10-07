@@ -636,8 +636,44 @@ gate judges the files a change adds, renames or re-exports from, never an old
 file it only edits; the rules view lists the old ones as what breaks it today.
 A finding says what is wrong: "is named helpers.ts, not *-service.ts",
 "exports 2 names, not one". The guide is never checked; it is shown on the
-rule in the Rules view and in a task's brief. Everything below holds for
-every kind.
+rule in the Rules view and in a task's brief.
+
+A **grep rule** (Phase 33 B2) says what text files may not hold, or must.
+It needs no parser, so it holds for every language and every kind of file:
+
+```yaml
+  - id: no-console-in-backend
+    kind: grep
+    in: [src/backend/]
+    except: ['**/*.test.ts']
+    mustNot: { match: regex, value: "console\\.(log|debug)\\(" }
+    strength: warn
+    because: The backend logs through services/logger, which redacts.
+
+  - id: routes-check-auth
+    kind: grep
+    in: [src/routes/*.ts]
+    must: requireAuth
+    strength: block
+```
+
+- **`mustNot`** reports each line that holds the text. **`must`** reports each
+  file in `in` with no line that holds it, on its first line.
+- **The text** is literal by default, and a `*` in it is a `*`, because code is
+  full of them. `match: glob` makes `*` any run of characters, and
+  `match: regex` searches each line (B1's limits apply).
+  `ignoreCase: true` reads it in any case. A line is read to its first 2000
+  characters, and a file with a NUL in its first 8000 is not read.
+- **Entries are keyed** by the line's text and the rule's terms
+  (`grep:<key>:+<line>`, `src/shared/lib/grep-entry.ts`). An edit above a
+  line moves it without making it new, so the gate reports only the lines a
+  change adds. A second copy of a line already in the file is not new either.
+  The Rules view reads every file git knows under `in`, up to 1 MB each,
+  through the confined-file helper.
+- **Old breaches:** baselined like any rule's (C3). The finding reads
+  "now contains “console.log('booting');”" or "never contains “requireAuth”".
+
+Everything below holds for every kind.
 
 - **On the graph** (Phase 33 G8): the Rules overlay (Overlays → Rules)
   draws an import that breaks a rule in the breach style (red, ⊘, the rule
