@@ -106,7 +106,7 @@ records that — but "✗ none" is proof of a gap.
 | b | `POST /api/rules/move-from-config` |  | ✗ none | 1 |  |  |  |
 | b | `POST /api/rules/proposals/:uid/decide` |  | ✗ none | 1 |  |  |  |
 | b | `POST /api/trellis/capture` |  | ✗ none | 3 | ✓ 0.4b: (baselines) |  |  |
-| b | `PUT /api/rules/:id` |  | ✗ none | 8 |  |  |  |
+| b | `PUT /api/rules/:id` |  | ✗ none | 9 |  |  |  |
 | c | `DELETE /api/attachments/:uid` |  | ✗ none | 1 | ✓ 0.4c-2: removes; unknown 404 (item-surface) |  |  |
 | c | `DELETE /api/comments/:uid` |  | ✗ none | 1 | ✓ 0.4c-2: removes a reply from the thread (item-surface) |  |  |
 | c | `DELETE /api/items/:uid` |  | ✗ none | 2 | ✓ 0.4c: exercised by agent-loop, criteria-signoff, drift-review-tools, full-loop, +5 (0.4c wrote no per-row note; filled from test references in 0.7) |  |  |
@@ -463,7 +463,7 @@ records that — but "✗ none" is proof of a gap.
 | d | `report_tests` | test · write | ✗ none | 4 |  |  |  |
 | d | `run_checks` | plan-item · read | ✗ none | 1 | ✓ 0.4d: names the stale criterion and the changed file; approves nothing (criteria-loops) |  |  |
 | d | `submit_criterion` | plan-item · write | ✗ none | 10 | ✓ 0.4d: submitting is not approving; agent policy self-approves in the agent's name (criteria-signoff) |  |  |
-| e | `get_brief` | plan-item · read | ✗ none | 17 | ✓ 0.4e: item, guide from pages, own files + pages' materials only, still_needs; unknown refused (brief-surface) |  |  |
+| e | `get_brief` | plan-item · read | ✗ none | 18 | ✓ 0.4e: item, guide from pages, own files + pages' materials only, still_needs; unknown refused (brief-surface) |  |  |
 | e | `list_materials` | plan-item · read | ✗ none | 1 | ✓ 0.4e: every file item by item in tree order, outputs included; unknown refused (brief-surface) |  |  |
 | e | `read_material` | plan-item · files | ✗ none | 8 | ✓ 0.4e: CSV by {range} (bug 24), text by {lines}, image as itself; read logged on the item (brief-surface, read unit) |  |  |
 | e | `record_artefact` | plan-item · write | ✗ none | 7 | ✓ 0.4e: agent records an output (brief-surface, criteria-loops) |  |  |

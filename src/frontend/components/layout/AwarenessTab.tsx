@@ -286,6 +286,16 @@ function DriftDetail({ subject }: { subject: AwarenessSignal['subject'] }) {
       <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5">
         {(subject.files ?? []).map((f) => <code key={f} className="font-mono text-foreground-muted" title={f}>{f}</code>)}
       </div>
+      {/* Phase 33 R9 — the rules about where it went, guides included. */}
+      {(subject.rules ?? []).length > 0 && (
+        <div className="mt-1 space-y-0.5" data-testid="awareness-drift-rules">
+          {(subject.rules ?? []).map((r) => (
+            <div key={r.id} data-testid="awareness-drift-rule">
+              The rule <span className="text-foreground-muted">“{r.words}”</span> ({r.suite}, {r.strength}) is about {r.files.join(', ')}.
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

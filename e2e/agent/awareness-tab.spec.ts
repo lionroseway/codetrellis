@@ -276,6 +276,25 @@ test.describe('Awareness tab', () => {
     await expect.poll(() => sent).toEqual([{ id: 'd1', state: 'intended', project: expect.any(String) }]);
   });
 
+  test('drift into what a rule is about names the rule, a guide included (Phase 33 R9)', async ({ page }) => {
+    const drift = signal('d2', {
+      kind: 'drift', severity: 'medium', workstreams: ['/work/acme-billing'],
+      subject: {
+        files: ['src/payments/refund.ts'], items: ['item-1'],
+        rules: [{ id: 'payments-through-the-wrapper', suite: 'payments', words: 'src/web/ may not import src/payments/', strength: 'guide', files: ['src/payments/refund.ts'] }],
+      },
+      summary: '`billing-v2` changes 1 file outside the scope its claimed item gives it: src/payments/refund.ts. A rule is about it: payments-through-the-wrapper (payments, guide)',
+    });
+    await serve(page, ROOM, [drift]);
+    await gotoWithProject(page);
+    await tabButton(page).click();
+
+    const d = card(page, 'outside the scope');
+    await expect(d.getByTestId('awareness-drift-rule')).toHaveText('The rule “src/web/ may not import src/payments/” (payments, guide) is about src/payments/refund.ts.');
+    await expandPanel(page);
+    await shot(page, 'awareness-drift-rule');
+  });
+
   test('a rule: the imports that break it, the rule and why, and the way to change it (A7.2)', async ({ page }) => {
     const rule = signal('r1', {
       kind: 'rule', severity: 'high', workstreams: ['/work/acme-billing'],

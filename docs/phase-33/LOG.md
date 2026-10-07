@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
-| **Status** | G10 in review (findings where the code is); G9 merged (#382) |
-| **In flight** | R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; G10 building on `feat/phase-33-g10-findings-where-code-is`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | G9 (#382, `f5c4f06`) |
-| **Next action** | Merge G10 when CI is green, then replay R9 |
+| **Status** | R9 in review (guide rules in scope); G10 merged (#383), Track G done |
+| **In flight** | R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | G10 (#383, `a2658dd`) |
+| **Next action** | Merge R9 when CI is green, then replay R6 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `f5c4f06`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `a2658dd`, with open PRs from GitHub.
 
 ---
 
@@ -89,7 +89,7 @@
 - [x] G7 The Rules view (its own workspace, not Settings) (#380)
 - [x] G8 Rules on the graph (breaches drawn, rules for the selected file) (#381)
 - [x] G9 The Checks view (run any check from the app, CI runs beside local ones, compare runs) (#382)
-- [ ] G10 Findings where the code is (graph, code gutter, inspector, brief, phone) — building
+- [x] G10 Findings where the code is (graph, code gutter, inspector, brief, phone) (#383)
 
 ### Track V: review (the owner's picks)
 - [x] V1 What this change does to the architecture (structural diff at the top of every review) (#373)
@@ -206,6 +206,25 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — G10 merged (#383), Track G done; R9 in review
+
+- **G10 merged** (#383): findings where the code is. The graph and UI track
+  (G1 to G10) is in.
+- **R9: guide rules in scope.** A guide rule checks nothing. It is shown
+  wherever work touches it:
+  - **in a task's brief**, which lists the rules over the task's files,
+    guides included, over MCP, in the Brief and in `codetrellis brief`;
+  - **in the awareness drift signal**, which names each rule about a file a
+    workstream reached outside its scope, with its suite and strength. The
+    digest line and the Awareness tab say so too.
+
+  A rule is about a file it judges or guards; a package rule, about the
+  files of its own ecosystem. That answer now comes from one place, so the
+  graph's overlay, the inspector and the drift signal agree.
+- Checked before review on the replayed code: unit 2131 passing; 98
+  awareness, phone and rules harness tests; the agent, graph and rules
+  browser specs (82 chromium, 61 serial).
 
 ### 2026-10-07 — G9 merged (#382); G10 in review
 
