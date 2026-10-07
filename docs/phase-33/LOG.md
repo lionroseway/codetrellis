@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | C6: graduation — what agent reviews keep finding becomes a proposed rule |
+| **Stage / step** | R10: this repository's own rulebook |
 | **Status** | In review |
-| **In flight** | C6 in review (#391) on `feat/phase-33-c6-graduation`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | C5 (#390, `3fb036a`) |
-| **Next action** | Merge C6 when CI is green, then build R10 (this repository's own rulebook, measured against today's code), then Z1 |
+| **In flight** | R10 in review (#392) on `feat/phase-33-r10-own-rulebook`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | C6 (#391, `f6ef82e`) |
+| **Next action** | Merge R10 when CI is green, then build B1 (matchers) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `3fb036a`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `f6ef82e`, with open PRs from GitHub.
 
 ---
 
@@ -68,7 +68,7 @@
 - [x] R7 Call rules (HTTP hosts, commands, tables, env) (#386)
 - [x] R8 Folder rules (what files in a folder are) (#387)
 - [x] R9 Guide rules in scope (the brief, `get_brief`, drift names the rule) (#384)
-- [ ] R10 This repository's own rulebook: its layering, the native packages and its folder conventions, checked on every pull request with no AI and no secret
+- [ ] R10 This repository's own rulebook: its layering, the native packages and its folder conventions, checked on every pull request with no AI and no secret (#392) — in review
 
 ### Track C: checks anywhere
 - [x] C1 Scoped checks (`--suite`, `--rule`, `--path`; MCP and REST alike) (#361)
@@ -77,9 +77,10 @@
 - [x] C4 Agent checks locally on the user's own agent: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes) (#389)
 - [ ] C4b Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified)
 - [x] C5 Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass) (#390)
-- [ ] C6 Graduation (a repeated finding proposes a rule) (#391) — in review
+- [x] C6 Graduation (a repeated finding proposes a rule) (#391)
 - [x] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran (#379)
 - [x] C8 One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words (#378)
+- [ ] C9 A review run on your device counts on the pull request: any agent (Cursor, Codex, Claude Code, any MCP client), signed with your device key, read and verified by CI with no secret
 
 ### Track G: graph and clarity
 - [x] G1 One visual vocabulary (colour, glyph, dash, words) with a guard test (#371)
@@ -98,6 +99,15 @@
 - [x] V2 Review in order of risk (dependents, rule scope, test grounding, other work) (#374)
 - [x] V3 Re-review only what changed since each reviewer's last look (#375)
 - [x] V6 Did the change do what the task said (only when it is linked to a task) (#376)
+
+### Track B: building blocks
+- [ ] B1 Matchers on every rule target: exact, glob, regex, fuzzy (absorbs the wildcard targets proposed as R11)
+- [ ] B2 Grep rules: text that must not, or must, appear, scoped by path, file:line findings, baselined
+- [ ] B3 Fuzzy matching: look-alike names and near-duplicates, by a deterministic similarity score with a threshold
+- [ ] B4 Your own patterns: what counts as a call, or as any entry (queue:, event:, flag:), without code
+- [ ] B5 Engine per rule: deterministic, fuzzy or agent, independent of strength; an agent rule blocks only when its owner says block
+- [ ] B6 Pipelines: stages in order or in parallel, needs and when, and later stages grounded by earlier results
+- [ ] B7 Docs for the blocks: a worked example each in rules.md, and pipeline recipes
 
 ### Stage Z: close
 - [ ] Z1 Docs: `docs/claude/rules.md`, CLI and MCP references, the change-control security rule — building
@@ -208,6 +218,69 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — C6 merged (#391); R10 in review; the agent review proved on a real repository; Track B and C9 added
+
+- **R10: this repository's own rulebook.** `.codetrellis/rules/` now holds
+  what CLAUDE.md says:
+  - **layers:** seven block rules;
+  - **native packages:** five block rules, each kept to the module that
+    wraps it;
+  - **conventions:** the services naming as a guide, and GitHub's API
+    callers at warn.
+
+  Measured against today's code first. Four tests import across a layer to
+  prove both sides agree; they are counted in `baseline.yaml` and may only
+  fall. A deliberate breach fails `codetrellis check` with exit 3, naming
+  both rules, the file and line, and why. `.gitignore` now keeps `rules/`,
+  and `own-rulebook.test.ts` catches a rule a typo would drop. Locally: unit
+  2179; 90 harness tests; 156 chromium and 83 serial browser tests.
+- **The SWF spike: agent review on a real repository, with a real token.**
+  The owner offered `lionroseway/swf`, which has a `CLAUDE_CODE_OAUTH_TOKEN`.
+  Two draft PRs target a spike base, never `main`. The base holds one rule
+  SWF already keeps: Stripe only through payments, migrations, tests and
+  `deploy/scripts/`, with `routes/users.py` as counted debt.
+  - **#336, should fail:** the rules check went red on
+    `core/paging.py:4 imports stripe`. The review kept five findings:
+    - the rule breach;
+    - both planted bugs;
+    - one bug nobody planted: `Charge.list` returns one page of 10;
+    - the file's "never merge" docstring.
+
+    The second pass refuted none.
+  - **#337, should pass:** the rules check was green, and the review found
+    nothing.
+  - **Times:** the rules check took under a minute, and the review 24 to 60
+    seconds after a 25-second install.
+  - **What it found wrong:** `upload-sarif` needs `actions: read` on a
+    private repository. Without it the findings reach the job summary but
+    not the changed lines. The recipe and this repo's workflow now grant it.
+    The PRs stay open as drafts (the owner's choice).
+- **The owner's direction: building blocks (Track B), in Phase 33 before Z1.**
+  Rules anyone can put together, designed in
+  [BUILDING-BLOCKS.md](BUILDING-BLOCKS.md):
+  - **B1, matchers:** exact, glob, regex and fuzzy on every target;
+  - **B2, grep rules;**
+  - **B3, fuzzy matching;**
+  - **B4, your own patterns:** an in-house SDK call counts as the API call it
+    makes, and there are new kinds of entry such as `queue:` and `flag:`;
+  - **B5, engine per rule:** deterministic, fuzzy or agent, independent of
+    strength;
+  - **B6, pipelines:** stages in order or in parallel, and later stages,
+    agents included, grounded by earlier results;
+  - **B7, docs.**
+
+  R11 (wildcard targets) is B1.
+- **C9: a review on your own device counts on the pull request.**
+  - **Any agent:** Cursor, Codex, Claude Code or any MCP client.
+  - **Signed** with the device key, and pushed as a git note.
+  - **Verified by CI** with no secret.
+
+  It sits beside C5's CI-token mode, which stays as the enterprise option.
+- **Order:** R10, B1 to B6, C9, B7, then Z1.
+- **C6 (#391):** one harness shard stalled for 30 minutes on Ubuntu's package
+  mirror while installing a browser, before any test ran. It was re-run
+  once.
 
 ### 2026-10-07 — C5 merged (#390); C6 in review; R10 added, agent review here deferred
 

@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "C6: graduation — what agent reviews keep finding becomes a proposed rule"
+  step: "R10: this repository's own rulebook"
   status: "In review"
-  next: "Merge C6 when CI is green, then build R10 (this repository's own rulebook, measured against today's code), then Z1"
+  next: "Merge R10 when CI is green, then build B1 (matchers)"
   blockers: "None"
   updated: 2026-10-07
 sections:
@@ -135,6 +135,8 @@ sections:
         title: Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran
       - id: C8
         title: "One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words"
+      - id: C9
+        title: "A review run on your device counts on the pull request: any agent (Cursor, Codex, Claude Code, any MCP client), signed with your device key, read and verified by CI with no secret"
   - title: "Track G: graph and clarity"
     goal: Every colour means one thing and is explained; the graph can be focused; selecting a file shows its plans; opening a plan shows it; rules are seen where the code is.
     items:
@@ -169,6 +171,23 @@ sections:
         title: Re-review only what changed since each reviewer's last look
       - id: V6
         title: Did the change do what the task said (only when it is linked to a task)
+  - title: "Track B: building blocks"
+    goal: "Rules anyone can put together: matchers, grep rules, fuzzy matching, their own call patterns, an engine and strength per rule, and pipelines whose later stages are grounded by earlier ones. The design is BUILDING-BLOCKS.md."
+    items:
+      - id: B1
+        title: "Matchers on every rule target: exact, glob, regex, fuzzy (absorbs the wildcard targets proposed as R11)"
+      - id: B2
+        title: "Grep rules: text that must not, or must, appear, scoped by path, file:line findings, baselined"
+      - id: B3
+        title: "Fuzzy matching: look-alike names and near-duplicates, by a deterministic similarity score with a threshold"
+      - id: B4
+        title: "Your own patterns: what counts as a call, or as any entry (queue:, event:, flag:), without code"
+      - id: B5
+        title: "Engine per rule: deterministic, fuzzy or agent, independent of strength; an agent rule blocks only when its owner says block"
+      - id: B6
+        title: "Pipelines: stages in order or in parallel, needs and when, and later stages grounded by earlier results"
+      - id: B7
+        title: "Docs for the blocks: a worked example each in rules.md, and pipeline recipes"
   - title: "Stage Z: close"
     goal: Documented, walked by the owner on a packaged build, merged and released.
     items:
