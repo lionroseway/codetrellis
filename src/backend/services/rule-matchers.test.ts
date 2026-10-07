@@ -75,7 +75,7 @@ test('an exact target reads as it always did', () => {
 });
 
 test('a matcher written wrongly is refused with why, and a regex that could run away is refused', () => {
-  assert.match(parse({ kind: 'calls', calls: { match: 'fuzzy-ish', value: 'http:x.com' } }).problems.join(), /match must be exact, glob or regex/);
+  assert.match(parse({ kind: 'calls', calls: { match: 'fuzzy-ish', value: 'http:x.com' } }).problems.join(), /match must be exact, glob, regex or fuzzy/);
   assert.match(parse({ kind: 'calls', calls: '*.stripe.com' }).problems.join(), /starts the way its entries do, like http:\*\.stripe\.com/);
   assert.match(parse({ kind: 'package', package: { match: 'regex', value: 'npm:(a+)+' } }).problems.join(), /repeat a group that itself repeats/);
   assert.match(parse({ kind: 'package', package: { match: 'regex', value: 'npm:(' } }).problems.join(), /does not compile/);

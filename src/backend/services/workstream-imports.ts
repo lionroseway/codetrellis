@@ -27,6 +27,7 @@ import { ruleFix } from '../../shared/lib/check-words';
 import { showAtAsync } from './branch-workstreams';
 import { baseContent, currentContent } from './workstream-symbols';
 import { checkEdges, grepReads, ruleStatement, rulesOf } from './architecture-rules';
+import { lookAlikeFix } from './architecture-rule';
 import type { RuleImport } from './conformity-gate';
 import type { ArchitectureRule } from '../../shared/types/architecture-rules';
 
@@ -152,7 +153,8 @@ export async function ruleImports(projectRoot: string, files: readonly string[],
     const rule = byId.get(b.rule)!;
     return {
       path: b.from, imports: b.to, rule: rule.id, words: ruleStatement({ ...rule, except: [] }), because: rule.because, strength: rule.strength === 'block' ? 'block' : 'warn',
-      suite: rule.suite ?? 'architecture', fix: ruleFix(rule),
+      // B3: a look-alike's fix says how alike, and what it is like.
+      suite: rule.suite ?? 'architecture', fix: lookAlikeFix(rule, b.to) ?? ruleFix(rule),
     };
   });
 }

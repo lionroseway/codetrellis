@@ -55,16 +55,18 @@ export interface RuleTerms {
   in?: string[]; must?: true; ignoreCase?: true;
   files?: string[]; kinds?: string[]; exports?: 'one';
   /** B1: absent for an exact target, so approvals signed before it still read the same. */
-  match?: 'glob' | 'regex';
+  match?: 'glob' | 'regex' | 'fuzzy';
+  /** B3: a fuzzy target's threshold, absent for any other. */
+  threshold?: number;
 }
 
 export function ruleTerms(r: ArchitectureRule | null | undefined): RuleTerms | null {
   if (!r) return null;
   const terms: RuleTerms = { from: r.from, mayNotImport: r.mayNotImport, except: [...r.except].sort(), strength: r.strength };
   if (r.kind === 'folder') return { ...terms, kind: 'folder', files: [...(r.files ?? [])].sort(), kinds: [...(r.kinds ?? [])].sort(), ...(r.exports ? { exports: r.exports } : {}) };
-  if (r.kind === 'grep') return { ...terms, kind: 'grep', in: [...(r.in ?? [])].sort(), ...(r.must ? { must: true as const } : {}), ...(r.ignoreCase ? { ignoreCase: true as const } : {}), ...(r.match ? { match: r.match } : {}) };
+  if (r.kind === 'grep') return { ...terms, kind: 'grep', in: [...(r.in ?? [])].sort(), ...(r.must ? { must: true as const } : {}), ...(r.ignoreCase ? { ignoreCase: true as const } : {}), ...(r.match ? { match: r.match } : {}), ...(r.threshold !== undefined ? { threshold: r.threshold } : {}) };
   // B1: a matcher is part of what the rule means; absent, the terms are as they were signed before it.
-  return r.kind === 'package' || r.kind === 'symbol' || r.kind === 'calls' ? { ...terms, kind: r.kind, only: [...(r.only ?? [])].sort(), ...(r.match ? { match: r.match } : {}) } : terms;
+  return r.kind === 'package' || r.kind === 'symbol' || r.kind === 'calls' ? { ...terms, kind: r.kind, only: [...(r.only ?? [])].sort(), ...(r.match ? { match: r.match } : {}), ...(r.threshold !== undefined ? { threshold: r.threshold } : {}) } : terms;
 }
 
 export interface RuleChangeStatement {

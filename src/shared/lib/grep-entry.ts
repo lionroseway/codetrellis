@@ -15,13 +15,16 @@
  * line moves it without making it new: the gate reports only the lines a
  * change adds, and an old line in an edited file is not blamed on the edit.
  */
-import { lineMatches, type MatchKind } from './matcher';
+import { lineMatches, type TargetMatch } from './matcher';
+import { DEFAULT_THRESHOLD } from './fuzzy';
 
 export interface GrepTerms {
   mayNotImport: string;
-  match?: MatchKind;
+  match?: TargetMatch;
   must?: boolean;
   ignoreCase?: boolean;
+  /** B3: how alike a word must be, for `match: fuzzy`. */
+  threshold?: number;
 }
 
 const MAX_TEXT = 200;
@@ -40,7 +43,8 @@ function fnv(s: string): string {
 
 /** The key a grep rule's entries carry. */
 export function grepKey(t: GrepTerms): string {
-  return fnv(JSON.stringify([t.must ? 'must' : 'mustNot', t.match ?? 'exact', t.ignoreCase ? 'i' : '', t.mayNotImport]));
+  // B3: a fuzzy rule's threshold is part of what it matches; an exact one's key is as it was.
+  return fnv(JSON.stringify([t.must ? 'must' : 'mustNot', t.match ?? 'exact', t.ignoreCase ? 'i' : '', t.mayNotImport, ...(t.match === 'fuzzy' ? [t.threshold ?? DEFAULT_THRESHOLD] : [])]));
 }
 
 export const isGrepEntry = (e: string): boolean => /^grep:[0-9a-f]{8}:[+-]/.test(e);
@@ -57,7 +61,7 @@ export function grepEntries(t: GrepTerms, text: string): string[] {
   const key = grepKey(t);
   const hits: string[] = [];
   for (const line of text.split('\n')) {
-    if (!lineMatches(t.match ?? null, t.mayNotImport, line, t.ignoreCase)) continue;
+    if (!lineMatches(t.match ?? null, t.mayNotImport, line, t.ignoreCase, t.threshold)) continue;
     if (t.must) return [];
     hits.push(`grep:${key}:+${line.trim().slice(0, MAX_TEXT)}`);
   }
@@ -65,8 +69,11 @@ export function grepEntries(t: GrepTerms, text: string): string[] {
 }
 
 /** The pattern as a rule says it: “requireAuth”, a line like “TODO*”, a line matching /console\.log/. */
-export function grepPatternWords(t: Pick<GrepTerms, 'mayNotImport' | 'match' | 'ignoreCase'>): string {
-  const said = t.match === 'regex' ? `a line matching /${t.mayNotImport}/` : t.match === 'glob' ? `a line like “${t.mayNotImport}”` : `“${t.mayNotImport}”`;
+export function grepPatternWords(t: Pick<GrepTerms, 'mayNotImport' | 'match' | 'ignoreCase' | 'threshold'>): string {
+  const said = t.match === 'regex' ? `a line matching /${t.mayNotImport}/`
+    : t.match === 'glob' ? `a line like “${t.mayNotImport}”`
+      : t.match === 'fuzzy' ? `a word like “${t.mayNotImport}” (${(t.threshold ?? DEFAULT_THRESHOLD).toFixed(2)} or closer) but not it`
+        : `“${t.mayNotImport}”`;
   return `${said}${t.ignoreCase ? ' (in any case)' : ''}`;
 }
 
