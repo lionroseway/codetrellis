@@ -152,6 +152,15 @@ function LineDetail({ line, base, root }: { line: ReviewQueueLine; base: string 
     return () => { live = false; };
   }, [base, root, line.planUid, line.branch, line.error]);
 
+  // V3 and V6 — the reviewer's last look, and the task the branch is linked to.
+  const [change, setChange] = useState<ChangeReview | null>(null);
+  const loadChange = useCallback(async () => {
+    if (!base) return;
+    const r = await fetch(`/api/review/architecture?project=${encodeURIComponent(root)}&base=${encodeURIComponent(base)}&head=${encodeURIComponent(line.branch)}`);
+    if (r.ok) setChange((await r.json()) as ChangeReview);
+  }, [root, base, line.branch]);
+  useEffect(() => { void loadChange(); }, [loadChange]);
+
   if (error) return <div className="px-8 pb-2 text-red-400">Could not review {line.branch}: {error}</div>;
   if (!review) return <div className="px-8 pb-2 text-foreground-subtle">Reviewing {line.branch}…</div>;
   const d = review.comparison.diff;
@@ -159,7 +168,7 @@ function LineDetail({ line, base, root }: { line: ReviewQueueLine; base: string 
   const other = review.otherWork;
   return (
     <div className="px-8 pb-2 space-y-2" data-testid="review-line-detail">
-      {base && <SinceLastLook root={root} base={base} head={line.branch} />}
+      {base && <SinceLastLook root={root} base={base} head={line.branch} since={change?.since ?? null} onMarked={loadChange} />}
       {/* V1 — what the change does to the architecture, before anything else. */}
       {review.architecture && (
         <section data-testid="review-architecture">
@@ -171,6 +180,7 @@ function LineDetail({ line, base, root }: { line: ReviewQueueLine; base: string 
             ))}
         </section>
       )}
+      {change?.task && <TaskSection task={change.task} />}
       <section>
         <h4 className="text-[10px] uppercase tracking-wide text-foreground-subtle mb-0.5">Other work in flight</h4>
         {!other || other.entries.length === 0
@@ -224,33 +234,32 @@ function LineDetail({ line, base, root }: { line: ReviewQueueLine; base: string 
 
 interface Since { words: string; changed: string[]; addressed: string[]; added: string[] }
 
+interface TaskOutcome {
+  branch: string;
+  items: Array<{ uid: string; title: string; planTitle: string; words: string; criteria: Array<{ text: string; state: string }> }>;
+  unplanned: string[];
+  words: string[];
+}
+
+interface ChangeReview { since?: Since; task?: TaskOutcome }
+
 /**
  * Phase 33 V3 — what moved since you last marked this line reviewed: the
  * files, the findings the pushes addressed, the new ones. Marking keeps the
  * look at the branch's head now.
  */
-function SinceLastLook({ root, base, head }: { root: string; base: string; head: string }) {
-  const [since, setSince] = useState<Since | null>(null);
+function SinceLastLook({ root, base, head, since, onMarked }: { root: string; base: string; head: string; since: Since | null; onMarked: () => Promise<void> }) {
   const [marked, setMarked] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const q = `project=${encodeURIComponent(root)}`;
-
-  const load = useCallback(async () => {
-    const r = await fetch(`/api/review/architecture?${q}&base=${encodeURIComponent(base)}&head=${encodeURIComponent(head)}`);
-    if (!r.ok) return;
-    setSince(((await r.json()) as { since?: Since }).since ?? null);
-  }, [q, base, head]);
-
-  useEffect(() => { void load(); }, [load]);
 
   const mark = async () => {
     setBusy(true);
     try {
-      const r = await fetch(`/api/review/seen?${q}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ base, head }) });
+      const r = await fetch(`/api/review/seen?project=${encodeURIComponent(root)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ base, head }) });
       if (r.ok) {
         const m = (await r.json()) as { commit: string };
         setMarked(m.commit.slice(0, 7));
-        await load();
+        await onMarked();
       }
     } finally { setBusy(false); }
   };
@@ -275,6 +284,42 @@ function SinceLastLook({ root, base, head }: { root: string; base: string; head:
       >
         Mark reviewed
       </button>
+    </section>
+  );
+}
+
+const CRITERION_MARK: Record<string, { glyph: string; tone: string; words: string }> = {
+  met: { glyph: '✓', tone: 'text-green-400', words: 'met' },
+  submitted: { glyph: '○', tone: 'text-amber-400', words: 'waiting for a person' },
+  sent_back: { glyph: '✗', tone: 'text-red-400', words: 'sent back' },
+  stale: { glyph: '○', tone: 'text-amber-400', words: 'stale' },
+  open: { glyph: '○', tone: 'text-foreground-subtle', words: 'open' },
+};
+
+/**
+ * Phase 33 V6 — did the change do what the task said. Shown only when the
+ * branch is linked to a task; there is no empty version.
+ */
+function TaskSection({ task }: { task: TaskOutcome }) {
+  return (
+    <section data-testid="review-task">
+      <h4 className="text-[10px] uppercase tracking-wide text-foreground-subtle mb-0.5">Did it do what the task said</h4>
+      {task.words.map((w) => (
+        <div key={w} className={w.startsWith('✗') ? 'text-red-300' : w.startsWith('✓') ? 'text-foreground' : 'text-foreground-muted'} data-testid="review-task-line">{w}</div>
+      ))}
+      {task.items.filter((i) => i.criteria.length > 0).map((i) => (
+        <div key={i.uid} className="mt-1 pl-2 border-l border-border-subtle" data-testid="review-task-criteria">
+          {i.criteria.map((c) => {
+            const m = CRITERION_MARK[c.state] ?? CRITERION_MARK.open;
+            return (
+              <div key={c.text} className="flex gap-1.5" data-testid="review-task-criterion">
+                <span className={`shrink-0 ${m.tone}`}>{m.glyph}</span>
+                <span className="text-foreground-muted">{c.text} <span className="text-foreground-subtle">({m.words})</span></span>
+              </div>
+            );
+          })}
+        </div>
+      ))}
     </section>
   );
 }

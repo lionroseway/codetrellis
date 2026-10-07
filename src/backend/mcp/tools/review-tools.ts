@@ -14,6 +14,7 @@
 
 import { architectureMarkdown, architectureOf } from '../../services/review-architecture';
 import { lastMark, markReviewed, sinceLastLook } from '../../services/review-marks';
+import { taskMarkdown, taskOutcome } from '../../services/review-task';
 import { authorFromExtra } from '../helpers';
 import { isSafeGitRef } from '../../services/git-safety';
 import { z } from 'zod';
@@ -169,6 +170,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         'What a change does to the architecture, with no plan needed: between two commits (a branch and its base), the imports added and ' +
         'removed between folders, outside packages added or dropped (package.json, requirements.txt, go.mod), HTTP calls, routes and SQL ' +
         'added or dropped, imports across the team\'s rules, and what it does to the rulebook. Read it before the text diff. ' +
+        'When head is a branch a plan item names, it also says whether the change did what the task said (task): each criterion with where it ' +
+        'stands, the planned files touched and not, and the changed files nobody planned. Without a linked task there is no task section. ' +
         'format="markdown" gives the section for a pull request comment.',
       inputSchema: {
         base: z.string().max(200).describe('The commit or branch the change started from, e.g. origin/main.'),
@@ -193,12 +196,14 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const mark = lastMark(root, target, who.author);
       const since = mark ? sinceLastLook(root, mark, a.head, a.words) : null;
       if (mark_reviewed) markReviewed(root, { target, reviewer: who.author, reviewerType: who.authorType, base: a.base, commit: a.head, findings: a.words });
+      // V6 — only when the head is a task's branch; otherwise absent.
+      const task = taskOutcome(root, base, target);
       if (format === 'markdown') {
-        return { content: [{ type: 'text' as const, text: `${since ? `${since.words}\n\n` : ''}${architectureMarkdown(a)}` }] };
+        return { content: [{ type: 'text' as const, text: `${since ? `${since.words}\n\n` : ''}${architectureMarkdown(a)}${task ? `\n\n${taskMarkdown(task)}` : ''}` }] };
       }
       return {
         _meta: { summary: `${a.words.length} architecture finding${a.words.length === 1 ? '' : 's'} between ${base} and ${head ?? 'HEAD'}` },
-        content: [{ type: 'text' as const, text: JSON.stringify({ ...a, ...(since ? { since } : {}) }, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify({ ...a, ...(since ? { since } : {}), ...(task ? { task } : {}) }, null, 2) }],
       };
     },
   );

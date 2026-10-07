@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
-| **Status** | V3 in review (re-review only what changed since your last look); V2 merged (#374) |
-| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | V2 (#374, `4234973`) |
-| **Next action** | Merge V3 when CI is green, then replay V6 (already verified on top of V3) |
+| **Status** | V6 in review (did the change do what the task said); V3 merged (#375) |
+| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | V3 (#375, `169833f`) |
+| **Next action** | Merge V6 when CI is green, then replay R5 (being verified on top of V6) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `4234973`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `169833f`, with open PRs from GitHub.
 
 ---
 
@@ -92,7 +92,7 @@
 ### Track V: review (the owner's picks)
 - [x] V1 What this change does to the architecture (structural diff at the top of every review) (#373)
 - [x] V2 Review in order of risk (dependents, rule scope, test grounding, other work) (#374)
-- [ ] V3 Re-review only what changed since each reviewer's last look — building
+- [x] V3 Re-review only what changed since each reviewer's last look (#375)
 - [ ] V6 Did the change do what the task said (only when it is linked to a task) — building
 
 ### Stage Z: close
@@ -204,6 +204,24 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — V3 merged (#375); V6 in review
+
+- **V3 merged** (#375): re-review only what changed since your last look.
+- **V6: did the change do what the task said.** When a change is linked to a
+  task (a plan item whose branch is the change's head), its review says:
+  - for each linked item, the files it planned that the change touched, and
+    those it did not;
+  - each of the item's criteria, and where it stands;
+  - the files the change touched that no linked item planned.
+
+  The footprint is git's file list, so a manifest or a doc counts. With no
+  linked task there is no section at all, rather than an empty one. It comes
+  after the architecture section in `review_change`, the review's markdown
+  and the Review tab.
+- Checked before review on the replayed code: unit 2093 passing; 106 review,
+  PR-draft and phone harness tests; the agent and review-regression browser
+  specs (54 chromium, 52 serial).
 
 ### 2026-10-07 — V2 merged (#374); V3 in review
 

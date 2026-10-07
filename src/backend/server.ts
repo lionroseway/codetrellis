@@ -96,6 +96,7 @@ import { previewChange, previewJson, type RulePreview } from './services/rule-pr
 import { signRuleChange } from './services/rule-approvals';
 import { architectureMarkdown, architectureOf } from './services/review-architecture';
 import { lastMark, markReviewed, sinceLastLook } from './services/review-marks';
+import { taskMarkdown, taskOutcome } from './services/review-task';
 import { inScope, parseScope, scopeWords } from './services/rule-scope';
 import { decideRuleProposal, getRuleProposal, listRuleProposals } from './services/rule-proposals';
 import { writerId as taskRecordWriterId } from './services/task-records/shared-state';
@@ -4781,8 +4782,10 @@ app.get('/api/review/architecture', async (req, res) => {
   // V3 — what moved since this reviewer's last look at the line of work.
   const mark = lastMark(projectPath, head, personFrom(req).author);
   const since = mark ? sinceLastLook(projectPath, mark, a.head, a.words) : null;
-  if (req.query.format === 'markdown') { res.type('text/markdown').send(`${since ? `${since.words}\n\n` : ''}${architectureMarkdown(a)}`); return; }
-  res.json({ ...a, ...(since ? { since } : {}) });
+  // V6 — what the linked task asked, only when the head is a task's branch.
+  const task = taskOutcome(projectPath, base, head);
+  if (req.query.format === 'markdown') { res.type('text/markdown').send(`${since ? `${since.words}\n\n` : ''}${architectureMarkdown(a)}${task ? `\n\n${taskMarkdown(task)}` : ''}`); return; }
+  res.json({ ...a, ...(since ? { since } : {}), ...(task ? { task } : {}) });
 });
 
 // Phase 33 V3 — a reviewer marks a line of work reviewed at its head now,
