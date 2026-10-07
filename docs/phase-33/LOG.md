@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
-| **Status** | C7 in review (check runs are records that travel); C8 merged (#378) |
-| **In flight** | R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | C8 (#378, `422aada`) |
-| **Next action** | Merge C7 when CI is green, then replay G7 (being verified on top of C7) |
+| **Status** | G7 in review (the Rules view); C7 merged (#379) |
+| **In flight** | R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | C7 (#379, `ec41fbe`) |
+| **Next action** | Merge G7 when CI is green, then replay G8 (being verified on top of G7) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `422aada`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `ec41fbe`, with open PRs from GitHub.
 
 ---
 
@@ -74,7 +74,7 @@
 - [ ] C4b Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified) — building
 - [ ] C5 Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass) — building
 - [ ] C6 Graduation (a repeated finding proposes a rule) — building
-- [ ] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran — building
+- [x] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran (#379)
 - [x] C8 One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words (#378)
 
 ### Track G: graph and clarity
@@ -204,6 +204,30 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — C7 merged (#379); G7 in review
+
+- **C7 merged** (#379): check runs are records that travel.
+- **G7: the Rules view, a workspace of its own.** Rules are made, read and
+  changed in a Rules view beside graph, plans, docs and code, opened from
+  the top bar. It shows:
+  - the suites, each with whether it holds, what breaks it today and its
+    debt (the baseline's old breaches), with a filter by suite;
+  - each rule with its reason, strength, breaches, debt and file;
+  - what agents propose, and the history of changes, newest first;
+  - a new rule (a boundary, or a package rule), previewed, and confirmed
+    and signed when it loosens.
+
+  Settings keeps only switches. Its Architecture rules section says where
+  rules went and opens the view, and so does the awareness card.
+- **A layout bug found before review.** The new Rules button pushed Settings
+  off the right edge at the 900px minimum window. Below 1280px it now shows
+  its icon only, with "Rules" as its name, as Connect Agent does.
+- Checked before review on the replayed code: unit 2114 passing; 147 rules,
+  awareness, check and CLI harness tests; the settings browser specs (60
+  chromium, 8 serial); with the fix, the rules, agent, keyboard and
+  screenshot specs (69 chromium and 38 serial before it; the failing spec
+  and the Rules view specs, 23 and 16, after).
 
 ### 2026-10-07 — C8 merged (#378); C7 in review
 

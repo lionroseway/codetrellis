@@ -17,8 +17,8 @@
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
   step: "Merging the built steps, in order"
-  status: "C7 in review (check runs are records that travel); C8 merged (#378)"
-  next: "Merge C7 when CI is green, then replay G7 (being verified on top of C7)"
+  status: "G7 in review (the Rules view); C7 merged (#379)"
+  next: "Merge G7 when CI is green, then replay G8 (being verified on top of G7)"
   blockers: "None"
   updated: 2026-10-07
 sections:
