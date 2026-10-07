@@ -175,3 +175,22 @@ test('the progress page shows the phase\'s screens, each opening full size, and 
   const now = { step: 's', status: 's', next: 'n', blockers: 'b', updated: 'u' };
   assert.deepEqual(problems({ now, sections: [], shots: [{ file: '../etc/x.png', title: 't', says: 's' }] }), ['shots[0] needs a file: a screenshot\'s name, like rules-view.png.']);
 });
+
+test('the progress page shows the newest log entries, nested lists and all', async () => {
+  const { latestEntries, entryHtml } = await import('./page');
+  const log = [
+    '# Log', '', '## Entries', '',
+    '### 2026-10-07 — R10 built', '',
+    '- **R10.** The rules:', '  - layers;', '  - native packages, kept to', '    one module each;', '', '  Measured first.', '- A `check` and [the design](BUILDING-BLOCKS.md).', '',
+    'A closing <paragraph>.', '',
+    '### 2026-10-06 — C5 merged', '', '- Older.', '',
+    '### 2026-10-05 — Oldest', '', '- Oldest.', '',
+  ].join('\n');
+  const latest = latestEntries(log, 2);
+  assert.deepEqual(latest.map((e) => e.title), ['2026-10-07 — R10 built', '2026-10-06 — C5 merged']);
+  const html = entryHtml(latest[0]);
+  assert.equal(html, '<article class="entry"><h3>2026-10-07 — R10 built</h3>'
+    + '<ul><li><b>R10.</b> The rules:<ul><li>layers;</li><li>native packages, kept to one module each;</li></ul><p>Measured first.</p></li>'
+    + '<li>A <code>check</code> and the design.</li></ul><p>A closing &lt;paragraph&gt;.</p></article>');
+  assert.deepEqual(latestEntries('# Log\n\nno entries\n', 2), []);
+});

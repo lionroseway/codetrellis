@@ -40,7 +40,12 @@ test-results/
 marketing-assets/test-results/
 playwright-report/
 .playwright-mcp/
-.codetrellis/
+# CodeTrellis's own state for this checkout is ignored EXCEPT its rulebook
+# (Phase 33 R10), which is committed with the code and gated in CI. As with
+# .claude/ above: `.codetrellis/*`, not `.codetrellis/`, so rules/ can be
+# re-included.
+.codetrellis/*
+!.codetrellis/rules/
 
 # E2E harness — per-test working dirs (cloned fixture + tmp data dir).
 # The harness creates these in setup and deletes them in teardown;

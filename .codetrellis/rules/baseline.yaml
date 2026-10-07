@@ -1,0 +1,21 @@
+# CodeTrellis: imports that already broke each rule when it was baselined.
+# The check fails on any breach not listed here, and this file may only shrink.
+# Written by `codetrellis rules baseline`; fix a breach, then run it again.
+rules:
+  backend-not-electron: []
+  backend-not-frontend: []
+  electron-in-the-shell: []
+  frontend-not-backend:
+    - src/frontend/lib/budget-format.test.ts > src/backend/services/budget-service.ts
+    - src/frontend/lib/rule-overlay.test.ts > src/backend/services/architecture-rule.ts
+  frontend-not-electron: []
+  github-api-two-callers: []
+  pty-via-terminal-service: []
+  shared-not-backend:
+    - src/shared/lib/call-entry.test.ts > src/backend/services/callsites/shared.ts
+    - src/shared/lib/folder-entry.test.ts > src/backend/services/architecture-rule.ts
+  shared-not-electron: []
+  shared-not-frontend: []
+  sqlite-via-database: []
+  tree-sitter-via-ast-parser: []
+  werift-via-webrtc-service: []

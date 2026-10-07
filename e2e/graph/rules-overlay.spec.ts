@@ -103,6 +103,8 @@ test.describe('Rules on the graph', () => {
     await page.getByTestId('graph-overlays').click();
     await page.getByTestId('overlay-rules').check();
     await page.keyboard.press('Escape');
+    // Closed, or it lies over the file clicked below (it did, in CI).
+    await expect(page.getByTestId('graph-overlays-menu')).toHaveCount(0);
 
     await expect(edge.getByTestId('edge-breach')).toHaveAttribute('data-rules', 'keep-apart');
     await expect(edge.getByTestId('edge-breach')).toHaveText('⊘ breaks keep-apart');
@@ -131,6 +133,7 @@ test.describe('Rules on the graph', () => {
     await page.getByTestId('graph-overlays').click();
     await page.getByTestId('overlay-rules').uncheck();
     await page.keyboard.press('Escape');
+    await expect(page.getByTestId('graph-overlays-menu')).toHaveCount(0);
     await expect(edge.getByTestId('edge-breach')).toHaveCount(0);
     await expect(page.getByTestId('node-rule-breach')).toHaveCount(0);
   });

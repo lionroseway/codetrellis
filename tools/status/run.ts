@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { allIds, applyToLog, loadStatus, phaseDocs, phaseFrom } from './status';
 import { readFacts } from './git-facts';
-import { renderPage } from './page';
+import { latestEntries, renderPage } from './page';
 
 /** Every phase status file under docs/, in either layout, repository-relative. */
 export function statusFiles(root: string): string[] {
@@ -66,7 +66,7 @@ async function main(): Promise<void> {
       fs.copyFileSync(src, path.join(shotsDir, shot.file));
       present.add(shot.file);
     }
-    fs.writeFileSync(out, renderPage(status, facts, docs, new Date(), present));
+    fs.writeFileSync(out, renderPage(status, facts, docs, new Date(), present, latestEntries(next, 2)));
     console.log(`Wrote the progress page to ${path.relative(root, out)}${present.size ? ` with ${present.size} screens in ${path.relative(root, shotsDir)}/` : ''}; publish it, and its shots/, to the progress artifact (the phase's EXECUTION §1.1)`);
   }
 }

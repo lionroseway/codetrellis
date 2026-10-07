@@ -18,11 +18,59 @@ import { flatten, resolve, type ItemStatus, type PhaseDocs, type Resolved, type 
 const esc = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-/** Backticks become code, `[text](url)` a link, the rest is escaped. */
+/** Backticks become code, `**bold**` bold, `[text](url)` a link (its text, when the link is relative), the rest is escaped. */
 function inline(s: string): string {
   return esc(s)
     .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\[([^\]]+)\]\((https:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>');
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+    .replace(/\[([^\]]+)\]\((https:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>')
+    .replace(/\[([^\]]+)\]\([^)\s]+\)/g, '$1');
+}
+
+export interface LogEntry { title: string; body: string }
+
+/**
+ * The newest entries of a phase's LOG, newest first: each `### ` heading under
+ * `## Entries` and the text below it. The page shows them (the owner, 2026-10-07:
+ * the page read as dated, because Now and the checklist say where the phase is,
+ * and nothing said what had just happened or been decided).
+ */
+export function latestEntries(log: string, n: number): LogEntry[] {
+  const at = log.indexOf('\n## Entries');
+  if (at < 0) return [];
+  const rest = log.slice(at).split('\n### ').slice(1);
+  return rest.slice(0, n).map((chunk) => {
+    const [title, ...body] = chunk.split('\n');
+    return { title: title.trim(), body: body.join('\n').split(/\n## /)[0].trim() };
+  });
+}
+
+/** An entry's markdown as HTML: paragraphs and lists, nested by indent, a line's continuation joined to it. */
+export function entryHtml(e: LogEntry): string {
+  type Block = { indent: number; bullet: boolean; text: string };
+  const blocks: Block[] = [];
+  for (const raw of e.body.split('\n')) {
+    if (!raw.trim()) { blocks.push({ indent: -1, bullet: false, text: '' }); continue; }
+    const indent = raw.length - raw.trimStart().length;
+    const line = raw.trim();
+    const bullet = /^(-|\d+\.) /.test(line);
+    const prev = blocks[blocks.length - 1];
+    if (!bullet && prev && prev.indent >= 0 && indent > prev.indent - (prev.bullet ? 0 : 1)) { prev.text += ` ${line}`; continue; }
+    blocks.push({ indent, bullet, text: bullet ? line.replace(/^(-|\d+\.) /, '') : line });
+  }
+  let html = '';
+  const open: number[] = [];
+  const closeTo = (indent: number) => { while (open.length && open[open.length - 1] >= indent) { html += '</li></ul>'; open.pop(); } };
+  for (const b of blocks) {
+    if (b.indent < 0) continue;
+    // A paragraph indented under a bullet stays in that bullet; one at the margin ends the lists.
+    if (!b.bullet) { closeTo(b.indent > 0 && open.length ? b.indent : 0); html += `<p>${inline(b.text)}</p>`; continue; }
+    if (open.length && open[open.length - 1] === b.indent) { html += `</li><li>${inline(b.text)}`; continue; }
+    if (open.length && open[open.length - 1] > b.indent) { closeTo(b.indent + 1); if (open.length && open[open.length - 1] === b.indent) { html += `</li><li>${inline(b.text)}`; continue; } }
+    html += `<ul><li>${inline(b.text)}`; open.push(b.indent);
+  }
+  closeTo(0);
+  return `<article class="entry"><h3>${inline(e.title)}</h3>${html}</article>`;
 }
 
 const WORDS: Record<ItemStatus, { glyph: string; word: string }> = {
@@ -83,7 +131,7 @@ export function shotsHtml(shots: readonly Shot[], present: ReadonlySet<string>):
     + `<p class="goal">Taken by the browser suite from the newest code. Tap one to open it full size.</p><div class="shots">${figs}</div></section>`;
 }
 
-export function renderPage(s: Status, facts: Facts | null, docs: PhaseDocs, now: Date, shotsPresent: ReadonlySet<string> = new Set()): string {
+export function renderPage(s: Status, facts: Facts | null, docs: PhaseDocs, now: Date, shotsPresent: ReadonlySet<string> = new Set(), latest: readonly LogEntry[] = []): string {
   const { phase } = docs;
   const resolved = resolve(s, facts);
   const all = countLeaves(resolved.flat());
@@ -152,6 +200,12 @@ ul.parts { margin: 6px 0 2px 1.4rem; }
 .prs { font-family: var(--mono); font-size: 0.8rem; margin-left: 6px; }
 @media (max-width: 520px) { .item { grid-template-columns: 1fr; } .item > ul.parts { grid-column: 1; } }
 footer { color: var(--muted); font-size: 0.85rem; }
+.latest { display: grid; gap: 14px; }
+.latest > header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border-top: 2px solid var(--ink); padding-top: 12px; }
+.entry { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 18px; display: grid; gap: 8px; max-width: 75ch; }
+.entry h3 { font-family: var(--display); font-size: 1rem; margin: 0; }
+.entry ul { margin: 0; padding-left: 1.2rem; display: grid; gap: 4px; }
+.entry ul ul { margin-top: 4px; }
 .see { display: grid; gap: 10px; }
 .see header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border-top: 2px solid var(--ink); padding-top: 12px; }
 .shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr)); gap: 16px; }
@@ -179,6 +233,7 @@ footer { color: var(--muted); font-size: 0.85rem; }
       <dt>Updated</dt><dd>${esc(String(s.now.updated))}</dd>
     </dl>
   </section>
+${latest.length ? `<section class="latest" aria-label="Latest"><header><h2>Latest</h2><span class="count">from the log</span></header>${latest.map(entryHtml).join('')}</section>` : ''}
 ${shotsHtml(s.shots ?? [], shotsPresent)}
 ${sections}
   <footer>${readAt}. Generated ${esc(now.toISOString().slice(0, 16).replace('T', ' '))} UTC from <code>${esc(docs.status)}</code> by <code>npm run status -- --page</code>.</footer>

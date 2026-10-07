@@ -27,6 +27,9 @@ jobs:
     permissions:
       contents: read
       security-events: write
+      # upload-sarif reads the run; a private repository refuses it without
+      # this, and the findings reach the summary but not the changed lines.
+      actions: read
       # id-token: write  # only for the OIDC sign-in below
       # pull-requests: write  # only with --post
     steps:

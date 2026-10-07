@@ -98,5 +98,11 @@ test.describe('Overlays on the graph', () => {
     await menu.getByTestId('overlay-collisions').check();
     await expect(file.getByTestId('node-work-count')).toBeVisible();
     await expect(file.getByTestId('node-collision')).toBeVisible();
+
+    // Escape closes it and gives the button the focus back.
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    await expect(menuButton).toBeFocused();
+    await expect(menuButton).toHaveAttribute('aria-expanded', 'false');
   });
 });

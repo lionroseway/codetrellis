@@ -132,6 +132,8 @@ rulebook's breadth.
    in CI, then graduation.
    **R10**, this repository's own rulebook, follows C6 (the owner,
    2026-10-07): deterministic rules before agent review in this repo's CI.
+   Then **Track B** (B1 to B6), **C9**, and **B7** (the owner, 2026-10-07):
+   the building blocks and a review on your own device, before Z.
 10. **Track V**, the review features the owner chose (2026-10-06): V1, V2
     and V3, then V6.
 11. **Z.** Docs, phase review, into `main`, release.
@@ -563,6 +565,84 @@ Done when:
 
 Done when a single finding can be reached from each of those places, and
 each place links to the others (browser tests).
+
+**C9 A review on your device counts on the pull request.** Added by the
+owner (2026-10-07). It is the second way to run agent review, beside C5's CI
+token, for repositories that will not hold a secret.
+- A review run on the developer's own device, by any agent. That means
+  `codetrellis review` on their own login, or Cursor, Codex, Claude Code or any
+  MCP client through `get_review_bundle` and `report_review`.
+- It is signed with their device key, the same Ed25519 key as rule approvals
+  (`.codetrellis/keys/`), after the findings are checked. The signing is done
+  by CodeTrellis, never by the agent.
+- It is pushed as a git note, so it changes neither the commit nor the diff.
+- CI reads it, verifies the key against keys already on the base, and checks
+  that it is for the head commit. A forged review says so, and so does a review
+  of an older commit. CI shows the findings as a check and on the changed
+  lines, with no secret and no AI.
+
+Done when a review made in Cursor on one machine shows on the pull request in
+CI, a forged one is refused, and a push after the review makes it stale.
+
+### Track B: building blocks (the owner, 2026-10-07)
+
+The design is [BUILDING-BLOCKS.md](BUILDING-BLOCKS.md). Every block is YAML
+beside the code, explained in words wherever it reports, and runs in every
+place a check runs.
+
+**B1 Matchers.** `match: exact | glob | regex | fuzzy` on every rule target:
+packages, call hosts and paths, SQL tables, export names, folder names and grep
+text. The defaults stay as today.
+Done when `http:*.stripe.com` catches `api.stripe.com` and `files.stripe.com`,
+a regex target holds, and every existing rule reads as before.
+
+**B2 Grep rules.** `kind: grep` with `in`, `except`, and `mustNot` or `must`.
+- `mustNot` reports the lines a change adds that match.
+- `must` reports each file in scope that never matches.
+- Baselined like any rule.
+
+Done when a `console.log` added to the backend is reported at its line, and an
+old one already in the file is not.
+
+**B3 Fuzzy matching.** A deterministic similarity score over normalised
+names, with a `threshold`. It says what a name was close to, and how close.
+Done when `npm:reqeusts` is reported as 0.93 like `npm:requests`, the same way
+on every run.
+
+**B4 Your own patterns.** `.codetrellis/patterns/*.yaml` turn source into
+entries, by a matcher, with `is`:
+- an HTTP or SQL call;
+- or a kind of entry of the team's own, such as `queue:`, `event:` or `flag:`.
+
+The entries go through the same normalisation as the built-in extractors, and
+reach rules, the cross-system map and reviews.
+Done when `paymentsClient.charge()` is caught by a calls rule on
+`api.stripe.com`, and a rule holds `queue:orders.*`.
+
+**B5 Engine per rule.** `engine: deterministic | fuzzy | agent`, independent of
+`strength`.
+- An agent rule is words, sent to the review in its bundle.
+- With no review configured, it is a guide.
+- It blocks only when its owner sets `block`.
+
+Done when an agent rule reaches the bundle, a finding citing it is held to the
+contract, and it does not block at `warn`.
+
+**B6 Pipelines.** `.codetrellis/pipeline.yaml`:
+- `stages`, each with `rules` selected by suite, engine, strength, id or tag;
+- `parallel`, `needs` and `when`;
+- `grounding`, which gives a stage the findings of the stages it names.
+
+`codetrellis check --pipeline` runs it all, and `--stage <id>` runs one. Each
+stage is a check run. The file is under change control.
+Done when a three-stage pipeline runs with one stage in parallel, its agent
+stage's bundle carries the earlier stages' findings, and removing a stage is
+refused as a loosening.
+
+**B7 Docs for the blocks.** A Building blocks section in
+`docs/claude/rules.md`, with a worked example per block, and
+`docs/recipes/pipeline.sh` with its CI variants.
+Done when each example in the docs is a test.
 
 ### Track V: review (the owner chose V1, V2, V3 and V6, 2026-10-06)
 
