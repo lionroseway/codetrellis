@@ -31,7 +31,7 @@ interface LineReview {
   unplannedEdges: Array<{ source: string; target: string }>;
   comparison: { diff: { addedFiles: string[]; modifiedFiles: string[]; removedFiles: string[] } };
   /** Phase 33 V1: what the change does to the architecture, one sentence each. */
-  architecture?: { words: string[] };
+  architecture?: { words: string[]; order?: Array<{ path: string; why: string }> };
 }
 
 export function ReviewTab() {
@@ -191,6 +191,22 @@ function LineDetail({ line, base, root }: { line: ReviewQueueLine; base: string 
           ))}
         </section>
       )}
+      {/* V2 — the changed files in order of what a mistake there would cost. */}
+      {review.architecture?.order && review.architecture.order.length > 0 ? (
+        <section data-testid="review-order">
+          <h4 className="text-[10px] uppercase tracking-wide text-foreground-subtle mb-0.5">Review in this order · changed against {base}</h4>
+          {review.architecture.order.slice(0, 25).map((r, n) => (
+            <div key={r.path} className="flex gap-2" data-testid="review-order-file">
+              <span className="w-4 shrink-0 text-right text-foreground-subtle">{n + 1}.</span>
+              <span className="min-w-0">
+                <span className="font-mono text-foreground-muted">{r.path}</span>
+                <span className="block text-foreground-subtle">{r.why}</span>
+              </span>
+            </div>
+          ))}
+          {review.architecture.order.length > 25 && <div className="text-foreground-subtle">…and {review.architecture.order.length - 25} more</div>}
+        </section>
+      ) : (
       <section>
         <h4 className="text-[10px] uppercase tracking-wide text-foreground-subtle mb-0.5">Changed against {base}</h4>
         {files.length === 0
@@ -200,6 +216,7 @@ function LineDetail({ line, base, root }: { line: ReviewQueueLine; base: string 
           ))}
         {files.length > 25 && <div className="text-foreground-subtle">…and {files.length - 25} more</div>}
       </section>
+      )}
     </div>
   );
 }

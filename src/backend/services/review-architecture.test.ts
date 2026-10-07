@@ -33,7 +33,7 @@ test('a call is new when its kind and target were not there before; one gone is 
 });
 
 test('the section says when nothing changes, and when the imports could not be read', () => {
-  const empty = { base: 'a', head: 'b', edgesKnown: true, folders: [], packages: [], calls: [], rules: [], words: [] };
+  const empty = { base: 'a', head: 'b', edgesKnown: true, folders: [], packages: [], calls: [], rules: [], words: [], order: [] };
   assert.equal(architectureMarkdown(empty), '### What this change does to the architecture\n\nNo imports between folders, outside packages, cross-system calls or rules change.');
   assert.match(architectureMarkdown({ ...empty, edgesKnown: false, words: ['The imports between folders are not known: x'] }), /_The imports between folders are not known/);
   assert.equal(architectureMarkdown({ ...empty, words: ['Adds an HTTP call to POST /api/charges (web/pay.ts:9)'] }).split('\n')[2], '- Adds an HTTP call to POST /api/charges (web/pay.ts:9)');

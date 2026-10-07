@@ -19,7 +19,7 @@ import { setupHarness, type Harness, type ScriptedAgent } from '../harness';
 const PAGE = 'packages/web/src/Checkout.ts';
 const ENV = { ...process.env, GIT_AUTHOR_NAME: 'Sam', GIT_AUTHOR_EMAIL: 'sam@acme.test', GIT_COMMITTER_NAME: 'Sam', GIT_COMMITTER_EMAIL: 'sam@acme.test' };
 
-interface Architecture { words: string[]; edgesKnown: boolean; packages: Array<{ manifest: string; added: string[] }>; calls: Array<{ what: string; file: string }> }
+interface Architecture { order: Array<{ path: string; why: string; score: number }>; words: string[]; edgesKnown: boolean; packages: Array<{ manifest: string; added: string[] }>; calls: Array<{ what: string; file: string }> }
 
 test.describe.serial('V1: what this change does to the architecture', () => {
   test.setTimeout(180_000);
@@ -85,9 +85,16 @@ test.describe.serial('V1: what this change does to the architecture', () => {
     // The rule's breach first: it is what a reviewer must see before anything else.
     expect(a.words[0]).toMatch(/^✗ /);
 
+    // V2: the files in order of risk, each with why. The two the block rule holds come first, by path;
+    // the API's requirements, which nothing depends on and no rule holds, last.
+    expect(a.order.map((f) => f.path)).toEqual(['packages/web/package.json', 'packages/web/src/Checkout.ts', 'services/api/requirements.txt']);
+    expect(a.order[1].why).toBe('in the scope of web-through-shared-index (block)');
+    expect(a.order[2].why).toBe('nothing depends on it, no rule holds it, and no other work touches it');
+
     const md = await agent.callTool('review_change', { base: main, head: 'payments', project_path: root, format: 'markdown' });
     expect(md.answer.split('\n')[0]).toBe('### What this change does to the architecture');
     expect(md.answer).toContain('- Adds 1 npm package: stripe (packages/web/package.json)');
+    expect(md.answer).toContain('### Review in this order\n\n1. `packages/web/package.json` — in the scope of web-through-shared-index (block)');
   });
 
   test('the same over REST, and a ref that is not a commit is refused', async () => {
