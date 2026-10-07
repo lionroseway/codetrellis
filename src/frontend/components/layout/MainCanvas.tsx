@@ -3,6 +3,7 @@ import { GraphPairBanner, useGraphPair } from './GraphPair';
 import { getAPI } from '../../bridge';
 import { fetchGraphAnswer } from '../../lib/graph-answer';
 import { preserveNodePositions } from '../../lib/preserve-node-positions';
+import { RemeasureHandles } from '../graph/RemeasureHandles';
 import {
   ReactFlow,
   Background,
@@ -1306,6 +1307,7 @@ export function MainCanvas() {
         className={`!bg-transparent ${graphStyle === 'performance' ? 'graph-perf' : ''}`}
       >
         <AutoFitView nodes={nodes} layout={layoutMode} />
+        <RemeasureHandles />
         {legendDimCss && <style data-testid="legend-dim">{legendDimCss}</style>}
         {suiteFadeCss && <style data-testid="rule-suite-fade">{suiteFadeCss}</style>}
         {ruleSuiteFocus && rulesOverlay && (
