@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
-| **Status** | R5 in review (package rules); V6 merged (#376), Track V done |
-| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | V6 (#376, `a5fdb0e`) |
-| **Next action** | Merge R5 when CI is green, then replay C8 (being verified on top of R5) |
+| **Status** | C8 in review (one renderer); R5 merged (#377) |
+| **In flight** | R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | R5 (#377, `30c5999`) |
+| **Next action** | Merge C8 when CI is green, then replay C7 (already verified on top of C8) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `a5fdb0e`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `30c5999`, with open PRs from GitHub.
 
 ---
 
@@ -60,7 +60,7 @@
 - [x] R2 CI judges with the base branch's rules; a rulebook change is its own finding (#358)
 - [x] R3 Change control: preview the effect, a person confirms, loosening is signed, `propose_rule` for agents (#360)
 - [x] R4 Strength: block, warn, guide (exit codes, `--strict`, signals) (#359)
-- [ ] R5 Package rules across all eleven languages (only the wrapper imports `stripe`) — building
+- [x] R5 Package rules across all eleven languages (only the wrapper imports `stripe`) (#377)
 - [ ] R6 Symbol rules (who may import a named export, through re-exports) — building
 - [ ] R7 Call rules (HTTP hosts, commands, tables, env) — building
 - [ ] R8 Folder rules (what files in a folder are) — building
@@ -204,6 +204,23 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — R5 merged (#377), with a packaging bug caught; C8 in review
+
+- **R5 merged** (#377): package rules. CI's bundle guard caught a relative
+  `require()` that the packaged app could not have loaded; it is now a
+  static import. The local replay now runs that guard too.
+- **C8: one renderer — every finding in the same words, everywhere.** A rule
+  and a finding are written in words once, in `shared/lib/check-words.ts`.
+  The terminal, markdown, SARIF and JSON all render from it. In the terminal:
+  - the summary comes first, grouped by suite: how many block, warn and hold;
+  - then each rule, then each place, with the import's own line, and the fix
+    after →;
+  - the exit code is said in words last;
+  - a glyph and a word, never colour alone. `NO_COLOR`, `--no-color` or a
+    pipe gets plain text, the same words.
+- Checked before review on the replayed code: unit 2107 passing; 148 rules,
+  awareness, check and CLI harness tests, through the real CLI.
 
 ### 2026-10-07 — V6 merged (#376), Track V done; R5 in review
 
