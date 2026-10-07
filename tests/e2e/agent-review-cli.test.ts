@@ -118,7 +118,7 @@ test.describe.serial('C4: codetrellis review runs your own agent headless, held 
     const mcp = JSON.parse(given.mcp) as { mcpServers: Record<string, unknown> };
     expect(Object.keys(mcp.mcpServers)).toEqual(['codetrellis_review']);
     // In an empty folder, not the checkout; with the key it was named and nothing else of ours.
-    expect(given.cwd).toMatch(/ct-review-[^/]+\/work$/);
+    expect(given.cwd).toMatch(/ct-review-[^/]+\/review\/work$/);
     expect(given.cwd.startsWith(root)).toBe(false);
     expect(given.env.ANTHROPIC_API_KEY).toBe(KEY);
     expect(given.env.SECRET_TOKEN).toBeUndefined();
@@ -203,6 +203,79 @@ test.describe.serial('C4: codetrellis review runs your own agent headless, held 
     expect(given.message).toContain('.env: it looks like it holds a secret, so it is not shown');
     expect(given.message).not.toContain(SECRET);
     expect(JSON.stringify(await runs())).not.toContain(SECRET);
+  });
+
+  // Phase 33 C5 — the same command in CI.
+  test('C5 --verify: a second session tests each finding; what it refutes is dropped with why', async () => {
+    const s = stub('report');
+    const r = review(s.bin, '--verify');
+    expect(r.code, r.err).toBe(0);
+    expect(s.given()).toHaveLength(2);
+    expect(s.given()[1].message).toContain('<findings>');
+    expect(s.given()[1].args[s.given()[1].args.indexOf('--allowedTools') + 1]).toBe('mcp__codetrellis_review__report_verdicts,mcp__codetrellis_review__read_change_file');
+    const rv = (await latest()).review! as Review & { verify: string | null };
+    expect(rv.findings.map((f) => f.kind)).toEqual(['rule']);
+    expect(rv.dropped.map((d) => d.why)).toEqual(['refuted by a second pass: Line 900 is not in the change.']);
+    expect(rv.verify).toBe('A second pass tested 2 findings and refuted 1.');
+    expect(r.out).toContain('A second pass tested 2 findings and refuted 1.');
+  });
+
+  test('C5 output for any host: SARIF that GitHub reads, markdown for a comment or a job summary', async () => {
+    const sarif = review(stub('report').bin, '--format', 'sarif');
+    expect(sarif.code, sarif.err).toBe(0);
+    const log = JSON.parse(sarif.out) as { version: string; runs: Array<{ results: Array<{ ruleId: string; level: string; locations: Array<{ physicalLocation: { artifactLocation: { uri: string }; region: { startLine: number } } }> }> }> };
+    expect(log.version).toBe('2.1.0');
+    expect(log.runs[0].results).toEqual([expect.objectContaining({ ruleId: 'stripe-api-via-client', level: 'error' })]);
+    expect(log.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri).toBe(API);
+    const md = review(stub('report').bin, '--format', 'markdown');
+    expect(md.out).toMatch(/^### CodeTrellis review/);
+    expect(md.out).toContain(`\`${API}:2\``);
+    // CI runs it once and keeps every rendering: the words in the log, the files beside.
+    const sarifOut = path.join(tmp, 'out.sarif');
+    const mdOut = path.join(tmp, 'out.md');
+    const once = review(stub('report').bin, '--sarif-out', sarifOut, '--markdown-out', mdOut);
+    expect(once.out).toContain('review: Claude Code\'s review: ⚠ 1 finding · 1 dropped');
+    expect((JSON.parse(fs.readFileSync(sarifOut, 'utf8')) as { version: string }).version).toBe('2.1.0');
+    expect(fs.readFileSync(mdOut, 'utf8')).toMatch(/^### CodeTrellis review/);
+  });
+
+  test('C5 --post: one comment on the pull request, with a token the agent never saw', async () => {
+    const posts: Array<{ url: string; auth: string | undefined; body: string }> = [];
+    const http = await import('node:http');
+    const server = http.createServer((req, res) => {
+      let body = '';
+      req.on('data', (d) => { body += d; });
+      req.on('end', () => { posts.push({ url: req.url ?? '', auth: req.headers.authorization, body }); res.writeHead(201, { 'Content-Type': 'application/json' }); res.end('{}'); });
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const port = (server.address() as { port: number }).port;
+    git('remote', 'add', 'origin', 'https://github.com/acme/app.git');
+    const event = path.join(tmp, 'event.json');
+    fs.writeFileSync(event, JSON.stringify({ pull_request: { number: 365 } }));
+    try {
+      const s = stub('report');
+      // Not spawnSync: the stand-in host answers from this process.
+      const { spawn } = await import('node:child_process');
+      const child = spawn(process.execPath, [BIN, 'review', '--base', main, '--auth', 'env:REVIEW_KEY', '--post', '--data-dir', h.fixture.dataDir], {
+        cwd: root,
+        env: { ...(process.env as Record<string, string>), ...ENV, CODETRELLIS_AGENT: 'ci', CODETRELLIS_REVIEW_CLAUDE: s.bin, REVIEW_KEY: KEY, GITHUB_TOKEN: 'ghs_posttoken123', GITHUB_EVENT_PATH: event, CODETRELLIS_GITHUB_API: `http://127.0.0.1:${port}` },
+      });
+      let stderr = '';
+      child.stderr.on('data', (d) => { stderr += d; });
+      child.stdout.resume();
+      const status = await new Promise<number | null>((resolve) => child.on('close', resolve));
+      const r = { status, stderr };
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stderr).toContain('Posted the review on GitHub, on #365.');
+      expect(posts).toHaveLength(1);
+      expect(posts[0].url).toBe('/repos/acme/app/issues/365/comments');
+      expect(posts[0].auth).toBe('Bearer ghs_posttoken123');
+      expect((JSON.parse(posts[0].body) as { body: string }).body).toMatch(/^### CodeTrellis review/);
+      expect(JSON.stringify(s.given()[0].env)).not.toContain('ghs_posttoken123');
+    } finally {
+      git('remote', 'remove', 'origin');
+      server.close();
+    }
   });
 
   test('a team\'s skills: one pass each, each its own run; a wrong flag is a usage error', async () => {

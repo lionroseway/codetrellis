@@ -34,12 +34,15 @@ export interface PassSetup {
   files: string[];
   /** Calls allowed before every further one is refused. */
   maxToolCalls: number;
+  /** C5: a second pass that tries to refute the first one's findings. */
+  mode?: 'review' | 'verify';
 }
 
 export const SINK_TOOLS = ['report_review', 'read_change_file'] as const;
+export const VERIFY_TOOLS = ['report_verdicts', 'read_change_file'] as const;
 
 /** Files the sink writes in the pass's folder. */
-export const PASS_FILES = { setup: 'pass.json', report: 'report.json', refused: 'refused.jsonl', calls: 'calls.json' } as const;
+export const PASS_FILES = { setup: 'pass.json', report: 'report.json', verdicts: 'verdicts.json', refused: 'refused.jsonl', calls: 'calls.json' } as const;
 
 const MAX_READ_LINES = 2000;
 
@@ -92,6 +95,32 @@ const TOOLS = [
   },
 ];
 
+const VERDICTS_TOOL = {
+  name: 'report_verdicts',
+  description:
+    'Your verdict on each finding, once, at the end: by its number, whether it holds, and why in a sentence. A finding holds ' +
+    'unless the change shows it wrong: the cited code is not what it says, or it does not do what the finding claims.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      verdicts: {
+        type: 'array', maxItems: 200,
+        items: {
+          type: 'object',
+          properties: { finding: { type: 'integer', minimum: 1 }, holds: { type: 'boolean' }, why: { type: 'string', maxLength: 500 } },
+          required: ['finding', 'holds', 'why'],
+        },
+      },
+    },
+    required: ['verdicts'],
+  },
+};
+
+/** The tools a pass is given, by its mode. */
+export function sinkTools(mode: PassSetup['mode']) {
+  return mode === 'verify' ? [VERDICTS_TOOL, TOOLS[1]] : TOOLS;
+}
+
 type Answer = { isError?: boolean; content: Array<{ type: 'text'; text: string }> };
 const say = (text: string, isError = false): Answer => ({ ...(isError ? { isError: true } : {}), content: [{ type: 'text', text }] });
 
@@ -106,10 +135,20 @@ export function handleSinkCall(dir: string, setup: PassSetup, name: string, args
   try { calls = (JSON.parse(fs.readFileSync(callsFile, 'utf8')) as { calls: number }).calls; } catch { /* first call */ }
   calls += 1;
   fs.writeFileSync(callsFile, JSON.stringify({ calls }));
+  const verify = setup.mode === 'verify';
+  const reportTool = verify ? 'report_verdicts' : 'report_review';
   // The report is always taken: a pass at its budget is told to report, so it must be able to.
-  if (name !== 'report_review' && calls > setup.maxToolCalls) return refuse(`the pass's budget of ${setup.maxToolCalls} tool calls is spent; call report_review now`);
+  if (name !== reportTool && calls > setup.maxToolCalls) return refuse(`the pass's budget of ${setup.maxToolCalls} tool calls is spent; call ${reportTool} now`);
 
-  if (name === 'report_review') {
+  if (verify && name === 'report_verdicts') {
+    const verdicts = (Array.isArray(args.verdicts) ? args.verdicts : []).flatMap((v: unknown) => {
+      const o = v && typeof v === 'object' ? v as Record<string, unknown> : {};
+      return Number.isSafeInteger(o.finding) && typeof o.holds === 'boolean' ? [{ finding: o.finding as number, holds: o.holds, why: typeof o.why === 'string' ? o.why.slice(0, 500) : '' }] : [];
+    });
+    fs.writeFileSync(path.join(dir, PASS_FILES.verdicts), JSON.stringify(verdicts));
+    return say('Received. You are done: stop here.');
+  }
+  if (!verify && name === 'report_review') {
     const findings = Array.isArray(args.findings) ? args.findings : [];
     const inconclusive = typeof args.inconclusive === 'string' ? args.inconclusive : null;
     fs.writeFileSync(path.join(dir, PASS_FILES.report), JSON.stringify({ findings, inconclusive }));
@@ -135,7 +174,7 @@ export function handleSinkCall(dir: string, setup: PassSetup, name: string, args
 export async function runReviewSink(dir: string): Promise<void> {
   const setup = JSON.parse(fs.readFileSync(path.join(dir, PASS_FILES.setup), 'utf8')) as PassSetup;
   const server = new Server({ name: 'codetrellis-review', version: '1' }, { capabilities: { tools: {} } });
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: sinkTools(setup.mode) }));
   server.setRequestHandler(CallToolRequestSchema, async (req) => handleSinkCall(dir, setup, req.params.name, (req.params.arguments ?? {}) as Record<string, unknown>));
   await server.connect(new StdioServerTransport());
 }

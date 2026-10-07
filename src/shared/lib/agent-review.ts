@@ -56,6 +56,8 @@ export interface AgentReview {
   pass?: string | null;
   /** C4: runs retried because the agent ended without reporting. */
   retries?: number;
+  /** C5: what a second pass made of the findings, in words, when one ran. */
+  verify?: string | null;
 }
 
 /** The new side of a change: for each file, its numbered lines the diff shows. */
@@ -203,5 +205,5 @@ export function parseAgentReview(raw: unknown): AgentReview | null {
   });
   const refused = (Array.isArray(r.refused) ? r.refused : []).map((x) => text(x, 300)).filter((x): x is string => !!x).slice(0, 200);
   const retries = Number.isSafeInteger(r.retries) && (r.retries as number) > 0 ? Math.min(r.retries as number, 10) : 0;
-  return { outcome, reason: text(r.reason, 500), agent: text(r.agent, 80) ?? 'an agent', findings, dropped, refused, pass: text(r.pass, 80), retries };
+  return { outcome, reason: text(r.reason, 500), agent: text(r.agent, 80) ?? 'an agent', findings, dropped, refused, pass: text(r.pass, 80), retries, verify: text(r.verify, 300) };
 }

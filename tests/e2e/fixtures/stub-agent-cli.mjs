@@ -47,6 +47,15 @@ const call = async (tool, a) => {
   const r = await client.callTool({ name: tool, arguments: a });
   return { isError: r.isError === true, text: (r.content ?? []).map((c) => c.text ?? '').join('\n') };
 };
+// C5: a verify pass is given report_verdicts. It holds every finding but a bug, which it refutes.
+if ((await client.listTools()).tools.some((t) => t.name === 'report_verdicts')) {
+  const findings = JSON.parse(message.slice(message.indexOf('<findings>') + 10, message.indexOf('</findings>')));
+  await call('report_verdicts', { verdicts: findings.map((f) => ({ finding: f.finding, holds: f.kind !== 'bug', why: f.kind === 'bug' ? 'Line 900 is not in the change.' : 'The cited line calls Stripe directly.' })) });
+  await client.close();
+  result({});
+  process.exit(0);
+}
+
 const bundle = JSON.parse(message.slice(message.indexOf('<bundle>') + 8, message.indexOf('</bundle>')));
 const api = bundle.data.files.find((f) => f.path.endsWith('api.ts'));
 const lineOf = (needle) => {

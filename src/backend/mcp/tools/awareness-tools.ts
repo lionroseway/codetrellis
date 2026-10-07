@@ -443,14 +443,16 @@ export function register(server: McpServer, deps: ToolDeps): void {
         refused: z.array(z.string().max(300)).max(200).optional().describe('`codetrellis review`: tool calls the agent was refused.'),
         retries: z.number().int().min(0).max(10).optional().describe('`codetrellis review`: runs retried because the agent ended without reporting.'),
         error: z.string().max(500).optional().describe('`codetrellis review`: why the agent could not run (the model unreachable, the key refused).'),
+        refuted: z.array(z.object({ says: z.string().max(1000), why: z.string().max(300) })).max(100).optional().describe('`codetrellis review --verify`: findings a second pass refuted, each with why. Kept as dropped.'),
+        verify: z.string().max(300).optional().describe('`codetrellis review --verify`: what the second pass made of the findings, in words.'),
       },
     },
-    async ({ bundle, inconclusive, findings, ran_in, reviewer, pass, refused, retries, error }, extra: any) => {
+    async ({ bundle, inconclusive, findings, ran_in, reviewer, pass, refused, retries, error, refuted, verify }, extra: any) => {
       const by = authorFromExtra(deps, extra);
       const r = recordReview({
         report: { bundle, inconclusive: inconclusive ?? null, findings },
         agent: reviewer?.trim() || by.author, by, ranIn: ran_in?.trim() || `${by.author}'s session`,
-        refused, error: error?.trim() || undefined, pass: pass?.trim() || null, retries,
+        refused, error: error?.trim() || undefined, pass: pass?.trim() || null, retries, refuted, verify: verify?.trim() || null,
       });
       if ('error' in r) return { isError: true, content: [{ type: 'text' as const, text: r.error }] };
       return {

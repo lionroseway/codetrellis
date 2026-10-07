@@ -217,6 +217,9 @@ export function recordReview(input: {
   /** C4: the skill the pass ran, and how often it was retried. */
   pass?: string | null;
   retries?: number;
+  /** C5: findings a second pass refuted, each with why; kept as dropped. */
+  refuted?: Array<{ says: string; why: string }>;
+  verify?: string | null;
 }): { error: string } | { run: string; review: AgentReview } {
   const bundle = keptBundle(input.report.bundle);
   if (!bundle) return { error: `No bundle ${input.report.bundle} is kept here (bundles are kept for an hour): ask for the bundle again and review that.` };
@@ -224,7 +227,8 @@ export function recordReview(input: {
   const { outcome, reason } = input.error
     ? { outcome: 'error' as const, reason: input.error }
     : reviewOutcome({ inconclusive: input.report.inconclusive ?? null, findings: input.report.findings ?? [] }, findings);
-  const review: AgentReview = { outcome, reason, agent: input.agent, findings, dropped, refused: input.refused ?? [], pass: input.pass ?? null, retries: input.retries ?? 0 };
+  const refuted = (input.refuted ?? []).slice(0, 100).map((r) => ({ says: r.says.slice(0, 1000), why: r.why.slice(0, 300) }));
+  const review: AgentReview = { outcome, reason, agent: input.agent, findings, dropped: [...dropped, ...refuted], refused: input.refused ?? [], pass: input.pass ?? null, retries: input.retries ?? 0, verify: input.verify ?? null };
   const code = codeAt(bundle.root);
   const run = recordCheckRun({
     projectRoot: bundle.root, at: Date.now(), by: input.by, ranIn: input.ranIn,

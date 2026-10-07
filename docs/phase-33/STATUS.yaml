@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "C4: codetrellis review — agent checks on your own agent, headless"
+  step: "C5: the review in CI — a second pass, output for any host, OIDC"
   status: "In review"
-  next: "Merge C4 when CI is green, then C5 (agent checks in CI; label its PR codetrellis-review once) and C6, both already passing locally stacked on C4"
+  next: "Merge C5 when CI is green (its labelled run reviewed nothing: the repo has no CLAUDE_CODE_OAUTH_TOKEN secret, a follow-up for the owner), then C6 and Z1, both already passing locally stacked on C5"
   blockers: "None"
   updated: 2026-10-07
 sections:
@@ -70,6 +70,8 @@ sections:
         prs:
           - 387
       - title: "The plan-panel and inspector Allotment resize throws on load (minimumSize of undefined), caught and logged since Phase 31"
+        followUp: true
+      - title: "C5 is not yet seen reviewing on this repo: it has no CLAUDE_CODE_OAUTH_TOKEN secret, so codetrellis-review.yml and claude-review.yml review nothing (owner: add the secret, then label a PR codetrellis-review)"
         followUp: true
   - title: "Stage 0: ground truth"
     goal: Numbers to measure against, the freeze measured, and every colour the app draws written down.
