@@ -15,11 +15,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { ArchitectureRule, RuleView } from '../../shared/types/architecture-rules';
 import { getProjectConfig, updateProjectConfig } from './project-config-service';
-import { checkEdges, parseArchitectureRule, ruleWords } from './architecture-rule';
-import { splitSymbol } from '../../shared/lib/symbol-entry';
+import { checkEdges, parseArchitectureRule, ruleWords, targetMatches } from './architecture-rule';
+import { splitSymbol, symbolEntry } from '../../shared/lib/symbol-entry';
 import { isSuiteName, readRulebook, suiteFile, writeSuite } from './rulebook';
 import { getCallEdges, getFileFacts, getPackageEdges } from './database';
-import { importersOf } from './importers';
+import { exportedSymbols, importersOf } from './importers';
 
 export { breachWords, breaks, checkEdges, inPattern, parseArchitectureRule, ruleStatement, ruleWords } from './architecture-rule';
 
@@ -210,14 +210,39 @@ function symbolEdgesOfGraph(projectRoot: string, rules: readonly ArchitectureRul
   const out: Array<{ sourceRelative: string; targetRelative: string }> = [];
   const done = new Set<string>();
   for (const rule of rules) {
-    if (rule.kind !== 'symbol' || done.has(rule.mayNotImport)) continue;
-    done.add(rule.mayNotImport);
+    if (rule.kind !== 'symbol' || done.has(`${rule.match ?? ''}:${rule.mayNotImport}`)) continue;
+    done.add(`${rule.match ?? ''}:${rule.mayNotImport}`);
+    if (rule.match) { out.push(...matchedSymbolEdges(rule)); continue; }
     const sym = splitSymbol(rule.mayNotImport);
     if (!sym) continue;
     try {
       for (const i of importersOf(path.join(projectRoot, sym.file), [sym.name])) out.push({ sourceRelative: i.relativePath, targetRelative: rule.mayNotImport });
     } catch { /* no scan yet, or no database */ }
   }
+  return out;
+}
+
+/**
+ * A glob or regex symbol rule's importers (B1): the exported names it covers,
+ * found among every file's exports, and who imports each, as an exact rule's
+ * are found.
+ */
+function matchedSymbolEdges(rule: ArchitectureRule): Array<{ sourceRelative: string; targetRelative: string }> {
+  const out: Array<{ sourceRelative: string; targetRelative: string }> = [];
+  try {
+    const byFile = new Map<string, { rel: string; names: string[] }>();
+    for (const s of exportedSymbols()) {
+      if (!targetMatches(rule, symbolEntry(s.rel, s.name))) continue;
+      const f = byFile.get(s.path) ?? { rel: s.rel, names: [] };
+      f.names.push(s.name);
+      byFile.set(s.path, f);
+    }
+    for (const [abs, f] of byFile) {
+      for (const i of importersOf(abs, f.names)) {
+        for (const name of i.names.filter((n) => f.names.includes(n))) out.push({ sourceRelative: i.relativePath, targetRelative: symbolEntry(f.rel, name) });
+      }
+    }
+  } catch { /* no scan yet, or no database */ }
   return out;
 }
 

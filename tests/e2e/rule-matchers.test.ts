@@ -10,6 +10,10 @@
  * A branch uploads a receipt to files.stripe.com from the web app and calls
  * PayPal's API from a Python route. The check fails on both lines, each under
  * the rule that names it; the client's own calls pass.
+ *
+ * A third rule globs the client's exports, `payments.ts#ch*`: the Rules view
+ * counts the checkout that already imports `charge` as breaking it today, and
+ * not for `receipt`, which the glob does not cover.
  */
 
 import fs from 'node:fs';
@@ -24,6 +28,7 @@ const ENV = { GIT_AUTHOR_NAME: 'Sam Lee', GIT_AUTHOR_EMAIL: 'sam@acme.test', GIT
 const CLIENT = 'packages/web/src/payments.ts';
 const API = 'packages/web/src/api.ts';
 const ROUTE = 'services/api/app/routes/users.py';
+const CHECKOUT = 'packages/web/src/checkout.ts';
 const PROVIDERS = 'http:api\\.(stripe|paypal)\\.com(/.*)?';
 
 interface Gate { ok: boolean; rules: Array<{ path: string; imports: string; rule: string; words: string; line?: number | null }> }
@@ -52,12 +57,14 @@ test.describe.serial('B1: a glob covers every Stripe host, a regex every provide
     main = git('rev-parse', '--abbrev-ref', 'HEAD');
     write(CLIENT, "export const charge = (cents: number) =>\n  fetch('https://api.stripe.com/v1/charges', { method: 'POST', body: String(cents) });\n"
       + "export const receipt = (id: string) =>\n  fetch(`https://files.stripe.com/v1/files/${id}`);\n");
+    write(CHECKOUT, "import { charge, receipt } from './payments';\n\nexport const pay = (cents: number) => charge(cents).then(() => receipt('r_1'));\n");
     git('add', '-A');
     git('commit', '-qm', 'The payments client');
     await h.client.scanProject(root);
     const rules: Array<[string, Record<string, unknown>]> = [
       ['stripe-via-client', { kind: 'calls', calls: 'http:*.stripe.com', only: [CLIENT], strength: 'block', because: 'The client sets idempotency keys.', suite: 'payments' }],
       ['providers-via-client', { kind: 'calls', calls: PROVIDERS, match: 'regex', only: [CLIENT], strength: 'block', because: 'One place talks to payment providers.', suite: 'payments' }],
+      ['charging-via-api', { kind: 'symbol', symbol: `${CLIENT}#ch*`, only: ['packages/web/src/api/'], strength: 'warn', because: 'Charging is the API layer\'s.', suite: 'payments' }],
     ];
     for (const [id, body] of rules) {
       const res = await h.client.raw('PUT', `/api/rules/${id}?${q()}`, body);
@@ -65,6 +72,7 @@ test.describe.serial('B1: a glob covers every Stripe host, a regex every provide
     }
     const suite = fs.readFileSync(path.join(root, '.codetrellis', 'rules', 'payments.yaml'), 'utf-8');
     expect(suite).toContain('calls: http:*.stripe.com');
+    expect(suite).toContain(`symbol: ${CLIENT}#ch*`);
     expect(suite).toContain('match: glob');
     expect(suite).toContain('match: regex');
     git('add', '.codetrellis');
@@ -83,6 +91,12 @@ test.describe.serial('B1: a glob covers every Stripe host, a regex every provide
     expect(providers.rule.match).toBe('regex');
     expect(providers.words).toBe(`only ${CLIENT} may make a call matching /${PROVIDERS}/: One place talks to payment providers.`);
     expect(providers.breaches).toEqual([]);
+  });
+
+  test('a symbol glob counts what imports the names it covers today, and only those', async () => {
+    const charging = (await rulesNow()).find((r) => r.rule.id === 'charging-via-api')!;
+    expect(charging.rule.match).toBe('glob');
+    expect(charging.breaches).toEqual([{ rule: 'charging-via-api', from: CHECKOUT, to: `${CLIENT}#charge` }]);
   });
 
   test('a branch reaching files.stripe.com and api.paypal.com from elsewhere fails, each under the rule that names it', async () => {
