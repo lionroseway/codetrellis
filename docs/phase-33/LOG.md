@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
-| **Status** | V2 in review (review in order of risk); V1 merged (#373), with a race from G6 fixed |
-| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | V1 (#373, `eea8a19`) |
-| **Next action** | Merge V2 when CI is green, then replay V3 |
+| **Status** | V3 in review (re-review only what changed since your last look); V2 merged (#374) |
+| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | V2 (#374, `4234973`) |
+| **Next action** | Merge V3 when CI is green, then replay V6 (already verified on top of V3) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `eea8a19`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `4234973`, with open PRs from GitHub.
 
 ---
 
@@ -91,7 +91,7 @@
 
 ### Track V: review (the owner's picks)
 - [x] V1 What this change does to the architecture (structural diff at the top of every review) (#373)
-- [ ] V2 Review in order of risk (dependents, rule scope, test grounding, other work) — building
+- [x] V2 Review in order of risk (dependents, rule scope, test grounding, other work) (#374)
 - [ ] V3 Re-review only what changed since each reviewer's last look — building
 - [ ] V6 Did the change do what the task said (only when it is linked to a task) — building
 
@@ -204,6 +204,26 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — V2 merged (#374); V3 in review
+
+- **V2 merged** (#374): a review lists the changed files in order of risk,
+  each saying why.
+- **V3: re-review only what changed since your last look.** Each reviewer,
+  a person or an agent, marks a line of work reviewed at its head, and the
+  review's findings are kept with that look. The next review of the line
+  opens with what moved since:
+  - the files changed;
+  - the findings the pushes addressed, and the new ones;
+  - or that the commit looked at was rewritten away, so the whole change
+    needs reviewing again.
+
+  `review_change` takes `mark_reviewed` and returns `since`, with the
+  reviewer taken from how the call arrived. The Review tab shows the since
+  line under each opened line, with a Mark reviewed button.
+- Checked before review on the replayed code: unit 2089 passing; 103 review,
+  PR-draft and phone harness tests; the agent and review-regression browser
+  specs (53 chromium, 52 serial).
 
 ### 2026-10-07 — V1 merged (#373), with a race fixed; V2 in review
 
