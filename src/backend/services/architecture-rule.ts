@@ -7,6 +7,7 @@
  */
 import { RULE_STRENGTHS, type ArchitectureRule, type RuleBreach, type RuleStrength } from '../../shared/types/architecture-rules';
 import { isPackageEntry, packageMatches, packageProblem } from '../../shared/lib/package-entry';
+import { isSymbolEntry, splitSymbol, symbolMatches, symbolProblem } from '../../shared/lib/symbol-entry';
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const MAX_BECAUSE = 200;
@@ -24,8 +25,9 @@ function patternProblem(name: string, v: unknown): string | null {
 export function parseArchitectureRule(raw: unknown): { rule: ArchitectureRule | null; problems: string[] } {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   if (r.kind === 'package') return parsePackageRule(r);
+  if (r.kind === 'symbol') return parseSymbolRule(r);
   const problems: string[] = [];
-  if (r.kind !== undefined && r.kind !== 'imports') problems.push('kind must be imports or package');
+  if (r.kind !== undefined && r.kind !== 'imports') problems.push('kind must be imports, package or symbol');
   if (typeof r.id !== 'string' || !ID_RE.test(r.id)) problems.push('id must be a short slug, like web-not-db');
   const fromProblem = patternProblem('from', r.from);
   if (fromProblem) problems.push(fromProblem);
@@ -93,6 +95,42 @@ function parsePackageRule(r: Record<string, unknown>): { rule: ArchitectureRule 
   };
 }
 
+/**
+ * A symbol rule (Phase 33 R6): `symbol` is a file and a name it exports,
+ * `only` the files that alone may import it, `from` where the rule applies
+ * (everywhere when not said). Importing it through a barrel is importing it.
+ */
+function parseSymbolRule(r: Record<string, unknown>): { rule: ArchitectureRule | null; problems: string[] } {
+  const problems: string[] = [];
+  if (typeof r.id !== 'string' || !ID_RE.test(r.id)) problems.push('id must be a short slug, like charges-via-payments');
+  const sym = r.symbol ?? r.mayNotImport;
+  const symProblem = symbolProblem(sym);
+  if (symProblem) problems.push(symProblem);
+  const fromProblem = r.from === undefined ? null : patternProblem('from', r.from);
+  if (fromProblem) problems.push(fromProblem);
+  const only = Array.isArray(r.only) ? r.only : r.only === undefined ? [] : null;
+  if (only === null || only.length === 0) problems.push('only must list the files that may import it, like src/payments/');
+  for (const o of only ?? []) {
+    const p = patternProblem('only', o);
+    if (p) { problems.push(p); break; }
+  }
+  if (r.except !== undefined && !(Array.isArray(r.except) && r.except.length === 0)) problems.push('a symbol rule has no except: name the files that may in only');
+  commonProblems(r, problems);
+  if (problems.length > 0) return { rule: null, problems };
+  return {
+    rule: {
+      id: r.id as string,
+      kind: 'symbol',
+      from: r.from === undefined ? '**' : normalise(r.from as string),
+      mayNotImport: normalise(sym as string),
+      only: (only as string[]).map(normalise),
+      except: [],
+      ...common(r),
+    },
+    problems: [],
+  };
+}
+
 function commonProblems(r: Record<string, unknown>, problems: string[]): void {
   if (r.because !== undefined && (typeof r.because !== 'string' || r.because.length > MAX_BECAUSE)) problems.push(`because must be words, at most ${MAX_BECAUSE} characters`);
   if (r.strength !== undefined && !RULE_STRENGTHS.includes(r.strength as RuleStrength)) problems.push('strength must be block, warn or guide');
@@ -138,7 +176,15 @@ export function breaks(rule: ArchitectureRule, from: string, to: string): boolea
     if (!inPattern(rule.from, from) || (rule.only ?? []).some((o) => inPattern(o, from))) return false;
     return !rule.except.some((e) => packageMatches(e, to));
   }
-  if (isPackageEntry(to)) return false; // an outside package is no file in a folder
+  if (rule.kind === 'symbol') {
+    // R6: `to` is a symbol entry; only the rule's own files, and the file that
+    // defines it, may import it.
+    if (!isSymbolEntry(to) || !symbolMatches(rule.mayNotImport, to)) return false;
+    if (from === splitSymbol(rule.mayNotImport)!.file) return false;
+    return inPattern(rule.from, from) && !(rule.only ?? []).some((o) => inPattern(o, from));
+  }
+  // An outside package, or a named export, is no file in a folder.
+  if (isPackageEntry(to) || isSymbolEntry(to)) return false;
   if (!inPattern(rule.from, from) || inPattern(rule.mayNotImport, from)) return false;
   if (!inPattern(rule.mayNotImport, to)) return false;
   return !rule.except.some((e) => inPattern(e, to));
@@ -165,6 +211,11 @@ export function ruleStatement(rule: Pick<ArchitectureRule, 'kind' | 'from' | 'ma
   if (rule.kind === 'package') {
     const where = rule.from && rule.from !== '**' ? `in ${rule.from}, ` : '';
     return `${where}only ${(rule.only ?? []).join(', ')} may import ${rule.mayNotImport}${except}`;
+  }
+  if (rule.kind === 'symbol') {
+    const where = rule.from && rule.from !== '**' ? `in ${rule.from}, ` : '';
+    const sym = splitSymbol(rule.mayNotImport);
+    return `${where}only ${(rule.only ?? []).join(', ')} may import ${sym ? `${sym.name} from ${sym.file}` : rule.mayNotImport}`;
   }
   return `${rule.from} may not import ${rule.mayNotImport}${except}`;
 }

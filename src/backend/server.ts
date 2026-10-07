@@ -2794,13 +2794,14 @@ function ruleBody(req: express.Request): Record<string, unknown> {
   // The rule's own fields, by name: nothing else in the body reaches the rulebook.
   return {
     id: req.params.id, suite: b.suite, from: b.from, mayNotImport: b.mayNotImport, except: b.except, because: b.because, strength: b.strength,
-    // R5: a package rule's own fields.
+    // R5: a package rule's own fields; R6: a symbol rule's.
     ...(b.kind !== undefined ? { kind: b.kind } : {}), ...(b.package !== undefined ? { package: b.package } : {}), ...(b.only !== undefined ? { only: b.only } : {}),
+    ...(b.symbol !== undefined ? { symbol: b.symbol } : {}),
   };
 }
 
 function previewRuleChange(projectRoot: string, id: string, next: ArchitectureRule | null): RulePreview {
-  return previewChange(projectRoot, id, next, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges));
+  return previewChange(projectRoot, id, next, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges, undefined, next ? [next] : []));
 }
 
 app.post('/api/rules/:id/preview', (req, res) => {

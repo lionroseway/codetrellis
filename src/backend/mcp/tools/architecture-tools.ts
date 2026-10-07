@@ -172,11 +172,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
         'caught by the check, which judges a branch by its base\'s rules.',
       inputSchema: {
         id: z.string().min(1).max(63).describe('The rule\'s id, a short slug like web-not-db: an existing rule to change or stop, or a new one.'),
-        kind: z.enum(['imports', 'package']).optional().describe('imports (the default): files in from may not import files in may_not_import. package: only the files in only may import the outside package named in package.'),
+        kind: z.enum(['imports', 'package', 'symbol']).optional().describe('imports (the default): files in from may not import files in may_not_import. package: only the files in only may import the outside package named in package. symbol: only the files in only may import the export named in symbol, directly or through a barrel.'),
         from: z.string().max(300).optional().describe('The files it is about: a folder ending in / or a pattern. Required for an imports rule unless remove; for a package rule, where it applies (everywhere if omitted).'),
         may_not_import: z.string().max(300).optional().describe('What they may not import. Required for an imports rule unless remove.'),
         package: z.string().max(300).optional().describe('A package rule\'s outside package, ecosystem and name: npm:stripe, pypi:requests, go:github.com/stripe/stripe-go, maven:com.stripe.'),
-        only: z.array(z.string().max(300)).max(50).optional().describe('A package rule\'s files that alone may import it, like src/payments/index.ts.'),
+        symbol: z.string().max(300).optional().describe('A symbol rule\'s export, a file and a name: src/payments/charge.ts#createCharge.'),
+        only: z.array(z.string().max(300)).max(50).optional().describe('A package or symbol rule\'s files that alone may import it, like src/payments/index.ts.'),
         except: z.array(z.string().max(300)).max(50).optional().describe('Files they may import all the same.'),
         because: z.string().max(200).optional().describe('Why the rule exists, in the team\'s words.'),
         strength: z.enum(['block', 'warn', 'guide']).optional().describe('block fails the check; warn is said; guide is never checked. A new rule starts at warn.'),
@@ -193,11 +194,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
       const body = args.remove ? null : {
         from: args.from, mayNotImport: args.may_not_import, except: args.except, because: args.because, strength: args.strength, suite: args.suite,
         ...(args.kind ? { kind: args.kind } : {}), ...(args.package ? { package: args.package } : {}), ...(args.only ? { only: args.only } : {}),
+        ...(args.symbol ? { symbol: args.symbol } : {}),
       };
       try {
         if (!body && !findRule(root, args.id)) return { isError: true, content: [{ type: 'text' as const, text: `No architecture rule "${args.id}" in this project to stop.` }] };
         const next = body ? proposedRule(root, { ...body, id: args.id }, id.author).rule : null;
-        const preview = previewChange(root, args.id, next, edgesIfLoaded(root, deps.getActiveProjectPath(), deps.getDependencyEdges));
+        const preview = previewChange(root, args.id, next, edgesIfLoaded(root, deps.getActiveProjectPath(), deps.getDependencyEdges, undefined, next ? [next] : []));
         if (!preview.change) return { isError: true, content: [{ type: 'text' as const, text: `${preview.words} Nothing to propose.` }] };
         const proposal = addRuleProposal({
           projectRoot: root, ruleId: args.id, body: body as Record<string, unknown> | null, why: args.why,

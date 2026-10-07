@@ -262,3 +262,45 @@ test.describe('The Rules view: suites, a package rule, and the history (Phase 33
     await expect(view).toHaveCount(0);
   });
 });
+
+test.describe('The Rules view: an export (Phase 33 R6)', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('the owner keeps createCharge to the payments module: the form sends the export and who may import it', async ({ page }) => {
+    const puts: Array<Record<string, unknown>> = [];
+    const previews: Array<Record<string, unknown>> = [];
+    await page.route((url) => url.pathname.startsWith('/api/rules'), async (route) => {
+      const req = route.request();
+      const { pathname } = new URL(req.url());
+      if (req.method() === 'GET' && pathname === '/api/rules') return route.fulfill({ json: { rules: [], suites: [], inConfig: 0, problems: [] } });
+      if (req.method() === 'GET' && pathname === '/api/rules/proposals') return route.fulfill({ json: { proposals: [] } });
+      if (req.method() === 'GET' && pathname === '/api/rules/history') return route.fulfill({ json: { history: [] } });
+      if (req.method() === 'POST' && pathname.endsWith('/preview')) {
+        previews.push(req.postDataJSON() as Record<string, unknown>);
+        return route.fulfill({ json: { change: { effect: 'tightens', allowed: [] }, words: '⚠ This change adds the rule “only src/payments/ may import createCharge from src/payments/charge.ts”: 1 import already in the code would break it.', needsConfirm: false } });
+      }
+      if (req.method() === 'PUT') {
+        puts.push({ id: decodeURIComponent(pathname.split('/')[3]), ...(req.postDataJSON() as Record<string, unknown>) });
+        return route.fulfill({ json: { rule: {} } });
+      }
+      return route.fallback();
+    });
+
+    await gotoWithProject(page);
+    await page.getByRole('button', { name: 'Rules', exact: true }).click();
+    const view = page.getByTestId('rules-view');
+    await view.getByTestId('rule-kind-symbol').check();
+    await expect(view.getByTestId('rule-package')).toHaveCount(0);
+    await expect(view.getByTestId('rule-form')).toContainText('Importing it through a barrel (an index file that passes it on) counts too.');
+    await expect(view.getByTestId('rule-save')).toBeDisabled();
+    await view.getByTestId('rule-symbol').fill('src/payments/charge.ts#createCharge');
+    await view.getByTestId('rule-only').fill('src/payments/');
+    await view.getByTestId('rule-because').fill('Charging sets idempotency keys');
+    await view.getByTestId('rule-save').click();
+    await expect.poll(() => puts).toEqual([{
+      id: 'createcharge-only-src-payments', kind: 'symbol', symbol: 'src/payments/charge.ts#createCharge', only: ['src/payments/'],
+      because: 'Charging sets idempotency keys', strength: 'warn',
+    }]);
+    expect(previews[0]).toMatchObject({ kind: 'symbol', symbol: 'src/payments/charge.ts#createCharge' });
+  });
+});

@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
-| **Status** | R9 in review (guide rules in scope); G10 merged (#383), Track G done |
-| **In flight** | R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | G10 (#383, `a2658dd`) |
-| **Next action** | Merge R9 when CI is green, then replay R6 |
+| **Status** | R6 in review (symbol rules); R9 merged (#384) |
+| **In flight** | R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | R9 (#384, `1b32993`) |
+| **Next action** | Merge R6 when CI is green, then replay R7 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `a2658dd`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `1b32993`, with open PRs from GitHub.
 
 ---
 
@@ -66,7 +66,7 @@
 - [ ] R6 Symbol rules (who may import a named export, through re-exports) — building
 - [ ] R7 Call rules (HTTP hosts, commands, tables, env) — building
 - [ ] R8 Folder rules (what files in a folder are) — building
-- [ ] R9 Guide rules in scope (the brief, `get_brief`, drift names the rule) — building
+- [x] R9 Guide rules in scope (the brief, `get_brief`, drift names the rule) (#384)
 
 ### Track C: checks anywhere
 - [x] C1 Scoped checks (`--suite`, `--rule`, `--path`; MCP and REST alike) (#361)
@@ -206,6 +206,29 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — R9 merged (#384); R6 in review, with a packaging bug fixed
+
+- **R9 merged** (#384): guide rules in scope.
+- **R6: symbol rules — only the payments module may import createCharge.**
+  A rule of kind `symbol` says which files alone may import one named
+  export, for example `symbol: src/payments/charge.ts#createCharge` with
+  `only: [src/payments/]`.
+  - Importing it through a barrel counts: an import of `createCharge` from
+    `src/payments/index.ts`, which passes it on, is an import of
+    `charge.ts#createCharge`.
+  - A namespace import of the module counts. The module that defines it,
+    and the files in `only`, may import it.
+  - Letting more files import it loosens the rule.
+  - The gate, the rules view, REST, `propose_rule` and the Rules view (an
+    "export" kind) take it.
+- **The replay's new bundle guard caught a packaging bug in R6**, as CI's had
+  in R5: a relative `require('./importers')` that the packaged app could not
+  have loaded. It is now a static import. R7 and R8 bring more of the same,
+  to be fixed as each replays.
+- Checked before review on the replayed code: unit 2141 passing; 135 rules,
+  check, awareness and CLI harness tests; the rules, graph and agent browser
+  specs (83 chromium, 61 serial).
 
 ### 2026-10-07 — G10 merged (#383), Track G done; R9 in review
 

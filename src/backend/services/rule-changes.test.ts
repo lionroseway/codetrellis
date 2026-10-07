@@ -88,3 +88,15 @@ test('a package rule letting more files import it loosens; fewer tightens (R5)',
   const [narrower] = diffRules([stripe(['src/payments/', 'src/billing/'])], [stripe(['src/payments/'])], pkgEdges);
   assert.equal(narrower.effect, 'tightens');
 });
+
+test('a symbol rule letting more files import it loosens; fewer tightens; another export is a different rule (R6)', () => {
+  const charge = (only: string[], symbol = 'src/payments/charge.ts#createCharge') => rule('charge', { kind: 'symbol', from: '**', mayNotImport: symbol, only, except: [] });
+  const edges = [{ from: 'src/checkout/pay.ts', to: 'src/payments/charge.ts#createCharge' }, { from: 'src/payments/index.ts', to: 'src/payments/charge.ts#createCharge' }];
+  const [wider] = diffRules([charge(['src/payments/'])], [charge(['src/payments/', 'src/checkout/'])], edges);
+  assert.equal(wider.effect, 'loosens');
+  assert.deepEqual(wider.allowed, [{ from: 'src/checkout/pay.ts', to: 'src/payments/charge.ts#createCharge' }]);
+  const [narrower] = diffRules([charge(['src/payments/', 'src/billing/'])], [charge(['src/payments/'])], edges);
+  assert.equal(narrower.effect, 'tightens');
+  const [other] = diffRules([charge(['src/payments/'])], [charge(['src/payments/'], 'src/payments/charge.ts#refund')], edges);
+  assert.equal(other.effect, 'loosens');
+});

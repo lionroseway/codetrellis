@@ -63,7 +63,7 @@ export async function checkTheChange(input: ChangeCheckInput): Promise<{ error: 
     if (atBase) {
       judgeBy = scopeRules(atBase.rules, scope);
       // C1: only the scope's rules, on either side: a rule moved out of the scope is still its change.
-      rulebook = diffRules(atBase.rules, rulesOf(root), edgesIfLoaded(root, input.activeProject, getDependencyEdges) ?? [])
+      rulebook = diffRules(atBase.rules, rulesOf(root), edgesIfLoaded(root, input.activeProject, getDependencyEdges, undefined, atBase.rules) ?? [])
         .filter((c) => !scope || (c.before && inScope(c.before, scope)) || (c.after && inScope(c.after, scope)));
       // R3: a loosening passes only with a person's signed approval, checked against the base's keys.
       if (rulebook.some((c) => c.effect === 'loosens')) {

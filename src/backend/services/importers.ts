@@ -153,3 +153,31 @@ export function importersOf(filePath: string, names?: readonly string[]): Import
   visit(target, names ? new Set(names) : null, []);
   return [...found.values()].sort((a, b) => a.via.length - b.via.length || a.relativePath.localeCompare(b.relativePath));
 }
+
+/**
+ * Where a name a file offers comes from (Phase 33 R6): the file itself, then
+ * each module it re-exports that name from, through barrels, nearest first.
+ * So an import of `createCharge` from `src/payments/index.ts` is known to be
+ * an import of `src/payments/charge.ts#createCharge` too. `*` (a namespace
+ * import) follows every re-export. Absolute paths, as the graph stores them.
+ */
+export function originsOf(filePath: string, name: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const visit = (file: string, depth: number) => {
+    if (seen.has(file) || depth > MAX_DEPTH) return;
+    seen.add(file);
+    out.push(file);
+    const res = getDb().exec(
+      `SELECT i.resolved_path, i.specifiers FROM imports i JOIN files f ON i.file_id = f.id
+        WHERE f.path = ? AND i.is_reexport = 1 AND i.resolved_path IS NOT NULL`,
+      [file],
+    );
+    for (const [resolved, specs] of res[0]?.values ?? []) {
+      const names = JSON.parse((specs as string) || '[]') as string[];
+      if (name === '*' || names.includes(name) || names.includes('*')) visit(resolved as string, depth + 1);
+    }
+  };
+  visit(stored(filePath), 0);
+  return out;
+}

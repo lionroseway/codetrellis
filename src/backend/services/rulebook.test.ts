@@ -148,3 +148,16 @@ test('a package rule is written the way a person writes one, and reads back the 
   assert.doesNotMatch(text, /mayNotImport|from:/);
   assert.deepEqual(readRulebook(root).suites[0].rules[0], stripe);
 });
+
+test('a symbol rule is written the way a person writes one, and reads back the same (R6)', () => {
+  const root = project();
+  const charge: ArchitectureRule = {
+    id: 'charges-via-payments', kind: 'symbol', from: '**', mayNotImport: 'src/payments/charge.ts#createCharge', only: ['src/payments/'],
+    except: [], because: 'Charging goes through the payments module.', since: '2026-10-06T00:00:00.000Z', by: '', strength: 'warn', suite: 'payments',
+  };
+  writeSuite(root, 'payments', [charge]);
+  const text = fs.readFileSync(path.join(root, RULES_DIR, 'payments.yaml'), 'utf-8');
+  assert.match(text, /kind: symbol\n\s+symbol: src\/payments\/charge.ts#createCharge\n\s+only:\n\s+- src\/payments\//);
+  assert.doesNotMatch(text, /mayNotImport|from:|except/);
+  assert.deepEqual(readRulebook(root).suites[0].rules[0], charge);
+});

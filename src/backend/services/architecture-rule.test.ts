@@ -9,7 +9,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { breachWords, breaks, checkEdges, inPattern, parseArchitectureRule, ruleWords } from './architecture-rule';
+import { breachWords, breaks, checkEdges, inPattern, parseArchitectureRule, ruleStatement, ruleWords } from './architecture-rule';
 
 const RULE = parseArchitectureRule({
   id: 'web-not-db', from: 'web/', mayNotImport: 'db/', except: ['db/types.ts'], because: 'web talks to db through the API', by: 'Sam Lee',
@@ -99,4 +99,45 @@ test('only the named files may import the package; its doors are open to all', (
   ]).map((b) => `${b.rule} ${b.from}`), ['stripe-via-wrapper src/checkout/pay.ts', 'web-not-db web/reports.ts']);
   assert.equal(breachWords(STRIPE, { from: 'src/checkout/pay.ts', to: 'npm:stripe' }),
     'src/checkout/pay.ts imports npm:stripe, which the rule “only src/payments/index.ts may import npm:stripe” forbids: The wrapper sets idempotency keys and retries.');
+});
+
+// Phase 33 R6 — a symbol rule: only these files may import a named export.
+const CHARGE = parseArchitectureRule({
+  id: 'charges-via-payments', kind: 'symbol', symbol: 'src/payments/charge.ts#createCharge', only: ['src/payments/'],
+  strength: 'block', because: 'Charging goes through the payments module.',
+}).rule!;
+
+test('a symbol rule reads as a person writes it: the export, who may, everywhere unless a folder is said', () => {
+  assert.equal(CHARGE.kind, 'symbol');
+  assert.equal(CHARGE.mayNotImport, 'src/payments/charge.ts#createCharge');
+  assert.equal(CHARGE.from, '**');
+  assert.equal(ruleStatement(CHARGE), 'only src/payments/ may import createCharge from src/payments/charge.ts');
+  const scoped = parseArchitectureRule({ id: 'x', kind: 'symbol', symbol: 'a.ts#b', from: 'web/', only: ['web/pay.ts'] }).rule!;
+  assert.equal(ruleStatement(scoped), 'in web/, only web/pay.ts may import b from a.ts');
+});
+
+test('a symbol rule is refused without a file and a name, without who may, with an except, or climbing out', () => {
+  const problems = (r: Record<string, unknown>) => parseArchitectureRule({ id: 'x', kind: 'symbol', ...r }).problems.join(' ');
+  assert.match(problems({ symbol: 'src/payments/charge.ts', only: ['a/'] }), /a file and a name/);
+  assert.match(problems({ symbol: 'a.ts#*', only: ['a/'] }), /one export/);
+  assert.match(problems({ symbol: '../a.ts#b', only: ['a/'] }), /climb out/);
+  assert.match(problems({ symbol: 'a.ts#b' }), /only must list/);
+  assert.match(problems({ symbol: 'a.ts#b', only: ['a/'], except: ['c.ts'] }), /no except/);
+  assert.match(parseArchitectureRule({ id: 'x', kind: 'calls' }).problems.join(' '), /imports, package or symbol/);
+});
+
+test('only the named files may import the export, directly, through a barrel or as a namespace; the module that defines it may', () => {
+  const sym = 'src/payments/charge.ts#createCharge';
+  assert.equal(breaks(CHARGE, 'src/api.ts', sym), true);
+  assert.equal(breaks(CHARGE, 'src/api.ts', 'src/payments/charge.ts#*'), true);
+  assert.equal(breaks(CHARGE, 'src/payments/checkout.ts', sym), false);
+  assert.equal(breaks(CHARGE, 'src/payments/charge.ts', sym), false);
+  assert.equal(breaks(CHARGE, 'src/api.ts', 'src/payments/charge.ts#refund'), false);
+  assert.equal(breaks(CHARGE, 'src/api.ts', 'src/payments/charge.ts'), false);
+  assert.equal(breaks(CHARGE, 'src/api.ts', 'npm:stripe'), false);
+  // An imports rule never reads a symbol entry as a file in its folder.
+  const web = parseArchitectureRule({ id: 'web-not-payments', from: 'src/web/', mayNotImport: 'src/payments/' }).rule!;
+  assert.equal(breaks(web, 'src/web/a.ts', sym), false);
+  assert.equal(breaks(web, 'src/web/a.ts', 'src/payments/charge.ts'), true);
+  assert.deepEqual(checkEdges([CHARGE], [{ from: 'src/api.ts', to: sym }, { from: 'src/payments/x.ts', to: sym }]), [{ rule: 'charges-via-payments', from: 'src/api.ts', to: sym }]);
 });
