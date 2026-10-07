@@ -35,8 +35,10 @@ on:
 
 permissions:
   contents: read
-  # The findings on the changed lines, through code scanning.
+  # The findings on the changed lines, through code scanning. upload-sarif
+  # also reads the run, which a private repository refuses without actions: read.
   security-events: write
+  actions: read
 
 concurrency:
   group: codetrellis-review-${{ github.event.pull_request.number }}
