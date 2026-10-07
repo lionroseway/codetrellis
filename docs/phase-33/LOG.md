@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
-| **Status** | G1 in review (one visual vocabulary); G4 merged (#369); the page's screens in review (#370) |
-| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G1 building on `feat/phase-33-g1-visual-vocabulary`; G2 building on `feat/phase-33-g2-legend`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs`; #370 in review on `feat/phase-33-fu-page-shots` |
-| **Last merged** | G4 (#369, `b9dc515`) |
-| **Next action** | Merge G1 and #370 when CI is green, then replay G2 |
+| **Status** | G2 in review (one legend, listing only what is drawn); G1 merged (#371); the page's screens merged (#370) |
+| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G2 building on `feat/phase-33-g2-legend`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V1 building on `feat/phase-33-v1-architecture-diff`; V2 building on `feat/phase-33-v2-risk-order`; V3 building on `feat/phase-33-v3-since-last-look`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | G1 (#371, `e0fd1f1`) |
+| **Next action** | Merge G2 when CI is green, then replay V1 |
 | **Blockers** | None |
-| **Last updated** | 2026-10-06 |
+| **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `b9dc515`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `e0fd1f1`, with open PRs from GitHub.
 
 ---
 
@@ -78,7 +78,7 @@
 - [ ] C8 One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words — building
 
 ### Track G: graph and clarity
-- [ ] G1 One visual vocabulary (colour, glyph, dash, words) with a guard test — building
+- [x] G1 One visual vocabulary (colour, glyph, dash, words) with a guard test (#371)
 - [ ] G2 The legend on the graph, plan canvas, file tree and Timeline — building
 - [x] G3 Edge toggles (imports, cross-system, symbol links) (#368)
 - [x] G4 Graph full screen and back; hidden panes leave no gap (#369)
@@ -204,6 +204,22 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — G1 merged (#371), the page's screens merged (#370); G2 in review
+
+- **G1 merged** (#371): one visual vocabulary. **#370 merged**: this page
+  shows the phase's screens, and three tests no longer lean on timing.
+- **G2: one legend, listing only what is drawn.** One legend component, built
+  from G1's vocabulary, on the graph, the file tree, the plan tree and the
+  Timeline. Each surface says which states it draws, and the legend lists
+  only those, in the vocabulary's order: turn import edges off and their
+  entry goes. Each entry is a glyph, a word and a swatch. Hovering an entry
+  on the graph dims everything that does not draw it, without moving the
+  layout. Whether each legend is open is remembered per surface.
+- Checked before review on the replayed code: unit 2077 passing; the graph,
+  sidebar, plan, keyboard, inspector and review-regression browser specs
+  pass (227 chromium, 114 serial), but for the PDF viewer's page 2, which
+  fails locally on the base too.
 
 ### 2026-10-06 — G4 merged (#369); G1 in review; screens on the page (#370)
 

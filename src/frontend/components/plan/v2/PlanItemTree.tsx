@@ -15,6 +15,8 @@ import { usePlanStatus } from '../../../lib/plan-status';
 import { statusLine, type ItemStatus } from '@shared/lib/item-status';
 import { gitStateChip, sourceWords } from '@shared/lib/git-state-words';
 import { TASK, TONES } from '../../../lib/visual-language';
+import { legendFor } from '../../../lib/legend';
+import { Legend } from '../../legend/Legend';
 
 // Task states from the visual vocabulary (Phase 33 G1). Assigned is no
 // longer a second blue beside in progress; blocked is ■, not the ⊘ a breach uses.
@@ -58,6 +60,7 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [drag, setDrag] = useState<DragState>({ draggedUid: null, overUid: null, position: null });
 
+  const taskLegend = useMemo(() => legendFor(Object.values(itemsByUid).map((i) => `task:${i.status ?? 'pending'}`)), [itemsByUid]);
   const { rootUids, childrenByParent } = useMemo(
     () => buildItemTree(itemsByUid),
     [itemsByUid],
@@ -267,6 +270,10 @@ export function PlanItemTree({ planUid }: { planUid: string }) {
         ) : (
           rootUids.map((uid) => renderNode(uid, 0))
         )}
+      </div>
+      {/* G2 — the task states this plan draws now. */}
+      <div className="px-2 py-1.5 border-t border-white/[0.06]">
+        <Legend surface="plan" entries={taskLegend} />
       </div>
     </div>
   );

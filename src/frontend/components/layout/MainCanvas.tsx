@@ -50,6 +50,8 @@ import { useAwarenessStore } from '../../stores/awareness-store';
 import { OverlaysMenu } from '../graph/OverlaysMenu';
 import { EdgesMenu } from '../graph/EdgesMenu';
 import { visibleEdges } from '../../lib/graph-edge-kinds';
+import { graphLegend, nodeLegendKeys, edgeLegendKeys } from '../../lib/legend';
+import { Legend } from '../legend/Legend';
 import { minimapNodeColor } from '../../lib/graph-visuals';
 import { chipClass, TONES } from '../../lib/visual-language';
 import { openFileAt } from '../../lib/open-file-at';
@@ -991,6 +993,21 @@ export function MainCanvas() {
     };
   }, [graphData, graphEdges, selectedNodeId, planHighlightPaths, planOverlay, stackFocus, breakpoints, graphOverlays, workCounts, collisions, groundingMap, plannedByFile]);
 
+  // G2 — the legend lists what the graph draws now; hovering an entry
+  // lights what carries it. Dimmed with a style rule, so the layout is left
+  // alone.
+  const [legendHover, setLegendHover] = useState<string | null>(null);
+  const legendEntries = useMemo(() => graphLegend(displayGraphData.nodes, displayGraphData.edges), [displayGraphData]);
+  const legendDimCss = useMemo(() => {
+    if (!legendHover) return '';
+    const esc = (id: string) => (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/["\\]/g, '\\$&'));
+    const lit = [
+      ...displayGraphData.nodes.filter((n) => nodeLegendKeys(n.data as Record<string, unknown>).includes(legendHover)).map((n) => `.react-flow__node[data-id="${esc(n.id)}"]`),
+      ...displayGraphData.edges.filter((e) => edgeLegendKeys(e.data as Record<string, unknown>).includes(legendHover)).map((e) => `.react-flow__edge[data-id="${esc(e.id)}"]`),
+    ];
+    return `.react-flow__node, .react-flow__edge { opacity: 0.18; transition: opacity 120ms; }${lit.length ? `${lit.join(', ')} { opacity: 1; }` : ''}`;
+  }, [legendHover, displayGraphData]);
+
   const [nodes, setNodes, onNodesChange] = useNodesState(displayGraphData?.nodes ?? []);
   const [edges, setEdges, onEdgesChange] = useEdgesState(displayGraphData?.edges ?? []);
 
@@ -1240,6 +1257,7 @@ export function MainCanvas() {
         className={`!bg-transparent ${graphStyle === 'performance' ? 'graph-perf' : ''}`}
       >
         <AutoFitView nodes={nodes} layout={layoutMode} />
+        {legendDimCss && <style data-testid="legend-dim">{legendDimCss}</style>}
         <Background color="rgba(59,130,246,0.06)" gap={24} size={1} />
         <Controls className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)] [&>button]:!bg-transparent [&>button]:!border-white/[0.06] [&>button]:!text-zinc-400 [&>button:hover]:!bg-white/[0.06] [&>button:hover]:!text-zinc-200" />
         <MiniMap className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)]" nodeColor={minimapNodeColor} maskColor="rgba(0,0,0,0.8)" />
@@ -1260,6 +1278,7 @@ export function MainCanvas() {
                 planSummary={summarizePlanVsLive(activeDiff, projectionData)}
                 snapshotName={currentSnapshot?.name}
               />
+              <Legend surface="graph" entries={legendEntries} onHover={setLegendHover} />
               {viewDepth === 'symbol' && (
                 <div
                   data-testid="symbols-status"
