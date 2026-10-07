@@ -32,6 +32,24 @@ function canvasEdges(page: Page) {
       pane: pane ? [Math.round(pane.width), Math.round(pane.height)] : null,
       viewport: (document.querySelector('.react-flow__viewport') as HTMLElement | null)?.style.transform ?? null,
       legend: Array.from(document.querySelectorAll('[data-testid="legend-entry"]')).map((e) => e.getAttribute('data-key')),
+      store: (() => {
+        // React Flow's own store, through the React fiber of its renderer:
+        // its pane size and edges, and which nodes it has measured.
+        const el = document.querySelector('.react-flow__renderer') as (HTMLElement & Record<string, unknown>) | null;
+        const key = el && Object.keys(el).find((k) => k.startsWith('__reactFiber$'));
+        type Fiber = { return?: Fiber; memoizedProps?: { value?: { getState?: () => Record<string, unknown> } } };
+        let f = (key ? el[key] : null) as Fiber | null;
+        while (f && !f.memoizedProps?.value?.getState) f = f.return ?? null;
+        const st = f?.memoizedProps?.value?.getState?.() as undefined | { width: number; height: number; transform: number[]; edges: unknown[]; nodeLookup: Map<string, { measured?: { width?: number }; internals: { handleBounds?: unknown } }> };
+        if (!st) return null;
+        const internal = [...st.nodeLookup.values()];
+        return {
+          width: st.width, height: st.height, transform: st.transform, edges: st.edges.length,
+          nodes: internal.length,
+          measured: internal.filter((n) => n.measured?.width).length,
+          withHandles: internal.filter((n) => n.internals.handleBounds).length,
+        };
+      })(),
     };
   });
 }
