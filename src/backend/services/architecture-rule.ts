@@ -5,7 +5,7 @@
  * and which import edges cross which rules. Kept apart from the service so
  * the project config can parse rules without importing it back.
  */
-import { RULE_STRENGTHS, type ArchitectureRule, type RuleBreach, type RuleStrength } from '../../shared/types/architecture-rules';
+import { RULE_ENGINES, RULE_STRENGTHS, type ArchitectureRule, type RuleBreach, type RuleEngine, type RuleStrength } from '../../shared/types/architecture-rules';
 import { isPackageEntry, packageMatches, packageProblem } from '../../shared/lib/package-entry';
 import { isSymbolEntry, splitSymbol, symbolMatches, symbolProblem } from '../../shared/lib/symbol-entry';
 import { callMatches, callProblem, callWords, isCallEntry, normaliseCall } from '../../shared/lib/call-entry';
@@ -29,13 +29,74 @@ function patternProblem(name: string, v: unknown): string | null {
 /** Read a rule from anyone's text: the rule, or why not. */
 export function parseArchitectureRule(raw: unknown): { rule: ArchitectureRule | null; problems: string[] } {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  // B5: who judges it. An agent's rule is words; the others' engine follows from how they match.
+  if (r.engine !== undefined && !RULE_ENGINES.includes(r.engine as RuleEngine)) return { rule: null, problems: ['engine must be deterministic, fuzzy or agent'] };
+  if (r.engine === 'agent' || r.kind === 'agent') return parseAgentRule(r);
+  const parsed = parseByKind(r);
+  if (parsed.rule && r.engine !== undefined && ruleEngine(parsed.rule) !== r.engine) {
+    return { rule: null, problems: [r.engine === 'fuzzy' ? 'engine fuzzy is a rule whose target says match: fuzzy' : `this rule's engine is ${ruleEngine(parsed.rule)}, not ${String(r.engine)}`] };
+  }
+  return parsed;
+}
+
+/** Who judges a rule (B5): an agent, code by likeness, or code. */
+export function ruleEngine(rule: Pick<ArchitectureRule, 'kind' | 'match'>): RuleEngine {
+  return rule.kind === 'agent' ? 'agent' : rule.match === 'fuzzy' ? 'fuzzy' : 'deterministic';
+}
+
+const MAX_WORDS = 1000;
+
+/**
+ * An agent rule (Phase 33 B5): `rule`, the words an agent review judges a
+ * change by, and `in`, the files it is about. No code checks it. Sent to a
+ * review in its bundle, a finding that cites it is held to the contract like
+ * any (it quotes the diff; the rule is in scope); it blocks only at `block`.
+ * With no review run, it is a guide: shown where it applies, checked nowhere.
+ */
+function parseAgentRule(r: Record<string, unknown>): { rule: ArchitectureRule | null; problems: string[] } {
+  const problems: string[] = [];
+  if (typeof r.id !== 'string' || !ID_RE.test(r.id)) problems.push('id must be a short slug, like money-through-ledger');
+  if (r.kind !== undefined && r.kind !== 'agent') problems.push('an agent rule has no kind: it is its words');
+  const words = r.rule ?? r.mayNotImport;
+  if (typeof words !== 'string' || !words.trim()) problems.push('rule must be the words an agent judges by, like: Code that moves money records it through services/ledger.');
+  else if (words.length > MAX_WORDS) problems.push(`rule is at most ${MAX_WORDS} characters`);
+  const list = (v: unknown): string[] | null => (v === undefined ? [] : typeof v === 'string' ? [v] : Array.isArray(v) && v.every((x) => typeof x === 'string') ? v as string[] : null);
+  const within = list(r.in);
+  if (within === null || within.length === 0) problems.push('in must list the files it is about, like src/');
+  for (const w of within ?? []) {
+    const p = patternProblem('in', w);
+    if (p) { problems.push(p); break; }
+  }
+  const except = list(r.except);
+  if (except === null) problems.push('except must be a list of files or patterns');
+  for (const e of except ?? []) {
+    const p = patternProblem('except', e);
+    if (p) { problems.push(p); break; }
+  }
+  commonProblems(r, problems);
+  if (problems.length > 0) return { rule: null, problems };
+  return {
+    rule: {
+      id: r.id as string,
+      kind: 'agent',
+      from: '**',
+      mayNotImport: (words as string).trim(),
+      in: within!.map(normalise),
+      except: except!.map(normalise),
+      ...common(r),
+    },
+    problems: [],
+  };
+}
+
+function parseByKind(r: Record<string, unknown>): { rule: ArchitectureRule | null; problems: string[] } {
   if (r.kind === 'package') return parsePackageRule(r);
   if (r.kind === 'symbol') return parseSymbolRule(r);
   if (r.kind === 'calls') return parseCallRule(r);
   if (r.kind === 'folder') return parseFolderRule(r);
   if (r.kind === 'grep') return parseGrepRule(r);
   const problems: string[] = [];
-  if (r.kind !== undefined && r.kind !== 'imports') problems.push('kind must be imports, package, symbol, calls, folder or grep');
+  if (r.kind !== undefined && r.kind !== 'imports') problems.push('kind must be imports, package, symbol, calls, folder or grep (or engine: agent)');
   if (typeof r.id !== 'string' || !ID_RE.test(r.id)) problems.push('id must be a short slug, like web-not-db');
   const fromProblem = patternProblem('from', r.from);
   if (fromProblem) problems.push(fromProblem);
@@ -426,6 +487,8 @@ const escape = (s: string) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
 
 /** Whether `from` importing `to` crosses this rule. A file already inside the forbidden set is not "from" outside it. */
 export function breaks(rule: ArchitectureRule, from: string, to: string): boolean {
+  // B5: an agent rule is judged by a review, never by an edge.
+  if (rule.kind === 'agent') return false;
   if (rule.kind === 'grep') {
     // B2: `to` is a line the file holds, or a pattern it never does, keyed by the rule's terms.
     return splitGrep(to)?.key === grepKey(rule) && grepReads(rule, from);
@@ -481,6 +544,8 @@ export function checkEdges(rules: ArchitectureRule[], edges: Array<{ from: strin
  */
 export function ruleStatement(rule: Pick<ArchitectureRule, 'kind' | 'from' | 'mayNotImport' | 'except' | 'only'> & Partial<Pick<ArchitectureRule, 'files' | 'kinds' | 'exports' | 'match' | 'in' | 'must' | 'ignoreCase' | 'threshold'>>): string {
   const except = rule.except.length > 0 ? ` (except ${rule.except.join(', ')})` : '';
+  // B5: an agent rule is its words, about its files.
+  if (rule.kind === 'agent') return `in ${(rule.in ?? []).join(', ')}${except}: ${rule.mayNotImport}`;
   if (rule.kind === 'grep') {
     // B2: "no file in src/backend/ may contain “console.log(”", "every file in src/routes/*.ts must contain “requireAuth”".
     const files = `${(rule.in ?? []).join(', ')}${except}`;

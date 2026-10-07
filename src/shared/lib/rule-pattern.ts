@@ -27,6 +27,9 @@ export interface CoveringRule {
   from: string;
   mayNotImport: string;
   only?: string[];
+  /** A grep or agent rule's files (B2, B5), less its `except`. */
+  in?: string[];
+  except?: string[];
 }
 
 /**
@@ -36,6 +39,8 @@ export interface CoveringRule {
  * may. The window's overlay, the inspector and the drift signal all ask this.
  */
 export function ruleCovers(rule: CoveringRule, file: string): boolean {
+  // B2, B5: a grep or agent rule is about the files it reads.
+  if (rule.kind === 'grep' || rule.kind === 'agent') return (rule.in ?? []).some((p) => inRulePattern(p, file)) && !(rule.except ?? []).some((e) => inRulePattern(e, file));
   if (rule.kind === 'package') return (inRulePattern(rule.from, file) && packageApplies(rule.mayNotImport, file)) || (rule.only ?? []).some((o) => inRulePattern(o, file));
   // R8: a folder rule is about the files in its folder.
   if (rule.kind === 'folder') return inRulePattern(rule.from, file);

@@ -2811,6 +2811,8 @@ function ruleBody(req: express.Request): Record<string, unknown> {
     // B2: a grep rule's own fields.
     ...(b.in !== undefined ? { in: b.in } : {}), ...(b.must !== undefined ? { must: b.must } : {}),
     ...(b.mustNot !== undefined ? { mustNot: b.mustNot } : {}), ...(b.ignoreCase !== undefined ? { ignoreCase: b.ignoreCase } : {}),
+    // B5: who judges it, and an agent rule's words.
+    ...(b.engine !== undefined ? { engine: b.engine } : {}), ...(b.rule !== undefined ? { rule: b.rule } : {}),
   };
 }
 

@@ -207,6 +207,20 @@ function written(rule: ArchitectureRule): Record<string, unknown> {
       ...(rule.by ? { by: rule.by } : {}),
     };
   }
+  if (rule.kind === 'agent') {
+    // B5: its words, and the files they are about.
+    return {
+      id: rule.id,
+      engine: 'agent',
+      rule: rule.mayNotImport,
+      in: rule.in ?? [],
+      ...(rule.except.length ? { except: rule.except } : {}),
+      strength: rule.strength,
+      ...(rule.because ? { because: rule.because } : {}),
+      since: rule.since,
+      ...(rule.by ? { by: rule.by } : {}),
+    };
+  }
   if (rule.kind === 'grep') {
     // B2: the files it reads, and the text they must not, or must, hold.
     return {

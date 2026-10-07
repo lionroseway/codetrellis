@@ -67,7 +67,9 @@ export function RulesView() {
   // R5 — a rule is an import boundary, or who alone may import an outside package;
   // R6 — or who alone may import one named export; R7 — or make one call;
   // R8 — or what the files in a folder are.
-  const [kind, setKind] = useState<'imports' | 'package' | 'symbol' | 'calls' | 'folder' | 'grep'>('imports');
+  const [kind, setKind] = useState<'imports' | 'package' | 'symbol' | 'calls' | 'folder' | 'grep' | 'agent'>('imports');
+  // B5: an agent rule's words.
+  const [agentWords, setAgentWords] = useState('');
   // B2: a grep rule's text, whether the files must hold it, and how it is read.
   const [grepText, setGrepText] = useState('');
   const [grepMust, setGrepMust] = useState(false);
@@ -202,7 +204,7 @@ export function RulesView() {
   };
 
   const clearForm = () => {
-    setFrom(''); setMayNotImport(''); setExcept(''); setBecause(''); setPkg(''); setSym(''); setCallTarget(''); setFileNames(''); setOneExport(false); setGuide(''); setOnly(''); setSuite(''); setStrength('warn'); setGrepText(''); setGrepMust(false); setGrepMatch('exact');
+    setFrom(''); setMayNotImport(''); setExcept(''); setBecause(''); setPkg(''); setSym(''); setCallTarget(''); setFileNames(''); setOneExport(false); setGuide(''); setOnly(''); setSuite(''); setStrength('warn'); setGrepText(''); setGrepMust(false); setGrepMatch('exact'); setAgentWords('');
   };
 
   if (!root) return <p className="p-6 text-[12px] text-foreground-muted">Open a project to write down its architecture rules.</p>;
@@ -213,6 +215,7 @@ export function RulesView() {
       : kind === 'calls' ? /^(http|sql):./.test(callTarget.trim()) && list(only).length > 0
         : kind === 'folder' ? !!from.trim() && (list(fileNames).length > 0 || oneExport)
           : kind === 'grep' ? list(from).length > 0 && !!grepText.trim()
+            : kind === 'agent' ? list(from).length > 0 && !!agentWords.trim()
           : !!from.trim() && !!mayNotImport.trim();
 
   const save = async () => {
@@ -226,6 +229,8 @@ export function RulesView() {
             ? slug(`${from}-files`) || 'folder-rule'
             : kind === 'grep'
               ? slug(`${grepMust ? 'must' : 'no'}-${grepText}`) || 'grep-rule'
+              : kind === 'agent'
+                ? slug(agentWords.split(/\s+/).slice(0, 5).join('-')) || 'agent-rule'
             : slug(`${from}-not-${mayNotImport}`) || 'rule';
     const body: Record<string, unknown> = kind === 'package'
       ? { kind: 'package', package: pkg.trim(), only: list(only), because: because.trim(), strength }
@@ -237,6 +242,8 @@ export function RulesView() {
             ? { kind: 'folder', folder: from.trim(), files: list(fileNames), ...(oneExport ? { exports: 'one' } : {}), ...(guide.trim() ? { guide: guide.trim() } : {}), because: because.trim(), strength }
             : kind === 'grep'
               ? { kind: 'grep', in: list(from), ...(list(except).length ? { except: list(except) } : {}), [grepMust ? 'must' : 'mustNot']: grepText.trim(), ...(grepMatch !== 'exact' ? { match: grepMatch } : {}), because: because.trim(), strength }
+              : kind === 'agent'
+                ? { engine: 'agent', rule: agentWords.trim(), in: list(from), ...(list(except).length ? { except: list(except) } : {}), because: because.trim(), strength }
             : { from: from.trim(), mayNotImport: mayNotImport.trim(), because: because.trim(), except: list(except), strength };
     if (suite.trim()) body.suite = suite.trim();
     // A rule that already exists and would hold less tightly: shown first, then confirmed.
@@ -426,6 +433,10 @@ export function RulesView() {
                 <input type="radio" name="rule-kind" checked={kind === 'grep'} onChange={() => setKind('grep')} data-testid="rule-kind-grep" />
                 <span className="text-foreground">Text</span><span className="text-[11px] text-foreground-subtle">what files may not, or must, contain</span>
               </label>
+              <label className="flex items-baseline gap-1.5">
+                <input type="radio" name="rule-kind" checked={kind === 'agent'} onChange={() => setKind('agent')} data-testid="rule-kind-agent" />
+                <span className="text-foreground">Words</span><span className="text-[11px] text-foreground-subtle">a rule an agent review judges</span>
+              </label>
             </fieldset>
             {kind === 'imports' ? (
               <>
@@ -463,6 +474,24 @@ export function RulesView() {
                 <label className="block space-y-1">
                   <span className="text-foreground-muted">Guide (optional): what a person or an agent should know, never checked</span>
                   <input className={inputCls} value={guide} onChange={(e) => setGuide(e.target.value)} placeholder="One service per file, named for its domain; pure helpers go in lib/." data-testid="rule-guide-input" />
+                </label>
+              </div>
+            ) : kind === 'agent' ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block space-y-1">
+                    <span className="text-foreground-muted">About the files in (comma-separated)</span>
+                    <input className={inputCls} value={from} onChange={(e) => setFrom(e.target.value)} placeholder="src/" data-testid="rule-agent-in" />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-foreground-muted">Except (optional, comma-separated)</span>
+                    <input className={inputCls} value={except} onChange={(e) => setExcept(e.target.value)} placeholder="**/*.test.ts" data-testid="rule-except" />
+                  </label>
+                </div>
+                <label className="block space-y-1">
+                  <span className="text-foreground-muted">The rule, in words</span>
+                  <textarea className={`${inputCls.replace(' font-mono', '')} min-h-[3.5rem]`} value={agentWords} onChange={(e) => setAgentWords(e.target.value)}
+                    placeholder="Code that moves money records it through services/ledger, never by writing balances directly." data-testid="rule-agent-words" />
                 </label>
               </div>
             ) : kind === 'grep' ? (
@@ -565,6 +594,8 @@ export function RulesView() {
                       ? 'A name pattern uses * within the name: *-service.ts. Files already there that break it are its debt; a change is judged on the files it adds or renames.'
                     : kind === 'grep'
                       ? 'Every file under those paths is read line by line, in any language. Lines already there that break it are its debt; a change is judged on the lines it adds.'
+                    : kind === 'agent'
+                      ? 'No code checks it: an agent review judges each change against these words, and a finding must quote the change. With no review run it is a guide. It fails a check only at block.'
                   : 'A folder ends in /; a pattern may use * within a name and ** across folders, like src/**/ui/**.'}
               {' '}You see what it does against the code before it is saved.
             </p>

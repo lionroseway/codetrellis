@@ -202,6 +202,16 @@ parser reads.
   must be in scope.
 - **With no review configured:** an agent rule behaves as a `guide`. It is shown
   in briefs and the Rules view, and checked nowhere.
+- **Built in B5.**
+  - **The engine** follows from the rule: an agent rule says `engine: agent`,
+    a `match: fuzzy` target is `fuzzy`, and the rest are `deterministic`.
+    Writing an engine the rule is not is refused.
+  - **Its words** are kept as `rule:`, and they are part of its signed terms.
+  - **A block-strength agent rule** fails the review's run when a finding
+    that cites it holds.
+  - **Grep and agent rules** are about the files in their `in`. The bundle,
+    briefs and overlays now ask that, where a grep rule had covered every
+    file.
 - **C6 graduation:** when the review keeps finding the same thing, C6 proposes a
   rule. B5 adds a second path: a person can harden an agent rule into a
   deterministic or fuzzy one once its shape is clear.

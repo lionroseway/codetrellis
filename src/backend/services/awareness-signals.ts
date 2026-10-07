@@ -64,7 +64,7 @@ export interface FootprintInput {
    * ones about the files it reaches. Given only when there is a scope to
    * drift from.
    */
-  rules?: Array<{ id: string; suite?: string; words: string; strength?: 'block' | 'warn' | 'guide'; kind?: string; from: string; mayNotImport: string; only?: string[] }>;
+  rules?: Array<{ id: string; suite?: string; words: string; strength?: 'block' | 'warn' | 'guide'; kind?: string; from: string; mayNotImport: string; only?: string[]; in?: string[]; except?: string[] }>;
 }
 
 /** The files and folders a workstream may change, and where that came from (A2.5). */

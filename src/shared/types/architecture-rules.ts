@@ -16,7 +16,15 @@ export type RuleStrength = 'block' | 'warn' | 'guide';
 
 export const RULE_STRENGTHS: readonly RuleStrength[] = ['block', 'warn', 'guide'];
 
-export type RuleKind = 'imports' | 'package' | 'symbol' | 'calls' | 'folder' | 'grep';
+export type RuleKind = 'imports' | 'package' | 'symbol' | 'calls' | 'folder' | 'grep' | 'agent';
+
+/**
+ * Who judges a rule (Phase 33 B5), whatever its strength: code over the graph
+ * and the text (`deterministic`), code by likeness (`fuzzy`, a `match: fuzzy`
+ * target), or an agent review against the rule's words (`agent`).
+ */
+export type RuleEngine = 'deterministic' | 'fuzzy' | 'agent';
+export const RULE_ENGINES: readonly RuleEngine[] = ['deterministic', 'fuzzy', 'agent'];
 
 export interface ArchitectureRule {
   /** A slug, unique in the project: `web-not-db`. */
@@ -35,7 +43,8 @@ export interface ArchitectureRule {
    * export one name each when `exports` is `one`; `mayNotImport` is empty.
    * `grep` (B2): the files in `in` (less `except`) may not hold the text in
    * `mayNotImport` on any line, or with `must`, must hold it on one; `from`
-   * is `**`.
+   * is `**`. `agent` (B5): words an agent review judges the files in `in`
+   * by, kept in `mayNotImport`; no code checks it.
    */
   kind?: RuleKind;
   /** The files the rule is about: `web/`. */

@@ -63,8 +63,9 @@ export function taskRules(item: Pick<PlanItem, 'fileSpecs' | 'scopePath'>, proje
   const in_scope = rulesOf(projectRoot)
     // The rules that judge its files: an imports rule over them; a package or
     // symbol rule over the files of its own language (npm:stripe is not about a .py file).
-    .filter((r) => files.some((f) => inPattern(r.from, f) && (r.kind !== 'package' && r.kind !== 'symbol' && r.kind !== 'calls' ? true : ruleCovers(r, f))))
-    .map((r) => ({ rule: r.id, suite: r.suite ?? 'architecture', strength: r.strength, words: ruleStatement(r), because: r.because, ...(r.guide ? { guide: r.guide } : {}) }));
+    // B2, B5: a grep or agent rule over the files it reads.
+    .filter((r) => files.some((f) => (r.kind === 'grep' || r.kind === 'agent' ? ruleCovers(r, f) : inPattern(r.from, f) && (r.kind !== 'package' && r.kind !== 'symbol' && r.kind !== 'calls' ? true : ruleCovers(r, f)))))
+    .map((r) => ({ rule: r.id, suite: r.suite ?? 'architecture', strength: r.strength, words: ruleStatement(r), because: r.because, ...(r.guide ? { guide: r.guide } : {}), ...(r.kind === 'agent' ? { engine: 'agent' as const } : {}) }));
   const open = openFindings(listCheckRuns(projectRoot), files);
   const latest_run = open && {
     id: open.run.id, who: open.run.who, ran_in: open.run.ranIn, at: new Date(open.run.at).toISOString(),

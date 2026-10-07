@@ -144,7 +144,7 @@ const scopeEntry = (scope: WorkstreamScope | null) => (scope ? { scope } : {});
 function rulesAboutEntry(projectRoot: string): Pick<FootprintInput, 'rules'> {
   const rules = rulesOf(projectRoot);
   if (rules.length === 0) return {};
-  return { rules: rules.map((r) => ({ id: r.id, suite: r.suite, words: ruleStatement(r), strength: r.strength, kind: r.kind, from: r.from, mayNotImport: r.mayNotImport, only: r.only })) };
+  return { rules: rules.map((r) => ({ id: r.id, suite: r.suite, words: ruleStatement(r), strength: r.strength, kind: r.kind, from: r.from, mayNotImport: r.mayNotImport, only: r.only, ...(r.in ? { in: r.in, except: r.except } : {}) })) };
 }
 
 /**

@@ -131,7 +131,9 @@ export function runWords(r: Omit<CheckRun, 'words'>): string {
   const against = r.base ? `, against ${r.base}` : '';
   const scope = r.scope ? `, ${r.scope}` : '';
   // C4b: an agent's review says what it found, in its own words.
-  const said = r.review ? `${r.review.agent}'s review${r.review.pass ? ` (${r.review.pass})` : ''}: ${reviewWords(r.review)}` : outcomeWords(r.outcome);
+  // B5: a review fails a check only on a block-strength agent rule, and then says so first.
+  const failed = r.review && r.outcome.blocks > 0 ? `✗ ${r.outcome.blocks} block · ` : '';
+  const said = r.review ? `${r.review.agent}'s review${r.review.pass ? ` (${r.review.pass})` : ''}: ${failed}${reviewWords(r.review)}` : outcomeWords(r.outcome);
   return `${r.who} in ${r.ranIn}${at}${against}${scope}: ${said}${r.verified ? '' : ` (unverified: ${r.why ?? 'not signed'})`}`;
 }
 

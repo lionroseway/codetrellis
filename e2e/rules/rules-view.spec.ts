@@ -425,4 +425,40 @@ test.describe('The Rules view: an export (Phase 33 R6)', () => {
     await expect(view.getByTestId('rule-words')).toHaveText(words);
     await expect(view.getByText('1 line breaks this today')).toBeVisible();
   });
+
+  test('the owner writes a rule in words, for an agent review to judge (Phase 33 B5)', async ({ page }) => {
+    const puts: Array<Record<string, unknown>> = [];
+    let made = false;
+    const said = 'Code that moves money records it through services/ledger, never by writing balances directly.';
+    const rule = { id: 'code-that-moves-money-records', kind: 'agent', from: '**', mayNotImport: said, in: ['src/'], except: [], because: '', strength: 'warn', suite: 'architecture', since: '2026-10-07T12:00:00.000Z', by: 'Sam Lee' };
+    await page.route((url) => url.pathname.startsWith('/api/rules'), async (route) => {
+      const req = route.request();
+      const { pathname } = new URL(req.url());
+      if (req.method() === 'GET' && pathname === '/api/rules') {
+        return route.fulfill({ json: { rules: made ? [{ rule, where: '.codetrellis/rules/architecture.yaml', words: `in src/: ${said}`, breaches: null, breachWords: 'Judged by an agent review, against its words: no code checks it, and with no review it is a guide', debt: 0 }] : [], suites: [], inConfig: 0, problems: [] } });
+      }
+      if (req.method() === 'GET' && pathname === '/api/rules/proposals') return route.fulfill({ json: { proposals: [] } });
+      if (req.method() === 'GET' && pathname === '/api/rules/history') return route.fulfill({ json: { history: [] } });
+      if (req.method() === 'POST' && pathname.endsWith('/preview')) return route.fulfill({ json: { change: { effect: 'tightens', allowed: [] }, words: '⚠ This change adds the rule.', needsConfirm: false } });
+      if (req.method() === 'PUT') {
+        puts.push({ id: decodeURIComponent(pathname.split('/')[3]), ...(req.postDataJSON() as Record<string, unknown>) });
+        made = true;
+        return route.fulfill({ json: { rule } });
+      }
+      return route.fallback();
+    });
+
+    await gotoWithProject(page);
+    await page.getByRole('button', { name: 'Rules', exact: true }).click();
+    const view = page.getByTestId('rules-view');
+    await view.getByTestId('rule-kind-agent').check();
+    await expect(view.getByTestId('rule-form')).toContainText('No code checks it: an agent review judges each change against these words');
+    await view.getByTestId('rule-agent-in').fill('src/');
+    await expect(view.getByTestId('rule-save')).toBeDisabled();
+    await view.getByTestId('rule-agent-words').fill(said);
+    await view.getByTestId('rule-save').click();
+    await expect.poll(() => puts).toEqual([{ id: 'code-that-moves-money-records', engine: 'agent', rule: said, in: ['src/'], because: '', strength: 'warn' }]);
+    await expect(view.getByTestId('rule-words')).toHaveText(`in src/: ${said}`);
+    await expect(view.getByText('Judged by an agent review, against its words')).toBeVisible();
+  });
 });
