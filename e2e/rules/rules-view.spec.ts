@@ -236,7 +236,8 @@ test.describe('The Rules view: suites, a package rule, and the history (Phase 33
     await view.getByTestId('rule-strength-block').check();
     await view.getByTestId('rule-save').click();
 
-    expect(previews).toEqual([{ kind: 'package', package: 'npm:stripe', only: ['src/payments/index.ts'], because: 'the wrapper sets idempotency keys and retries', strength: 'block', suite: 'payments' }]);
+    // The preview is asked for after the click returns: wait for it.
+    await expect.poll(() => previews).toEqual([{ kind: 'package', package: 'npm:stripe', only: ['src/payments/index.ts'], because: 'the wrapper sets idempotency keys and retries', strength: 'block', suite: 'payments' }]);
     await expect.poll(() => puts.length).toBe(1);
     expect(puts[0]).toEqual({ id: 'stripe-only-src-payments-index-ts', kind: 'package', package: 'npm:stripe', only: ['src/payments/index.ts'], because: 'the wrapper sets idempotency keys and retries', strength: 'block', suite: 'payments' });
 
