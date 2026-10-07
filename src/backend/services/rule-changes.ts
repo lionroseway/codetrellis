@@ -153,7 +153,7 @@ export function diffRules(base: readonly ArchitectureRule[], head: readonly Arch
   return out;
 }
 
-const NEEDS = " Loosening a rule needs a person's approval in the app.";
+export const NEEDS = " Loosening a rule needs a person's approval in the app.";
 
 /** How the gate says a change, given its approval (R3): approved, it is a note; otherwise the line says what is missing. */
 export function changeWords(c: RuleChange): string {

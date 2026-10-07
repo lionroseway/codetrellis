@@ -358,19 +358,22 @@ export function register(server: McpServer, deps: ToolDeps): void {
         suite: z.string().max(500).optional().describe('Check only these suites\' rules (comma-separated, like payments). A scoped check judges only rules.'),
         rule: z.string().max(500).optional().describe('Check only these rules, by id (comma-separated).'),
         path: z.string().max(500).optional().describe('Check only the rules about these paths (comma-separated, like src/payments/).'),
+        engine: z.string().max(100).optional().describe('Check only the rules these engines judge (deterministic, fuzzy, agent; comma-separated): a pipeline stage\'s.'),
+        strength: z.string().max(100).optional().describe('Check only the rules at these strengths (block, warn, guide; comma-separated).'),
+        pipeline: z.boolean().optional().describe('B6: a scoped check (a pipeline\'s first stage) also judges what the change does to .codetrellis/pipeline.yaml. An unscoped check always does.'),
         strict: z.boolean().optional().describe(
           'Fail on a rule at warn as well as one at block. By default a warn rule\'s breach is said in notes and the change still conforms.'),
         ran_in: z.string().max(80).optional().describe(
           'Where this check runs, in words, for the run\'s record: the CLI says "GitHub Actions", "a terminal". Omit from a session.'),
       },
     },
-    async ({ paths, base, project_path, strict, suite, rule, path: scopePath, ran_in }, extra: any) => {
+    async ({ paths, base, project_path, strict, suite, rule, path: scopePath, engine, strength, pipeline, ran_in }, extra: any) => {
       const root = project_path ?? deps.getActiveProjectPath();
       if (!root) return noProject;
       // C7, G9: the same check the Checks view runs, kept as a run.
       const by = authorFromExtra(deps, extra);
       const r = await checkTheChange({
-        root, paths, base, strict: strict === true, scope: { suite, rule, path: scopePath },
+        root, paths, base, strict: strict === true, scope: { suite, rule, path: scopePath, engine, strength }, pipeline: pipeline === true,
         by, ranIn: ran_in?.trim() || `${by.author}'s session`,
         activeProject: deps.getActiveProjectPath(), checkCriterion: (uid) => deps.criterionLoop.checkCriterion(uid),
       });
@@ -397,14 +400,19 @@ export function register(server: McpServer, deps: ToolDeps): void {
         suite: z.string().max(500).optional().describe('Review against these suites\' rules only (comma-separated).'),
         rule: z.string().max(500).optional().describe('Review against these rules only, by id (comma-separated).'),
         path: z.string().max(500).optional().describe('Review against the rules about these paths only (comma-separated).'),
+        engine: z.string().max(100).optional().describe('Review against the rules these engines judge only (deterministic, fuzzy, agent; comma-separated): a pipeline stage\'s.'),
+        strength: z.string().max(100).optional().describe('Review against the rules at these strengths only (comma-separated).'),
+        grounding: z.array(z.object({
+          stage: z.string().max(63), path: z.string().max(500), says: z.string().max(1000), rule: z.string().max(63).nullable().optional(), strength: z.string().max(10).optional(),
+        })).max(200).optional().describe('B6: what earlier stages of a pipeline found, given to the review as facts to build on, not to repeat.'),
         task_uid: z.string().max(100).optional().describe('The task the change is for: its goal and criteria come with the bundle.'),
         project_path: z.string().optional().describe('Absolute path of an opened project. Defaults to the active project.'),
       },
     },
-    async ({ base, suite, rule, path: scopePath, task_uid, project_path }) => {
+    async ({ base, suite, rule, path: scopePath, engine, strength, grounding, task_uid, project_path }) => {
       const root = project_path ?? deps.getActiveProjectPath();
       if (!root) return noProject;
-      const r = await reviewBundle({ root, base, scope: { suite, rule, path: scopePath }, taskUid: task_uid, env: process.env });
+      const r = await reviewBundle({ root, base, scope: { suite, rule, path: scopePath, engine, strength }, ...(grounding ? { grounding } : {}), taskUid: task_uid, env: process.env });
       if ('error' in r) return { isError: true, content: [{ type: 'text' as const, text: r.error }] };
       const files = r.bundle.data.files.length;
       return {

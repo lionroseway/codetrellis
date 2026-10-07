@@ -253,6 +253,20 @@ stages:
   runs one stage, so a CI that wants its own job per stage can have it. The C2
   recipes take the flag.
 
+Built in B6.
+- **Runs:** `codetrellis check --pipeline` runs the base's pipeline (R2),
+  each wave of stages together, each stage a check run naming itself.
+  `--stage <id>` runs one stage.
+- **Agent stages** run with `--agent` (the review's flags), and their
+  bundle carries `grounding`. Without `--agent` they are skipped, their
+  rules guides.
+- **Change control:** each stage is held as a rule is, so removing it,
+  making it advisory, or changing its terms is a loosening. It needs the
+  same signed approval, which the Rules view's Pipeline panel gives.
+  Moving a stage to run beside another is not a term.
+- **Not yet:** `tag` as a selector (rules have no tags yet), and a stage
+  that ran somewhere else filling this one (a signed local review, C9).
+
 ## B7 The docs
 
 `docs/claude/rules.md` gains a **Building blocks** section, with one worked

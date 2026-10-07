@@ -32,6 +32,8 @@ import { BASELINE_FILE, baselineYaml, readBaseline, type Baseline } from '../bac
 import { writeFileWithin } from '../backend/services/confined-fs';
 import { version as CLI_VERSION } from '../../package.json';
 import { changedFiles, gate, gateMarkdown, gateWords, wantsColor, withPlaces } from './conformity';
+import { pipelineAt, readPipeline } from '../backend/services/pipeline';
+import { pipelineWords, runPipeline, type PipelineRunners, type StageFinding } from './pipeline';
 import type { Agent, ToolAnswer } from './agent';
 
 export const VERBS = new Set(['next', 'claim', 'update', 'stuck', 'done', 'request', 'brief', 'awareness', 'check', 'report-tests', 'rules']);
@@ -251,6 +253,11 @@ async function check(ctx: Ctx, file: string | undefined): Promise<Outcome> {
 async function conforms(ctx: Ctx, root: string): Promise<Outcome> {
   let changed;
   try { changed = changedFiles(root, flag(ctx.p, 'base'), process.env); } catch (err) { throw new UsageError((err as Error).message); }
+  // B6: the base's pipeline, stage by stage.
+  if (ctx.p.flags.pipeline === true || flag(ctx.p, 'stage') !== undefined) {
+    const piped = await pipelined(ctx, root, changed);
+    if (piped) return piped;
+  }
   const g = await gate(ctx.agent, root, changed, ctx.p.flags.strict === true, { suite: flag(ctx.p, 'suite'), rule: flag(ctx.p, 'rule'), path: flag(ctx.p, 'path') });
   if ('error' in g) return { out: g.error, code: 1 };
   const format = flag(ctx.p, 'format') ?? (ctx.json ? 'json' : 'text');
@@ -270,6 +277,46 @@ async function conforms(ctx: Ctx, root: string): Promise<Outcome> {
   if (format === 'markdown') return { out: gateMarkdown(g, read), code: g.ok ? 0 : 3 };
   if (format !== 'text') throw new UsageError(`--format is text, json, markdown or sarif, not ${format}`);
   return { out: gateWords(g, { read, color: wantsColor(process.stdout, process.env, ctx.p.flags['no-color'] === true) }), code: g.ok ? 0 : 3 };
+}
+
+/**
+ * B6: `check --pipeline` (or `--stage <id>`): the base's pipeline, stage by
+ * stage; null when there is none, and the check runs every rule in one stage
+ * as before. Agent stages run only with a reviewer (`--agent`, and the rest of
+ * `codetrellis review`'s flags).
+ */
+async function pipelined(ctx: Ctx, root: string, changed: ReturnType<typeof changedFiles>): Promise<Outcome | null> {
+  const got = changed.since ? await pipelineAt(root, changed.since) : readPipeline(root);
+  if (!got) return null;
+  if (!got.pipeline) return { out: `The pipeline${changed.since ? ` at ${changed.since.slice(0, 7)}` : ''} could not be read: ${got.problems.join('; ')}`, code: 1 };
+  const strict = ctx.p.flags.strict === true;
+  let review: PipelineRunners['review'] = null;
+  if (flag(ctx.p, 'agent') !== undefined) {
+    const { review: runReview, reviewOptions, ReviewUsageError } = await import('./review');
+    let o: ReturnType<typeof reviewOptions>;
+    try { o = reviewOptions(ctx.p, ctx.cwd, process.env); } catch (err) {
+      if (err instanceof ReviewUsageError) throw new UsageError(err.message);
+      throw err;
+    }
+    const sinkFor = (dir: string) => ({ command: process.execPath, args: [path.resolve(__dirname, '..', '..', 'bin', 'codetrellis.mjs'), 'review-sink', '--pass', dir] });
+    review = async (stage, scope, grounding) => {
+      // An agent stage fails on what a block-strength agent rule's finding holds (B5), and its output is read, not shown raw.
+      const r = await runReview(ctx.agent, { ...o, scope: { suite: scope.suite, rule: scope.rule, path: scope.path, engine: scope.engine, strength: scope.strength }, stage: stage.id, grounding, format: 'json', failOn: new Set(['block']), post: null }, ctx.cwd, process.env, sinkFor, { version: CLI_VERSION });
+      let j: { passes?: Array<{ says: string; failing: boolean; kept: Array<{ path: string | null; says: string; rule: string | null }> }>; says?: string; error?: string };
+      try { j = JSON.parse(r.out); } catch { return { error: r.out }; }
+      if (j.error) return { error: j.error };
+      const findings: StageFinding[] = (j.passes ?? []).flatMap((pass) => pass.kept.filter((k) => k.path).map((k) => ({ stage: stage.id, path: k.path!, says: k.says, rule: k.rule })));
+      return { ok: r.code === 0, out: j.says ?? (j.passes ?? []).map((pass) => `review: ${pass.says}`).join('\n'), findings };
+    };
+  }
+  const result = await runPipeline(got.pipeline, { gate: (scope) => gate(ctx.agent, root, changed, strict, scope), review }, flag(ctx.p, 'stage'));
+  const code = result.stages.some((s) => !s.ok && !s.advisory && (s.gate && 'error' in s.gate)) ? 1 : result.ok ? 0 : 3;
+  if (ctx.json || flag(ctx.p, 'format') === 'json') return { out: JSON.stringify(result), code };
+  const read = (rel: string): string | null => {
+    try { return fs.readFileSync(path.join(root, rel), 'utf8'); } catch { return null; }
+  };
+  const color = wantsColor(process.stdout, process.env, ctx.p.flags['no-color'] === true);
+  return { out: pipelineWords(result, (g) => gateWords(g, { read, color })), code };
 }
 
 /**

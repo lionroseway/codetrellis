@@ -185,6 +185,53 @@ says what it checked: `Conforms to suite payments: …`. The same scopes are
 `suite`, `rule` and `path` on `check_changes` and `check_conformity`, and on
 `GET /api/rules`.
 
+### Stages: a pipeline (Phase 33 B6)
+
+An optional `.codetrellis/pipeline.yaml` says what runs, in what order, and
+what each stage hands the next. Without it, every rule runs in one stage.
+
+```yaml
+stages:
+  - id: fast
+    rules: { engine: deterministic }
+  - id: fuzzy
+    rules: { engine: fuzzy }
+    parallel: true                 # beside the stage before
+  - id: review
+    needs: [fast, fuzzy]
+    rules: { engine: agent }
+    when: { fuzzy: passed }        # run only if fuzzy passed
+    grounding: [fast, fuzzy]       # the review is given what they found
+```
+
+```
+codetrellis check --pipeline --base main                 # every stage
+codetrellis check --pipeline --stage fast --base main    # one stage, for a CI job per stage
+codetrellis check --pipeline --base main --agent claude-code --auth env:KEY   # agent stages too
+```
+
+- **`rules`** selects by `suite`, `engine`, `strength` or `id`, each a name
+  or a list. `all`, or no `rules`, means every rule.
+- **How it runs:** stages run in order, and `parallel: true` runs a stage
+  beside the one before it. `needs` and `when` name only stages that finish
+  first. `advisory: true` makes a stage said, never failing.
+- **Each stage is a check run** whose `ranIn` names it ("a terminal, stage
+  fast").
+- **An agent stage** (one that selects `engine: agent`) is also a
+  `codetrellis review` of those rules, with the review's own flags. Its
+  bundle carries what the `grounding` stages found under `grounding`, as
+  facts to build on. With no `--agent`, it is skipped, and its rules are
+  guides.
+- **The pipeline is the base's,** as the rules are (R2). What a branch does
+  to it is the first stage's finding, or any whole check's.
+- **Change control:** removing a stage, making it advisory, or changing what
+  it runs, after what, when, or with what grounding is a loosening. It
+  needs a person's signed approval, the same as a rule's: the Rules view's
+  **Pipeline** panel shows the loosenings since the last commit and signs
+  them (`GET /api/pipeline`, `POST /api/pipeline/approve`).
+- **Exit codes:** 3 when a stage that is not advisory fails, and 1 when the
+  base's pipeline cannot be read.
+
 ### Old breaches may only fall (Phase 33 C3)
 
 A rule written over old code has imports that already break it. The check
