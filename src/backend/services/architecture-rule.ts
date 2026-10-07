@@ -6,6 +6,7 @@
  * the project config can parse rules without importing it back.
  */
 import { RULE_STRENGTHS, type ArchitectureRule, type RuleBreach, type RuleStrength } from '../../shared/types/architecture-rules';
+import { isPackageEntry, packageMatches, packageProblem } from '../../shared/lib/package-entry';
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const MAX_BECAUSE = 200;
@@ -22,7 +23,9 @@ function patternProblem(name: string, v: unknown): string | null {
 /** Read a rule from anyone's text: the rule, or why not. */
 export function parseArchitectureRule(raw: unknown): { rule: ArchitectureRule | null; problems: string[] } {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  if (r.kind === 'package') return parsePackageRule(r);
   const problems: string[] = [];
+  if (r.kind !== undefined && r.kind !== 'imports') problems.push('kind must be imports or package');
   if (typeof r.id !== 'string' || !ID_RE.test(r.id)) problems.push('id must be a short slug, like web-not-db');
   const fromProblem = patternProblem('from', r.from);
   if (fromProblem) problems.push(fromProblem);
@@ -34,8 +37,7 @@ export function parseArchitectureRule(raw: unknown): { rule: ArchitectureRule | 
     const p = patternProblem('except', e);
     if (p) { problems.push(p); break; }
   }
-  if (r.because !== undefined && (typeof r.because !== 'string' || r.because.length > MAX_BECAUSE)) problems.push(`because must be words, at most ${MAX_BECAUSE} characters`);
-  if (r.strength !== undefined && !RULE_STRENGTHS.includes(r.strength as RuleStrength)) problems.push('strength must be block, warn or guide');
+  commonProblems(r, problems);
   if (!fromProblem && !toProblem && normalise(r.from as string) === normalise(r.mayNotImport as string)) problems.push('from and mayNotImport must differ');
   if (problems.length > 0) return { rule: null, problems };
   return {
@@ -44,13 +46,65 @@ export function parseArchitectureRule(raw: unknown): { rule: ArchitectureRule | 
       from: normalise(r.from as string),
       mayNotImport: normalise(r.mayNotImport as string),
       except: (except as string[]).map(normalise),
-      because: typeof r.because === 'string' ? r.because.trim() : '',
-      since: typeof r.since === 'string' && !Number.isNaN(Date.parse(r.since)) ? r.since : new Date(0).toISOString(),
-      by: typeof r.by === 'string' ? r.by : '',
-      // Absent: written before strength existed, when every rule blocked (R4).
-      strength: (r.strength as RuleStrength | undefined) ?? 'block',
+      ...common(r),
     },
     problems: [],
+  };
+}
+
+/**
+ * A package rule (Phase 33 R5): `package` is the outside package, `only` the
+ * files that alone may import it, `from` where the rule applies (everywhere
+ * when not said), `except` the parts of the package anyone may import.
+ */
+function parsePackageRule(r: Record<string, unknown>): { rule: ArchitectureRule | null; problems: string[] } {
+  const problems: string[] = [];
+  if (typeof r.id !== 'string' || !ID_RE.test(r.id)) problems.push('id must be a short slug, like stripe-via-wrapper');
+  const pkg = r.package ?? r.mayNotImport;
+  const pkgProblem = packageProblem(pkg);
+  if (pkgProblem) problems.push(pkgProblem);
+  const fromProblem = r.from === undefined ? null : patternProblem('from', r.from);
+  if (fromProblem) problems.push(fromProblem);
+  const only = Array.isArray(r.only) ? r.only : r.only === undefined ? [] : null;
+  if (only === null || only.length === 0) problems.push('only must list the files that may import it, like src/payments/index.ts');
+  for (const o of only ?? []) {
+    const p = patternProblem('only', o);
+    if (p) { problems.push(p); break; }
+  }
+  const except = Array.isArray(r.except) ? r.except : r.except === undefined ? [] : null;
+  if (except === null) problems.push('except must be a list of packages, like npm:stripe/types');
+  for (const e of except ?? []) {
+    const p = packageProblem(e);
+    if (p) { problems.push(`except: ${p}`); break; }
+  }
+  commonProblems(r, problems);
+  if (problems.length > 0) return { rule: null, problems };
+  return {
+    rule: {
+      id: r.id as string,
+      kind: 'package',
+      from: r.from === undefined ? '**' : normalise(r.from as string),
+      mayNotImport: (pkg as string).trim(),
+      only: (only as string[]).map(normalise),
+      except: (except as string[]).map((e) => e.trim()),
+      ...common(r),
+    },
+    problems: [],
+  };
+}
+
+function commonProblems(r: Record<string, unknown>, problems: string[]): void {
+  if (r.because !== undefined && (typeof r.because !== 'string' || r.because.length > MAX_BECAUSE)) problems.push(`because must be words, at most ${MAX_BECAUSE} characters`);
+  if (r.strength !== undefined && !RULE_STRENGTHS.includes(r.strength as RuleStrength)) problems.push('strength must be block, warn or guide');
+}
+
+function common(r: Record<string, unknown>): Pick<ArchitectureRule, 'because' | 'since' | 'by' | 'strength'> {
+  return {
+    because: typeof r.because === 'string' ? r.because.trim() : '',
+    since: typeof r.since === 'string' && !Number.isNaN(Date.parse(r.since)) ? r.since : new Date(0).toISOString(),
+    by: typeof r.by === 'string' ? r.by : '',
+    // Absent: written before strength existed, when every rule blocked (R4).
+    strength: (r.strength as RuleStrength | undefined) ?? 'block',
   };
 }
 
@@ -78,6 +132,13 @@ const escape = (s: string) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
 
 /** Whether `from` importing `to` crosses this rule. A file already inside the forbidden set is not "from" outside it. */
 export function breaks(rule: ArchitectureRule, from: string, to: string): boolean {
+  if (rule.kind === 'package') {
+    // R5: `to` is a package entry; only the rule's own files may import it.
+    if (!isPackageEntry(to) || !packageMatches(rule.mayNotImport, to)) return false;
+    if (!inPattern(rule.from, from) || (rule.only ?? []).some((o) => inPattern(o, from))) return false;
+    return !rule.except.some((e) => packageMatches(e, to));
+  }
+  if (isPackageEntry(to)) return false; // an outside package is no file in a folder
   if (!inPattern(rule.from, from) || inPattern(rule.mayNotImport, from)) return false;
   if (!inPattern(rule.mayNotImport, to)) return false;
   return !rule.except.some((e) => inPattern(e, to));
@@ -93,14 +154,27 @@ export function checkEdges(rules: ArchitectureRule[], edges: Array<{ from: strin
   return out;
 }
 
+/**
+ * What the rule says, in one clause, the same everywhere a rule is named:
+ * "web/ may not import db/ (except db/types.ts)", or for a package rule
+ * "only src/payments/index.ts may import npm:stripe" ("in src/, only …"
+ * when it applies to a folder).
+ */
+export function ruleStatement(rule: Pick<ArchitectureRule, 'kind' | 'from' | 'mayNotImport' | 'except' | 'only'>): string {
+  const except = rule.except.length > 0 ? ` (except ${rule.except.join(', ')})` : '';
+  if (rule.kind === 'package') {
+    const where = rule.from && rule.from !== '**' ? `in ${rule.from}, ` : '';
+    return `${where}only ${(rule.only ?? []).join(', ')} may import ${rule.mayNotImport}${except}`;
+  }
+  return `${rule.from} may not import ${rule.mayNotImport}${except}`;
+}
+
 /** "web/ may not import db/ (except db/types.ts): web talks to db through the API" */
 export function ruleWords(rule: ArchitectureRule): string {
-  const except = rule.except.length > 0 ? ` (except ${rule.except.join(', ')})` : '';
-  return `${rule.from} may not import ${rule.mayNotImport}${except}${rule.because ? `: ${rule.because}` : ''}`;
+  return `${ruleStatement(rule)}${rule.because ? `: ${rule.because}` : ''}`;
 }
 
 /** "web/reports.ts imports db/client.ts, which “web-not-db” forbids: web talks to db through the API" */
 export function breachWords(rule: ArchitectureRule, b: { from: string; to: string }): string {
-  return `${b.from} imports ${b.to}, which the rule “${rule.from} may not import ${rule.mayNotImport}” forbids${rule.because ? `: ${rule.because}` : ''}`;
+  return `${b.from} imports ${b.to}, which the rule “${ruleStatement({ ...rule, except: [] })}” forbids${rule.because ? `: ${rule.because}` : ''}`;
 }
-

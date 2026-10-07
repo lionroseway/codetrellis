@@ -77,3 +77,14 @@ test('a narrower exception at a lower strength still loosens, and the words say 
   assert.equal(c.effect, 'loosens');
   assert.match(c.words, /from “web\/ may not import db\/ \(except db\/types.ts\)” at block to “web\/ may not import db\/” at warn/);
 });
+
+test('a package rule letting more files import it loosens; fewer tightens (R5)', () => {
+  const stripe = (only: string[]) => rule('stripe', { kind: 'package', from: '**', mayNotImport: 'npm:stripe', only, except: [] });
+  const pkgEdges = [{ from: 'src/checkout/pay.ts', to: 'npm:stripe' }, { from: 'src/payments/index.ts', to: 'npm:stripe' }];
+  const [wider] = diffRules([stripe(['src/payments/index.ts'])], [stripe(['src/payments/index.ts', 'src/checkout/'])], pkgEdges);
+  assert.equal(wider.effect, 'loosens');
+  assert.deepEqual(wider.allowed, [{ from: 'src/checkout/pay.ts', to: 'npm:stripe' }]);
+  assert.match(wider.words, /^✗ This change loosens the rule stripe, from “only src\/payments\/index.ts may import npm:stripe” to “only src\/payments\/index.ts, src\/checkout\/ may import npm:stripe”: 1 import it forbade become allowed/);
+  const [narrower] = diffRules([stripe(['src/payments/', 'src/billing/'])], [stripe(['src/payments/'])], pkgEdges);
+  assert.equal(narrower.effect, 'tightens');
+});

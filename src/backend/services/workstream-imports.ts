@@ -17,9 +17,10 @@ import type { ChangedFile, Workstream } from '../../shared/types';
 import { parseVirtualFile } from './ast-parser';
 import { getAllFileHashes, getImportResolutionContext, resolutionContextRoot } from './database';
 import { getResolverForLanguage } from './resolvers';
+import { packageEntry } from '../../shared/lib/package-entry';
 import { showAtAsync } from './branch-workstreams';
 import { baseContent, currentContent } from './workstream-symbols';
-import { checkEdges, rulesOf } from './architecture-rules';
+import { checkEdges, ruleStatement, rulesOf } from './architecture-rules';
 import type { RuleImport } from './conformity-gate';
 import type { ArchitectureRule } from '../../shared/types/architecture-rules';
 
@@ -45,7 +46,12 @@ function stampOf(folder: string, base: string | null, file: ChangedFile, head: s
  * is the main checkout, where a branch workstream (no folder of its own) is
  * read at its head commit.
  */
-export async function importsAdded(projectRoot: string, w: Pick<Workstream, 'root' | 'shape' | 'head' | 'changes'>, mainRoot: string | null): Promise<ImportEdge[]> {
+export async function importsAdded(
+  projectRoot: string,
+  w: Pick<Workstream, 'root' | 'shape' | 'head' | 'changes'>,
+  mainRoot: string | null,
+  opts: { packages?: boolean } = {},
+): Promise<ImportEdge[]> {
   const base = w.changes.base;
   const branch = w.shape === 'branch' && w.head && mainRoot ? w.head : null;
   const folder = branch ? mainRoot! : w.root;
@@ -67,6 +73,11 @@ export async function importsAdded(projectRoot: string, w: Pick<Workstream, 'roo
     for (const imp of parsed.imports) {
       const hit = resolver.resolve({ importSource: imp.source, importerPath: abs, projectRoot, knownFiles: known, aliasMap, systems, isRelative: imp.isRelative });
       if (hit) out.add(posix(path.relative(projectRoot, hit)));
+      else if (opts.packages) {
+        // R5: an outside import, as its package, for package rules to read.
+        const entry = packageEntry(parsed.language, imp.source, imp.isRelative);
+        if (entry) out.add(entry);
+      }
     }
     return out;
   };
@@ -74,7 +85,7 @@ export async function importsAdded(projectRoot: string, w: Pick<Workstream, 'roo
   const edges: ImportEdge[] = [];
   for (const file of w.changes.files) {
     if (file.status === 'deleted') continue;
-    const key = `${folder}\0${file.path}`;
+    const key = `${folder}\0${file.path}\0${opts.packages ? 'p' : ''}`;
     const stamp = stampOf(folder, base, file, branch);
     const hit = cache.get(key);
     if (hit && hit.stamp === stamp) { edges.push(...hit.added); continue; }
@@ -115,10 +126,10 @@ export async function ruleImports(projectRoot: string, files: readonly string[],
   const edges = await importsAdded(projectRoot, {
     root: projectRoot, shape: 'shared', head: null,
     changes: { base, files: files.map((f) => ({ path: f, status: 'modified' as const })), truncated: false },
-  }, null);
+  }, null, { packages: true });
   const byId = new Map(rules.map((r) => [r.id, r]));
   return checkEdges(rules, edges).map((b) => {
     const rule = byId.get(b.rule)!;
-    return { path: b.from, imports: b.to, rule: rule.id, words: `${rule.from} may not import ${rule.mayNotImport}`, because: rule.because, strength: rule.strength === 'block' ? 'block' : 'warn' };
+    return { path: b.from, imports: b.to, rule: rule.id, words: ruleStatement({ ...rule, except: [] }), because: rule.because, strength: rule.strength === 'block' ? 'block' : 'warn' };
   });
 }

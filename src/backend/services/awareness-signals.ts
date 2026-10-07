@@ -31,6 +31,7 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import type { AwarenessSignal, ChangedFile, SignalKind, SignalSeverity } from '../../shared/types';
+import { ruleStatement } from './architecture-rule';
 
 export interface FootprintInput {
   root: string;
@@ -274,7 +275,7 @@ export function computeSignals(footprints: readonly FootprintInput[]): SignalDra
       if (edges.length === 0) continue;
       const sorted = [...edges].sort((x, y) => x.from.localeCompare(y.from) || x.to.localeCompare(y.to));
       const shown = sorted.slice(0, 2).map((e) => `${e.from} → ${e.to}`).join(', ') + (sorted.length > 2 ? ` and ${sorted.length - 2} more` : '');
-      const words = `${rule.from} may not import ${rule.mayNotImport}`;
+      const words = ruleStatement({ ...rule, except: [] });
       out.push(draft('rule', rule.strength === 'warn' ? 'medium' : 'high', `${w.root}\0${rule.id}`, {
         files: [...new Set(sorted.map((e) => e.from))],
         rule: { id: rule.id, words, because: rule.because },

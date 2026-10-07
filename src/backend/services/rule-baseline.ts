@@ -26,7 +26,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { ArchitectureRule } from '../../shared/types/architecture-rules';
-import { checkEdges } from './architecture-rule';
+import { checkEdges, ruleStatement } from './architecture-rule';
 import { readTextWithin } from './confined-fs';
 
 export const BASELINE_FILE = '.codetrellis/rules/baseline.yaml';
@@ -125,7 +125,7 @@ export function ratchet(
     const breaches = checkEdges([r], edges as Array<{ from: string; to: string }>);
     for (const b of breaches) {
       if (listed.has(entry(b))) continue;
-      out.push({ rule: r.id, kind: 'breach', from: b.from, to: b.to, words: `✗ ${b.from} imports ${b.to}, which the rule “${r.from} may not import ${r.mayNotImport}” forbids, and its baseline does not list it` });
+      out.push({ rule: r.id, kind: 'breach', from: b.from, to: b.to, words: `✗ ${b.from} imports ${b.to}, which the rule “${ruleStatement({ ...r, except: [] })}” forbids, and its baseline does not list it` });
     }
     const left = breaches.filter((b) => listed.has(entry(b))).length;
     if (left < listed.size) {

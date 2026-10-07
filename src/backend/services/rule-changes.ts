@@ -14,7 +14,7 @@
  */
 
 import type { ArchitectureRule, RuleStrength } from '../../shared/types/architecture-rules';
-import { checkEdges } from './architecture-rule';
+import { checkEdges, ruleStatement } from './architecture-rule';
 
 export type RuleEffect = 'loosens' | 'tightens' | 'reworded';
 
@@ -52,9 +52,14 @@ const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.l
  * code that does not exist yet. A person decides those (R3).
  */
 function textEffect(base: ArchitectureRule, head: ArchitectureRule): RuleEffect | 'same' {
-  const pathsSame = base.from === head.from && base.mayNotImport === head.mayNotImport;
-  if (pathsSame && sameSet(base.except, head.except)) return 'same';
-  if (pathsSame && head.except.every((e) => base.except.includes(e))) return 'tightens';
+  const pathsSame = (base.kind ?? 'imports') === (head.kind ?? 'imports') && base.from === head.from && base.mayNotImport === head.mayNotImport;
+  // A package rule's `only` is who may: fewer is tighter, more or other is looser (R5).
+  const baseOnly = base.only ?? [];
+  const headOnly = head.only ?? [];
+  const onlySame = sameSet(baseOnly, headOnly);
+  const onlyShrank = headOnly.every((o) => baseOnly.includes(o));
+  if (pathsSame && onlySame && sameSet(base.except, head.except)) return 'same';
+  if (pathsSame && onlyShrank && head.except.every((e) => base.except.includes(e))) return 'tightens';
   return 'loosens';
 }
 
@@ -65,7 +70,7 @@ function strengthEffect(base: ArchitectureRule, head: ArchitectureRule): RuleEff
   return d === 0 ? 'same' : d > 0 ? 'tightens' : 'loosens';
 }
 
-const stated = (r: ArchitectureRule) => `“${r.from} may not import ${r.mayNotImport}${r.except.length ? ` (except ${r.except.join(', ')})` : ''}”`;
+const stated = (r: ArchitectureRule) => `“${ruleStatement(r)}”`;
 
 export function diffRules(base: readonly ArchitectureRule[], head: readonly ArchitectureRule[], edges: readonly Edge[]): RuleChange[] {
   const out: RuleChange[] = [];
@@ -78,7 +83,7 @@ export function diffRules(base: readonly ArchitectureRule[], head: readonly Arch
       const allowed = breaches(b, edges);
       out.push({
         rule: id, change: 'removed', effect: 'loosens', allowed, forbidden: [], before: b, after: null,
-        words: `✗ This change removes the rule “${b.from} may not import ${b.mayNotImport}” (${id})${allowed.length ? `: ${imports(allowed.length)} it forbade become allowed` : ''}. Loosening a rule needs a person's approval in the app.`,
+        words: `✗ This change removes the rule “${ruleStatement({ ...b, except: [] })}” (${id})${allowed.length ? `: ${imports(allowed.length)} it forbade become allowed` : ''}. Loosening a rule needs a person's approval in the app.`,
       });
       continue;
     }
@@ -124,7 +129,7 @@ export function diffRules(base: readonly ArchitectureRule[], head: readonly Arch
     const forbidden = breaches(h, edges);
     out.push({
       rule: id, change: 'added', effect: 'tightens', allowed: [], forbidden, before: null, after: h,
-      words: `⚠ This change adds the rule “${h.from} may not import ${h.mayNotImport}” (${id}) at ${h.strength}${forbidden.length ? `: ${imports(forbidden.length)} already in the code would break it` : ''}. It is checked once it is on the base branch.`,
+      words: `⚠ This change adds the rule “${ruleStatement({ ...h, except: [] })}” (${id}) at ${h.strength}${forbidden.length ? `: ${imports(forbidden.length)} already in the code would break it` : ''}. It is checked once it is on the base branch.`,
     });
   }
   return out;

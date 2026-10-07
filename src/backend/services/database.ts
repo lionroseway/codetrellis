@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { ParsedFile, ParsedSymbol, AliasMapping, DiscoveredSystem, SupportedLanguage } from '../../shared/types';
 import { getDataDir, ensureDataDir } from './persistence';
 import { getResolverForLanguage } from './resolvers';
+import { packageEntry } from '../../shared/lib/package-entry';
 import { reconcileSchemaFromSql } from './schema-reconciler';
 // Called, never read at load: the two modules name each other.
 import { importersOf } from './importers';
@@ -803,6 +804,38 @@ export function getDependencyEdges(): Array<{
     targetRelative: row[3] as string,
     specifiers: JSON.parse((row[4] as string) || '[]'),
   }));
+}
+
+/**
+ * Phase 33 R5 — every outside import in the graph, as the package it comes
+ * from: an import that resolved to no project file, kept as `npm:stripe`,
+ * `pypi:requests`, `go:github.com/stripe/stripe-go` (see package-entry.ts).
+ * The edges package rules are checked against; relative imports and the
+ * standard library are left out.
+ */
+export function getPackageEdges(): Array<{ sourceRelative: string; targetRelative: string }> {
+  let results;
+  try {
+    results = getDb().exec(`
+      SELECT DISTINCT f.relative_path, f.language, i.source_path, i.is_relative
+      FROM imports i
+      JOIN files f ON i.file_id = f.id
+      WHERE i.resolved_path IS NULL
+      ORDER BY f.relative_path
+    `);
+  } catch {
+    return []; // no scan yet, or no database
+  }
+  const out: Array<{ sourceRelative: string; targetRelative: string }> = [];
+  const seen = new Set<string>();
+  for (const row of results[0]?.values ?? []) {
+    const entry = packageEntry(String(row[1]), String(row[2]), Number(row[3]) === 1);
+    const key = `${row[0]}\0${entry}`;
+    if (!entry || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ sourceRelative: String(row[0]), targetRelative: entry });
+  }
+  return out;
 }
 
 /**

@@ -16,14 +16,26 @@ export type RuleStrength = 'block' | 'warn' | 'guide';
 
 export const RULE_STRENGTHS: readonly RuleStrength[] = ['block', 'warn', 'guide'];
 
+export type RuleKind = 'imports' | 'package';
+
 export interface ArchitectureRule {
   /** A slug, unique in the project: `web-not-db`. */
   id: string;
+  /**
+   * What it checks (Phase 33 R5). `imports`, the default: files in `from`
+   * may not import files in `mayNotImport`. `package`: only the files in
+   * `only` may import the outside package named in `mayNotImport`
+   * (`npm:stripe`); `from` is where the rule applies, everywhere (`**`) when
+   * not said.
+   */
+  kind?: RuleKind;
   /** The files the rule is about: `web/`. */
   from: string;
-  /** What they may not import: `db/`. */
+  /** What they may not import: `db/`, or for a package rule the package, `npm:stripe`. */
   mayNotImport: string;
-  /** Files they may import all the same: `db/types.ts`. */
+  /** A package rule's files that alone may import it: `src/payments/index.ts`. */
+  only?: string[];
+  /** Files they may import all the same: `db/types.ts`; for a package rule, parts of it they may (`npm:stripe/types`). */
   except: string[];
   /** Why, in the team's words: "web talks to db through the API". */
   because: string;
