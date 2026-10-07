@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | B1: matchers |
+| **Stage / step** | B2: grep rules |
 | **Status** | In review |
-| **In flight** | B1 in review (#393) on `feat/phase-33-b1-matchers`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | R10 (#392, `b652871`) |
-| **Next action** | Merge B1 when CI is green, then build B2 (grep rules) |
+| **In flight** | B2 building on `feat/phase-33-b2-grep-rules`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | B1 (#393, `4e4271b`) |
+| **Next action** | Merge B2 when CI is green, then build B3 (fuzzy matching) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `b652871`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `4e4271b`, with open PRs from GitHub.
 
 ---
 
@@ -47,6 +47,7 @@
 - [x] Follow-up: rules-overlay.spec drew no edges in CI: React Flow held every node measured and none with handle positions, and nothing measured them again; the canvas now does (`RemeasureHandles`) (#387)
 - [ ] Follow-up: The plan-panel and inspector Allotment resize throws on load (minimumSize of undefined), caught and logged since Phase 31
 - [ ] Follow-up: C5 is not yet seen reviewing on this repo: it has no CLAUDE_CODE_OAUTH_TOKEN secret, so codetrellis-review.yml and claude-review.yml review nothing. Deferred by the owner (2026-10-07): a public repo's PRs can read its secrets, so agent review here waits; deterministic rules (R10) come first
+- [ ] Follow-up: Path patterns: should `**/` match no folder too (`src/backend/**/*.ts` misses `src/backend/server.ts`)? Widening only and except loosens existing rules, so the owner decides
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
@@ -101,8 +102,8 @@
 - [x] V6 Did the change do what the task said (only when it is linked to a task) (#376)
 
 ### Track B: building blocks
-- [ ] B1 Matchers on every rule target: exact, glob, regex, fuzzy (absorbs the wildcard targets proposed as R11) (#393) — in review
-- [ ] B2 Grep rules: text that must not, or must, appear, scoped by path, file:line findings, baselined
+- [x] B1 Matchers on every rule target: exact, glob, regex, fuzzy (absorbs the wildcard targets proposed as R11) (#393)
+- [ ] B2 Grep rules: text that must not, or must, appear, scoped by path, file:line findings, baselined — building
 - [ ] B3 Fuzzy matching: look-alike names and near-duplicates, by a deterministic similarity score with a threshold
 - [ ] B4 Your own patterns: what counts as a call, or as any entry (queue:, event:, flag:), without code
 - [ ] B5 Engine per rule: deterministic, fuzzy or agent, independent of strength; an agent rule blocks only when its owner says block
@@ -218,6 +219,43 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — B1 merged; B2 built: grep rules
+
+- **B1 (#393) merged**, with one more fix found before merge. The gate
+  judged a glob or regex symbol rule per import, but the Rules view looked
+  importers up by the literal name (`raw*`) and counted none. It now finds
+  the exported names the pattern covers, and who imports each. A harness
+  test that failed without the fix proves it.
+- **B2: grep rules.** `kind: grep` reads files by path, in any language,
+  with no parser.
+  - **`mustNot`** reports each line that holds the text. **`must`** reports
+    each file in `in` that never does, on its first line.
+  - **The text** is literal by default, and a `*` in it stays a `*`, because
+    code is full of them. `match: glob` and `match: regex` (searched per
+    line) also work, and `ignoreCase: true` reads it in any case.
+  - **Entries are keyed** by the line's text and the rule's terms. The gate
+    reports only the lines a change adds, so an edit above an old line does
+    not make it new. A rule changed on a branch is never judged by the
+    other rule's entries.
+  - **The Rules view** reads every file git knows under `in`, up to 1 MB
+    each, through the confined-file helper. It counts "1 line breaks this
+    today", and its form has a **Text** kind.
+  - **Baselined like any rule.** Rule-change words count lines or files,
+    and changing `in`, `must` or the case is a loosening.
+  - **Done criterion, proved end to end:** a branch adds
+    `console.log('booting')` above the old `console.log`. The check fails
+    at line 2 and says nothing of the old line. A route without
+    `requireAuth` fails at line 1, and an excepted test file passes. With
+    the old line baselined, a branch that removes it is told the count fell.
+  - **Locally:** unit 2198; 83 harness tests (rules, check, CLI, SARIF and
+    the C3 baseline); 70 chromium and 10 serial browser tests, including
+    the Text form.
+- **Follow-up:** `**/` in a path pattern needs at least one folder, so
+  `src/backend/**/*.ts` misses `src/backend/server.ts`. That is true of
+  every rule kind since Phase 32. Matching zero folders would widen `only`
+  and `except` on existing rules, which loosens them, so it is the owner's
+  call.
 
 ### 2026-10-07 — R10 merged; B1 built: globs and regexes on rule targets
 
