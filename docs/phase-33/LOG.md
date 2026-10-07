@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Merging the built steps, in order |
-| **Status** | R8 in review (folder rules); R7 merged (#386) |
-| **In flight** | R8 in review (#387) on `feat/phase-33-r8-folder-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | R7 (#386, `55af7ab`) |
-| **Next action** | Merge R8 when CI is green, then replay C4b |
+| **Stage / step** | C4b: bring your own agent — get_review_bundle and report_review |
+| **Status** | In review |
+| **In flight** | C4 building on `feat/phase-33-c4-agent-checks`; C4b in review (#388) on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | R8 (#387, `bcea46d`) |
+| **Next action** | Merge C4b when CI is green, then replay C4 (codetrellis review) onto it; C4 already passes locally stacked on C4b |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `55af7ab`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `bcea46d`, with open PRs from GitHub.
 
 ---
 
@@ -65,7 +65,7 @@
 - [x] R5 Package rules across all eleven languages (only the wrapper imports `stripe`) (#377)
 - [x] R6 Symbol rules (who may import a named export, through re-exports) (#385)
 - [x] R7 Call rules (HTTP hosts, commands, tables, env) (#386)
-- [ ] R8 Folder rules (what files in a folder are) (#387) — in review
+- [x] R8 Folder rules (what files in a folder are) (#387)
 - [x] R9 Guide rules in scope (the brief, `get_brief`, drift names the rule) (#384)
 
 ### Track C: checks anywhere
@@ -73,7 +73,7 @@
 - [x] C2 SARIF output, host-neutral; recipes are examples for any CI (no host first) (#362)
 - [x] C3 Debt ratchet (existing breaches may only fall) (#363)
 - [ ] C4 Agent checks locally on the user's own agent: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes) — building
-- [ ] C4b Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified) — building
+- [ ] C4b Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified) (#388) — in review
 - [ ] C5 Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass) — building
 - [ ] C6 Graduation (a repeated finding proposes a rule) — building
 - [x] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran (#379)
@@ -206,6 +206,42 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — R8 merged (#387); C4b in review
+
+- **R8 merged** (#387): folder rules. Before it went green, CI failed twice,
+  in tests that are not about folder rules; both causes are fixed in it.
+  - **The graph drew files and none of their imports** (`rules-overlay`,
+    also twice on #381). G8's diagnostics showed React Flow holding every
+    node measured and none with handle positions, and it re-measures only
+    when a node's size changes. `RemeasureHandles` measures such a node
+    again. `nodes-stay-drawn.spec` puts the canvas in that state and fails
+    without the fix. The follow-up is done.
+  - **The terminal panel lost its shell** (`terminal/empty-state`), for two
+    reasons:
+    - The terminal list fetched on connect replaced a shell just started.
+      `hydrate` now keeps what changed meanwhile.
+    - Terminal specs on two workers deleted each other's terminals. They
+      now delete their own, and `empty-state` runs in the serial project.
+- **C4b: bring your own agent.** The agent a person already runs reviews the
+  change, on their own model and key.
+  - **`get_review_bundle`** gives it what the review needs:
+    - the contract;
+    - the rules about the changed files, in the check's words;
+    - what the check already found;
+    - the task's criteria, when named;
+    - the change as numbered lines under `data`, said to be data and never
+      instructions.
+  - **`report_review`** checks each finding against exactly the lines that
+    bundle showed: a file in the change, lines in the diff, a quote that
+    matches, a rule in scope. What fails is dropped with the reason. A
+    review whose every finding fails is inconclusive.
+  - The review is kept as an advisory check run, and the Checks view opens
+    it into what held and what was dropped. Both tools are `read`.
+- Checked before review on the replayed code: unit 2163 passing; 83 review,
+  rule, check, CLI and capability harness tests; the rules, settings and
+  agent browser specs (121 chromium, 23 serial). The only difference from the
+  tree tested is R8's fixes, which passed CI on #387.
 
 ### 2026-10-07 — R7 merged (#386); R8 in review
 
