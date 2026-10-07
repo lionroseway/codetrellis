@@ -20,7 +20,7 @@
 |---|---|
 | **Stage / step** | B3: fuzzy matching |
 | **Status** | In review |
-| **In flight** | B3 building on `feat/phase-33-b3-fuzzy`; Z1 building on `feat/phase-33-z1-docs` |
+| **In flight** | B3 in review (#395) on `feat/phase-33-b3-fuzzy`; Z1 building on `feat/phase-33-z1-docs` |
 | **Last merged** | B2 (#394, `affe4e4`) |
 | **Next action** | Merge B3 when CI is green, then build B4 (your own patterns) |
 | **Blockers** | None |
@@ -104,7 +104,7 @@
 ### Track B: building blocks
 - [x] B1 Matchers on every rule target: exact, glob, regex, fuzzy (absorbs the wildcard targets proposed as R11) (#393)
 - [x] B2 Grep rules: text that must not, or must, appear, scoped by path, file:line findings, baselined (#394)
-- [ ] B3 Fuzzy matching: look-alike names and near-duplicates, by a deterministic similarity score with a threshold — building
+- [ ] B3 Fuzzy matching: look-alike names and near-duplicates, by a deterministic similarity score with a threshold (#395) — in review
 - [ ] B4 Your own patterns: what counts as a call, or as any entry (queue:, event:, flag:), without code
 - [ ] B5 Engine per rule: deterministic, fuzzy or agent, independent of strength; an agent rule blocks only when its owner says block
 - [ ] B6 Pipelines: stages in order or in parallel, needs and when, and later stages grounded by earlier results
