@@ -19,6 +19,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Gate } from './conformity';
 import { findingLine } from '../shared/lib/check-words';
+import { importLine } from '../shared/lib/import-line';
+
+export { importLine };
 
 type Level = 'error' | 'warning' | 'note';
 
@@ -51,23 +54,6 @@ export interface SarifLog {
 
 const SCHEMA = 'https://json.schemastore.org/sarif-2.1.0.json';
 const INFO = 'https://codetrellis.dev';
-
-/** The line that imports `target` in `source`'s text, 1-based; null when no import line names it. */
-export function importLine(text: string, target: string): number | null {
-  // A package (R5) is named as the code names it: `npm:stripe` is `stripe`, `go:github.com/x/y` is `y`.
-  const pkg = /^(npm|pypi|go|cargo|maven|nuget|gem|composer|swift):(.+)$/.exec(target);
-  const base = pkg
-    ? (pkg[1] === 'go' ? path.posix.basename(pkg[2]) : pkg[2])
-    : path.posix.basename(target).replace(/\.[^.]+$/, '');
-  if (!base) return null;
-  const word = new RegExp(`(^|[^A-Za-z0-9_])${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^A-Za-z0-9_]|$)`);
-  const importish = /^\s*(import\b|from\b|export\b.*\bfrom\b|use\b|using\b|require\b|#include\b|package\b)|\brequire\s*\(|\bimport\s*\(/;
-  const lines = text.split('\n');
-  for (let i = 0; i < lines.length; i++) {
-    if (importish.test(lines[i]) && word.test(lines[i])) return i + 1;
-  }
-  return null;
-}
 
 const asObj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? v as Record<string, unknown> : {});
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);

@@ -39,7 +39,9 @@ export function ChecksView() {
   const root = useProjectStore((s) => s.root);
   const [runs, setRuns] = useState<Run[]>([]);
   const [suites, setSuites] = useState<string[]>([]);
-  const [open, setOpen] = useState<string | null>(null);
+  // In the store, so the code gutter, the inspector and the Brief can open a run here (G10).
+  const open = useUiStore((s) => s.checkRunOpen);
+  const setOpen = useUiStore((s) => s.setCheckRunOpen);
   const [against, setAgainst] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
   const [scope, setScope] = useState('');
@@ -123,7 +125,7 @@ export function ChecksView() {
           {shown.map((r) => {
             const o = outcomeOf(r);
             return (
-              <button key={r.id} type="button" onClick={() => { setOpen(r.id); if (against === r.id) setAgainst(null); }} data-testid="check-run-row" title={r.words}
+              <button key={r.id} type="button" onClick={() => { setOpen(r.id); if (against === r.id) setAgainst(null); }} data-testid="check-run-row" data-run={r.id} aria-current={open === r.id ? "true" : undefined} title={r.words}
                 className={`w-full text-left rounded px-2 py-1.5 ${open === r.id ? 'bg-accent/10' : 'hover:bg-white/[0.04]'}`}>
                 <div className="flex items-baseline gap-1.5">
                   <span className={o.tone} aria-hidden>{o.glyph}</span>

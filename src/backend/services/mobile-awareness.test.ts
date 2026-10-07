@@ -84,6 +84,23 @@ before(async () => {
 after(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
 
 describe('what needs you, on the phone', () => {
+  test('Phase 33 G10: a check run that blocks is in Needs you, the latest from each place, with what to do; a place whose latest passes is not', async () => {
+    const runs = await import('./check-runs');
+    const f = (p: string) => ({ rule: 'stripe-via-wrapper', suite: 'payments', path: p, imports: 'npm:stripe', strength: 'block' as const, failing: true, words: 'only src/pay.ts may import npm:stripe', fix: 'use src/pay.ts instead' });
+    const base = { projectRoot: PROJECT, by: { author: 'ci', authorType: 'agent' }, commit: null, dirty: [], base: 'main', rulebook: null, scope: null, strict: false, says: [] };
+    runs.recordCheckRun({ ...base, at: 1, ranIn: 'GitHub Actions', outcome: { ok: false, files: 2, blocks: 1, warns: 0 }, findings: [f('src/api.ts')] }, { writer: 'aaaaaaaa', name: 'Build bot' });
+    runs.recordCheckRun({ ...base, at: 2, ranIn: 'a terminal', outcome: { ok: false, files: 5, blocks: 4, warns: 0 }, findings: ['a', 'b', 'c', 'd'].map((x) => f(`src/${x}.ts`)) });
+    runs.recordCheckRun({ ...base, at: 3, ranIn: 'GitHub Actions', outcome: { ok: true, files: 2, blocks: 0, warns: 0 }, findings: [] }, { writer: 'aaaaaaaa', name: 'Build bot' });
+    const got = await call('awareness.needsYou', {}) as import('./mobile-awareness').PhoneNeedsYou;
+    assert.equal(got.checks.length, 1);
+    assert.deepEqual({ ...got.checks[0], id: undefined, who: undefined }, {
+      id: undefined, who: undefined, ranIn: 'a terminal', scope: null, at: 2, outcome: '✗ 4 block',
+      findings: ['a', 'b', 'c'].map((x) => ({ where: `src/${x}.ts imports npm:stripe`, rule: 'stripe-via-wrapper', fix: 'use src/pay.ts instead' })),
+      more: 1,
+    });
+    db.getDb().run('DELETE FROM rule_check_runs');
+  });
+
   test('the digest\'s lines, then the signals in play: open first by severity, then seen; low and set-aside ones left to the desktop', async () => {
     const got = await call('awareness.needsYou', {}) as import('./mobile-awareness').PhoneNeedsYou;
     assert.equal(got.projectRoot, PROJECT);
@@ -100,7 +117,7 @@ describe('what needs you, on the phone', () => {
 
   test('no project open: nothing to say, and no error', async () => {
     const got = await call('awareness.needsYou', {}, CONFIRMED, { ...CTX, projectRoot: null }) as import('./mobile-awareness').PhoneNeedsYou;
-    assert.deepEqual(got, { projectRoot: null, digest: { needsYou: 0, low: 0, moreLines: 0, lines: [] }, signals: [] });
+    assert.deepEqual(got, { projectRoot: null, digest: { needsYou: 0, low: 0, moreLines: 0, lines: [] }, signals: [], checks: [] });
   });
 
   test('the snapshot\'s count is the tab\'s: open, high or medium', () => {

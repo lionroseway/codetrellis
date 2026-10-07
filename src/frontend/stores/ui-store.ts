@@ -138,6 +138,11 @@ interface UiState {
   /** Phase 33 G9 — the Rules view's tab: what the rules are, or what the checks say. */
   rulesViewTab: 'rules' | 'checks';
   setRulesViewTab: (tab: 'rules' | 'checks') => void;
+  /** Phase 33 G10 — the check run open in the Checks view, or null. */
+  checkRunOpen: string | null;
+  setCheckRunOpen: (id: string | null) => void;
+  /** Phase 33 G10 — open one run in the Checks view, from wherever its findings are shown. */
+  openCheckRun: (id: string) => void;
   setRuleSuiteFocus: (suite: string | null) => void;
   /** Phase 33 G3 — the kinds of edge the graph draws. */
   graphEdges: EdgeKind[];
@@ -226,6 +231,9 @@ export const useUiStore = create<UiState>((set) => ({
   ruleSuiteFocus: null,
   rulesViewTab: 'rules',
   setRulesViewTab: (rulesViewTab) => set({ rulesViewTab }),
+  checkRunOpen: null,
+  setCheckRunOpen: (checkRunOpen) => set({ checkRunOpen }),
+  openCheckRun: (id) => set({ checkRunOpen: id, rulesViewTab: 'checks', workspaceMode: 'rules' }),
   setRuleSuiteFocus: (ruleSuiteFocus) => set((s) => {
     // Showing a suite turns the Rules overlay on, so what it is about is drawn.
     if (ruleSuiteFocus && !s.graphOverlays.includes('rules')) {

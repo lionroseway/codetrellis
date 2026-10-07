@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { test, expect } from '@playwright/test';
-import { setupHarness, type Harness } from '../harness';
+import { pairPhone, setupHarness, type Harness } from '../harness';
 import { REPO_ROOT } from '../harness/paths';
 
 const BIN = path.join(REPO_ROOT, 'bin', 'codetrellis.mjs');
@@ -150,6 +150,46 @@ test.describe.serial('R5: only the wrapper may import Stripe', () => {
     const runs = ((await (await h.client.raw('GET', `/api/check-runs?${q()}`)).json()) as { runs: Array<{ id: string; ranIn: string; scope: string | null; outcome: { blocks: number } }> }).runs;
     expect(runs[0]).toMatchObject({ id: app.run, ranIn: 'the local API', scope: 'suite payments', outcome: { blocks: 2 } });
     expect((await h.client.raw('POST', `/api/check-runs?${q()}`, { base: 'no-such-branch' })).status).toBe(400);
+  });
+
+  test('G10: a task\'s brief names the rules that judge its files and what the latest check found there; the phone hears the run that blocks', async () => {
+    const plan = await h.client.createPlan({ title: 'Checkout', projectPath: root });
+    const made = await h.client.raw('POST', `/api/plans/${plan.uid}/items`, {
+      kind: 'action', title: 'Charge from the API client',
+      fileSpecs: [{ path: API, action: 'modify' }, { path: WRAPPER, action: 'modify' }],
+    });
+    expect(made.ok, await made.clone().text()).toBe(true);
+    const task = (await made.json()) as { uid: string };
+    const runs = ((await (await h.client.raw('GET', `/api/check-runs?${q()}`)).json()) as { runs: Array<{ id: string }> }).runs;
+
+    // The app's Brief reads this; the agent reads the same block in get_brief.
+    const res = await h.client.raw('GET', `/api/items/${task.uid}/rules`);
+    expect(res.status, await res.clone().text()).toBe(200);
+    const rules = (await res.json()) as {
+      files: string[]; in_scope: Array<{ rule: string; suite: string; strength: string; words: string }>;
+      latest_run: { id: string; ran_in: string; findings: Array<{ rule: string; path: string; imports: string; failing: boolean; fix: string | null }> } | null; says: string;
+    };
+    expect(rules.files).toEqual([API, WRAPPER]);
+    // The Python rule is not about TypeScript files.
+    expect(rules.in_scope).toEqual([{ rule: 'stripe-via-wrapper', suite: 'payments', strength: 'block', words: `only ${WRAPPER} may import npm:stripe`, because: BECAUSE }]);
+    expect(rules.latest_run?.id).toBe(runs[0].id);
+    expect(rules.latest_run?.findings).toEqual([{ rule: 'stripe-via-wrapper', path: API, imports: 'npm:stripe', failing: true, words: `only ${WRAPPER} may import npm:stripe`, fix: `use ${WRAPPER} instead` }]);
+    expect(rules.says).toBe('1 rule judges this task\'s files. The latest check (you in the local API) found 1 import in them that breaks a rule.');
+    expect((await h.client.raw('GET', '/api/items/no-such-item/rules')).status).toBe(404);
+
+    const agent = await h.spawnAgent({ agentType: 'claude-code' });
+    const brief = JSON.parse((await agent.callTool('get_brief', { item_uid: task.uid })).answer) as { rules: typeof rules };
+    expect(brief.rules).toEqual(rules);
+
+    // The phone: the latest run from each place, when it blocks, with what to do.
+    const phone = await pairPhone(h.client, { alias: 'Sam’s phone' });
+    try {
+      const needs = await phone.rpc<{ checks: Array<{ id: string; ranIn: string; outcome: string; findings: Array<{ where: string; rule: string; fix: string | null }> }> }>('awareness.needsYou');
+      expect(needs.checks[0]).toMatchObject({ id: runs[0].id, ranIn: 'the local API', outcome: '✗ 2 block' });
+      expect(needs.checks[0].findings).toEqual(expect.arrayContaining([{ where: `${API} imports npm:stripe`, rule: 'stripe-via-wrapper', fix: `use ${WRAPPER} instead` }]));
+    } finally {
+      await phone.close();
+    }
   });
 
   test('opened on the branch, the rules view shows what breaks each today, from the graph', async () => {

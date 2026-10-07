@@ -17,8 +17,8 @@
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
   step: "Merging the built steps, in order"
-  status: "G9 in review (the Checks view); G8 merged (#381)"
-  next: "Merge G9 when CI is green, then replay G10"
+  status: "G10 in review (findings where the code is); G9 merged (#382)"
+  next: "Merge G10 when CI is green, then replay R9"
   blockers: "None"
   updated: 2026-10-07
 sections:

@@ -1,4 +1,5 @@
 import { FileRules } from '../inspector/FileRules';
+import { useFileFindings } from '../../hooks/useCheckRuns';
 import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import {
   ArrowRight, ArrowLeft, Braces, Box, Layers, LetterText, List, Hash,
@@ -252,6 +253,9 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
     if (nodeId.startsWith('/')) return nodeId;
     return root ? `${root}/${nodeId}` : nodeId;
   }, [nodeId, root]);
+  // Phase 33 G10 — what the latest check run found in this file, on its lines.
+  const relPath = root && nodeId.startsWith(`${root}/`) ? nodeId.slice(root.length + 1) : nodeId;
+  const fileFindings = useFileFindings(root, relPath);
 
   useEffect(() => {
     if (!absPath) { setSymbols([]); setDeps(null); setContent(null); setOverlay(null); setGrounding(null); return; }
@@ -376,6 +380,7 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
               overlay={overlay}
               onClose={() => setShowCode(false)}
               onOpenItem={(itemUid, planUid) => { void revealPlanItem(planUid, itemUid); }}
+              findings={fileFindings}
             />
           ) : root ? (
             <Suspense
@@ -388,6 +393,7 @@ function FileView({ nodeId, onSelectFile }: { nodeId: string; onSelectFile: (pat
                 relativePath={nodeId.startsWith('/') ? nodeId.slice(root.length + 1) : nodeId}
                 before={diffBefore}
                 after="live"
+                findings={fileFindings}
               />
             </Suspense>
           ) : null}

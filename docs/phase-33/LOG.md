@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
-| **Status** | G9 in review (the Checks view); G8 merged (#381) |
-| **In flight** | R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | G8 (#381, `9e585d7`) |
-| **Next action** | Merge G9 when CI is green, then replay G10 |
+| **Status** | G10 in review (findings where the code is); G9 merged (#382) |
+| **In flight** | R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; G10 building on `feat/phase-33-g10-findings-where-code-is`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | G9 (#382, `f5c4f06`) |
+| **Next action** | Merge G10 when CI is green, then replay R9 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `9e585d7`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `f5c4f06`, with open PRs from GitHub.
 
 ---
 
@@ -88,7 +88,7 @@
 - [x] G6 Opening a plan always shows it, from a chip too (#365)
 - [x] G7 The Rules view (its own workspace, not Settings) (#380)
 - [x] G8 Rules on the graph (breaches drawn, rules for the selected file) (#381)
-- [ ] G9 The Checks view (run any check from the app, CI runs beside local ones, compare runs) — building
+- [x] G9 The Checks view (run any check from the app, CI runs beside local ones, compare runs) (#382)
 - [ ] G10 Findings where the code is (graph, code gutter, inspector, brief, phone) — building
 
 ### Track V: review (the owner's picks)
@@ -206,6 +206,32 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — G9 merged (#382); G10 in review
+
+- **G9 merged** (#382): the Checks view.
+- **G10: findings where the code is.** What the latest check run found is
+  shown where the code is, and each place leads to the others. "Open" is
+  what the latest run says: a later run that no longer finds an import has
+  fixed it, whoever ran it. The findings appear in four places:
+  - **The code:** a ⊘ on the line that makes the import, in the code view,
+    the inspector and the live side of the diff. Hovering gives the finding
+    in words, and a click opens the run in the Checks view.
+  - **The inspector:** "Found here by the latest check", each finding with
+    its fix and its run.
+  - **A task's brief:** the rules that judge the task's files, and the
+    latest run's findings in them (`get_brief` and the Brief's Rules
+    section).
+  - **The phone:** Needs you lists the runs that block, with a few findings
+    and their fixes.
+
+  A package rule now applies only to files that can import from its
+  ecosystem, so `npm:stripe` is no longer listed against a `.py` file.
+- Checked before review on the replayed code: unit 2129 passing; 183 rules,
+  check, CLI, phone and brief harness tests; the 40 phone screens; the mobile
+  typecheck; the rules, inspector, graph, plan and review-regression browser
+  specs (209 chromium, 108 serial), but for the PDF viewer's page 2, which
+  fails locally on the base too.
 
 ### 2026-10-07 — G8 merged (#381), one CI failure not yet explained; G9 in review
 

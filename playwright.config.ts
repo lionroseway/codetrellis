@@ -122,6 +122,8 @@ export const FIXTURE_SPECS = [
   '**/graph/canvas-rescan-wait.spec.ts',
   '**/graph/grounding-overlay.spec.ts',
   '**/graph/rules-overlay.spec.ts',
+  // Phase 33 G10: opens the sample app and follows a finding through the graph.
+  '**/rules/findings-where.spec.ts',
   '**/graph/nodes-stay-drawn.spec.ts',
   '**/live-agent/multi-agent-contention.spec.ts',
   '**/plan/play-forward.spec.ts',

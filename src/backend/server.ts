@@ -99,6 +99,7 @@ import { lastMark, markReviewed, sinceLastLook } from './services/review-marks';
 import { taskMarkdown, taskOutcome } from './services/review-task';
 import { inScope, parseScope, scopeWords } from './services/rule-scope';
 import { getCheckRun, listCheckRuns } from './services/check-runs';
+import { taskRules } from './services/task-rules';
 import { checkTheChange } from './services/change-check';
 import { changedFiles } from './services/work-changes';
 import { debtByRule, ruleHistory, suiteSummaries } from './services/rules-overview';
@@ -3744,6 +3745,17 @@ app.get('/api/items/:uid/grounding', async (req, res) => {
   const g = await taskGrounding(req.params.uid);
   if (!g) { res.status(404).json({ error: 'Item not found' }); return; }
   res.json(g);
+});
+
+/**
+ * Phase 33 G10 — the rules that judge a task's files, and what the latest
+ * check run found in them: the brief's `rules` block, for the app's Brief.
+ * The root is the task's plan's project, never the request's.
+ */
+app.get('/api/items/:uid/rules', (req, res) => {
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  res.json(taskRules(item, planService.getPlan(item.planUid)?.projectPath ?? null));
 });
 
 app.post('/api/items/:uid/criteria', (req, res) => {

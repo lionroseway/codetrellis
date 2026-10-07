@@ -300,6 +300,27 @@ findings in the one renderer's words, each with its fix, a link to the file on
 the graph and to its code; two runs compare into what is new, what was fixed
 and what is unchanged.
 
+## Findings where the code is (Phase 33 G10)
+
+What the latest run found is shown where the code is, and each place leads to
+the run. "Open" means the latest run's: a later run that no longer finds an
+import has fixed it, whoever ran it (`shared/lib/open-findings.ts`).
+
+- **The code** (CodePreview, in the Code workspace and the inspector) and **the
+  diff** (its live side): a ⊘ on the line that makes the import, found by the
+  same `importLine` SARIF uses (`shared/lib/import-line.ts`); the finding in
+  words on hover; a click opens the run in the Checks view.
+- **The inspector**: "Found here by the latest check", each finding with its
+  fix and the run, above the rules about the file (G8). A package rule is about
+  the files that can import from its ecosystem: `npm:stripe` is not about a
+  `.py` file.
+- **A task's brief**: `get_brief`'s `rules` block, and the Brief's Rules
+  section (`GET /api/items/:uid/rules`): the rules that judge the task's files
+  (its file specs) and what the latest run found in them, with the code and
+  the run.
+- **The phone**: Needs you lists the runs that block, the latest from each
+  place, with a few findings and their fixes.
+
 ## Test runs that travel (D1.5a)
 
 With task state shared, each new run reported (`report-tests`) is also
