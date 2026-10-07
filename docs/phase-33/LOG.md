@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Merging the built steps, in order |
-| **Status** | V6 in review (did the change do what the task said); V3 merged (#375) |
-| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; V6 building on `feat/phase-33-v6-did-it-do-the-task`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | V3 (#375, `169833f`) |
-| **Next action** | Merge V6 when CI is green, then replay R5 (being verified on top of V6) |
+| **Status** | R5 in review (package rules); V6 merged (#376), Track V done |
+| **In flight** | R5 building on `feat/phase-33-r5-package-rules`; R6 building on `feat/phase-33-r6-symbol-rules`; R7 building on `feat/phase-33-r7-call-rules`; R8 building on `feat/phase-33-r8-folder-rules`; R9 building on `feat/phase-33-r9-guide-rules`; C4 building on `feat/phase-33-c4-agent-checks`; C4b building on `feat/phase-33-c4b-bring-your-own-agent`; C5 building on `feat/phase-33-c5-agent-checks-in-ci`; C6 building on `feat/phase-33-c6-graduation`; C7 building on `feat/phase-33-c7-check-runs`; C8 building on `feat/phase-33-c8-one-renderer`; G7 building on `feat/phase-33-g7-rules-view`; G8 building on `feat/phase-33-g8-rules-on-graph`; G9 building on `feat/phase-33-g9-checks-view`; G10 building on `feat/phase-33-g10-findings-where-code-is`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | V6 (#376, `a5fdb0e`) |
+| **Next action** | Merge R5 when CI is green, then replay C8 (being verified on top of R5) |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `169833f`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `a5fdb0e`, with open PRs from GitHub.
 
 ---
 
@@ -93,7 +93,7 @@
 - [x] V1 What this change does to the architecture (structural diff at the top of every review) (#373)
 - [x] V2 Review in order of risk (dependents, rule scope, test grounding, other work) (#374)
 - [x] V3 Re-review only what changed since each reviewer's last look (#375)
-- [ ] V6 Did the change do what the task said (only when it is linked to a task) — building
+- [x] V6 Did the change do what the task said (only when it is linked to a task) (#376)
 
 ### Stage Z: close
 - [ ] Z1 Docs: `docs/claude/rules.md`, CLI and MCP references, the change-control security rule — building
@@ -204,6 +204,26 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — V6 merged (#376), Track V done; R5 in review
+
+- **V6 merged** (#376): did the change do what the task said. The review
+  track (V1, V2, V3, V6) is in.
+- **R5: package rules — only the wrapper may import Stripe.** A rule of kind
+  `package` says which files alone may import an outside package, for
+  example `package: npm:stripe`, `only: [src/payments/index.ts]`.
+  - An import that resolves to no project file is kept as the package it
+    comes from, in all eleven languages (npm, pypi, go, cargo, gem, maven,
+    nuget, composer, swift). Relative imports and the standard library are
+    not packages.
+  - The rules view and every check read the scanned graph's outside imports.
+    The gate and the in-flight signals read the packages a change adds.
+  - Letting more files import a package loosens the rule, so it needs a
+    person's signed approval.
+  - REST and `propose_rule` take `kind`, `package` and `only`.
+- Checked before review on the replayed code: unit 2101 passing; 144 rules,
+  awareness, check and CLI harness tests; the settings and agent browser
+  specs (113 chromium, 22 serial).
 
 ### 2026-10-07 — V3 merged (#375); V6 in review
 
