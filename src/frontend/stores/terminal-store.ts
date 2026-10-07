@@ -125,14 +125,25 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
   },
 
   hydrate: async () => {
+    // The list is as of when the backend answered. A session this window
+    // created or was told of while it was on its way is newer than the list,
+    // and one it closed meanwhile is gone: the list replaced both, so the
+    // shell that opening the panel starts could vanish as soon as it came.
+    const before = new Set(get().sessions.map((ss) => ss.id));
     try {
       const res = await fetch('/api/terminals');
       if (!res.ok) return;
-      const sessions: TerminalSessionInfo[] = await res.json();
-      set((s) => ({
-        sessions,
-        activeSessionId: s.activeSessionId ?? (sessions.length > 0 ? sessions[0].id : null),
-      }));
+      const listed: TerminalSessionInfo[] = await res.json();
+      set((s) => {
+        const now = new Set(s.sessions.map((ss) => ss.id));
+        const inList = new Set(listed.map((ss) => ss.id));
+        const sessions = [
+          ...listed.filter((ss) => now.has(ss.id) || !before.has(ss.id)),
+          ...s.sessions.filter((ss) => !before.has(ss.id) && !inList.has(ss.id)),
+        ];
+        const active = s.activeSessionId && sessions.some((ss) => ss.id === s.activeSessionId) ? s.activeSessionId : null;
+        return { sessions, activeSessionId: active ?? (sessions.length > 0 ? sessions[0].id : null) };
+      });
     } catch { /* */ }
   },
 
