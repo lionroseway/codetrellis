@@ -482,6 +482,11 @@ advisory, beside `claude-review.yml`.
   env:VAR`, else `GITHUB_TOKEN`, `GITLAB_TOKEN` or `BITBUCKET_TOKEN`. The
   agent's environment is scrubbed, so the model never sees it.
 
+This repository holds no model credential (it is public), so its own run
+says so and passes. C5 is proven on a private repository instead, with a
+real token, a pull request that should fail and one that should pass:
+[the SWF spike in the testing guide](../TESTING-GUIDE.md#agent-review-in-ci-on-a-real-repository-the-swf-spike).
+
 ### A review on your device counts on the pull request (Phase 33 C9)
 
 The second way to run agent review, beside C5's CI token, is for repositories
