@@ -259,7 +259,7 @@ async function conforms(ctx: Ctx, root: string): Promise<Outcome> {
     const piped = await pipelined(ctx, root, changed);
     if (piped) return piped;
   }
-  const g = await gate(ctx.agent, root, changed, ctx.p.flags.strict === true, { suite: flag(ctx.p, 'suite'), rule: flag(ctx.p, 'rule'), path: flag(ctx.p, 'path') });
+  const g = await gate(ctx.agent, root, changed, ctx.p.flags.strict === true, { suite: flag(ctx.p, 'suite'), rule: flag(ctx.p, 'rule'), path: flag(ctx.p, 'path'), tag: flag(ctx.p, 'tag') });
   if ('error' in g) return { out: g.error, code: 1 };
   const format = flag(ctx.p, 'format') ?? (ctx.json ? 'json' : 'text');
   if (format === 'sarif') {
@@ -302,7 +302,7 @@ async function pipelined(ctx: Ctx, root: string, changed: ReturnType<typeof chan
     const sinkFor = (dir: string) => ({ command: process.execPath, args: [path.resolve(__dirname, '..', '..', 'bin', 'codetrellis.mjs'), 'review-sink', '--pass', dir] });
     review = async (stage, scope, grounding) => {
       // An agent stage fails on what a block-strength agent rule's finding holds (B5), and its output is read, not shown raw.
-      const r = await runReview(ctx.agent, { ...o, scope: { suite: scope.suite, rule: scope.rule, path: scope.path, engine: scope.engine, strength: scope.strength }, stage: stage.id, grounding, format: 'json', failOn: new Set(['block']), post: null }, ctx.cwd, process.env, sinkFor, { version: CLI_VERSION });
+      const r = await runReview(ctx.agent, { ...o, scope: { suite: scope.suite, rule: scope.rule, path: scope.path, engine: scope.engine, strength: scope.strength, tag: scope.tag }, stage: stage.id, grounding, format: 'json', failOn: new Set(['block']), post: null }, ctx.cwd, process.env, sinkFor, { version: CLI_VERSION });
       let j: { passes?: Array<{ says: string; failing: boolean; kept: ReviewFinding[] }>; says?: string; error?: string };
       try { j = JSON.parse(r.out); } catch { return { error: r.out }; }
       if (j.error) return { error: j.error };

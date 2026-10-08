@@ -22,6 +22,8 @@ export interface StageRules {
   engine?: string[];
   strength?: string[];
   id?: string[];
+  /** Rules with any of these tags (a rule's `tags`). */
+  tag?: string[];
 }
 
 export interface PipelineStage {

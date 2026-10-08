@@ -28,7 +28,7 @@ export const PIPELINE_FILE = '.codetrellis/pipeline.yaml';
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const MAX_STAGES = 20;
 const MAX_BYTES = 64 * 1024;
-const SELECTORS = ['suite', 'engine', 'strength', 'id'] as const;
+const SELECTORS = ['suite', 'engine', 'strength', 'id', 'tag'] as const;
 
 const list = (v: unknown): string[] | null => (v === undefined ? [] : typeof v === 'string' ? [v] : Array.isArray(v) && v.every((x) => typeof x === 'string') ? (v as string[]).map((x) => x.trim()).filter(Boolean) : null);
 
@@ -55,11 +55,11 @@ export function parsePipeline(text: string): { pipeline: Pipeline | null; proble
     else if (stages.some((s) => s.id === id)) why.push(`${id} is already a stage`);
     const rules: StageRules = {};
     if (r.rules !== undefined && r.rules !== 'all') {
-      if (!r.rules || typeof r.rules !== 'object' || Array.isArray(r.rules)) why.push('rules selects by suite, engine, strength or id, like { engine: deterministic }, or is all');
+      if (!r.rules || typeof r.rules !== 'object' || Array.isArray(r.rules)) why.push('rules selects by suite, engine, strength, id or tag, like { engine: deterministic }, or is all');
       else {
         for (const [k, v] of Object.entries(r.rules as Record<string, unknown>)) {
           const values = list(v);
-          if (!(SELECTORS as readonly string[]).includes(k)) { why.push(`rules selects by suite, engine, strength or id, not ${k}`); continue; }
+          if (!(SELECTORS as readonly string[]).includes(k)) { why.push(`rules selects by suite, engine, strength, id or tag, not ${k}`); continue; }
           if (!values || values.length === 0) { why.push(`rules.${k} is a name or a list of them`); continue; }
           if (k === 'engine' && values.some((x) => !(RULE_ENGINES as readonly string[]).includes(x))) why.push('rules.engine is deterministic, fuzzy or agent');
           if (k === 'strength' && values.some((x) => !(RULE_STRENGTHS as readonly string[]).includes(x))) why.push('rules.strength is block, warn or guide');
@@ -130,12 +130,13 @@ export async function pipelineAt(projectRoot: string, commit: string): Promise<{
 }
 
 /** A stage's rules as a check's scope takes them (rule-scope.ts). */
-export function stageScope(s: Pick<PipelineStage, 'rules'>): { suite?: string; rule?: string; engine?: string; strength?: string } {
+export function stageScope(s: Pick<PipelineStage, 'rules'>): { suite?: string; rule?: string; engine?: string; strength?: string; tag?: string } {
   return {
     ...(s.rules.suite ? { suite: s.rules.suite.join(',') } : {}),
     ...(s.rules.id ? { rule: s.rules.id.join(',') } : {}),
     ...(s.rules.engine ? { engine: s.rules.engine.join(',') } : {}),
     ...(s.rules.strength ? { strength: s.rules.strength.join(',') } : {}),
+    ...(s.rules.tag ? { tag: s.rules.tag.join(',') } : {}),
   };
 }
 
@@ -155,8 +156,8 @@ export function stageWords(s: PipelineStage): string {
   const sel: string[] = [];
   if (s.rules.engine) sel.push(`${and(s.rules.engine)}`);
   if (s.rules.strength) sel.push(`${and(s.rules.strength)}-strength`);
-  const what = `${sel.length ? `${sel.join(' ')} ` : ''}rules${s.rules.suite ? ` in ${and(s.rules.suite)}` : ''}${s.rules.id ? ` ${and(s.rules.id)}` : ''}`;
-  const parts = [s.rules.engine || s.rules.strength || s.rules.suite || s.rules.id ? what : 'every rule'];
+  const what = `${sel.length ? `${sel.join(' ')} ` : ''}rules${s.rules.tag ? ` tagged ${s.rules.tag.join(' or ')}` : ''}${s.rules.suite ? ` in ${and(s.rules.suite)}` : ''}${s.rules.id ? ` ${and(s.rules.id)}` : ''}`;
+  const parts = [s.rules.engine || s.rules.strength || s.rules.suite || s.rules.id || s.rules.tag ? what : 'every rule'];
   if (s.parallel) parts.push('beside the stage before');
   if (s.needs) parts.push(`after ${and(s.needs)}`);
   if (s.when) parts.push(`when ${and(Object.entries(s.when).map(([k, v]) => `${k} ${v}`))}`);

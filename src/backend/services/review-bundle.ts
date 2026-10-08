@@ -136,7 +136,7 @@ function hunksOf(lines: Map<number, string>): Array<{ start: number; end: number
 export interface BundleInput {
   root: string;
   base?: string;
-  scope: { suite?: unknown; rule?: unknown; path?: unknown; engine?: unknown; strength?: unknown };
+  scope: { suite?: unknown; rule?: unknown; path?: unknown; engine?: unknown; strength?: unknown; tag?: unknown };
   /** B6: what earlier stages of a pipeline found, given to the review as facts. */
   grounding?: Grounding[];
   taskUid?: string;

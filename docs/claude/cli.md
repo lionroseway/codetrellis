@@ -176,6 +176,7 @@ also
 codetrellis check --suite payments          # one suite's rules
 codetrellis check --rule stripe-via-wrapper # named rules
 codetrellis check --path src/payments/      # the rules about a path
+codetrellis check --tag pci                 # the rules tagged pci (a rule's tags)
 ```
 
 Each takes a comma-separated list, and scopes given together all apply. A

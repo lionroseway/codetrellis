@@ -58,10 +58,17 @@ export interface RuleTerms {
   match?: 'glob' | 'regex' | 'fuzzy';
   /** B3: a fuzzy target's threshold, absent for any other. */
   threshold?: number;
+  /** What a pipeline stage selects it by; absent when it has none, so approvals signed before tags still read the same. */
+  tags?: string[];
 }
 
 export function ruleTerms(r: ArchitectureRule | null | undefined): RuleTerms | null {
   if (!r) return null;
+  const t = termsOf(r);
+  return r.tags?.length ? { ...t, tags: [...r.tags].sort() } : t;
+}
+
+function termsOf(r: ArchitectureRule): RuleTerms {
   const terms: RuleTerms = { from: r.from, mayNotImport: r.mayNotImport, except: [...r.except].sort(), strength: r.strength };
   if (r.kind === 'folder') return { ...terms, kind: 'folder', files: [...(r.files ?? [])].sort(), kinds: [...(r.kinds ?? [])].sort(), ...(r.exports ? { exports: r.exports } : {}) };
   if (r.kind === 'agent') return { ...terms, kind: 'agent', in: [...(r.in ?? [])].sort() };

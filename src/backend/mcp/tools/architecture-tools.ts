@@ -196,6 +196,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         because: z.string().max(200).optional().describe('Why the rule exists, in the team\'s words.'),
         strength: z.enum(['block', 'warn', 'guide']).optional().describe('block fails the check; warn is said; guide is never checked. A new rule starts at warn.'),
         suite: z.string().max(63).optional().describe('The suite file it belongs in, like payments.'),
+        tags: z.array(z.string().max(32)).max(10).optional().describe('Words a pipeline stage or a check selects it by, like pci (short slugs). Dropping one loosens the rule.'),
         remove: z.boolean().optional().describe('Propose stopping the rule.'),
         why: z.string().min(1).max(1000).describe('Why you propose it: what you found, and the evidence.'),
         project_path: z.string().optional().describe('An opened project. Omit for the one open in the app.'),
@@ -214,6 +215,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         ...(args.in ? { in: args.in } : {}), ...(args.must_not !== undefined ? { mustNot: args.must_not } : {}),
         ...(args.must !== undefined ? { must: args.must } : {}), ...(args.ignore_case !== undefined ? { ignoreCase: args.ignore_case } : {}),
         ...(args.engine ? { engine: args.engine } : {}), ...(args.rule_words ? { rule: args.rule_words } : {}),
+        ...(args.tags ? { tags: args.tags } : {}),
       };
       try {
         if (!body && !findRule(root, args.id)) return { isError: true, content: [{ type: 'text' as const, text: `No architecture rule "${args.id}" in this project to stop.` }] };

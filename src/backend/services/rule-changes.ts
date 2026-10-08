@@ -74,8 +74,12 @@ function textEffect(base: ArchitectureRule, head: ArchitectureRule): RuleEffect 
     base.exports === head.exports ? 'same' : head.exports === 'one' ? 'tightens' : 'loosens'];
   // B2: a grep rule reading other files, requiring rather than forbidding, or in another case, is not proven tighter.
   const grepSame = sameSet(base.in ?? [], head.in ?? []) && !!base.must === !!head.must && !!base.ignoreCase === !!head.ignoreCase;
-  const folderSame = folder.every((f) => f === 'same') && grepSame && threshold === 'same';
-  const folderTighter = folder.every((f) => f !== 'loosens') && grepSame && threshold !== 'loosens';
+  // A tag selects the rule into a pipeline's stages: one dropped may take it out of a stage, one added only into more.
+  const baseTags = base.tags ?? [];
+  const headTags = head.tags ?? [];
+  const tags = sameSet(baseTags, headTags) ? 'same' : baseTags.every((t) => headTags.includes(t)) ? 'tightens' : 'loosens';
+  const folderSame = folder.every((f) => f === 'same') && grepSame && threshold === 'same' && tags === 'same';
+  const folderTighter = folder.every((f) => f !== 'loosens') && grepSame && threshold !== 'loosens' && tags !== 'loosens';
   if (pathsSame && onlySame && sameSet(base.except, head.except) && folderSame) return 'same';
   if (pathsSame && onlyShrank && head.except.every((e) => base.except.includes(e)) && folderTighter) return 'tightens';
   return 'loosens';

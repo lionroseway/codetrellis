@@ -264,6 +264,10 @@ Built in B6.
 - **Change control:** each stage is held as a rule is, so removing it,
   making it advisory, or changing its terms is a loosening. It needs the
   same signed approval, which the Rules view's Pipeline panel gives.
+- **Tags (a follow-up):** a rule's `tags` are what `rules: { tag: … }`
+  selects, and `--tag` on a check or a review. A tag is one of the rule's
+  terms, so dropping one, which may take the rule out of a stage, is a
+  loosening.
   Moving a stage to run beside another is not a term.
 - **Not yet:** `tag` as a selector (rules have no tags yet), and a stage
   that ran somewhere else filling this one (a signed local review, C9).

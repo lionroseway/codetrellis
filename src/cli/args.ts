@@ -154,16 +154,16 @@ which; text, or --json):
                                                rule; a rule at warn is said and passes (--strict: it fails)
   codetrellis check --format sarif             the same, as SARIF 2.1.0 for any CI host (or text, json, markdown)
   codetrellis check --no-color                 plain text in a terminal too (NO_COLOR does the same)
-  codetrellis check --suite <s> | --rule <id> | --path <p>
+  codetrellis check --suite <s> | --rule <id> | --path <p> | --tag <t>
                                                only those rules (comma-separated): one suite's, named
-                                               rules, or the rules about a path
+                                               rules, the rules about a path, or those with a tag
   codetrellis check --pipeline [--stage <id>]  the base's .codetrellis/pipeline.yaml, stage by stage; agent
                                                stages too with --agent and the review's flags
   codetrellis rules baseline                   record each rule's breaches now; the check then fails on
                                                any it does not list, and the file may only shrink
   codetrellis report-tests <junit.xml>         tell CodeTrellis how the tests went
   codetrellis review [--agent claude-code] [--model <m>] [--endpoint <url>] [--auth env:<VAR>]
-                     [--skills <dir>] [--suite <s> | --rule <id> | --path <p>] [--base <ref>] [--task <uid>]
+                     [--skills <dir>] [--suite <s> | --rule <id> | --path <p> | --tag <t>] [--base <ref>] [--task <uid>]
                      [--max-turns <n>] [--timeout <s>] [--max-tool-calls <n>] [--fail-on block,error] [--verify]
                      [--format text|markdown|sarif|json] [--sarif-out <f>] [--markdown-out <f>] [--post [--pr <n>]]
                                                your own agent reviews the change, headless, with no shell,

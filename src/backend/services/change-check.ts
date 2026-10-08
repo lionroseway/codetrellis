@@ -32,7 +32,7 @@ export interface ChangeCheckInput {
   base?: string;
   strict?: boolean;
   /** C1: part of the rulebook. */
-  scope: { suite?: unknown; rule?: unknown; path?: unknown; engine?: unknown; strength?: unknown };
+  scope: { suite?: unknown; rule?: unknown; path?: unknown; engine?: unknown; strength?: unknown; tag?: unknown };
   /** B6: a scoped check (a pipeline's first stage) that also judges the change to the pipeline. */
   pipeline?: boolean;
   by: { author: string; authorType: string };

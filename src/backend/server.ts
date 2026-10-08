@@ -2754,8 +2754,8 @@ const RULES_WHERE = 'Rules view';
 app.get('/api/rules', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
-  // C1: ?suite=, ?rule=, ?path= show part of the rulebook, as `check` scopes it.
-  const scope = parseScope({ suite: req.query.suite, rule: req.query.rule, path: req.query.path });
+  // C1: ?suite=, ?rule=, ?path= (and ?tag=) show part of the rulebook, as `check` scopes it.
+  const scope = parseScope({ suite: req.query.suite, rule: req.query.rule, path: req.query.path, tag: req.query.tag });
   const views = rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)).filter((v) => inScope(v.rule, scope));
   // G7: each rule's debt (the baseline's count), and each suite with its status.
   const debt = debtByRule(projectRoot);
@@ -2801,6 +2801,8 @@ function ruleBody(req: express.Request): Record<string, unknown> {
   // The rule's own fields, by name: nothing else in the body reaches the rulebook.
   return {
     id: req.params.id, suite: b.suite, from: b.from, mayNotImport: b.mayNotImport, except: b.except, because: b.because, strength: b.strength,
+    // What a pipeline stage or a check selects it by (follow-up to B6).
+    ...(b.tags !== undefined ? { tags: b.tags } : {}),
     // R5: a package rule's own fields; R6: a symbol rule's.
     ...(b.kind !== undefined ? { kind: b.kind } : {}), ...(b.package !== undefined ? { package: b.package } : {}), ...(b.only !== undefined ? { only: b.only } : {}),
     ...(b.symbol !== undefined ? { symbol: b.symbol } : {}), ...(b.calls !== undefined ? { calls: b.calls } : {}),
