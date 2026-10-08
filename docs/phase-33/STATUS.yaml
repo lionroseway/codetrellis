@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "B6: pipelines"
+  step: "C9: a signed local review"
   status: "In review"
-  next: "Merge B6 when CI is green, then C9 (signed local review), which is built; B7 (docs for the blocks) is being written"
+  next: "Merge C9 when CI is green, then B7 (docs for the blocks), which is built; then Z1"
   blockers: "None"
   updated: 2026-10-08
 sections:
