@@ -20,7 +20,7 @@
 |---|---|
 | **Stage / step** | Follow-ups after Z1 |
 | **Status** | #406 merged (the panes resize on load). Call rules now hold commands and environment variables, in review. The cross-system map pairing a team's own kinds is built and in its harness run. |
-| **In flight** | nothing open |
+| **In flight** | #407 in review on `feat/phase-33-fu-exec-env-calls` |
 | **Last merged** | Z1 (#401, #402, `d293a94`) |
 | **Next action** | Merge the commands and environment variables follow-up, then open the pull request for pairing a team's own kinds |
 | **Blockers** | None |
