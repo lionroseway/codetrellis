@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Follow-ups after Z1 |
-| **Status** | #407 merged (commands and environment variables). Pairing a team's own kinds is in review. The owner's two decisions are being built: ** matches no folder (built, in its harness run), and C5 proven on the SWF spike (re-run under way). Rule tags with a stage selector are being built. |
-| **In flight** | #408 in review on `feat/phase-33-fu-own-kinds-pairing` |
+| **Stage / step** | Z2 Phase review |
+| **Status** | Every step and follow-up of Phase 33 is merged into feat/phase-33 (#409-#413 for the last follow-ups). What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3). |
+| **In flight** | nothing open |
 | **Last merged** | Z1 (#401, #402, `d293a94`) |
-| **Next action** | Merge the pairing pull request, then the ** change, then rule tags; write up the SWF spike in the testing docs |
+| **Next action** | The owner walks the outcomes in RULES-AND-CLARITY.md on a packaged build; anything short becomes a step or a follow-up. Then Z3: bring main in, run everything, verify a packaged build, follow docs/releases/RUNBOOK.md. |
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `4bbeb2d`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `158a590`, with open PRs from GitHub.
 
 ---
 
@@ -41,16 +41,17 @@
 - [x] Follow-up: A new advisory (sprintf-js, GHSA-hp3w-g68c-fv3c) failed the production audit on every branch: kept out of the tree by an override (into `main`) (#347)
 - [x] Follow-up: A new advisory (MCP SDK, GHSA-6qxp-vccf-f47h) failed the production audit on every branch: SDK 1.32.1 (into `main`) (#355)
 - [x] Follow-up: With many worktrees of one repository, `listWorkstreams` takes ~10 s and six parallel asks for it fill the browser's connections, so the graph waits behind them: share one answer (#405)
-- [ ] Follow-up: On a checkout whose 50 worktrees each differ by ~165 files from the main checkout's branch, a cold listing takes ~12 s and the worktrees' watchers and background parsing load the backend: five browser specs time out there (a CI-like clone passes them)
+- [x] Follow-up: On a checkout whose 50 worktrees each differ by ~165 files from the main checkout's branch, a cold listing takes ~12 s and the worktrees' watchers and background parsing load the backend: five browser specs time out there (a CI-like clone passes them) (#412)
 - [x] Follow-up: Call rules read HTTP and SQL callsites; no extractor finds subprocess commands or environment variables yet, so those calls cannot be ruled on (#407)
 - [x] Follow-up: Rebalance the browser shards: chromium 2/3 runs 185 tests in about 25 minutes, the others about 7 (#367)
 - [x] Follow-up: Four browser specs fail in a local clone with many fetched branches and pass in CI (evolution, play-forward, navigate_to Awareness, signal-to-lines): find why (#405)
 - [x] Follow-up: rules-overlay.spec drew no edges in CI: React Flow held every node measured and none with handle positions, and nothing measured them again; the canvas now does (`RemeasureHandles`) (#387)
 - [x] Follow-up: The plan-panel and inspector Allotment resize throws on load (minimumSize of undefined), caught and logged since Phase 31 (#406)
-- [ ] Follow-up: C5 is not yet seen reviewing on this repo: it has no CLAUDE_CODE_OAUTH_TOKEN secret, so codetrellis-review.yml and claude-review.yml review nothing. Deferred by the owner (2026-10-07): a public repo's PRs can read its secrets, so agent review here waits; deterministic rules (R10) come first
-- [ ] Follow-up: Path patterns: should `**/` match no folder too (`src/backend/**/*.ts` misses `src/backend/server.ts`)? Widening only and except loosens existing rules, so the owner decides
+- [x] Follow-up: C5 is not yet seen reviewing on this repo: it has no CLAUDE_CODE_OAUTH_TOKEN secret, so codetrellis-review.yml and claude-review.yml review nothing. Deferred by the owner (2026-10-07): a public repo's PRs can read its secrets, so agent review here waits; deterministic rules (R10) come first (#410)
+- [x] Follow-up: Path patterns: should `**/` match no folder too (`src/backend/**/*.ts` misses `src/backend/server.ts`)? Widening only and except loosens existing rules, so the owner decides (#409)
 - [x] Follow-up: Cross-system map: pair a team's own kinds (a queue's publishers with its consumers) (#408)
-- [ ] Follow-up: B6: a tag selector for stages, once rules have tags
+- [x] Follow-up: B6: a tag selector for stages, once rules have tags (#411)
+- [x] Follow-up: A file rewritten at the same size in the same clock tick as a commit was missed by the live tree (a flaky git-refs unit test on #411 found it) (#413)
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
@@ -222,6 +223,63 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-08 — Follow-ups after Z1, all closed: Phase 33 is built (#409–#413)
+
+- **#408 merged:** the cross-system map pairs a team's own kinds.
+- **The owner's two decisions, built:**
+  - **`**/` matches no folder too** (#409). The three copies of the glob
+    translation are now one, `globSource`, and `src/backend/**/*.ts` holds
+    `src/backend/server.ts`. This repository's rules were measured first,
+    and none of their findings change.
+  - **Agent review in CI is proven on the SWF spike** (#410). Re-run on
+    2026-10-08 against `feat/phase-33`:
+    - **#336:** blocked on `core/paging.py:4 imports pypi:stripe`. The
+      review posted five findings: the breach, both planted bugs, an
+      unplanted one-page `Charge.list` bug, and the "never merge" note. The
+      second pass refuted none.
+    - **#337:** clean on both the check and the review.
+
+    `docs/TESTING-GUIDE.md` says how to run it, what passing looks like, and
+    what it does not prove. This repository still holds no model credential.
+- **Rule tags, and the B6 stage selector** (#411). A rule may carry
+  `tags: [pci]`. What selects by them:
+  - a pipeline stage, with `rules: { tag: pci }`;
+  - a check or a review, with `--tag`;
+  - the Rules view, with `?tag=`;
+  - `check_changes` and `get_review_bundle`.
+
+  A tag is a signed term: dropping one is a loosening.
+- **A checkout with 50 worktrees** (#412):
+  - **The cap.** At most 16 working trees are watched: those with agents
+    first, then the main checkout and the project. Inotify watches went from
+    101,212 to 33,854.
+  - **The tab.** The Awareness tab opens on the signals (kept, so they
+    answer at once), and the lines of work fill in when the listing lands.
+    Until then it says it is still listing.
+  - **The environment.** This container's main checkout had been left on an
+    old step branch, so every worktree differed from it by about 165 files.
+    It now follows `feat/phase-33`.
+  - **The five specs** that timed out here: 5, then 4 with the cap, then 1
+    once the main checkout was current, then all 15 passed with the tab
+    change.
+- **A bug a flaky test found** (#413). On #411, `git-refs.test.ts` failed
+  once in CI, and the cause was in the product. The live side of every
+  comparison is written through a copy of the index, and the copy looked
+  newer than every entry. So git trusted a stale stat for a file rewritten
+  at the same size in the same clock tick as a commit, and missed the
+  change, about 3 times in 100. The copy now keeps the index's times: 6
+  misses in 200 before, 0 in 400 after. A test sets up that tick on purpose,
+  and fails without the fix.
+- **What is left is the owner's:**
+  - **Z2:** walk the outcomes in RULES-AND-CLARITY.md on a packaged build.
+  - **Z3:** bring `main` in, run everything, verify a packaged build, and release by
+    `docs/releases/RUNBOOK.md`. `main` has three commits the phase does
+    not: the v0.2.0 notes (#345) and two dependency security fixes, sprintf-js
+    (#347) and the MCP SDK 1.32.1 (#355).
+  - **npm publish of the CLI:** needs the owner's say-so.
+  - **The SWF spike PRs** (#336, #337) stay open as drafts, so the spike can
+    be re-run.
 
 ### 2026-10-08 — Follow-up: the cross-system map pairs a team's own kinds
 
