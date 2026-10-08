@@ -162,7 +162,16 @@ export function workingCopyTree(root: string): string | null {
     tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ct-tree-')), 'index');
     // Its own index carries what it has staged and each file's stat, so
     // unchanged files are not hashed again; a new repository has none.
-    if (fs.existsSync(indexPath)) fs.copyFileSync(indexPath, tmp);
+    if (fs.existsSync(indexPath)) {
+      fs.copyFileSync(indexPath, tmp);
+      // With the index's own times. git re-reads a file whose recorded time
+      // is not older than the index's ("racily clean"): a file rewritten at
+      // the same size within the clock's tick of a commit keeps its recorded
+      // stat. A copy made now looks newer than every entry, so git trusted
+      // that stat and missed the change, about 3 times in 100.
+      const st = fs.statSync(indexPath);
+      fs.utimesSync(tmp, st.atime, st.mtime);
+    }
     const env = { GIT_INDEX_FILE: tmp };
     git(root, ['add', '-A', '--', ':/'], env);
     const tree = git(root, ['write-tree'], env).trim();
