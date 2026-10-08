@@ -207,10 +207,10 @@ export function App() {
     return () => clearTimeout(t);
   }, []);
 
-  // Skip the very first effect run — Allotment is still wiring up its
-  // internal views and calling resize() too early throws "Cannot read
-  // properties of undefined (reading 'minimumSize')". On mount we let
-  // Allotment use the Pane preferredSize/minSize props.
+  // Never resize on mount: Allotment is still putting its panes in and
+  // resize() throws "Cannot read properties of undefined (reading
+  // 'minimumSize')". The plan and inspector effects below resize only when
+  // what they follow changes; on mount the Panes' preferredSize/minSize hold.
   // G4 — a side pane shown again comes back at the width it had. Allotment
   // re-shows a hidden pane at its minimum (the sidebar at 180, not the 240
   // it was), so full screen and back did not restore the layout. Widths are
@@ -243,14 +243,16 @@ export function App() {
     return () => { cancelAnimationFrame(raf); restoringPanes.current = false; };
   }, [sidebarVisible, inspectorVisible]);
 
-  const planResizeMounted = useRef(false);
-  const inspectorResizeMounted = useRef(false);
+  // The values each resize last followed. A "mounted" ref skipped only the
+  // first run, but StrictMode runs an effect twice on mount and keeps the
+  // ref, so the second run resized too early, on every load (Phase 33
+  // follow-up). A value that has not changed resizes nothing.
+  const planResizedFor = useRef(planPanelExpanded);
+  const inspectorResizedFor = useRef(inspectorExpanded);
 
   useEffect(() => {
-    if (!planResizeMounted.current) {
-      planResizeMounted.current = true;
-      return;
-    }
+    if (planResizedFor.current === planPanelExpanded) return;
+    planResizedFor.current = planPanelExpanded;
     const handle = verticalRef.current;
     if (!handle) return;
     // Defer one frame so Allotment finishes any in-flight layout work.
@@ -270,10 +272,8 @@ export function App() {
   }, [planPanelExpanded]);
 
   useEffect(() => {
-    if (!inspectorResizeMounted.current) {
-      inspectorResizeMounted.current = true;
-      return;
-    }
+    if (inspectorResizedFor.current === inspectorExpanded) return;
+    inspectorResizedFor.current = inspectorExpanded;
     const handle = horizontalRef.current;
     if (!handle) return;
     const raf = requestAnimationFrame(() => {
