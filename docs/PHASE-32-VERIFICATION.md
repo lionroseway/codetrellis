@@ -82,7 +82,7 @@ records that — but "✗ none" is proof of a gap.
 | b | `GET /api/check-runs` |  | ✗ none | 6 |  |  |  |
 | b | `GET /api/check-runs/:id` |  | ✗ none | 1 |  |  |  |
 | b | `GET /api/coverage` |  | ✗ none | 1 | ✓ 0.4b: unread code by reason, unserved routes (coverage) |  |  |
-| b | `GET /api/cross-system` |  | ✗ none | 6 | ✓ 0.4b: the fixture's six pairings, before and after changes (cross-system) |  |  |
+| b | `GET /api/cross-system` |  | ✗ none | 7 | ✓ 0.4b: the fixture's six pairings, before and after changes (cross-system) |  |  |
 | b | `GET /api/dependencies` |  | ✗ none | 4 | ✓ 0.4b: edges after scan (smoke, cross-system) |  |  |
 | b | `GET /api/dependencies/file` |  | ✗ none | 4 | ✓ 0.4b: matches get_dependencies; relative or absolute (graph-tools; bug 17) |  |  |
 | b | `GET /api/diff` |  | ✗ none | 6 | ✓ 0.4b: empty after scan; added/modified files, new edge, blast radius, git untracked — live, no rescan (graph-rest; bug 20) |  |  |

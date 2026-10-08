@@ -280,6 +280,26 @@ payments  ✗ 1 blocks
 2 findings block this change (exit 3).
 ```
 
+A kind of your own (`queue:`, `event:`, `flag:`) is held by `calls` rules as it
+is. To see it on the graph's cross-system map as well, a pattern says which end
+of it the code is, `side: sends` or `side: receives`. Each file that sends
+`queue:orders.created` is then drawn to each file that receives it, a `queue`
+edge labelled with the entry, as an HTTP call is drawn to its route. Without a
+side an entry pairs with nothing, because which way it goes cannot be told. An
+HTTP entry needs no side: its route is the other end.
+
+```yaml
+patterns:
+  - id: orders-published
+    find: { match: regex, value: "publish\\(['\"]orders\\.(\\w+)" }
+    is: queue:orders.$1
+    side: sends
+  - id: orders-consumed
+    find: { match: regex, value: "subscribe\\(['\"]orders\\.(\\w+)" }
+    is: queue:orders.$1
+    side: receives
+```
+
 ### Commands and environment variables
 
 A call rule holds a command the code runs (`exec:<program>`) and an

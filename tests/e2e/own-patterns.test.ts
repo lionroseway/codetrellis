@@ -11,7 +11,9 @@
  * client breaks the Stripe rule today. A branch refunds through the client
  * from another file and publishes an order cancellation from the API. The
  * check fails on both lines, the review names the new queue entry, and a
- * pattern added later is read by the next scan though no file changed.
+ * pattern added later is read by the next scan though no file changed. Once
+ * patterns say which end of the queue each file is, the cross-system map draws
+ * billing's publish to the mail consumer as a queue edge.
  */
 
 import fs from 'node:fs';
@@ -128,5 +130,29 @@ test.describe.serial('B4: paymentsClient.charge() is a call to Stripe, and a rul
     await new Promise((r) => setTimeout(r, 2500)); // the patterns are re-read within two seconds of a change
     await h.client.scanProject(root);
     expect((await rulesNow()).find((r) => r.rule.id === 'flags-in-checkout')!.breaches).toEqual([{ rule: 'flags-in-checkout', from: `${WEB}flags.ts`, to: 'flag:fast-checkout' }]);
+  });
+
+  test('patterns that say which end of the queue a file is pair the publisher with its consumer on the cross-system map', async () => {
+    const CONSUMER = `${WEB}mail/on-order.ts`;
+    write(CONSUMER, "declare function subscribe(topic: string, fn: (o: unknown) => void): void;\n\nsubscribe('orders.created', (o) => console.log(o));\n");
+    // Without a side, an entry is held by rules and paired with nothing.
+    await h.client.scanProject(root);
+    expect((await h.client.getCrossSystemEdges()).filter((e) => e.protocol === 'queue')).toEqual([]);
+
+    write('.codetrellis/patterns/orders-sides.yaml', [
+      'patterns:',
+      '  - id: orders-published',
+      '    find: { match: regex, value: "publish\\\\([\'\\"]orders\\\\.(\\\\w+)" }',
+      '    is: queue:orders.$1',
+      '    side: sends',
+      '  - id: orders-consumed',
+      '    find: { match: regex, value: "subscribe\\\\([\'\\"]orders\\\\.(\\\\w+)" }',
+      '    is: queue:orders.$1',
+      '    side: receives',
+    ].join('\n') + '\n');
+    await new Promise((r) => setTimeout(r, 2500)); // the patterns are re-read within two seconds of a change
+    await h.client.scanProject(root);
+    const queue = (await h.client.getCrossSystemEdges()).filter((e) => e.protocol === 'queue');
+    expect(queue.map((e) => `${e.sourceRelative} → ${e.targetRelative} ${e.label}`)).toEqual([`${BILLING} → ${CONSUMER} queue:orders.created`]);
   });
 });

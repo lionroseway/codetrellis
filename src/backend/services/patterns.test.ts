@@ -16,6 +16,7 @@ import { breaks, parseArchitectureRule, ruleStatement } from './architecture-rul
 import { callEntry, callMatches, callProblem, callWords, isCallEntry, isOwnKind } from '../../shared/lib/call-entry';
 import { reachWords } from '../../shared/lib/check-words';
 import { callChanges } from './review-architecture';
+import { matchEntryEdges } from './cross-system-service';
 
 const YAML = [
   'patterns:',
@@ -122,6 +123,52 @@ test('a rule holds queue:orders.*: only billing publishes to an orders queue', (
   assert.equal(breaks(rule!, 'services/web/cancel.ts', 'event:orders.cancelled'), false);
   const exact = parseArchitectureRule({ id: 'x', kind: 'calls', calls: 'queue:orders', only: ['a/'] }).rule!;
   assert.equal(breaks(exact, 'b/c.ts', 'queue:orders.created'), true);
+});
+
+test('a pattern says which end of its own kind the code is; the map pairs each sender with each receiver', () => {
+  const { patterns, problems } = parsePatterns('queue.yaml', [
+    'patterns:',
+    '  - id: orders-out',
+    '    find: { match: regex, value: "publish\\\\([\'\\"]orders\\\\.(\\\\w+)" }',
+    '    is: queue:orders.$1',
+    '    side: sends',
+    '  - id: orders-in',
+    '    find: { match: regex, value: "subscribe\\\\([\'\\"]orders\\\\.(\\\\w+)" }',
+    '    is: queue:orders.$1',
+    '    side: receives',
+    '  - id: sideways',
+    '    find: x',
+    '    is: queue:x',
+    '    side: both',
+    '  - id: http-side',
+    '    find: y',
+    '    is: http:api.stripe.com',
+    '    side: sends',
+  ].join('\n'));
+  assert.deepEqual(patterns.map((p) => [p.id, p.side ?? null]), [['orders-out', 'sends'], ['orders-in', 'receives']]);
+  assert.match(problems.join('\n'), /sideways: side is sends or receives/);
+  assert.match(problems.join('\n'), /http-side: side is for a kind of your own/);
+
+  const out = patternCallsites(patterns, 'billing/out.ts', "publish('orders.created', o);\n");
+  const inn = patternCallsites(patterns, 'mail/in.ts', "subscribe('orders.created', send);\n");
+  assert.deepEqual(out.map((c) => [c.kind, c.method, c.urlPattern]), [['entry', 'SEND', 'queue:orders.created']]);
+  assert.deepEqual(inn.map((c) => [c.kind, c.method, c.urlPattern]), [['entry', 'RECEIVE', 'queue:orders.created']]);
+  assert.equal(callEntry(out[0]), 'queue:orders.created', 'a side changes nothing a rule holds');
+
+  const row = (fileId: number, method: string | null, urlPattern: string) => ({ fileId, kind: 'entry', method, urlPattern });
+  assert.deepEqual(matchEntryEdges([
+    row(1, 'SEND', 'queue:orders.created'),
+    row(2, 'RECEIVE', 'queue:orders.created'),
+    row(3, 'RECEIVE', 'queue:orders.created'),
+    row(3, 'SEND', 'queue:orders.created'), // a file on both ends is no edge to itself
+    row(4, null, 'queue:orders.created'), // no side: held by rules, paired with nothing
+    row(5, 'RECEIVE', 'queue:orders.cancelled'), // received, never sent
+    { fileId: 6, kind: 'http_call', method: 'POST', urlPattern: '/v1/charges' },
+  ]), [
+    { sourceFileId: 1, targetFileId: 2, protocol: 'queue', label: 'queue:orders.created' },
+    { sourceFileId: 1, targetFileId: 3, protocol: 'queue', label: 'queue:orders.created' },
+    { sourceFileId: 3, targetFileId: 2, protocol: 'queue', label: 'queue:orders.created' },
+  ]);
 });
 
 test('a review says what a change adds of the team\'s own kinds', () => {

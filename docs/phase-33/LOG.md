@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Follow-ups after Z1 |
-| **Status** | #406 merged (the panes resize on load). Call rules now hold commands and environment variables, in review. The cross-system map pairing a team's own kinds is built and in its harness run. |
-| **In flight** | #407 in review on `feat/phase-33-fu-exec-env-calls` |
+| **Status** | #407 merged (commands and environment variables). Pairing a team's own kinds is in review. The owner's two decisions are being built: ** matches no folder (built, in its harness run), and C5 proven on the SWF spike (re-run under way). Rule tags with a stage selector are being built. |
+| **In flight** | #408 in review on `feat/phase-33-fu-own-kinds-pairing` |
 | **Last merged** | Z1 (#401, #402, `d293a94`) |
-| **Next action** | Merge the commands and environment variables follow-up, then open the pull request for pairing a team's own kinds |
+| **Next action** | Merge the pairing pull request, then the ** change, then rule tags; write up the SWF spike in the testing docs |
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `588064a`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `4bbeb2d`, with open PRs from GitHub.
 
 ---
 
@@ -49,7 +49,7 @@
 - [x] Follow-up: The plan-panel and inspector Allotment resize throws on load (minimumSize of undefined), caught and logged since Phase 31 (#406)
 - [ ] Follow-up: C5 is not yet seen reviewing on this repo: it has no CLAUDE_CODE_OAUTH_TOKEN secret, so codetrellis-review.yml and claude-review.yml review nothing. Deferred by the owner (2026-10-07): a public repo's PRs can read its secrets, so agent review here waits; deterministic rules (R10) come first
 - [ ] Follow-up: Path patterns: should `**/` match no folder too (`src/backend/**/*.ts` misses `src/backend/server.ts`)? Widening only and except loosens existing rules, so the owner decides
-- [ ] Follow-up: Cross-system map: pair a team's own kinds (a queue's publishers with its consumers)
+- [x] Follow-up: Cross-system map: pair a team's own kinds (a queue's publishers with its consumers) (#408)
 - [ ] Follow-up: B6: a tag selector for stages, once rules have tags
 
 ### Stage 0: ground truth
@@ -222,6 +222,31 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-08 — Follow-up: the cross-system map pairs a team's own kinds
+
+- **Commands and environment variables merged** (#407).
+- **The owner's decisions on the open follow-ups:**
+  - **`**/` matches no folder too**, as `.gitignore` reads it. It is built
+    on its own branch.
+  - **Agent review (C5)** is proven on the SWF spike rather than with a
+    secret in this public repository. The spike is re-run against today's
+    `feat/phase-33` and written into the testing docs.
+- **Pairing a team's own kinds** (this PR). A pattern may say which end of a
+  kind of its own the code is: `side: sends` or `side: receives`. The
+  cross-system map then draws each file that sends `queue:orders.created`
+  to each file that receives it.
+  - The edge's protocol is the entry's kind (`queue`), and its label is the
+    entry, as an HTTP call is drawn to its route.
+  - Without a side, an entry is held by call rules as before and paired with
+    nothing, because which way it goes cannot be told.
+  - A side on an HTTP entry is refused: its route is the other end already.
+  - Tested by unit tests (`patterns.test.ts`: parsing, the side on each
+    callsite, `matchEntryEdges`) and a harness test (`own-patterns`): billing's
+    publish is drawn to the mail consumer once the patterns say which side
+    each is on. 212 harness tests passed in a CI-like clone.
+- **Docs:** `rules.md` has a paragraph after the API-calls example, and the
+  B4 note in BUILDING-BLOCKS no longer lists it as left for later.
 
 ### 2026-10-08 — Follow-up: call rules hold the commands code runs and the environment variables it reads
 

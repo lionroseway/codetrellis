@@ -27,6 +27,11 @@
  * - `in` and `except` limit the files (every file when `in` is not said).
  * - `method` gives an HTTP entry its verb, so the cross-system map can pair it
  *   with a route; without one it is `ANY`.
+ * - `side: sends` or `side: receives` says which end of a kind of its own this
+ *   code is, so the cross-system map pairs each sender of `queue:orders.created`
+ *   with each of its receivers, as a call pairs with its route (Phase 33
+ *   follow-up). Without one, the entry is held by call rules and paired with
+ *   nothing: which way it goes cannot be told.
  *
  * Patterns are found by the file: the nearest folder above it with a
  * `.codetrellis/patterns/`, read through the confined-file helper. So the
@@ -60,6 +65,8 @@ export interface Pattern {
   find: { match: 'glob' | 'regex' | null; value: string };
   is: string;
   method?: string;
+  /** Which end of a kind of its own this code is: it sends the entry, or receives it. */
+  side?: 'sends' | 'receives';
 }
 
 export interface PatternBook { patterns: Pattern[]; problems: string[]; stamp: string }
@@ -100,11 +107,16 @@ export function parsePatterns(file: string, text: string): { patterns: Pattern[]
     else { const isWhy = callProblem(shaped); if (isWhy) why.push(`is: ${isWhy}`); }
     if (/\$[1-9]/.test(is) && kind !== 'regex') why.push('is may use $1 only when find is a regex');
     if (r.method !== undefined && (typeof r.method !== 'string' || !/^[A-Za-z]+$/.test(r.method))) why.push('method is an HTTP verb, like POST');
+    if (r.side !== undefined) {
+      if (r.side !== 'sends' && r.side !== 'receives') why.push('side is sends or receives: which end of the entry this code is');
+      else if (is && !isOwnKind(shaped)) why.push('side is for a kind of your own, like queue:orders.$1; an HTTP call pairs with its route already');
+    }
     if (why.length) { problems.push(`${file}: ${id ?? 'a pattern'}: ${why.join('; ')}`); continue; }
     if (patterns.length >= MAX_PATTERNS) { problems.push(`${file}: more than ${MAX_PATTERNS} patterns; the rest were not read`); break; }
     patterns.push({
       id: id!, file, in: within!, except: except!, find: { match: kind as 'glob' | 'regex' | null, value: value as string }, is,
       ...(typeof r.method === 'string' ? { method: r.method.toUpperCase() } : {}),
+      ...(r.side === 'sends' || r.side === 'receives' ? { side: r.side } : {}),
     });
   }
   return { patterns, problems };
@@ -206,7 +218,7 @@ function callsiteOf(p: Pattern, entry: string, line: number): Callsite | null {
     return call(line, p.method ?? 'ANY', url, context);
   }
   if (entry.startsWith('sql:')) return { kind: 'sql_query', protocol: 'sql', line, method: 'READ', urlPattern: entry.slice(4).toLowerCase(), context };
-  if (isOwnKind(entry)) return { kind: 'entry', protocol: 'entry', line, urlPattern: entry, context };
+  if (isOwnKind(entry)) return { kind: 'entry', protocol: 'entry', line, urlPattern: entry, context, ...(p.side ? { method: p.side === 'sends' ? 'SEND' : 'RECEIVE' } : {}) };
   return null;
 }
 
