@@ -55,6 +55,9 @@ test('Phase 33 reads its own subjects and branches, and not Phase 32\'s', () => 
   assert.equal(parseMergeSubject('Phase 32 S1: not this phase (#200)', known, 33), null);
   // Phase 32's D and E tracks were invisible to the old A–C pattern.
   assert.deepEqual(parseMergeSubject('Phase 32 E6: the done-when (#320)', new Set(['E6']), 32), { ids: ['E6'], pr: 320 });
+  // A letter after the step's own number, not only after a dotted one: C4b merged in #388 and read as unbuilt.
+  assert.deepEqual(parseMergeSubject('Phase 33 C4b: bring your own agent — get_review_bundle and report_review (#388)', new Set(['C4', 'C4b']), 33), { ids: ['C4b'], pr: 388 });
+  assert.deepEqual(parseMergeSubject('Phase 32 A1.7a: tagged (#100)', new Set(['A1.7a']), 32), { ids: ['A1.7a'], pr: 100 });
   assert.equal(idForBranch('origin/feat/phase-33-g6-open-restores', [...known], 33), 'G6');
   assert.equal(idForBranch('feat/phase-32-r2-x', [...known], 33), null);
 });

@@ -52,8 +52,8 @@ export function parseMergeSubject(subject: string, known: ReadonlySet<string>, p
   // `Phase 32 B7.4: …` since #153; `feat(phase-32): A1.7a — …` and `fix(phase-32): A0 — …` before.
   const m = new RegExp(`^(?:Phase ${phase} (.+?):|(?:feat|fix)\\(phase-${phase}\\): (.+?) —) .*\\(#(\\d+)\\)$`).exec(subject);
   if (!m) return null;
-  // An id is a track letter or two and a number (`B7.4`, `HD1`, `R5`), or a Stage 0 number (`0.4c-1`); only ids in the file count.
-  const ids = [...(m[1] ?? m[2]).matchAll(/(?<![\w.])([A-Z]{1,2}\d+(?:\.\d+[a-z]?)?|0\.\d+[a-z]?(?:-\d)?)(?![\w.])/g)]
+  // An id is a track letter or two and a number, perhaps lettered (`B7.4`, `HD1`, `R5`, `C4b`, `A1.7a`), or a Stage 0 number (`0.4c-1`); only ids in the file count.
+  const ids = [...(m[1] ?? m[2]).matchAll(/(?<![\w.])([A-Z]{1,2}\d+[a-z]?(?:\.\d+[a-z]?)?|0\.\d+[a-z]?(?:-\d)?)(?![\w.])/g)]
     .map((x) => x[1])
     .filter((id) => known.has(id));
   return ids.length ? { ids, pr: Number(m[3]) } : null;

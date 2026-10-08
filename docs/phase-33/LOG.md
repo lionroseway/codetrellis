@@ -21,12 +21,12 @@
 | **Stage / step** | Z2: phase review |
 | **Status** | Waiting on the owner |
 | **In flight** | nothing open |
-| **Last merged** | Z1 (#401, `f4bcfe5`) |
+| **Last merged** | Z1 (#401, #402, `d293a94`) |
 | **Next action** | The owner walks the outcomes on a packaged build (Z2); then Z3, into main and release. Every step in the agreed order is merged, Z1 the last |
 | **Blockers** | None: Z2 and Z3 are the owner's |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `f4bcfe5`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `d293a94`, with open PRs from GitHub.
 
 ---
 
@@ -78,7 +78,7 @@
 - [x] C2 SARIF output, host-neutral; recipes are examples for any CI (no host first) (#362)
 - [x] C3 Debt ratchet (existing breaches may only fall) (#363)
 - [x] C4 Agent checks locally on the user's own agent: the orchestrator, passes, the headless contract (allowlisted tools, no ask, must report, budgets, grounded citations, four outcomes) (#389)
-- [ ] C4b Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified)
+- [x] C4b Bring your own agent locally (`get_review_bundle`, `report_review`; citations still verified) (#388)
 - [x] C5 Agent checks in CI (host adapter, OIDC, cost dial, the optional verify pass) (#390)
 - [x] C6 Graduation (a repeated finding proposes a rule) (#391)
 - [x] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran (#379)
@@ -113,7 +113,7 @@
 - [x] B7 Docs for the blocks: a worked example each in rules.md, and pipeline recipes (#400)
 
 ### Stage Z: close
-- [x] Z1 Docs: `docs/claude/rules.md`, CLI and MCP references, the change-control security rule (#401)
+- [x] Z1 Docs: `docs/claude/rules.md`, CLI and MCP references, the change-control security rule (#401, #402)
 - [ ] Z2 Phase review on a packaged build
 - [ ] Z3 Into `main` and release
 
