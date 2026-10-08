@@ -83,7 +83,7 @@ function writeLastViewed(at: number): void {
 
 export function AwarenessTab() {
   const root = useProjectStore((s) => s.root);
-  const { workstreams, signals: liveSignals, loaded, error } = useAwarenessStore();
+  const { workstreams, signals: liveSignals, loaded, workstreamsLoaded, error } = useAwarenessStore();
   const [liveNow, setNow] = useState(() => Date.now());
   // B5.3: while replaying, the signals open at the cursor's moment.
   const replay = useReplayState();
@@ -111,7 +111,12 @@ export function AwarenessTab() {
   }
 
   const groups = groupSignals(signals);
-  const digest = digestLine(workstreams, signals);
+  // The signals come before the listing on a large checkout: until it lands,
+  // "no parallel work" would be a guess, so the tab says it is still looking.
+  const listing = !workstreamsLoaded && !replay && signals.length === 0;
+  const digest = listing
+    ? { headline: 'Listing the lines of work…', detail: 'Each worktree, clone and branch of this repository is asked what it has changed. Overlaps show here as they are found.' }
+    : digestLine(workstreams, signals);
   const distilled = buildDigest(signals, (r) => sideLabel(r, workstreams), { since: lastViewed });
 
   return (
@@ -122,7 +127,7 @@ export function AwarenessTab() {
       <div data-testid="awareness-digest" className="flex gap-2.5 rounded-lg border border-border-subtle bg-surface/60 px-3 py-2.5">
         <Radar size={14} className={`shrink-0 mt-0.5 ${groups.needsYou.length > 0 ? 'text-warning' : 'text-foreground-subtle'}`} />
         <div className="min-w-0">
-          <div className="text-[12px] font-medium text-foreground">{digest.headline}</div>
+          <div className="text-[12px] font-medium text-foreground" data-testid={listing ? 'awareness-listing' : undefined}>{digest.headline}</div>
           {!replay && distilled.newSince != null && distilled.newSince > 0 && lastViewed && (
             <div data-testid="awareness-new-since" className="mt-0.5 text-[10px] text-warning">
               {distilled.newSince} new since you last looked ({new Date(lastViewed).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })})

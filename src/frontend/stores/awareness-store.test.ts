@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { useAwarenessStore, resetAwarenessReads } from './awareness-store';
 
 const realFetch = globalThis.fetch;
-afterEach(() => { globalThis.fetch = realFetch; resetAwarenessReads(); useAwarenessStore.setState({ root: null, signals: [], workstreams: [], loaded: false }); });
+afterEach(() => { globalThis.fetch = realFetch; resetAwarenessReads(); useAwarenessStore.setState({ root: null, signals: [], workstreams: [], loaded: false, workstreamsLoaded: false }); });
 
 const signal = (state: string) => ({ id: 'sig1', kind: 'collision', state, severity: 'medium', title: 'Collision', replies: [] });
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
@@ -59,4 +59,29 @@ test('refreshes asked for while one runs become one more read, not one each', as
   release();
   await Promise.all([first, ...rest]);
   assert.equal(reads, 2);
+});
+
+test('the signals are shown as soon as they answer; the lines of work fill in when the slower listing lands', async () => {
+  useAwarenessStore.setState({ root: '/p', signals: [], workstreams: [], loaded: false, workstreamsLoaded: false });
+  let releaseListing!: () => void;
+  const listingHeld = new Promise<void>((r) => { releaseListing = r; });
+  globalThis.fetch = (async (url: string) => {
+    const u = String(url);
+    if (u.startsWith('/api/workstreams/commits')) return json({ commits: {} });
+    if (u.startsWith('/api/workstreams')) { await listingHeld; return json([{ root: '/p/wt', branch: 'b', idle: false }]); }
+    if (u.startsWith('/api/awareness?')) return json({ signals: [signal('open')] });
+    throw new Error(`unexpected ${u}`);
+  }) as typeof fetch;
+
+  const reading = useAwarenessStore.getState().refresh('/p');
+  for (let i = 0; i < 20 && !useAwarenessStore.getState().loaded; i++) await new Promise((r) => setTimeout(r, 5));
+  const early = useAwarenessStore.getState();
+  assert.equal(early.loaded, true, 'the tab opens on the signals');
+  assert.equal(early.signals.length, 1);
+  assert.equal(early.workstreamsLoaded, false, 'and knows the listing has not landed');
+  releaseListing();
+  await reading;
+  const done = useAwarenessStore.getState();
+  assert.equal(done.workstreamsLoaded, true);
+  assert.deepEqual(done.workstreams.map((w) => w.root), ['/p/wt']);
 });
