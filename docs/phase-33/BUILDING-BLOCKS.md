@@ -177,9 +177,10 @@ patterns:
 Built in B4. Patterns are found by the file's place (the nearest
 `.codetrellis/patterns/` above it), so every path that parses a file reads
 them. A scan redoes their finds when they change. A team's own kinds are
-held by call rules (`calls: queue:orders.*`). Two things are left for later:
-pairing a team's own kinds in the cross-system map, and reading files no
-parser reads.
+held by call rules (`calls: queue:orders.*`). A follow-up pairs them in the
+cross-system map: a pattern's `side: sends` or `side: receives` says which end
+of the entry the code is, and each sender is drawn to each receiver as an edge
+of the entry's kind (`queue`). Reading files no parser reads is left for later.
 
 ## B5 Engine and strength, per rule
 
