@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Z2: phase review |
-| **Status** | Waiting on the owner |
+| **Stage / step** | Follow-ups after Z1 |
+| **Status** | Building |
 | **In flight** | nothing open |
 | **Last merged** | Z1 (#401, #402, `d293a94`) |
-| **Next action** | The owner walks the outcomes on a packaged build (Z2); then Z3, into main and release. Every step in the agreed order is merged, Z1 the last |
-| **Blockers** | None: Z2 and Z3 are the owner's |
+| **Next action** | Finish the workstreams fix (one listing shared by callers who ask together, worktree symbols parsed inside a budget, background git behind callers) and re-run the four browser specs that fail locally; then the Allotment resize throw, subprocess and env callsites, and pairing a team’s own call kinds. Every step in the agreed order is merged; Z2 and Z3 are the owner’s |
+| **Blockers** | None for the follow-ups. The owner’s: Z2 (phase review on a packaged build), Z3 (into main and release), npm publish of the CLI, whether `**/` matches no folder, and agent review on this repo (the secret, deferred) |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `d293a94`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `3179c2d`, with open PRs from GitHub.
 
 ---
 

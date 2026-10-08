@@ -16,10 +16,10 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "Z2: phase review"
-  status: "Waiting on the owner"
-  next: "The owner walks the outcomes on a packaged build (Z2); then Z3, into main and release. Every step in the agreed order is merged, Z1 the last"
-  blockers: "None: Z2 and Z3 are the owner's"
+  step: "Follow-ups after Z1"
+  status: "Building"
+  next: "Finish the workstreams fix (one listing shared by callers who ask together, worktree symbols parsed inside a budget, background git behind callers) and re-run the four browser specs that fail locally; then the Allotment resize throw, subprocess and env callsites, and pairing a team’s own call kinds. Every step in the agreed order is merged; Z2 and Z3 are the owner’s"
+  blockers: "None for the follow-ups. The owner’s: Z2 (phase review on a packaged build), Z3 (into main and release), npm publish of the CLI, whether `**/` matches no folder, and agent review on this repo (the secret, deferred)"
   updated: 2026-10-08
 sections:
   - title: Setup
