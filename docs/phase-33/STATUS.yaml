@@ -56,6 +56,8 @@ sections:
       - title: "With many worktrees of one repository, `listWorkstreams` takes ~10 s and six parallel asks for it fill the browser's connections, so the graph waits behind them: share one answer"
         followUp: true
         status: done
+        prs:
+          - 405
       - title: "On a checkout whose 50 worktrees each differ by ~165 files from the main checkout's branch, a cold listing takes ~12 s and the worktrees' watchers and background parsing load the backend: five browser specs time out there (a CI-like clone passes them)"
         followUp: true
       - title: "Call rules read HTTP and SQL callsites; no extractor finds subprocess commands or environment variables yet, so those calls cannot be ruled on"
@@ -68,6 +70,8 @@ sections:
       - title: "Four browser specs fail in a local clone with many fetched branches and pass in CI (evolution, play-forward, navigate_to Awareness, signal-to-lines): find why"
         followUp: true
         status: done
+        prs:
+          - 405
       - title: "rules-overlay.spec drew no edges in CI: React Flow held every node measured and none with handle positions, and nothing measured them again; the canvas now does (`RemeasureHandles`)"
         followUp: true
         status: done
