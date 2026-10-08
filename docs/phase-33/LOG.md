@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | Z1: the docs |
-| **Status** | In review |
-| **In flight** | Z1 in review (#401) on `feat/phase-33-z1-docs` |
-| **Last merged** | B7 (#400, `53fb62a`) |
-| **Next action** | Merge Z1 when CI is green; then Z2, the owner's phase review on a packaged build, and Z3, into main and release |
-| **Blockers** | None |
+| **Stage / step** | Z2: phase review |
+| **Status** | Waiting on the owner |
+| **In flight** | nothing open |
+| **Last merged** | Z1 (#401, `f4bcfe5`) |
+| **Next action** | The owner walks the outcomes on a packaged build (Z2); then Z3, into main and release. Every step in the agreed order is merged, Z1 the last |
+| **Blockers** | None: Z2 and Z3 are the owner's |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `53fb62a`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `f4bcfe5`, with open PRs from GitHub.
 
 ---
 
@@ -113,7 +113,7 @@
 - [x] B7 Docs for the blocks: a worked example each in rules.md, and pipeline recipes (#400)
 
 ### Stage Z: close
-- [ ] Z1 Docs: `docs/claude/rules.md`, CLI and MCP references, the change-control security rule (#401) — in review
+- [x] Z1 Docs: `docs/claude/rules.md`, CLI and MCP references, the change-control security rule (#401)
 - [ ] Z2 Phase review on a packaged build
 - [ ] Z3 Into `main` and release
 

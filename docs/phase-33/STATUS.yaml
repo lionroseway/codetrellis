@@ -16,10 +16,10 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "Z1: the docs"
-  status: "In review"
-  next: "Merge Z1 when CI is green; then Z2, the owner's phase review on a packaged build, and Z3, into main and release"
-  blockers: "None"
+  step: "Z2: phase review"
+  status: "Waiting on the owner"
+  next: "The owner walks the outcomes on a packaged build (Z2); then Z3, into main and release. Every step in the agreed order is merged, Z1 the last"
+  blockers: "None: Z2 and Z3 are the owner's"
   updated: 2026-10-08
 sections:
   - title: Setup
