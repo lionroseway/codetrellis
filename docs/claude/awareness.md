@@ -737,6 +737,37 @@ It needs no parser, so it holds for every language and every kind of file:
 - **Old breaches:** baselined like any rule's (C3). The finding reads
   "now contains “console.log('booting');”" or "never contains “requireAuth”".
 
+An **agent rule** (Phase 33 B5) is words that only a reader can judge.
+Every rule has an **engine**, whatever its strength:
+
+- **`deterministic`:** code over the graph and the text. This is every kind
+  above.
+- **`fuzzy`:** code by likeness, a `match: fuzzy` target (B3).
+- **`agent`:** a review, against the rule's words.
+
+```yaml
+  - id: money-through-ledger
+    engine: agent
+    rule: Code that moves money records it through services/ledger, never by writing balances directly.
+    in: [src/]
+    strength: warn
+```
+
+- **No code checks it.** The gate does not count it among the rules that
+  hold, and the Rules view says who judges it.
+- **In a review:** a review's bundle lists it with `engine: agent`, and the
+  contract tells the agent it is the review's alone. A finding that cites it
+  is held to the contract like any other: it must quote the change, and the
+  rule must be in scope.
+- **It blocks only at `block`.** Then a kept finding citing it fails the
+  review's run (`blocks`), and `codetrellis review --fail-on block` exits 3.
+  At `warn` it is said.
+- **With no review run,** it is a guide: shown in briefs and where it
+  applies, checked nowhere.
+- **Change control:** rewording it, or changing what it is about, loosens
+  it.
+- **In the Rules view,** its form kind is **Words**.
+
 Everything below holds for every kind.
 
 - **On the graph** (Phase 33 G8): the Rules overlay (Overlays → Rules)

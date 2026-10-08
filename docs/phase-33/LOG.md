@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | B4: your own patterns |
+| **Stage / step** | B5: engine per rule |
 | **Status** | In review |
-| **In flight** | B4 in review (#396) on `feat/phase-33-b4-patterns`; B5 building on `feat/phase-33-b5-engine`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | B3 (#395, `bbc8fdc`) |
-| **Next action** | Merge B4 when CI is green, then B5 (engine per rule), which is built |
+| **In flight** | B5 in review (#397) on `feat/phase-33-b5-engine`; B6 building on `feat/phase-33-b6-pipelines`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | B4 (#396, `5c9abd5`) |
+| **Next action** | Merge B5 when CI is green, then B6 (pipelines), which is built |
 | **Blockers** | None |
 | **Last updated** | 2026-10-07 |
 
-> Read from git at `origin/feat/phase-33` `bbc8fdc`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `5c9abd5`, with open PRs from GitHub.
 
 ---
 
@@ -106,9 +106,9 @@
 - [x] B1 Matchers on every rule target: exact, glob, regex, fuzzy (absorbs the wildcard targets proposed as R11) (#393)
 - [x] B2 Grep rules: text that must not, or must, appear, scoped by path, file:line findings, baselined (#394)
 - [x] B3 Fuzzy matching: look-alike names and near-duplicates, by a deterministic similarity score with a threshold (#395)
-- [ ] B4 Your own patterns: what counts as a call, or as any entry (queue:, event:, flag:), without code (#396) — in review
-- [ ] B5 Engine per rule: deterministic, fuzzy or agent, independent of strength; an agent rule blocks only when its owner says block — building
-- [ ] B6 Pipelines: stages in order or in parallel, needs and when, and later stages grounded by earlier results
+- [x] B4 Your own patterns: what counts as a call, or as any entry (queue:, event:, flag:), without code (#396)
+- [ ] B5 Engine per rule: deterministic, fuzzy or agent, independent of strength; an agent rule blocks only when its owner says block (#397) — in review
+- [ ] B6 Pipelines: stages in order or in parallel, needs and when, and later stages grounded by earlier results — building
 - [ ] B7 Docs for the blocks: a worked example each in rules.md, and pipeline recipes
 
 ### Stage Z: close
@@ -220,6 +220,37 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-07 — B4 merged; B5 built: engine per rule
+
+- **B4 (#396) merged.**
+- **B5: engine per rule.** Every rule has an engine, whatever its
+  strength:
+  - **`deterministic`:** code over the graph and the text;
+  - **`fuzzy`:** a `match: fuzzy` target;
+  - **`agent`:** a review, against the rule's words.
+
+  The engine follows from the rule, and writing one the rule is not is
+  refused.
+  - **An agent rule** is `engine: agent`, `rule:` (its words) and `in:` (its
+    files). No code checks it, and the gate does not say it holds.
+  - **In a review:** its bundle lists it with `engine: agent`, and the
+    contract tells the agent it is the review's alone. A finding that cites
+    it must quote the change, like any other.
+  - **It blocks only at `block`.** Then a kept finding citing it fails the
+    review's run (`✗ 1 block` first in the run's words). At `warn` it is
+    said and passes. With no review run, it is a guide.
+  - **Change control:** rewording it, or changing its files, loosens it.
+    The Rules view's form has a **Words** kind.
+  - **Fixed on the way:** a grep rule (B2) covered every file in review
+    bundles, briefs and overlays. Grep and agent rules now cover the files
+    in their `in`.
+  - **Done criterion, proved end to end:**
+    - the rule reaches the bundle;
+    - a finding citing it is kept, and a misquoted one dropped;
+    - at warn the run passes, and set to block the same finding fails it.
+  - **Locally:** unit 2220; 226 harness tests (with the awareness, task
+    rules and review suites); 84 chromium and 26 serial browser tests.
 
 ### 2026-10-07 — B3 merged; B4 built: your own patterns
 

@@ -145,7 +145,7 @@ export function moveRulesFromConfig(projectRoot: string): string[] {
 export function rulesView(projectRoot: string, edges: Array<{ from: string; to: string }> | null): RuleView[] {
   return rulesOf(projectRoot).map((rule) => {
     // A guide is read, not checked (R4): it has no breaches to count.
-    const breaches = edges && rule.strength !== 'guide' ? checkEdges([rule], edges) : null;
+    const breaches = edges && rule.strength !== 'guide' && rule.kind !== 'agent' ? checkEdges([rule], edges) : null;
     return {
       rule,
       where: whereOf(rule),
@@ -153,6 +153,8 @@ export function rulesView(projectRoot: string, edges: Array<{ from: string; to: 
       breaches,
       breachWords: rule.strength === 'guide'
         ? 'A guide: shown to agents whose work touches it, never checked'
+        : rule.kind === 'agent'
+        ? 'Judged by an agent review, against its words: no code checks it, and with no review it is a guide'
         : breaches === null
         ? 'Open this project to see what breaks it today'
         : breaches.length === 0 ? 'Nothing breaks this today' : `${breaches.length} ${breakers(rule, breaches.length)} this today`,

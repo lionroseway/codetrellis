@@ -116,7 +116,8 @@ export async function checkTheChange(input: ChangeCheckInput): Promise<{ error: 
       docs: c.docs.map((d) => ({ uid: d.uid, title: d.title, slug: d.slug, verified_at: d.verifiedAt, files: d.files })),
       rules: c.rules.map((r) => ({ path: r.path, imports: r.imports, rule: r.rule, words: r.words, because: r.because, strength: r.strength, suite: r.suite ?? 'architecture', fix: r.fix ?? null, ...(r.line ? { line_found: r.line } : {}) })),
       // C8: the rules judged by, so a suite can say how many hold.
-      checked: (judgeBy ?? scopeRules(rulesOf(root), scope)).map((r) => ({ rule: r.id, suite: r.suite ?? 'architecture', strength: r.strength })),
+      // B5: an agent rule is a review's to judge, not this check's: it is not said to hold.
+      checked: (judgeBy ?? scopeRules(rulesOf(root), scope)).filter((r) => r.kind !== 'agent').map((r) => ({ rule: r.id, suite: r.suite ?? 'architecture', strength: r.strength })),
       rulebook: c.rulebook.map((r) => ({ rule: r.rule, change: r.change, effect: r.effect, allowed: r.allowed, forbidden: r.forbidden, words: changeWords(r), ...(r.approval ? { approval: r.approval } : {}) })),
       notes: c.notes,
       ...(c.ratchet.length ? { ratchet: c.ratchet } : {}),

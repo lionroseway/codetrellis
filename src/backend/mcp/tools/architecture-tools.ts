@@ -184,6 +184,8 @@ export function register(server: McpServer, deps: ToolDeps): void {
         must_not: z.string().max(200).optional().describe('A grep rule\'s text no line may hold, like console.log(.'),
         must: z.string().max(200).optional().describe('A grep rule\'s text each file must hold on some line, like requireAuth.'),
         ignore_case: z.boolean().optional().describe('A grep rule: read its text in any case.'),
+        engine: z.enum(['deterministic', 'fuzzy', 'agent']).optional().describe('Who judges it (B5): deterministic (code, the default), fuzzy (a match: fuzzy target), or agent: words an agent review judges a change by, in rule_words, about the files in in. No code checks an agent rule; it blocks only at block.'),
+        rule_words: z.string().max(1000).optional().describe('An agent rule\'s words: Code that moves money records it through services/ledger, never by writing balances directly.'),
         folder: z.string().max(300).optional().describe('A folder rule\'s folder, like src/backend/services/.'),
         files: z.array(z.string().max(100)).max(20).optional().describe('A folder rule\'s name patterns, like *-service.ts.'),
         kinds: z.array(z.string().max(20)).max(20).optional().describe('A folder rule\'s file kinds, by extension, like ts.'),
@@ -211,6 +213,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
         ...(args.exports ? { exports: args.exports } : {}), ...(args.guide ? { guide: args.guide } : {}),
         ...(args.in ? { in: args.in } : {}), ...(args.must_not !== undefined ? { mustNot: args.must_not } : {}),
         ...(args.must !== undefined ? { must: args.must } : {}), ...(args.ignore_case !== undefined ? { ignoreCase: args.ignore_case } : {}),
+        ...(args.engine ? { engine: args.engine } : {}), ...(args.rule_words ? { rule: args.rule_words } : {}),
       };
       try {
         if (!body && !findRule(root, args.id)) return { isError: true, content: [{ type: 'text' as const, text: `No architecture rule "${args.id}" in this project to stop.` }] };

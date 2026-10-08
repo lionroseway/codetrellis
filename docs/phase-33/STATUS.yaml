@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "B4: your own patterns"
+  step: "B5: engine per rule"
   status: "In review"
-  next: "Merge B4 when CI is green, then B5 (engine per rule), which is built"
+  next: "Merge B5 when CI is green, then B6 (pipelines), which is built"
   blockers: "None"
   updated: 2026-10-07
 sections:
