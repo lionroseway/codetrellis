@@ -48,6 +48,18 @@ A target can say how it matches: `glob`, `regex` or `fuzzy` with a
 `threshold` (B1, B3). What counts as a call can be widened with your own
 patterns in `.codetrellis/patterns/` (B4). Each is worked through below.
 
+Paths (`from`, `only`, `except`, `in`) are written three ways:
+- `web/` is a folder and everything under it.
+- `db/types.ts` is that file, or that folder if the path goes on under it.
+- A glob uses `*` for any run within a name and `**` for any run across
+  folders.
+
+A `**` that is a whole folder name matches any number of folders, none
+included, as `.gitignore` reads it. So `src/**/*.ts` holds `src/server.ts` as
+well as `src/a/b.ts`, and `**/*.test.ts` holds a test at the root. Before the
+Phase 33 follow-up it needed at least one folder. This repository's own rules
+were measured, and none of their findings changed.
+
 Every rule has an **engine**, which follows from the rule: `deterministic`
 (code over the graph and the text), `fuzzy` (a `match: fuzzy` target), or
 `agent`. How hard each holds is its **strength** (R4):

@@ -28,6 +28,7 @@ test('the window matches patterns exactly as the backend does', () => {
   const cases: Array<[string, string]> = [
     ['web/', 'web/a.ts'], ['web/', 'webby/a.ts'], ['web', 'web/a.ts'], ['web/a.ts', 'web/a.ts'], ['src/**/ui/**', 'src/x/ui/b.tsx'],
     ['src/*.ts', 'src/a.ts'], ['src/*.ts', 'src/x/a.ts'], ['**', 'anything/at/all.ts'], ['./web/', 'web/a.ts'],
+    ['src/backend/**/*.ts', 'src/backend/server.ts'], ['**/*.test.ts', 'a.test.ts'], ['src/**/ui/**', 'src/ui/a.tsx'],
   ];
   for (const [p, f] of cases) assert.equal(inRulePattern(p, f), inPattern(p, f), `${p} ~ ${f}`);
 });

@@ -32,9 +32,28 @@ const MAX_PATTERN = 200;
 
 const escapeRe = (s: string) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
 
-/** A glob as a regex source: `**` any run, `*` any run but `/`. Not anchored. */
+// A glob as a regex source, not anchored. `*` is any run but `/`; `**` is any
+// run at all. A `**` that is a whole folder name (`**/` at the start or after
+// a `/`) is any number of folders, none included, as gitignore and minimatch
+// read it: `src/**/*.ts` holds `src/server.ts` as well as `src/a/b.ts`
+// (Phase 33 follow-up, the owner's call). Paths and targets share it. (Line
+// comments: the examples would end a block comment.)
 export function globSource(glob: string): string {
-  return glob.split('**').map((part) => part.split('*').map(escapeRe).join('[^/]*')).join('.*');
+  let out = '';
+  for (let i = 0; i < glob.length;) {
+    if (glob.startsWith('**', i)) {
+      const wholeFolder = (i === 0 || glob[i - 1] === '/') && glob[i + 2] === '/';
+      out += wholeFolder ? '(?:.*/)?' : '.*';
+      i += wholeFolder ? 3 : 2;
+    } else if (glob[i] === '*') {
+      out += '[^/]*';
+      i += 1;
+    } else {
+      out += escapeRe(glob[i]);
+      i += 1;
+    }
+  }
+  return out;
 }
 
 /** A regex's source, or why it cannot be one. */
