@@ -281,6 +281,19 @@ async function verb(name: string, p: Parsed): Promise<void> {
  * CLI, run headless, each pass recorded as a check run (src/cli/review.ts).
  */
 async function reviewCmd(p: Parsed): Promise<void> {
+  // C9: the signed review on the pull request, which needs git and nothing else.
+  if (p.rest[0] === 'verify' || p.rest[0] === 'publish') {
+    const { verifyCmd, publishCmd, VerifyUsageError } = await import('./review-verify');
+    try {
+      const r = p.rest[0] === 'verify' ? verifyCmd(p, process.cwd(), process.env, CLI_VERSION) : publishCmd(p, process.cwd());
+      out(r.out);
+      process.exitCode = r.code;
+    } catch (err) {
+      if (err instanceof VerifyUsageError) fail(err.message);
+      throw err;
+    }
+    return;
+  }
   const { agentName, connectAgent, dataDirFor, NotRunningError } = await import('./agent');
   const { review, reviewOptions, ReviewUsageError } = await import('./review');
   const cwd = process.cwd();

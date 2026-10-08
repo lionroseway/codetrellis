@@ -23,6 +23,7 @@ import crypto from 'node:crypto';
 import { changedFiles } from './work-changes';
 import { rulesOf } from './architecture-rules';
 import { ruleEngine, ruleStatement } from './architecture-rule';
+import { attestReview, type Attested } from './review-attest';
 import { parseScope, scopeRules, scopeWords } from './rule-scope';
 import { ruleImports } from './workstream-imports';
 import { readTextWithin } from './confined-fs';
@@ -237,7 +238,7 @@ export function recordReview(input: {
   /** C5: findings a second pass refuted, each with why; kept as dropped. */
   refuted?: Array<{ says: string; why: string }>;
   verify?: string | null;
-}): { error: string } | { run: string; review: AgentReview; proposed: RuleProposal[] } {
+}): { error: string } | { run: string; review: AgentReview; proposed: RuleProposal[]; signed: Attested } {
   const bundle = keptBundle(input.report.bundle);
   if (!bundle) return { error: `No bundle ${input.report.bundle} is kept here (bundles are kept for an hour): ask for the bundle again and review that.` };
   const { kept: findings, dropped } = input.error ? { kept: [], dropped: [] } : verifyFindings(bundle.diff, bundle.rules, input.report.findings ?? []);
@@ -259,5 +260,7 @@ export function recordReview(input: {
   }, { writer: writerId(), name: writerName(bundle.root) });
   // C6: what reviews keep finding is proposed as a rule, for a person to decide.
   const proposed = graduate(bundle.root, run, review, input.by);
-  return { run, review, proposed };
+  // C9: signed on this device, as a git note on the commit it reviewed, for CI to verify.
+  const signed = attestReview(bundle.root, { head: bundle.head, base: bundle.since, files: bundle.files, agent: input.agent, review, scope: bundle.scope }, { writer: writerId(), name: writerName(bundle.root) });
+  return { run, review, proposed, signed };
 }

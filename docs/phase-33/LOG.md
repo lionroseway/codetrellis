@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | B6: pipelines |
+| **Stage / step** | C9: a signed local review |
 | **Status** | In review |
-| **In flight** | C9 building on `feat/phase-33-c9-signed-local-review`; B6 in review (#398) on `feat/phase-33-b6-pipelines`; B7 building on `feat/phase-33-b7-docs`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | B5 (#397, `0fc20ba`) |
-| **Next action** | Merge B6 when CI is green, then C9 (signed local review), which is built; B7 (docs for the blocks) is being written |
+| **In flight** | C9 in review (#399) on `feat/phase-33-c9-signed-local-review`; B7 building on `feat/phase-33-b7-docs`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | B6 (#398, `8285b59`) |
+| **Next action** | Merge C9 when CI is green, then B7 (docs for the blocks), which is built; then Z1 |
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `0fc20ba`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `8285b59`, with open PRs from GitHub.
 
 ---
 
@@ -83,7 +83,7 @@
 - [x] C6 Graduation (a repeated finding proposes a rule) (#391)
 - [x] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran (#379)
 - [x] C8 One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words (#378)
-- [ ] C9 A review run on your device counts on the pull request: any agent (Cursor, Codex, Claude Code, any MCP client), signed with your device key, read and verified by CI with no secret — building
+- [ ] C9 A review run on your device counts on the pull request: any agent (Cursor, Codex, Claude Code, any MCP client), signed with your device key, read and verified by CI with no secret (#399) — in review
 
 ### Track G: graph and clarity
 - [x] G1 One visual vocabulary (colour, glyph, dash, words) with a guard test (#371)
@@ -109,7 +109,7 @@
 - [x] B3 Fuzzy matching: look-alike names and near-duplicates, by a deterministic similarity score with a threshold (#395)
 - [x] B4 Your own patterns: what counts as a call, or as any entry (queue:, event:, flag:), without code (#396)
 - [x] B5 Engine per rule: deterministic, fuzzy or agent, independent of strength; an agent rule blocks only when its owner says block (#397)
-- [ ] B6 Pipelines: stages in order or in parallel, needs and when, and later stages grounded by earlier results (#398) — in review
+- [x] B6 Pipelines: stages in order or in parallel, needs and when, and later stages grounded by earlier results (#398)
 - [ ] B7 Docs for the blocks: a worked example each in rules.md, and pipeline recipes — building
 
 ### Stage Z: close
@@ -221,6 +221,52 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-08 — B6 merged; C9 built: a review on your own device counts on the pull request
+
+- **B6 (#398) merged.**
+- **C9: a signed local review.** Any agent can review a branch on the
+  developer's own device: `codetrellis review`, or Cursor, Codex, Claude
+  Code or any MCP client through `get_review_bundle` and `report_review`.
+  CI then reads that review with no secret, no AI and no app. This is how
+  an open-source project gets agent review without putting a key in CI.
+  - **Signed by CodeTrellis, not the agent.** Once a report's findings are
+    checked (C4b), CodeTrellis signs a statement of the review: which
+    commit, which agent, what held. It signs with the device's Ed25519 key,
+    which is introduced under `.codetrellis/keys/` the way a rule approval
+    introduces it.
+  - **A git note on the commit** (`refs/notes/codetrellis-reviews`), so it
+    changes neither the commit nor the diff. `codetrellis review publish`
+    pushes it.
+  - **Only a committed review is signed.** A review of uncommitted changes
+    is no review of the commit. It is kept as a run, and `report_review`
+    says why it was not signed. `CODETRELLIS_SIGN_REVIEWS=0` turns signing
+    off.
+  - **`codetrellis review verify`** in CI fetches the notes and reads the one
+    on the head. It checks the note against the device keys the **base**
+    lists, so a branch cannot trust its own key (R2). The verdict is one of:
+    - **verified:** the findings are shown at their lines, as words,
+      markdown, SARIF or JSON;
+    - **stale:** a review of an earlier commit, named, which does not count
+      after a push;
+    - **refused:** a note edited after signing, or signed by a key the base
+      does not list;
+    - **none.**
+
+    `--require` makes anything but verified exit 3.
+  - **Recipe:** `docs/recipes/github-actions-signed-review.yml` puts the
+    review in the job summary and the findings in code scanning. This
+    repository runs it advisory (`.github/workflows/signed-review.yml`), with
+    no secret.
+  - **Done criterion, proved end to end:**
+    1. Cursor, through the stdio connector, reviews a branch, and its
+       finding is signed as a note.
+    2. A fresh clone with no app verifies it and shows the finding at its
+       line, and the recipe's own Verify step runs as CI would.
+    3. A forged note is refused, and a push after the review makes it
+       stale.
+  - **Locally:** unit 2229; 103 harness tests (with the review, rules, CLI,
+    signed approvals and task record suites).
 
 ### 2026-10-08 — B5 merged; B6 built: pipelines
 

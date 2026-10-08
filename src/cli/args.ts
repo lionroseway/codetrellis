@@ -16,7 +16,7 @@ export interface Parsed {
 }
 
 /** Flags that never take a value, so `--json foo` keeps `foo` as an argument. */
-const SWITCHES = new Set(['json', 'help', 'no-wait', 'quiet', 'share-task-state', 'top', 'page', 'strict', 'no-color', 'verify', 'post', 'pipeline']);
+const SWITCHES = new Set(['json', 'help', 'no-wait', 'quiet', 'share-task-state', 'top', 'page', 'strict', 'no-color', 'verify', 'post', 'pipeline', 'require', 'no-fetch']);
 
 export function parseArgs(argv: readonly string[]): Parsed {
   const flags: Record<string, string | true> = {};
@@ -157,6 +157,8 @@ which; text, or --json):
   codetrellis check --suite <s> | --rule <id> | --path <p>
                                                only those rules (comma-separated): one suite's, named
                                                rules, or the rules about a path
+  codetrellis check --pipeline [--stage <id>]  the base's .codetrellis/pipeline.yaml, stage by stage; agent
+                                               stages too with --agent and the review's flags
   codetrellis rules baseline                   record each rule's breaches now; the check then fails on
                                                any it does not list, and the file may only shrink
   codetrellis report-tests <junit.xml>         tell CodeTrellis how the tests went
@@ -169,7 +171,13 @@ which; text, or --json):
                                                is kept as a check run. --verify: a second pass tries to refute
                                                each finding. --auth oidc:bedrock|vertex|foundry signs in through
                                                your cloud. --post comments on the pull request. Advisory: exit 3
-                                               only with --fail-on
+                                               only with --fail-on. A review of a commit is signed with this
+                                               device's key, as a git note on it
+  codetrellis review publish [--remote <r>]    push the signed reviews, for CI to read
+  codetrellis review verify --base <ref> [--head <ref>] [--require] [--format text|markdown|sarif|json]
+                                               the head's signed review, checked against the keys on the base:
+                                               verified, stale (of an earlier commit), refused, or none; no
+                                               app, no secret, no AI. --require: exit 3 unless verified
 
 Changing and committing the plan:
 

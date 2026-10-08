@@ -473,6 +473,43 @@ advisory, beside `claude-review.yml`.
   env:VAR`, else `GITHUB_TOKEN`, `GITLAB_TOKEN` or `BITBUCKET_TOKEN`. The
   agent's environment is scrubbed, so the model never sees it.
 
+### A review on your device counts on the pull request (Phase 33 C9)
+
+The second way to run agent review, beside C5's CI token, is for repositories
+that will not hold a secret. You review on your own machine, with any agent:
+`codetrellis review` on your own login, or Cursor, Codex, Claude Code or any
+MCP client through `get_review_bundle` and `report_review`.
+
+- **Signing:** CodeTrellis checks the findings (C4b), then signs the review
+  with this device's key, never the agent's.
+  - The key is the same Ed25519 key that rule approvals use, introduced once
+    under `.codetrellis/keys/`.
+  - The signature goes in a git note on the commit reviewed
+    (`refs/notes/codetrellis-reviews`), so the commit and the diff are
+    untouched.
+  - It is signed only when every file the review read is that commit's. A
+    review of uncommitted changes is kept as a run and not signed, with why
+    (`report_review` says `signed` or `unsigned`).
+- **Publishing:** `codetrellis review publish` pushes the notes.
+- **Verifying:** `codetrellis review verify --base origin/main` needs git and
+  nothing else: no app, no secret, no AI. It fetches the notes, reads the one
+  on the head, and verifies it against the device keys on the base. It says
+  one of:
+  - **verified:** the review, and its findings at their lines;
+  - **stale:** a review of an earlier commit, before the last push;
+  - **refused:** edited after it was signed, signed by a key the base does
+    not list, or copied from another commit;
+  - **none.**
+
+  `--require` exits 3 unless the review is verified. `--format markdown|sarif|json`
+  works as `codetrellis review`'s does.
+- **A key counts once it is on the base,** the same as for an approval: merge
+  the `.codetrellis/keys/` file once.
+- **In CI:** `docs/recipes/github-actions-signed-review.yml`, and this repo's
+  own `.github/workflows/signed-review.yml`, show the review in the job
+  summary and its findings on the changed lines. They are advisory.
+- **Turning it off:** `CODETRELLIS_SIGN_REVIEWS=0` stops a machine signing.
+
 ### What reviews keep finding becomes a rule (Phase 33 C6)
 
 A reviewer names each bug or risk with a `topic`: a short slug it would use
