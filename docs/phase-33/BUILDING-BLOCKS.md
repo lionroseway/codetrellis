@@ -279,6 +279,29 @@ example per block:
 
 `docs/recipes/` gains `pipeline.sh` and its CI variants.
 
+Built in B7.
+- **Each example is a test.** A code block's first line says which example
+  it belongs to and what it is: a file on `main` or on the change, the
+  agent's report, a command, or what the command prints.
+  `tests/e2e/rules-docs.test.ts` runs every example as written, in a fresh
+  repository with no desktop app, and fails when the output differs by a
+  character. Where an example has an agent, a stand-in reports what the page
+  says the agent reports.
+- **Recipes:** `pipeline.sh` runs the pipeline once, so an agent stage is
+  paid for once. `CODETRELLIS_STAGE` runs one stage, and an empty secret
+  skips the agent stages and says so. The variants are
+  `github-actions-pipeline.yml` and `gitlab-ci-pipeline.yml`, and the test
+  runs `pipeline.sh` on the pipeline example.
+- **What writing the examples found,** each fixed:
+  - **Wrong line:** an SDK call a pattern found was reported on the `fetch`
+    line above it. The extractor's own line now wins.
+  - **Wrong fix:** a grep rule's fix read "import **/*.test.ts instead",
+    from its `except`.
+  - **Missing block count:** a review's summary did not say that a finding
+    blocks.
+  - **Findings not listed:** a pipeline's review stage did not list its
+    findings.
+
 ## Agent review: three ways to run it
 
 The blocks don't decide where the agent runs. Teams choose per repository:

@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { agentFindingLine, parseAgentReview, parseUnifiedDiff, reviewOutcome, reviewWords, verifyFindings, wholeFile } from './agent-review';
+import { agentFindingLine, parseAgentReview, parseUnifiedDiff, reviewBlockWords, reviewOutcome, reviewWords, verifyFindings, wholeFile } from './agent-review';
 
 const DIFF = [
   'diff --git a/src/api.ts b/src/api.ts',
@@ -74,6 +74,9 @@ test('the outcome: findings, pass, inconclusive when said or when nothing held; 
   assert.equal(reviewWords({ outcome: 'findings', reason: null, findings: [f, f, q], dropped: [{ says: 'x', why: 'y' }] }), '⚠ 2 findings · ? 1 question · 1 dropped');
   assert.equal(reviewWords({ outcome: 'pass', reason: null, findings: [], dropped: [] }), '✓ nothing found');
   assert.equal(reviewWords({ outcome: 'error', reason: 'the model refused the key', findings: [], dropped: [] }), '✗ error: the model refused the key');
+  // B5, said everywhere since B7: how many findings block comes first.
+  assert.equal(reviewBlockWords({ outcome: 'findings', reason: null, findings: [f, f], dropped: [] }, 1), '✗ 1 block · ⚠ 2 findings');
+  assert.equal(reviewBlockWords({ outcome: 'findings', reason: null, findings: [f], dropped: [] }, 0), '⚠ 1 finding');
 });
 
 test('a stored review is read back under limits; anything else is not a review', () => {

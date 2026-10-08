@@ -64,6 +64,13 @@ if (scenario === 'none') {
   result({});
   process.exit(0);
 }
+// report:<file> (Phase 33 B7): reports what the file says, as a docs example's agent report shows it.
+if (scenario.startsWith('report:')) {
+  await call('report_review', JSON.parse(fs.readFileSync(scenario.slice(7), 'utf8')));
+  await client.close();
+  result({});
+  process.exit(0);
+}
 const api = bundle.data.files.find((f) => f.path.endsWith('api.ts'));
 const lineOf = (needle) => {
   for (const h of api.hunks) for (const l of h.lines.split('\n')) { const m = /^\s*(\d+) \| (.*)$/.exec(l); if (m && m[2].includes(needle)) return Number(m[1]); }

@@ -16,9 +16,9 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "C9: a signed local review"
+  step: "B7: docs for the blocks"
   status: "In review"
-  next: "Merge C9 when CI is green, then B7 (docs for the blocks), which is built; then Z1"
+  next: "Merge B7 when CI is green, then Z1 (docs), rebuilt on top of B7's rules.md"
   blockers: "None"
   updated: 2026-10-08
 sections:

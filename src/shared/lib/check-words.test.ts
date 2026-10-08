@@ -126,6 +126,10 @@ test('a rule says its fix: the files that may, or the doors through it; else its
   assert.equal(ruleFix({ kind: 'package', only: ['src/payments/index.ts'], except: [] }), 'use src/payments/index.ts instead');
   assert.equal(ruleFix({ except: ['db/types.ts'] }), 'import db/types.ts instead');
   assert.equal(ruleFix({ except: [] }), null);
+  // B7: a grep or agent rule's except is files it skips, not something to import instead.
+  assert.equal(ruleFix({ kind: 'grep', except: ['**/*.test.ts'] }), null);
+  assert.equal(ruleFix({ kind: 'agent', except: ['src/legacy/'] }), null);
+  assert.equal(ruleFix({ kind: 'package', only: [], except: ['npm:stripe/types'] }), 'import npm:stripe/types instead');
   assert.equal(findingNext(refund), 'refunds use refundCharge');
   assert.equal(ruleLine(refund.words, refund), refund.words);
 });

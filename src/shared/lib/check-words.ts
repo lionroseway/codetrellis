@@ -71,7 +71,8 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 /** What to do instead, from the rule itself: the files that may, or the doors through it. */
 export function ruleFix(rule: { kind?: string; only?: string[]; except: string[] }): string | null {
   if ((rule.kind === 'package' || rule.kind === 'symbol' || rule.kind === 'calls') && rule.only?.length) return `use ${rule.only.join(' or ')} instead`;
-  if (rule.except.length) return `import ${rule.except.join(' or ')} instead`;
+  // An imports or package rule's except is what anyone may import; a grep or agent rule's is files it skips (B7).
+  if ((rule.kind === undefined || rule.kind === 'imports' || rule.kind === 'package') && rule.except.length) return `import ${rule.except.join(' or ')} instead`;
   return null;
 }
 
