@@ -21,7 +21,7 @@
 import { execFileSync } from 'node:child_process';
 import type { WorkstreamChanges } from '../../shared/types';
 import { isSafeGitRef } from './git-safety';
-import { gitAsync as sharedGitAsync } from './git-env';
+import { gitAsync as sharedGitAsync, inBackground } from './git-env';
 import { parseNameStatusZ, parseNumstatZ, withLineCounts, combineChanges } from './workstream-watch-service';
 
 export interface BranchRef {
@@ -217,6 +217,15 @@ const mainCache = new Map<string, Set<string>>();
  * answered in full, as before.
  */
 export const INLINE_BRANCHES = 8;
+/**
+ * And how long it waits for them (Phase 33 follow-up). A count alone let one
+ * branch far from main hold every listing: counting its commits and diffing
+ * it took 12 s on a checkout with 385 branches, and the window's six asks
+ * each waited for it while the graph's own request queued behind them. Past
+ * this, the branch still being worked out is finished by the warmer, from
+ * the same work.
+ */
+export const INLINE_MS = 1_500;
 const WARM_CONCURRENCY = 4;
 
 let onWarmed: (repo: string) => void = () => {};
@@ -241,6 +250,34 @@ export function branchWorkstreamsWarmed(repo: string): Promise<void> {
 /** Forget every answer (tests). */
 export function resetBranchWorkstreamCache(): void {
   cache.clear(); mainCache.clear();
+}
+
+/** Entries being worked out, so a listing that stopped waiting and the warmer share one computation. */
+const inflight = new Map<string, Promise<Entry>>();
+
+function entryFor(repo: string, mainHead: string, head: string, mainLeft: () => Promise<Set<string>>): Promise<Entry> {
+  const k = `${repo}\0${head}\0${mainHead}`;
+  const hit = cache.get(k);
+  if (hit) return Promise.resolve(hit);
+  let p = inflight.get(k);
+  if (!p) {
+    // In the background lane even when a listing asked: it waits only `INLINE_MS`,
+    // and a branch still being diffed after that must not hold the slots its
+    // next listing needs.
+    p = inBackground(() => computeEntry(repo, mainHead, head, mainLeft))
+      .then((e) => { cache.set(k, e); return e; })
+      .finally(() => inflight.delete(k));
+    inflight.set(k, p);
+  }
+  return p;
+}
+
+/** `p`, or null once `ms` have passed; the timer never keeps the process alive. */
+function within<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  if (ms <= 0) return Promise.resolve(null);
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), ms); timer.unref?.(); });
+  return Promise.race([p, late]).finally(() => clearTimeout(timer));
 }
 
 async function computeEntry(repo: string, mainHead: string, head: string, mainLeft: () => Promise<Set<string>>): Promise<Entry> {
@@ -269,16 +306,14 @@ async function computeEntry(repo: string, mainHead: string, head: string, mainLe
 function warm(repo: string, mainHead: string, heads: string[], mainLeft: () => Promise<Set<string>>): void {
   if (warming.has(repo) || heads.length === 0) return;
   const todo = [...new Set(heads)];
-  const run = (async () => {
+  const run = inBackground(async () => {
     const worker = async () => {
       for (let head = todo.shift(); head; head = todo.shift()) {
-        const k = `${repo}\0${head}\0${mainHead}`;
-        if (cache.has(k)) continue;
-        cache.set(k, await computeEntry(repo, mainHead, head, mainLeft));
+        await entryFor(repo, mainHead, head, mainLeft);
       }
     };
     await Promise.all(Array.from({ length: WARM_CONCURRENCY }, worker));
-  })().finally(() => {
+  }).finally(() => {
     warming.delete(repo);
     onWarmed(repo);
   });
@@ -288,14 +323,14 @@ function warm(repo: string, mainHead: string, heads: string[], mainLeft: () => P
 /**
  * The branch workstreams of a repository, each with its changes. `repo` is a
  * working tree of it (the main checkout). Never throws. Branches beyond
- * `INLINE_BRANCHES` not yet worked out are left out of this answer and
- * worked out in the background; `setBranchWorkstreamsWarmedListener` hears
+ * `INLINE_BRANCHES`, or still being worked out after `INLINE_MS`, are left
+ * out of this answer and worked out in the background; `setBranchWorkstreamsWarmedListener` hears
  * when they are ready. Git runs without blocking the server, so "inline"
  * means only that this answer waits for them.
  */
 export async function branchWorkstreamsOf(
   repo: string,
-  opts: { mainBranch: string | null; mainRef: string | null; checkedOut: ReadonlySet<string>; windowDays: number; nowSec?: number; inline?: number },
+  opts: { mainBranch: string | null; mainRef: string | null; checkedOut: ReadonlySet<string>; windowDays: number; nowSec?: number; inline?: number; inlineMs?: number },
 ): Promise<BranchWorkstream[]> {
   if (!opts.mainRef || !isSafeGitRef(opts.mainRef)) return [];
   let mainHead: string;
@@ -328,6 +363,7 @@ export async function branchWorkstreamsOf(
     aheadOf: () => true,
   });
   let budget = opts.inline ?? INLINE_BRANCHES;
+  const deadline = Date.now() + (opts.inlineMs ?? INLINE_MS);
   const later: string[] = [];
   const selected: BranchWorkstream[] = [];
   for (const r of candidates) {
@@ -336,8 +372,9 @@ export async function branchWorkstreamsOf(
     if (!hit) {
       if (budget <= 0 || warming.has(repo)) { later.push(r.head); continue; }
       budget--;
-      hit = await computeEntry(repo, mainHead, r.head, mainLeft);
-      cache.set(k, hit);
+      hit = (await within(entryFor(repo, mainHead, r.head, mainLeft), deadline - Date.now())) ?? undefined;
+      // Out of time: this one and the rest are the warmer's.
+      if (!hit) { budget = 0; later.push(r.head); continue; }
     }
     // Ahead by ancestry, but maybe merged by content (bug 53).
     if (!hit.ahead || hit.merged) continue;
