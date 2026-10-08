@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Follow-ups after Z1 |
-| **Status** | In review |
-| **In flight** | #406 in review on `feat/phase-33-fu-allotment-resize` |
+| **Status** | #406 merged (the panes resize on load). Call rules now hold commands and environment variables, in review. The cross-system map pairing a team's own kinds is built and in its harness run. |
+| **In flight** | #407 in review on `feat/phase-33-fu-exec-env-calls` |
 | **Last merged** | Z1 (#401, #402, `d293a94`) |
-| **Next action** | Merge the Allotment fix when CI is green; then call rules for commands and environment variables (built, being checked), and pairing a team’s own call kinds. Z2 and Z3 are the owner’s |
+| **Next action** | Merge the commands and environment variables follow-up, then open the pull request for pairing a team's own kinds |
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `a7490b9`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `588064a`, with open PRs from GitHub.
 
 ---
 
@@ -42,7 +42,7 @@
 - [x] Follow-up: A new advisory (MCP SDK, GHSA-6qxp-vccf-f47h) failed the production audit on every branch: SDK 1.32.1 (into `main`) (#355)
 - [x] Follow-up: With many worktrees of one repository, `listWorkstreams` takes ~10 s and six parallel asks for it fill the browser's connections, so the graph waits behind them: share one answer (#405)
 - [ ] Follow-up: On a checkout whose 50 worktrees each differ by ~165 files from the main checkout's branch, a cold listing takes ~12 s and the worktrees' watchers and background parsing load the backend: five browser specs time out there (a CI-like clone passes them)
-- [ ] Follow-up: Call rules read HTTP and SQL callsites; no extractor finds subprocess commands or environment variables yet, so those calls cannot be ruled on
+- [x] Follow-up: Call rules read HTTP and SQL callsites; no extractor finds subprocess commands or environment variables yet, so those calls cannot be ruled on (#407)
 - [x] Follow-up: Rebalance the browser shards: chromium 2/3 runs 185 tests in about 25 minutes, the others about 7 (#367)
 - [x] Follow-up: Four browser specs fail in a local clone with many fetched branches and pass in CI (evolution, play-forward, navigate_to Awareness, signal-to-lines): find why (#405)
 - [x] Follow-up: rules-overlay.spec drew no edges in CI: React Flow held every node measured and none with handle positions, and nothing measured them again; the canvas now does (`RemeasureHandles`) (#387)
@@ -222,6 +222,27 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-08 — Follow-up: call rules hold the commands code runs and the environment variables it reads
+
+- **The panes resize on load again** (#406). Allotment threw `minimumSize of
+  undefined` when the plan or inspector pane was resized before it mounted.
+  Each pane is now resized only when its expanded state changes, and
+  `e2e/graph/pane-resize.spec.ts` holds it.
+- **Commands and environment variables are calls** (this PR). A new extractor,
+  `callsites/process-env.ts`, finds the commands a file runs and the
+  environment variables it reads, in every language with callsites: TS / JS,
+  Python, Go, Ruby, C#, Kotlin, Java, Swift, Rust and PHP. It runs beside
+  embedded SQL for every file.
+  - A command is its program, without its folder: `exec:git`, `exec:curl`.
+    A variable is its name: `env:STRIPE_SECRET_KEY`.
+  - Only literals count. `spawn(cmd)` and `process.env[name]` name nothing a
+    rule could hold, so they are left out rather than guessed.
+  - A `calls` rule holds them like an HTTP call or a table: "only
+    `src/payments/` may read the environment variable STRIPE_SECRET_KEY".
+    Checks say "runs curl" and "reads the environment variable …".
+- **Docs:** `rules.md` has a new worked example, `exec-env`, which runs as a
+  test like the others. `mcp-tools.md` names the two new kinds of entry.
 
 ### 2026-10-08 — Follow-ups: #405 merged; the panes are never resized on load
 

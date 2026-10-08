@@ -584,8 +584,10 @@ export function ruleStatement(rule: Pick<ArchitectureRule, 'kind' | 'from' | 'ma
   return `${rule.from} may not import ${rule.mayNotImport}${except}`;
 }
 
-/** What a call rule's files may do to its target: call a host, use a table, or reach a team's own kind (B4). */
+/** What a call rule's files may do to its target: call a host, use a table, run a command, read a variable, or reach a team's own kind (B4). */
 function callVerb(target: string): string {
+  if (target.startsWith('exec:')) return 'run';
+  if (target.startsWith('env:')) return 'read';
   return target.startsWith('sql:') ? 'use' : target.startsWith('http:') ? 'call' : 'reach';
 }
 

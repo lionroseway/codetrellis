@@ -58,7 +58,7 @@ test.describe('Every example in docs/claude/rules.md does what the page says', (
   test.setTimeout(300_000);
 
   test('the page has an example for each building block', () => {
-    expect(examples.map((e) => e.id)).toEqual(['api-calls', 'text', 'look-alikes', 'agent-rule', 'pipeline']);
+    expect(examples.map((e) => e.id)).toEqual(['api-calls', 'exec-env', 'text', 'look-alikes', 'agent-rule', 'pipeline']);
   });
 
   for (const ex of examples) {
