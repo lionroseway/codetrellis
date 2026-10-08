@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | B5: engine per rule |
+| **Stage / step** | B6: pipelines |
 | **Status** | In review |
-| **In flight** | B5 in review (#397) on `feat/phase-33-b5-engine`; B6 building on `feat/phase-33-b6-pipelines`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | B4 (#396, `5c9abd5`) |
-| **Next action** | Merge B5 when CI is green, then B6 (pipelines), which is built |
+| **In flight** | C9 building on `feat/phase-33-c9-signed-local-review`; B6 building on `feat/phase-33-b6-pipelines`; B7 building on `feat/phase-33-b7-docs`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | B5 (#397, `0fc20ba`) |
+| **Next action** | Merge B6 when CI is green, then C9 (signed local review), which is built; B7 (docs for the blocks) is being written |
 | **Blockers** | None |
-| **Last updated** | 2026-10-07 |
+| **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `5c9abd5`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `0fc20ba`, with open PRs from GitHub.
 
 ---
 
@@ -49,6 +49,7 @@
 - [ ] Follow-up: C5 is not yet seen reviewing on this repo: it has no CLAUDE_CODE_OAUTH_TOKEN secret, so codetrellis-review.yml and claude-review.yml review nothing. Deferred by the owner (2026-10-07): a public repo's PRs can read its secrets, so agent review here waits; deterministic rules (R10) come first
 - [ ] Follow-up: Path patterns: should `**/` match no folder too (`src/backend/**/*.ts` misses `src/backend/server.ts`)? Widening only and except loosens existing rules, so the owner decides
 - [ ] Follow-up: Cross-system map: pair a team's own kinds (a queue's publishers with its consumers)
+- [ ] Follow-up: B6: a tag selector for stages, once rules have tags
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
@@ -82,7 +83,7 @@
 - [x] C6 Graduation (a repeated finding proposes a rule) (#391)
 - [x] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran (#379)
 - [x] C8 One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words (#378)
-- [ ] C9 A review run on your device counts on the pull request: any agent (Cursor, Codex, Claude Code, any MCP client), signed with your device key, read and verified by CI with no secret
+- [ ] C9 A review run on your device counts on the pull request: any agent (Cursor, Codex, Claude Code, any MCP client), signed with your device key, read and verified by CI with no secret — building
 
 ### Track G: graph and clarity
 - [x] G1 One visual vocabulary (colour, glyph, dash, words) with a guard test (#371)
@@ -107,9 +108,9 @@
 - [x] B2 Grep rules: text that must not, or must, appear, scoped by path, file:line findings, baselined (#394)
 - [x] B3 Fuzzy matching: look-alike names and near-duplicates, by a deterministic similarity score with a threshold (#395)
 - [x] B4 Your own patterns: what counts as a call, or as any entry (queue:, event:, flag:), without code (#396)
-- [ ] B5 Engine per rule: deterministic, fuzzy or agent, independent of strength; an agent rule blocks only when its owner says block (#397) — in review
+- [x] B5 Engine per rule: deterministic, fuzzy or agent, independent of strength; an agent rule blocks only when its owner says block (#397)
 - [ ] B6 Pipelines: stages in order or in parallel, needs and when, and later stages grounded by earlier results — building
-- [ ] B7 Docs for the blocks: a worked example each in rules.md, and pipeline recipes
+- [ ] B7 Docs for the blocks: a worked example each in rules.md, and pipeline recipes — building
 
 ### Stage Z: close
 - [ ] Z1 Docs: `docs/claude/rules.md`, CLI and MCP references, the change-control security rule — building
@@ -220,6 +221,39 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-08 — B5 merged; B6 built: pipelines
+
+- **B5 (#397) merged.**
+- **B6: pipelines.** An optional `.codetrellis/pipeline.yaml` puts the
+  rules in stages. Without it, every rule runs in one stage, as before.
+  - **A stage** selects rules by `suite`, `engine`, `strength` or `id`.
+    `parallel: true` runs it beside the stage before; `needs` names stages
+    that must finish first; `when` decides whether it runs at all.
+  - **Grounding:** a stage that names others under `grounding` gets what
+    they found. An agent stage's bundle carries those findings as facts, and
+    the contract tells the agent to build on them rather than find them
+    again.
+  - **One command:** `codetrellis check --pipeline` runs the base's
+    pipeline, each wave of stages together, each stage a check run naming
+    itself. `--stage <id>` runs one stage, for a CI that wants a job per
+    stage. Agent stages run with `--agent` and the review's flags; without
+    it they are skipped and their rules are guides.
+  - **Change control:** each stage is held as a rule is. Removing it,
+    making it advisory, or changing what it selects loosens the pipeline,
+    and needs the same signed approval. The Rules view's **Pipeline** panel
+    shows the stages and gives it. Moving a stage beside another is not a
+    term.
+  - **Also reachable:** `GET /api/pipeline`, `POST /api/pipeline/approve`;
+    `check_changes` and `get_review_bundle` take `engine`, `strength` and
+    (the bundle) `grounding`.
+  - **Not yet:** `tag` as a selector (rules have no tags), and a stage that
+    ran somewhere else filling this one.
+  - **Done criterion, proved end to end:** three stages, one beside
+    another, the review grounded by both; dropping a stage is a loosening
+    that fails the gate until a person approves it.
+  - **Locally:** unit 2227; 229 harness tests (with the rules, review,
+    awareness and CLI suites); 85 chromium and 26 serial browser tests.
 
 ### 2026-10-07 — B4 merged; B5 built: engine per rule
 
