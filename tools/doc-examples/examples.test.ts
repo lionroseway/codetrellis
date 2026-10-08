@@ -54,7 +54,7 @@ test('a badly marked example is refused, naming its line', () => {
 test('docs/claude/rules.md has an example for each building block, and its table links each', () => {
   const page = fs.readFileSync(path.join(root, 'docs', 'claude', 'rules.md'), 'utf8');
   const examples = docExamples(page, 'docs/claude/rules.md');
-  assert.deepEqual(examples.map((e) => e.id), ['api-calls', 'text', 'look-alikes', 'agent-rule', 'pipeline']);
+  assert.deepEqual(examples.map((e) => e.id), ['api-calls', 'exec-env', 'text', 'look-alikes', 'agent-rule', 'pipeline']);
   for (const block of ['B1', 'B2', 'B3', 'B4', 'B5', 'B6']) assert.match(page, new RegExp(`\\| [^|]+ \\(${block}\\) \\|[^|]+\\| \\[[^\\]]+\\]\\(#[a-z-]+\\) \\|`), `the Building blocks table has no example for ${block}`);
   // Each anchor the table links is a heading on the page.
   const headings = new Set([...page.matchAll(/^#{2,4} (.+)$/gm)].map((m) => m[1].toLowerCase().replace(/[^a-z0-9 -]/g, '').replace(/ /g, '-')));

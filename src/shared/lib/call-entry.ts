@@ -8,7 +8,9 @@
  *  - `http:api.stripe.com/v1/charges`: a host and the path, normalised the
  *    way the cross-system matcher normalises it (`callsites/shared.ts`);
  *    `http:/api/users` when the URL names no host;
- *  - `sql:payments`: a table.
+ *  - `sql:payments`: a table;
+ *  - `exec:git`: a program the code runs, and `env:STRIPE_SECRET_KEY`: an
+ *    environment variable it reads (Phase 33 follow-up). Only literals.
  *
  * A call rule names a host (`http:api.stripe.com`), a host and a path prefix
  * (`http:api.stripe.com/v1/charges`), a path (`http:/api/admin`) or a table
@@ -53,6 +55,9 @@ export function callEntry(cs: { kind: string; urlPattern?: string | null; host?:
     return `http:${cs.host ?? ''}${p === '/' && cs.host ? '' : p}`;
   }
   if (cs.kind === 'sql_query' && cs.urlPattern) return `sql:${cs.urlPattern.toLowerCase()}`;
+  // A command a file runs, and an environment variable it reads (Phase 33 follow-up).
+  if (cs.kind === 'subprocess' && cs.urlPattern) return `exec:${cs.urlPattern}`;
+  if (cs.kind === 'env_lookup' && cs.urlPattern) return `env:${cs.urlPattern}`;
   // B4: a team's own kind, found by its patterns, is its entry as written.
   if (cs.kind === 'entry' && cs.urlPattern && isOwnKind(cs.urlPattern)) return cs.urlPattern;
   return null;
@@ -105,5 +110,7 @@ export function callWords(entry: string): string {
   const m = callParts(entry);
   if (!m) return entry;
   // B4: a team's own kind is said whole, so the reader knows what kind it is.
+  if (m[0] === 'exec') return m[1] === '*' ? 'any command' : `the command ${m[1]}`;
+  if (m[0] === 'env') return m[1] === '*' ? 'any environment variable' : `the environment variable ${m[1]}`;
   return m[0] === 'sql' ? `the table ${m[1]}` : m[0] === 'http' ? m[1] : entry;
 }

@@ -890,7 +890,7 @@ export function getCallEdges(): Array<{ sourceRelative: string; targetRelative: 
       SELECT DISTINCT f.relative_path, c.kind, c.url_pattern, c.host
       FROM callsites c
       JOIN files f ON c.file_id = f.id
-      WHERE c.kind IN ('http_call', 'sql_query', 'entry')
+      WHERE c.kind IN ('http_call', 'sql_query', 'entry', 'subprocess', 'env_lookup')
       ORDER BY f.relative_path
     `);
   } catch {

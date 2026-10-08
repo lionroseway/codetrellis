@@ -8,6 +8,7 @@ import { getCallsiteExtractor } from './callsites';
 import { extractSqlSymbols, extractTableRefs, sqlRefsToCallsites, applyMigrationFold } from './sql';
 import { extractEmbeddedSql } from './sql/embedded';
 import { patternCallsitesFor } from './patterns';
+import { extractProcessAndEnv } from './callsites/process-env';
 
 /**
  * Dynamically load `web-tree-sitter` — same pattern as sql.js in
@@ -330,6 +331,14 @@ function parseSource(filePath: string, content: string): ParsedFile | null {
     callsites = [...callsites, ...extractEmbeddedSql(content)];
   } catch (err) {
     console.warn(`[AST] Embedded SQL extraction failed for ${filePath}:`, err);
+  }
+
+  // Commands run and environment variables read (Phase 33 follow-up), for
+  // call rules: per language, beside the extractors, as embedded SQL is.
+  try {
+    callsites = [...callsites, ...extractProcessAndEnv(plugin.language as SupportedLanguage, content)];
+  } catch (err) {
+    console.warn(`[AST] Command and environment extraction failed for ${filePath}:`, err);
   }
 
   // Phase 33 B4: the project's own patterns, found by the file's place in it,

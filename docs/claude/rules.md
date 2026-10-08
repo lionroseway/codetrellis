@@ -39,7 +39,7 @@ What a rule can say:
 | `imports` (the default) | `from` may not import `mayNotImport`, `except` some files | A7, R1 |
 | `package` | only `only` may import an outside package (`npm:stripe`, `pypi:requests`) | R5 |
 | `symbol` | only `only` may import one export (`src/payments/charge.ts#createCharge`), through barrels too | R6 |
-| `calls` | only `only` may make a call: `http:api.stripe.com/v1`, `sql:invoices`, or a kind of your own (`queue:orders.*`) | R7, B4 |
+| `calls` | only `only` may make a call: `http:api.stripe.com/v1`, `sql:invoices`, run a command (`exec:git`), read an environment variable (`env:STRIPE_SECRET_KEY`), or a kind of your own (`queue:orders.*`) | R7, B4 |
 | `folder` | what the files in a folder are: named to `files`, of `kinds`, `exports: one`, with a `guide` | R8 |
 | `grep` | the files `in` a scope must, or must not, hold a line | B2 |
 | `engine: agent` | its words, judged by an agent review of the files `in` its scope | B5 |
@@ -278,6 +278,68 @@ payments  ✗ 1 blocks
       → use src/payments/ instead
 
 2 findings block this change (exit 3).
+```
+
+### Commands and environment variables
+
+A call rule holds a command the code runs (`exec:<program>`) and an
+environment variable it reads (`env:<NAME>`) as it holds an HTTP call. They
+are found in TypeScript, JavaScript, Python, Go, Ruby, C#, Kotlin, Java,
+Swift, Rust and PHP, from literals only: `spawn(cmd)` names nothing a rule
+could hold. A command is its program, without its folder, so
+`/usr/bin/curl -s …` is `exec:curl`.
+
+```yaml example=exec-env file=.codetrellis/rules/secrets.yaml at=main
+suite: secrets
+because: The payments key stays in the payments client.
+rules:
+  - id: stripe-key-in-payments
+    kind: calls
+    calls: env:STRIPE_SECRET_KEY
+    only: [src/payments/]
+    strength: block
+    because: Only the payments client may hold the Stripe key.
+  - id: no-shelling-out
+    kind: calls
+    calls: exec:*
+    only: [scripts/]
+    strength: warn
+    because: The app talks to services through clients, not a shell.
+```
+
+```ts example=exec-env file=src/payments/client.ts at=main
+const key = process.env.STRIPE_SECRET_KEY;
+export const auth = () => `Bearer ${key}`;
+```
+
+The change reads the key in a report, and shells out to fetch it:
+
+```ts example=exec-env file=src/reports/daily.ts at=change
+import { execSync } from 'node:child_process';
+
+const key = process.env.STRIPE_SECRET_KEY;
+export const pull = () => execSync(`curl -s -H "Authorization: Bearer ${key}" https://api.stripe.com/v1/balance`);
+```
+
+```sh example=exec-env exit=3
+codetrellis start --quiet
+codetrellis check --base main
+```
+
+```text example=exec-env
+Does not conform (1 changed file since main):
+
+secrets  ✗ 1 blocks · ⚠ 1 warns
+
+  ✗ stripe-key-in-payments   only src/payments/ may read the environment variable STRIPE_SECRET_KEY: Only the payments client may hold the Stripe key.
+      src/reports/daily.ts:3 reads the environment variable STRIPE_SECRET_KEY   const key = process.env.STRIPE_SECRET_KEY;
+      → use src/payments/ instead
+
+  ⚠ no-shelling-out   only scripts/ may run any command: The app talks to services through clients, not a shell.
+      src/reports/daily.ts:4 runs curl   export const pull = () => execSync(`curl -s -H "Authorization: Bearer ${key}" https://api.stripe.com/v1/balance`);
+      → use scripts/ instead
+
+1 finding blocks this change (exit 3).
 ```
 
 ### Text that must or must not appear
