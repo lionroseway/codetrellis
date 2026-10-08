@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | C9: a signed local review |
+| **Stage / step** | B7: docs for the blocks |
 | **Status** | In review |
-| **In flight** | C9 in review (#399) on `feat/phase-33-c9-signed-local-review`; B7 building on `feat/phase-33-b7-docs`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | B6 (#398, `8285b59`) |
-| **Next action** | Merge C9 when CI is green, then B7 (docs for the blocks), which is built; then Z1 |
+| **In flight** | B7 building on `feat/phase-33-b7-docs`; Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | C9 (#399, `748c05d`) |
+| **Next action** | Merge B7 when CI is green, then Z1 (docs), rebuilt on top of B7's rules.md |
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `8285b59`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `748c05d`, with open PRs from GitHub.
 
 ---
 
@@ -83,7 +83,7 @@
 - [x] C6 Graduation (a repeated finding proposes a rule) (#391)
 - [x] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran (#379)
 - [x] C8 One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words (#378)
-- [ ] C9 A review run on your device counts on the pull request: any agent (Cursor, Codex, Claude Code, any MCP client), signed with your device key, read and verified by CI with no secret (#399) — in review
+- [x] C9 A review run on your device counts on the pull request: any agent (Cursor, Codex, Claude Code, any MCP client), signed with your device key, read and verified by CI with no secret (#399)
 
 ### Track G: graph and clarity
 - [x] G1 One visual vocabulary (colour, glyph, dash, words) with a guard test (#371)
@@ -221,6 +221,53 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-08 — C9 merged; B7 built: docs for the blocks, every example a test
+
+- **C9 (#399) merged.**
+- **B7: docs for the blocks.** `docs/claude/rules.md` gains a **Building
+  blocks** section with one worked example per block:
+  - API calls made several ways (B1 matchers and B4 patterns);
+  - text that must or must not appear (B2);
+  - look-alike packages (B3);
+  - an agent rule (B5);
+  - a pipeline whose review stage is grounded by the stages before it (B6).
+- **Every example is a test.** Each code block's first line says what it is:
+  a file on `main` or on the change, the agent's report, a command, or what
+  the command prints. A rendered page hides that line. `tools/doc-examples/`
+  reads the blocks, and `tests/e2e/rules-docs.test.ts` runs each example as
+  written: a fresh repository, no desktop app, `codetrellis` on the PATH.
+  The output must match to the character, and the exit code must match.
+  Where an example has an agent, a stand-in reports what the page says the
+  agent reports. Changing one number on the page fails the test, naming
+  the line.
+- **Recipes:** `docs/recipes/pipeline.sh` runs the pipeline on any CI host,
+  once, so an agent stage is paid for once.
+  - `CODETRELLIS_STAGE` runs one stage.
+  - An empty secret, as on a fork's pull request, skips the agent stages
+    and says so.
+  - `github-actions-pipeline.yml` and `gitlab-ci-pipeline.yml` call it.
+  - The test runs it on the pipeline example: with a key, without one, and
+    one stage.
+- **Writing the examples found four bugs,** each fixed with a unit test:
+  - **Wrong line:** an SDK call a pattern found was reported on the `fetch`
+    line above it, because the text's first mention of the host won. The
+    extractor's own line now wins (`findingAt`), in the terminal, markdown
+    and SARIF.
+  - **Wrong fix:** a grep rule's fix read "import **/*.test.ts instead",
+    from its `except`. Only an imports or package rule's `except` is
+    something to import.
+  - **Missing block count:** a review's summary said "⚠ 1 finding" when the
+    finding blocked. `report_review`, the CLI and the run now all say
+    "✗ 1 block · ⚠ 1 finding".
+  - **Findings not listed:** a pipeline's review stage did not list its
+    findings.
+- **Linked from** CLAUDE.md's reference docs and `cli.md`'s pipeline
+  section.
+- **For Z1:** Z1's own draft of `rules.md` (the rulebook, change control and
+  checks) goes above this section when Z1 is rebuilt on top of B7.
+- **Locally:** unit 2232; 170 harness tests (the docs examples, every rule
+  kind, review, pipelines, signed review and the CLI).
 
 ### 2026-10-08 — B6 merged; C9 built: a review on your own device counts on the pull request
 
