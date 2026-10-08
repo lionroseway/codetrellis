@@ -48,7 +48,7 @@ export interface ReviewOptions {
   endpoint: string | null;
   auth: ReviewAuth;
   skills: Array<{ name: string; text: string }>;
-  scope: { suite?: string; rule?: string; path?: string; engine?: string; strength?: string };
+  scope: { suite?: string; rule?: string; path?: string; engine?: string; strength?: string; tag?: string };
   /** B6: a pipeline stage's name, for its run, and what earlier stages found, for its bundle. */
   stage?: string;
   grounding?: Array<{ stage: string; path: string; says: string; rule?: string | null; strength?: string }>;
@@ -144,7 +144,7 @@ export function reviewOptions(p: Parsed, cwd: string, env: NodeJS.ProcessEnv): R
     endpoint,
     auth,
     skills: readSkills(flag(p, 'skills'), cwd),
-    scope: { suite: flag(p, 'suite'), rule: flag(p, 'rule'), path: flag(p, 'path') },
+    scope: { suite: flag(p, 'suite'), rule: flag(p, 'rule'), path: flag(p, 'path'), tag: flag(p, 'tag') },
     base: flag(p, 'base') ?? null,
     task: flag(p, 'task') ?? null,
     maxTurns: NUM(flag(p, 'max-turns'), 30, 1, 500, 'max-turns'),
@@ -251,7 +251,7 @@ export async function runPass(agent: Agent, o: ReviewOptions, skill: { name: str
   const got = await agent.call('get_review_bundle', {
     ...(o.base ? { base: o.base } : {}), ...(o.scope.suite ? { suite: o.scope.suite } : {}), ...(o.scope.rule ? { rule: o.scope.rule } : {}),
     ...(o.scope.path ? { path: o.scope.path } : {}), ...(o.task ? { task_uid: o.task } : {}),
-    ...(o.scope.engine ? { engine: o.scope.engine } : {}), ...(o.scope.strength ? { strength: o.scope.strength } : {}),
+    ...(o.scope.engine ? { engine: o.scope.engine } : {}), ...(o.scope.strength ? { strength: o.scope.strength } : {}), ...(o.scope.tag ? { tag: o.scope.tag } : {}),
     ...(o.grounding?.length ? { grounding: o.grounding } : {}),
   });
   if (got.isError) return { error: got.text };

@@ -698,3 +698,35 @@ any CI host, with variants for GitHub Actions
 ([`github-actions-pipeline.yml`](../recipes/github-actions-pipeline.yml))
 and GitLab ([`gitlab-ci-pipeline.yml`](../recipes/gitlab-ci-pipeline.yml)).
 The test runs it on this example too.
+
+#### Tags: a stage of the rules that matter for one reason
+
+A rule may carry `tags`, short words a stage, a check or a review selects it
+by. A stage that runs the rules an auditor reads, wherever they are kept, is
+then one line:
+
+```yaml
+# a rule, in any suite
+  - id: stripe-via-wrapper
+    kind: package
+    package: npm:stripe
+    only: [src/payments/client.ts]
+    strength: block
+    tags: [pci, payments]
+
+# .codetrellis/pipeline.yaml
+stages:
+  - id: pci
+    rules: { tag: pci }
+```
+
+- **Selecting:** `rules: { tag: pci }` in a stage, `codetrellis check --tag
+  pci`, `codetrellis review --tag pci`, `?tag=pci` on the Rules view's
+  `/api/rules`, and `tag` on `check_changes` and `get_review_bundle`. A rule
+  with any of the tags named is in, and the other selectors still apply.
+- **Held as a rule's terms.** Dropping a tag may take a rule out of the stage
+  that selected it, so it is a loosening and needs a person's signed
+  approval. Adding one only adds it to more stages, so it tightens. A rule
+  with no tags signs as it did before tags existed.
+- **Written** as short slugs (`pci`, `fast`), at most ten. The Rules view's
+  form takes them, comma-separated, and each rule shows its own.

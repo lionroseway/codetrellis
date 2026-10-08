@@ -92,6 +92,7 @@ export function RulesView() {
   const [mayNotImport, setMayNotImport] = useState('');
   const [except, setExcept] = useState('');
   const [because, setBecause] = useState('');
+  const [tags, setTags] = useState('');
   // R4 — a new rule starts at warn: said, and CI passes, until it is made to block.
   const [strength, setStrength] = useState<RuleStrength>('warn');
   const [pending, setPending] = useState<Pending | null>(null);
@@ -208,7 +209,7 @@ export function RulesView() {
   };
 
   const clearForm = () => {
-    setFrom(''); setMayNotImport(''); setExcept(''); setBecause(''); setPkg(''); setSym(''); setCallTarget(''); setFileNames(''); setOneExport(false); setGuide(''); setOnly(''); setSuite(''); setStrength('warn'); setGrepText(''); setGrepMust(false); setGrepMatch('exact'); setAgentWords('');
+    setFrom(''); setMayNotImport(''); setExcept(''); setBecause(''); setPkg(''); setSym(''); setCallTarget(''); setFileNames(''); setOneExport(false); setGuide(''); setOnly(''); setSuite(''); setTags(''); setStrength('warn'); setGrepText(''); setGrepMust(false); setGrepMatch('exact'); setAgentWords('');
   };
 
   if (!root) return <p className="p-6 text-[12px] text-foreground-muted">Open a project to write down its architecture rules.</p>;
@@ -250,6 +251,7 @@ export function RulesView() {
                 ? { engine: 'agent', rule: agentWords.trim(), in: list(from), ...(list(except).length ? { except: list(except) } : {}), because: because.trim(), strength }
             : { from: from.trim(), mayNotImport: mayNotImport.trim(), because: because.trim(), except: list(except), strength };
     if (suite.trim()) body.suite = suite.trim();
+    if (list(tags).length) body.tags = list(tags);
     // A rule that already exists and would hold less tightly: shown first, then confirmed.
     const p = await preview(id, body);
     if (!p) return;
@@ -377,6 +379,9 @@ export function RulesView() {
                       <span className="shrink-0 text-[10.5px] text-foreground-muted" data-testid="rule-strength" title={STRENGTH_WORDS[v.rule.strength]}>
                         {STRENGTH_GLYPH[v.rule.strength]} {v.rule.strength}
                       </span>
+                      {v.rule.tags?.map((t) => (
+                        <span key={t} className="shrink-0 rounded bg-white/[0.06] px-1 text-[10.5px] text-foreground-muted font-mono" data-testid="rule-tag">#{t}</span>
+                      ))}
                     </div>
                     {v.rule.guide && <p className="text-[11.5px] text-foreground-muted italic" data-testid="rule-guide">{v.rule.guide}</p>}
                     <div className="text-[11px] text-foreground-muted">
@@ -579,6 +584,10 @@ export function RulesView() {
                 <input className={inputCls} value={suite} onChange={(e) => setSuite(e.target.value)} placeholder={shownSuite && shownSuite !== 'config.json' ? shownSuite : 'architecture'} data-testid="rule-suite" />
               </label>
             </div>
+            <label className="block space-y-1">
+              <span className="text-foreground-muted">Tags (optional): what a pipeline stage or a check selects it by</span>
+              <input className={inputCls} value={tags} onChange={(e) => setTags(e.target.value)} placeholder="pci, fast" data-testid="rule-tags" />
+            </label>
         <fieldset className="space-y-1" data-testid="rule-strength-choice">
               <legend className="text-foreground-muted">How hard it holds</legend>
               {RULE_STRENGTHS.map((k) => (

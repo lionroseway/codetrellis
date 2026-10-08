@@ -97,6 +97,12 @@ export interface ArchitectureRule {
    * them, until a person moves it.
    */
   suite?: string;
+  /**
+   * Words a pipeline stage, a check or a review can select it by (Phase 33
+   * follow-up to B6): `tags: [pci, fast]`. A tag removed is a loosening, since
+   * the rule may then leave a stage that selected it.
+   */
+  tags?: string[];
 }
 
 /** One import that crosses a rule: `from` imports `to`, both project-relative. */

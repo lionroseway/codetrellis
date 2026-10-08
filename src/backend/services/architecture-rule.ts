@@ -451,10 +451,22 @@ export function targetMatches(rule: Pick<ArchitectureRule, 'kind' | 'mayNotImpor
 function commonProblems(r: Record<string, unknown>, problems: string[]): void {
   if (r.because !== undefined && (typeof r.because !== 'string' || r.because.length > MAX_BECAUSE)) problems.push(`because must be words, at most ${MAX_BECAUSE} characters`);
   if (r.strength !== undefined && !RULE_STRENGTHS.includes(r.strength as RuleStrength)) problems.push('strength must be block, warn or guide');
+  if (r.tags !== undefined && tagsOf(r.tags) === null) problems.push(`tags are short slugs, like pci, at most ${MAX_TAGS}`);
 }
 
-function common(r: Record<string, unknown>): Pick<ArchitectureRule, 'because' | 'since' | 'by' | 'strength'> {
+const TAG_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
+const MAX_TAGS = 10;
+/** A rule's tags, sorted and once each; null when they are not a list of short slugs. */
+export function tagsOf(v: unknown): string[] | null {
+  const xs = typeof v === 'string' ? [v] : v;
+  if (!Array.isArray(xs) || xs.length > MAX_TAGS || !xs.every((x) => typeof x === 'string' && TAG_RE.test(x.trim()))) return null;
+  return [...new Set(xs.map((x: string) => x.trim()))].sort();
+}
+
+function common(r: Record<string, unknown>): Pick<ArchitectureRule, 'because' | 'since' | 'by' | 'strength' | 'tags'> {
+  const tags = r.tags === undefined ? null : tagsOf(r.tags);
   return {
+    ...(tags?.length ? { tags } : {}),
     because: typeof r.because === 'string' ? r.because.trim() : '',
     since: typeof r.since === 'string' && !Number.isNaN(Date.parse(r.since)) ? r.since : new Date(0).toISOString(),
     by: typeof r.by === 'string' ? r.by : '',

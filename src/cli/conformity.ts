@@ -63,7 +63,7 @@ export function ranIn(env: NodeJS.ProcessEnv): string {
 /** `check_changes` over this work's files, as the agent. */
 /** C1: part of the rulebook to check, as the flags give it (comma-separated). */
 /** `engine` and `strength` select a pipeline stage's rules (B6); `stage` names the run after it. */
-export interface GateScope { suite?: string; rule?: string; path?: string; engine?: string; strength?: string; stage?: string; pipeline?: boolean }
+export interface GateScope { suite?: string; rule?: string; path?: string; engine?: string; strength?: string; tag?: string; stage?: string; pipeline?: boolean }
 
 export async function gate(agent: Agent, root: string, changed: Changed, strict = false, scope: GateScope = {}): Promise<Gate | { error: string }> {
   // Nothing changed, not even the rules: nothing to check. A change to the

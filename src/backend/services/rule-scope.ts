@@ -12,7 +12,8 @@
  * it.
  *
  * Phase 33 B6: a pipeline's stage also selects by engine (`deterministic`,
- * `fuzzy`, `agent`) and by strength (`block`, `warn`, `guide`).
+ * `fuzzy`, `agent`) and by strength (`block`, `warn`, `guide`); and, since a
+ * follow-up, by tag (`--tag pci`): a rule with any of the tags.
  */
 
 import type { ArchitectureRule } from '../../shared/types/architecture-rules';
@@ -25,19 +26,22 @@ export interface RuleScope {
   /** B6: who judges the rules selected, and how hard they hold. */
   engines?: string[];
   strengths?: string[];
+  /** Rules with any of these tags. */
+  tags?: string[];
 }
 
 /** A scope from comma-separated text, as flags and query strings carry it; null when nothing is given. */
-export function parseScope(raw: { suite?: unknown; rule?: unknown; path?: unknown; engine?: unknown; strength?: unknown }): RuleScope | null {
+export function parseScope(raw: { suite?: unknown; rule?: unknown; path?: unknown; engine?: unknown; strength?: unknown; tag?: unknown }): RuleScope | null {
   const list = (v: unknown): string[] | undefined => {
     const items = (Array.isArray(v) ? v : typeof v === 'string' ? v.split(',') : [])
       .filter((x): x is string => typeof x === 'string').map((x) => x.trim().replace(/^\.\/+/, '')).filter(Boolean);
     return items.length ? [...new Set(items)].slice(0, 50) : undefined;
   };
-  const scope: RuleScope = { suites: list(raw.suite), rules: list(raw.rule), paths: list(raw.path), engines: list(raw.engine), strengths: list(raw.strength) };
+  const scope: RuleScope = { suites: list(raw.suite), rules: list(raw.rule), paths: list(raw.path), engines: list(raw.engine), strengths: list(raw.strength), tags: list(raw.tag) };
   if (!scope.engines) delete scope.engines;
   if (!scope.strengths) delete scope.strengths;
-  return scope.suites || scope.rules || scope.paths || scope.engines || scope.strengths ? scope : null;
+  if (!scope.tags) delete scope.tags;
+  return scope.suites || scope.rules || scope.paths || scope.engines || scope.strengths || scope.tags ? scope : null;
 }
 
 /**
@@ -57,6 +61,7 @@ export function inScope(rule: ArchitectureRule, scope: RuleScope | null): boolea
   if (scope.paths && !scope.paths.some((p) => ruleTouches(rule, p))) return false;
   if (scope.engines && !scope.engines.includes(ruleEngine(rule))) return false;
   if (scope.strengths && !scope.strengths.includes(rule.strength)) return false;
+  if (scope.tags && !scope.tags.some((t) => rule.tags?.includes(t))) return false;
   return true;
 }
 
@@ -69,5 +74,5 @@ export function scopeWords(scope: RuleScope | null): string {
   if (!scope) return 'every rule';
   const part = (one: string, many: string, xs?: string[]) => (xs ? `${xs.length === 1 ? one : many} ${xs.join(', ')}` : null);
   return [part('suite', 'suites', scope.suites), part('rule', 'rules', scope.rules), part('rules about', 'rules about', scope.paths),
-    part('engine', 'engines', scope.engines), part('strength', 'strengths', scope.strengths)].filter(Boolean).join('; ');
+    part('engine', 'engines', scope.engines), part('strength', 'strengths', scope.strengths), part('tag', 'tags', scope.tags)].filter(Boolean).join('; ');
 }
