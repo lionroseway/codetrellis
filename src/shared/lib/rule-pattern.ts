@@ -6,15 +6,14 @@
  * with `*` is a glob (`*` within a folder name, `**` across folders);
  * anything else is that file, or that folder when the path continues.
  */
+import { globSource } from './matcher';
 import { ecosystemOfPath, packageApplies } from './package-entry';
 import { splitSymbol } from './symbol-entry';
-
-const escape = (s: string) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
 
 export function inRulePattern(pattern: string, relPath: string): boolean {
   const p = relPath.replace(/^\.\//, '');
   if (pattern.includes('*')) {
-    const re = new RegExp('^' + pattern.split('**').map((part) => part.split('*').map(escape).join('[^/]*')).join('.*') + '$');
+    const re = new RegExp(`^${globSource(pattern)}$`);
     return re.test(p);
   }
   if (pattern.endsWith('/')) return p.startsWith(pattern);

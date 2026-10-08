@@ -27,6 +27,16 @@ test('a folder, a file and a glob are each a pattern', () => {
   assert.equal(inPattern('src/*.ts', 'src/a/index.ts'), false);
 });
 
+test('a ** that is a whole folder name is any number of folders, none included, as gitignore reads it', () => {
+  assert.equal(inPattern('src/backend/**/*.ts', 'src/backend/server.ts'), true, 'no folder');
+  assert.equal(inPattern('src/backend/**/*.ts', 'src/backend/services/a/b.ts'), true);
+  assert.equal(inPattern('src/backend/**/*.ts', 'src/backendx/server.ts'), false);
+  assert.equal(inPattern('**/*.test.ts', 'a.test.ts'), true, 'at the start, the root too');
+  assert.equal(inPattern('**/*.test.ts', 'src/x/a.test.ts'), true);
+  assert.equal(inPattern('src/**/ui/**', 'src/ui/Form.tsx'), true);
+  assert.equal(inPattern('a/**/b', 'ab'), false, 'the slashes still separate');
+});
+
 test('web/ importing db/ breaks the rule; its door, and db/ itself, do not', () => {
   assert.equal(breaks(RULE, 'web/reports.ts', 'db/client.ts'), true);
   assert.equal(breaks(RULE, 'web/reports.ts', 'db/types.ts'), false, 'the door through the wall');

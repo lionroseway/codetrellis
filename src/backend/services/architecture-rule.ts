@@ -10,7 +10,7 @@ import { isPackageEntry, packageMatches, packageProblem } from '../../shared/lib
 import { isSymbolEntry, splitSymbol, symbolMatches, symbolProblem } from '../../shared/lib/symbol-entry';
 import { callMatches, callProblem, callWords, isCallEntry, normaliseCall } from '../../shared/lib/call-entry';
 import { folderProblem, folderWords, isFileFact } from '../../shared/lib/folder-entry';
-import { matcherOf, regexProblem, splitTarget, thresholdProblem, underPattern, wholly, type TargetMatch } from '../../shared/lib/matcher';
+import { globSource, matcherOf, regexProblem, splitTarget, thresholdProblem, underPattern, wholly, type TargetMatch } from '../../shared/lib/matcher';
 import { DEFAULT_THRESHOLD, comparedNames, fuzzyScore, scoreWords } from '../../shared/lib/fuzzy';
 import { grepKey, grepPatternWords, grepWords, isGrepEntry, splitGrep } from '../../shared/lib/grep-entry';
 
@@ -476,14 +476,12 @@ function normalise(p: string): string {
 export function inPattern(pattern: string, relPath: string): boolean {
   const p = relPath.replace(/^\.\//, '');
   if (pattern.includes('*')) {
-    const re = new RegExp('^' + pattern.split('**').map((part) => part.split('*').map(escape).join('[^/]*')).join('.*') + '$');
+    const re = new RegExp(`^${globSource(pattern)}$`);
     return re.test(p);
   }
   if (pattern.endsWith('/')) return p.startsWith(pattern);
   return p === pattern || p.startsWith(pattern + '/');
 }
-
-const escape = (s: string) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
 
 /** Whether `from` importing `to` crosses this rule. A file already inside the forbidden set is not "from" outside it. */
 export function breaks(rule: ArchitectureRule, from: string, to: string): boolean {

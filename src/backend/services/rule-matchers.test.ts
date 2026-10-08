@@ -95,7 +95,8 @@ test('changing a target\'s matcher, or its pattern, loosens: what a pattern cove
 });
 
 test('the glob and regex helpers', () => {
-  assert.equal(globSource('src/**/x*.ts'), 'src/.*/x[^/]*\\.ts');
+  assert.equal(globSource('src/**/x*.ts'), 'src/(?:.*/)?x[^/]*\\.ts');
+  assert.equal(globSource('a**b'), 'a.*b', 'a ** inside a name is any run');
   assert.equal(wholly('glob', 'a/*', 'a/b'), true);
   assert.equal(wholly('glob', 'a/*', 'a/b/c'), false);
   assert.equal(underPattern('glob', 'a/*', 'a/b/c'), true);
