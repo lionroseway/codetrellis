@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Follow-ups after Z1 |
-| **Status** | Building |
-| **In flight** | nothing open |
+| **Status** | In review |
+| **In flight** | #405 in review on `feat/phase-33-fu-workstreams-once` |
 | **Last merged** | Z1 (#401, #402, `d293a94`) |
-| **Next action** | Finish the workstreams fix (one listing shared by callers who ask together, worktree symbols parsed inside a budget, background git behind callers) and re-run the four browser specs that fail locally; then the Allotment resize throw, subprocess and env callsites, and pairing a team’s own call kinds. Every step in the agreed order is merged; Z2 and Z3 are the owner’s |
-| **Blockers** | None for the follow-ups. The owner’s: Z2 (phase review on a packaged build), Z3 (into main and release), npm publish of the CLI, whether `**/` matches no folder, and agent review on this repo (the secret, deferred) |
+| **Next action** | Merge the workstreams fix when CI is green; then the Allotment resize throw, subprocess and env callsites, and pairing a team’s own call kinds. Z2 and Z3 are the owner’s |
+| **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `3179c2d`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `60fdaac`, with open PRs from GitHub.
 
 ---
 
@@ -40,10 +40,11 @@
 - [x] CLAUDE.md points every session here (#346)
 - [x] Follow-up: A new advisory (sprintf-js, GHSA-hp3w-g68c-fv3c) failed the production audit on every branch: kept out of the tree by an override (into `main`) (#347)
 - [x] Follow-up: A new advisory (MCP SDK, GHSA-6qxp-vccf-f47h) failed the production audit on every branch: SDK 1.32.1 (into `main`) (#355)
-- [ ] Follow-up: With many worktrees of one repository, `listWorkstreams` takes ~10 s and six parallel asks for it fill the browser's connections, so the graph waits behind them: share one answer
+- [x] Follow-up: With many worktrees of one repository, `listWorkstreams` takes ~10 s and six parallel asks for it fill the browser's connections, so the graph waits behind them: share one answer (#405)
+- [ ] Follow-up: On a checkout whose 50 worktrees each differ by ~165 files from the main checkout's branch, a cold listing takes ~12 s and the worktrees' watchers and background parsing load the backend: five browser specs time out there (a CI-like clone passes them)
 - [ ] Follow-up: Call rules read HTTP and SQL callsites; no extractor finds subprocess commands or environment variables yet, so those calls cannot be ruled on
 - [x] Follow-up: Rebalance the browser shards: chromium 2/3 runs 185 tests in about 25 minutes, the others about 7 (#367)
-- [ ] Follow-up: Four browser specs fail in a local clone with many fetched branches and pass in CI (evolution, play-forward, navigate_to Awareness, signal-to-lines): find why
+- [x] Follow-up: Four browser specs fail in a local clone with many fetched branches and pass in CI (evolution, play-forward, navigate_to Awareness, signal-to-lines): find why (#405)
 - [x] Follow-up: rules-overlay.spec drew no edges in CI: React Flow held every node measured and none with handle positions, and nothing measured them again; the canvas now does (`RemeasureHandles`) (#387)
 - [ ] Follow-up: The plan-panel and inspector Allotment resize throws on load (minimumSize of undefined), caught and logged since Phase 31
 - [ ] Follow-up: C5 is not yet seen reviewing on this repo: it has no CLAUDE_CODE_OAUTH_TOKEN secret, so codetrellis-review.yml and claude-review.yml review nothing. Deferred by the owner (2026-10-07): a public repo's PRs can read its secrets, so agent review here waits; deterministic rules (R10) come first
@@ -221,6 +222,60 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-08 — Follow-ups: C4b ticked; workstream listings answer on a checkout with many worktrees
+
+- **C4b shows as done** (#403). It merged in #388, but the status tool read
+  a step id with a letter only after a dotted number (`A1.7a`), so
+  `Phase 33 C4b: …` named no step. The Now block names the follow-ups under
+  way (#404).
+- **Why four browser specs failed only locally**, found. Most of the suite
+  opens this repository itself. This checkout has:
+  - 50 worktrees and 385 branches;
+  - a main checkout on an old step branch, so each worktree differs from it
+    by about 165 files (8,261 between them).
+
+  The window's listings there **never answered**:
+  - each of its six asks ran the whole pass at once;
+  - every changed file of every worktree was parsed before the first
+    answered;
+  - one branch far from main took 12 s on its own.
+
+  The Awareness tab, the code view's workstreams and source control all
+  waited on them. CI, a one-branch clone, never sees this.
+- **Fixed in the listing** (`workstream-service`, `branch-workstreams`,
+  `git-env`):
+  - **Shared:** callers asking together share one listing; a `fresh` one
+    still gets its own.
+  - **Worktree symbols in a budget:** parsed within the budget branches have
+    had since 0.1. The rest are parsed in the background, after the answer,
+    and the window is told.
+  - **Branches bounded by time:** each is worked out inline for at most
+    `INLINE_MS` (1.5 s); the warmer finishes it from the same work.
+  - **Background lane for git:** calls nobody waits on (the warmer, the
+    watchers' rechecks, branch entries) give way to callers and never take
+    the last slot.
+  - **Six at a time:** worktrees' changes are measured six at once, not one
+    after another.
+- **Measured on the real backend here:** the six asks at startup went from
+  none answered within 300 s to all answered in 12–14 s.
+- **What remains here:**
+  - Listings still take ~12 s cold.
+  - The 50 worktrees' watchers and background parsing load the backend.
+  - So five browser specs still time out in this checkout.
+
+  That is the cost of watching 50 large worktrees, not waiting or
+  duplicated work; it is recorded as a follow-up. In a CI-like clone every
+  related suite passes: 184 harness, 91 chromium, 37 serial, the four specs
+  among them.
+- **Tests:**
+  - the shared listing;
+  - the worktree symbol budget (at most 60 parsed inline, the rest warmed,
+    nothing parsed twice);
+  - a branch past its time left to the warmer;
+  - background git giving way to a caller.
+
+  Unit 2236.
 
 ### 2026-10-08 — B7 merged; Z1 built: the docs
 

@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { quietGitLocks, refreshIndexOccasionally, REFRESH_EVERY_MS, gitAsync, gitAsyncLoad, GIT_CONCURRENCY, refreshIndexOccasionallyAsync } from './git-env';
+import { quietGitLocks, refreshIndexOccasionally, REFRESH_EVERY_MS, gitAsync, gitAsyncLoad, GIT_CONCURRENCY, inBackground, refreshIndexOccasionallyAsync } from './git-env';
 
 function repoWithStaleIndex(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-git-env-'));
@@ -97,7 +97,23 @@ test('gitAsync answers like git, and never runs more than GIT_CONCURRENCY at onc
   assert.equal(load.queued, GIT_CONCURRENCY * 2, 'the rest wait for a slot');
   await Promise.all(calls);
   assert.ok(most <= GIT_CONCURRENCY, `at most ${GIT_CONCURRENCY} ran together (saw ${most})`);
-  assert.deepEqual(gitAsyncLoad(), { running: 0, queued: 0 }, 'every slot is given back');
+  assert.deepEqual(gitAsyncLoad(), { running: 0, queued: 0, behind: 0 }, 'every slot is given back');
+});
+
+test('background git gives way: it never takes the last slot, and a caller who comes later still goes first', async () => {
+  const dir = repoWithStaleIndex();
+  const bg = Array.from({ length: GIT_CONCURRENCY + 2 }, () => inBackground(() => gitAsync(dir, ['status', '--porcelain'])));
+  assert.deepEqual(gitAsyncLoad(), { running: GIT_CONCURRENCY - 1, queued: 3, behind: 3 }, 'one slot is left for a caller');
+  const first = gitAsync(dir, ['rev-parse', 'HEAD']);
+  assert.equal(gitAsyncLoad().running, GIT_CONCURRENCY, 'a caller takes it at once');
+  // Every slot busy now: the next caller waits, but ahead of the background work queued before it.
+  const seen: { whenAFreed?: ReturnType<typeof gitAsyncLoad> } = {};
+  const second = gitAsync(dir, ['rev-parse', 'HEAD']);
+  const freed = Promise.race([...bg.slice(0, GIT_CONCURRENCY - 1), first]).then(() => { seen.whenAFreed ??= gitAsyncLoad(); });
+  await Promise.all([...bg, first, second, freed]);
+  assert.ok(seen.whenAFreed, 'a slot was freed');
+  assert.equal(seen.whenAFreed.queued, seen.whenAFreed.behind, 'the first slot freed went to the caller, not to background work queued before it');
+  assert.deepEqual(gitAsyncLoad(), { running: 0, queued: 0, behind: 0 }, 'every slot is given back');
 });
 
 test('the async index refresh keeps the same once-per-period rule', async () => {
