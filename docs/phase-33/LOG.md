@@ -20,7 +20,7 @@
 |---|---|
 | **Stage / step** | Z2 Phase review |
 | **Status** | Every step and follow-up of Phase 33 is merged into feat/phase-33 (#409-#413 for the last follow-ups). What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3). |
-| **In flight** | nothing open |
+| **In flight** | #414 in review on `feat/phase-33-fu-log-after-z1` |
 | **Last merged** | Z1 (#401, #402, `d293a94`) |
 | **Next action** | The owner walks the outcomes in RULES-AND-CLARITY.md on a packaged build; anything short becomes a step or a follow-up. Then Z3: bring main in, run everything, verify a packaged build, follow docs/releases/RUNBOOK.md. |
 | **Blockers** | None |
