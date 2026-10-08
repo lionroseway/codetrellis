@@ -461,4 +461,30 @@ test.describe('The Rules view: an export (Phase 33 R6)', () => {
     await expect(view.getByTestId('rule-words')).toHaveText(`in src/: ${said}`);
     await expect(view.getByText('Judged by an agent review, against its words')).toBeVisible();
   });
+
+  test('the pipeline in the Rules view: its stages in order, and a dropped stage approved by the person, signed (Phase 33 B6)', async ({ page }) => {
+    const stages = ['fast: deterministic rules', 'review: agent rules, after fast, grounded by fast'];
+    const dropped = '✗ This change removes the stage fuzzy from the pipeline (“fuzzy: fuzzy rules, beside the stage before”). Loosening a rule needs a person\'s approval in the app.';
+    let approvals = 0;
+    await page.route((url) => url.pathname.startsWith('/api/pipeline'), async (route) => {
+      const req = route.request();
+      if (req.method() === 'POST') {
+        approvals += 1;
+        return route.fulfill({ json: { signed: [{ stage: 'fuzzy', file: '.codetrellis/rules/approvals/pipeline.fuzzy-0a1b2c3d4e5f.yaml', how: 'device' }], view: { where: '.codetrellis/pipeline.yaml', pipeline: { stages: [] }, problems: [], words: stages, pending: [] } } });
+      }
+      return route.fulfill({ json: { where: '.codetrellis/pipeline.yaml', pipeline: { stages: [] }, problems: [], words: stages, pending: [{ stage: 'fuzzy', words: dropped }] } });
+    });
+    await page.route((url) => url.pathname.startsWith('/api/rules'), (route) => route.fulfill({ json: route.request().url().includes('proposals') ? { proposals: [] } : route.request().url().includes('history') ? { history: [] } : { rules: [], suites: [], inConfig: 0, problems: [] } }));
+
+    await gotoWithProject(page);
+    await page.getByRole('button', { name: 'Rules', exact: true }).click();
+    const panel = page.getByTestId('pipeline-panel');
+    await expect(panel.getByTestId('pipeline-stage')).toHaveText(stages);
+    await expect(panel.getByTestId('pipeline-pending-words')).toHaveText(dropped);
+    fs.mkdirSync(OUT, { recursive: true });
+    await panel.screenshot({ path: path.join(OUT, 'rules-pipeline.png') });
+    await panel.getByTestId('pipeline-approve').click();
+    await expect(panel.getByTestId('pipeline-pending')).toHaveCount(0);
+    expect(approvals).toBe(1);
+  });
 });

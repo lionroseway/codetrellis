@@ -62,17 +62,19 @@ export function ranIn(env: NodeJS.ProcessEnv): string {
 
 /** `check_changes` over this work's files, as the agent. */
 /** C1: part of the rulebook to check, as the flags give it (comma-separated). */
-export interface GateScope { suite?: string; rule?: string; path?: string }
+/** `engine` and `strength` select a pipeline stage's rules (B6); `stage` names the run after it. */
+export interface GateScope { suite?: string; rule?: string; path?: string; engine?: string; strength?: string; stage?: string; pipeline?: boolean }
 
 export async function gate(agent: Agent, root: string, changed: Changed, strict = false, scope: GateScope = {}): Promise<Gate | { error: string }> {
   // Nothing changed, not even the rules: nothing to check. A change to the
   // rules alone is still checked (Phase 33 R2): it could loosen one.
   if (changed.files.length === 0 && !changed.rulebook) return { ok: true, says: [], files: 0, base: changed.base, breakpoints: [], tests: [], criteria: [], docs: [], rules: [], rulebook: [], notes: [] };
   // The merge base, so an import that was already there is not this work's (A7.3).
+  const { stage, ...selects } = scope;
   const a = await agent.call('check_changes', {
-    paths: changed.files.slice(0, 500), project_path: root, ...(changed.since ? { base: changed.since } : {}), ...(strict ? { strict: true } : {}), ...scope,
-    // C7: the run is kept saying where it ran.
-    ran_in: ranIn(process.env),
+    paths: changed.files.slice(0, 500), project_path: root, ...(changed.since ? { base: changed.since } : {}), ...(strict ? { strict: true } : {}), ...selects,
+    // C7: the run is kept saying where it ran; B6: and which stage of the pipeline it was.
+    ran_in: stage ? `${ranIn(process.env)}, stage ${stage}` : ranIn(process.env),
   });
   if (a.isError) return { error: a.text };
   const j = (a.json ?? {}) as Record<string, unknown>;

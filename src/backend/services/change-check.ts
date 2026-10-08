@@ -15,6 +15,7 @@ import { approvalFor, approvalsHere, keysAt } from './rule-approvals';
 import { inScope, parseScope, scopeRules, scopeWords } from './rule-scope';
 import { baselineAt, ratchet, readBaseline, type RatchetFinding } from './rule-baseline';
 import { edgesIfLoaded, rulesOf } from './architecture-rules';
+import { diffPipeline, pipelineAt, readPipeline } from './pipeline';
 import { getDependencyEdges } from './database';
 import { isSafeGitRef } from './git-safety';
 import { recordCheckRun } from './check-runs';
@@ -31,7 +32,9 @@ export interface ChangeCheckInput {
   base?: string;
   strict?: boolean;
   /** C1: part of the rulebook. */
-  scope: { suite?: unknown; rule?: unknown; path?: unknown };
+  scope: { suite?: unknown; rule?: unknown; path?: unknown; engine?: unknown; strength?: unknown };
+  /** B6: a scoped check (a pipeline's first stage) that also judges the change to the pipeline. */
+  pipeline?: boolean;
   by: { author: string; authorType: string };
   /** Where it ran, in words, for the run's record. */
   ranIn: string;
@@ -75,6 +78,22 @@ export async function checkTheChange(input: ChangeCheckInput): Promise<{ error: 
       }
     } else {
       notes.push(`⚠ The rules at ${since.slice(0, 7)} could not be read, so this change was judged by its own rules. Fetch the base with its history.`);
+    }
+    // Phase 33 B6: the pipeline is a rule file. A whole check (not one part of the
+    // rulebook) says what the change does to it, and a loosening needs a signature.
+    if (!scope || input.pipeline) {
+      const was = await pipelineAt(root, since);
+      const now = readPipeline(root);
+      if (now?.problems.length) notes.push(`⚠ ${now.problems.join('; ')}`);
+      const changes = diffPipeline(was?.pipeline ?? null, now?.pipeline ?? null);
+      if (changes.some((c) => c.effect === 'loosens')) {
+        const approvals = approvalsHere(root);
+        const keys = keysAt(root, since);
+        try {
+          for (const c of changes) if (c.effect === 'loosens') c.approval = approvalFor(root, c, approvals, keys, since);
+        } finally { keys.done(); }
+      }
+      rulebook = [...rulebook, ...changes];
     }
   }
   // C3: with a baseline on the base, the whole tree is judged against it, by the base's rules.

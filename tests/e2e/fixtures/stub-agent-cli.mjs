@@ -57,6 +57,13 @@ if ((await client.listTools()).tools.some((t) => t.name === 'report_verdicts')) 
 }
 
 const bundle = JSON.parse(message.slice(message.indexOf('<bundle>') + 8, message.indexOf('</bundle>')));
+// none (Phase 33 B6): a review that finds nothing, of any change.
+if (scenario === 'none') {
+  await call('report_review', { findings: [] });
+  await client.close();
+  result({});
+  process.exit(0);
+}
 const api = bundle.data.files.find((f) => f.path.endsWith('api.ts'));
 const lineOf = (needle) => {
   for (const h of api.hunks) for (const l of h.lines.split('\n')) { const m = /^\s*(\d+) \| (.*)$/.exec(l); if (m && m[2].includes(needle)) return Number(m[1]); }

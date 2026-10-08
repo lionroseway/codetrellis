@@ -47,6 +47,7 @@ export function changedFiles(root: string, given: string | undefined, env: NodeJ
     ...lines(git(root, ['ls-files', '--others', '--exclude-standard'])),
   ]);
   const files = [...out].filter((f) => !f.startsWith('.codetrellis/')).sort();
-  const rulebook = [...out].some((f) => f.startsWith('.codetrellis/rules/') || f === '.codetrellis/config.json');
+  // B6: the pipeline is a rule file too.
+  const rulebook = [...out].some((f) => f.startsWith('.codetrellis/rules/') || f === '.codetrellis/config.json' || f === '.codetrellis/pipeline.yaml');
   return { base, since, files, rulebook };
 }

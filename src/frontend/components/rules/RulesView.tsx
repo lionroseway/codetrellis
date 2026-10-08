@@ -3,6 +3,7 @@ import { ShieldCheck } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
 import { useUiStore } from '../../stores/ui-store';
 import { ChecksView } from './ChecksView';
+import { PipelinePanel } from './PipelinePanel';
 import { RULE_STRENGTHS, type RuleStrength, type RuleView } from '../../../shared/types/architecture-rules';
 
 interface Preview { change: { effect: string; allowed: unknown[] } | null; words: string; needsConfirm: boolean }
@@ -99,8 +100,11 @@ export function RulesView() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // B6: the pipeline panel reads again whenever the rules do.
+  const [loads, setLoads] = useState(0);
   const reload = useCallback(async () => {
     if (!root) return;
+    setLoads((n) => n + 1);
     try {
       const res = await fetch(`/api/rules?project=${encodeURIComponent(root)}`);
       if (res.ok) {
@@ -333,6 +337,8 @@ export function RulesView() {
           </button>
         </div>
       )}
+
+      <PipelinePanel root={root} version={loads} />
 
       {proposals.length > 0 && (
         <div className="rounded border border-violet-300/25 bg-violet-500/[0.05] px-3 py-2 text-[12px] space-y-2" data-testid="rule-proposals">

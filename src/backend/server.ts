@@ -74,6 +74,7 @@ import { listWorktrees, listWorktreesWithPlans, createWorktree, WorktreeError } 
 import { checkoutGitDir, currentBranch, hasCommits, localBranches } from './services/git-checkout';
 import { startAutoSave, saveNow } from './services/persistence';
 import { exportDatabase } from './services/database';
+import { approvePipeline, pipelineView } from './services/pipeline-approvals';
 import { notePatternsRead, refreshPatternFinds } from './services/pattern-scan';
 import * as planService from './services/plan-service';
 import * as budgetService from './services/budget-service';
@@ -2877,6 +2878,29 @@ async function applyRuleChange(req: express.Request, projectRoot: string, id: st
   return { status: 200, body: { ...(rule ? { rule, view } : { removed: id }), ...(approval ? { approval } : {}) } };
 }
 
+// Phase 33 B6 — the pipeline: its stages in words, and the loosenings an
+// edit to it makes since the last commit, which a person approves here,
+// signed as a rule's loosening is (R3).
+app.get('/api/pipeline', async (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(await pipelineView(projectRoot));
+});
+
+app.post('/api/pipeline/approve', async (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can approve a change to the pipeline — in the CodeTrellis app's ${RULES_WHERE}.` }); return; }
+  const person = personFrom(req);
+  try {
+    const r = await approvePipeline(projectRoot, { writer: taskRecordWriterId(), name: person.author });
+    if (r.signed.length) broadcast('rules-changed', { project: projectRoot });
+    res.json(r);
+  } catch (err) {
+    res.status(500).json({ error: `The change could not be signed (${(err as Error).message}); CI will hold it until it is.` });
+  }
+});
+
 app.put('/api/rules/:id', async (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
@@ -2927,7 +2951,7 @@ app.post('/api/check-runs', async (req, res) => {
   const person = personFrom(req);
   const r = await checkTheChange({
     root: projectRoot, paths: changed.files.slice(0, 500), ...(changed.since ? { base: changed.since } : {}), strict: b.strict === true,
-    scope: { suite: b.suite, rule: b.rule, path: b.path },
+    scope: { suite: b.suite, rule: b.rule, path: b.path, engine: b.engine, strength: b.strength },
     by: person, ranIn: person.authorType === 'human' ? 'the app' : 'the local API',
     activeProject: getActiveProjectPath(), checkCriterion: (uid) => criterionLoop.checkCriterion(uid),
   });

@@ -16,11 +16,11 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "B5: engine per rule"
+  step: "B6: pipelines"
   status: "In review"
-  next: "Merge B5 when CI is green, then B6 (pipelines), which is built"
+  next: "Merge B6 when CI is green, then C9 (signed local review), which is built; B7 (docs for the blocks) is being written"
   blockers: "None"
-  updated: 2026-10-07
+  updated: 2026-10-08
 sections:
   - title: Setup
     goal: The phase can be picked up cold by any session, and its progress read on one page.
@@ -76,6 +76,8 @@ sections:
       - title: "Path patterns: should `**/` match no folder too (`src/backend/**/*.ts` misses `src/backend/server.ts`)? Widening only and except loosens existing rules, so the owner decides"
         followUp: true
       - title: "Cross-system map: pair a team's own kinds (a queue's publishers with its consumers)"
+        followUp: true
+      - title: "B6: a tag selector for stages, once rules have tags"
         followUp: true
   - title: "Stage 0: ground truth"
     goal: Numbers to measure against, the freeze measured, and every colour the app draws written down.
@@ -216,6 +218,10 @@ shots:
     step: B2
     title: A rule about text
     says: Files that may not, or must, contain some text, read as itself, a glob or a regex. Any language, no parser. A change is judged on the lines it adds, so old lines are debt, not news.
+  - file: rules-pipeline.png
+    step: B6
+    title: A pipeline, and a dropped stage
+    says: The stages in the order they run. Dropping a stage loosens the pipeline, so it waits here until you approve it, signed with your key.
   - file: checks-view.png
     step: G9
     title: The Checks tab

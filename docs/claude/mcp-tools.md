@@ -148,7 +148,7 @@ in the background once per folder; `check` with no path and `status` gate
 on this work's changes through `check_changes` (a breakpoint on a changed
 file, its tests failing or older than the code, a done task whose criterion
 check fails, a stale system doc describing it, an import added across an
-architecture rule (A7.3)) and exit 3 when it does not conform. Every such check is kept as a check run (Phase 33 C7): `list_check_runs` (`read`) lists them with where each ran, by whom and what it found, CI's among them once pulled where task state is shared. The app runs the same check over REST (`POST /api/check-runs`, the Rules view's Checks tab, Phase 33 G9), through the code `check_changes` uses. The SessionStart hook, `.mcp.json` and GitHub Actions recipes are
+architecture rule (A7.3)) and exit 3 when it does not conform. Since Phase 33 B6 `check_changes` also selects by `engine` and `strength` (a pipeline stage's rules), and `pipeline: true` makes a scoped check also judge the change to `.codetrellis/pipeline.yaml`; `get_review_bundle` takes the same two selectors and `grounding`, earlier stages' findings carried in the bundle as facts. Every such check is kept as a check run (Phase 33 C7): `list_check_runs` (`read`) lists them with where each ran, by whom and what it found, CI's among them once pulled where task state is shared. The app runs the same check over REST (`POST /api/check-runs`, the Rules view's Checks tab, Phase 33 G9), through the code `check_changes` uses. The SessionStart hook, `.mcp.json` and GitHub Actions recipes are
 in `docs/recipes/`; how they fit is [`cli.md`](cli.md).
 
 `getMcpSetup` (`/api/mcp/setup`) returns the connector's command, JSON and

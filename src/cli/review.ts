@@ -48,7 +48,10 @@ export interface ReviewOptions {
   endpoint: string | null;
   auth: ReviewAuth;
   skills: Array<{ name: string; text: string }>;
-  scope: { suite?: string; rule?: string; path?: string };
+  scope: { suite?: string; rule?: string; path?: string; engine?: string; strength?: string };
+  /** B6: a pipeline stage's name, for its run, and what earlier stages found, for its bundle. */
+  stage?: string;
+  grounding?: Array<{ stage: string; path: string; says: string; rule?: string | null; strength?: string }>;
   base: string | null;
   task: string | null;
   maxTurns: number;
@@ -248,6 +251,8 @@ export async function runPass(agent: Agent, o: ReviewOptions, skill: { name: str
   const got = await agent.call('get_review_bundle', {
     ...(o.base ? { base: o.base } : {}), ...(o.scope.suite ? { suite: o.scope.suite } : {}), ...(o.scope.rule ? { rule: o.scope.rule } : {}),
     ...(o.scope.path ? { path: o.scope.path } : {}), ...(o.task ? { task_uid: o.task } : {}),
+    ...(o.scope.engine ? { engine: o.scope.engine } : {}), ...(o.scope.strength ? { strength: o.scope.strength } : {}),
+    ...(o.grounding?.length ? { grounding: o.grounding } : {}),
   });
   if (got.isError) return { error: got.text };
   const bundle = got.json as Bundle;
@@ -317,7 +322,7 @@ export async function runPass(agent: Agent, o: ReviewOptions, skill: { name: str
 
     const sent = await agent.call('report_review', {
       bundle: bundle.id, findings, ...(inconclusive ? { inconclusive } : {}), ...(error ? { error } : {}),
-      ran_in: ranIn(env), reviewer: o.adapter.id, pass: skill.name, refused: ran.refused.slice(0, 200).map((r) => scrub(r, o).slice(0, 300)), retries,
+      ran_in: o.stage ? `${ranIn(env)}, stage ${o.stage}` : ranIn(env), reviewer: o.adapter.id, pass: skill.name, refused: ran.refused.slice(0, 200).map((r) => scrub(r, o).slice(0, 300)), retries,
       ...(refuted.length ? { refuted } : {}), ...(verify ? { verify } : {}),
     });
     if (sent.isError) return { error: sent.text };

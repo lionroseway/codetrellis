@@ -16,7 +16,7 @@ export interface Parsed {
 }
 
 /** Flags that never take a value, so `--json foo` keeps `foo` as an argument. */
-const SWITCHES = new Set(['json', 'help', 'no-wait', 'quiet', 'share-task-state', 'top', 'page', 'strict', 'no-color', 'verify', 'post']);
+const SWITCHES = new Set(['json', 'help', 'no-wait', 'quiet', 'share-task-state', 'top', 'page', 'strict', 'no-color', 'verify', 'post', 'pipeline']);
 
 export function parseArgs(argv: readonly string[]): Parsed {
   const flags: Record<string, string | true> = {};
