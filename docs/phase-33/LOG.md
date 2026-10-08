@@ -20,7 +20,7 @@
 |---|---|
 | **Stage / step** | Follow-ups after Z1 |
 | **Status** | In review |
-| **In flight** | nothing open |
+| **In flight** | #406 in review on `feat/phase-33-fu-allotment-resize` |
 | **Last merged** | Z1 (#401, #402, `d293a94`) |
 | **Next action** | Merge the Allotment fix when CI is green; then call rules for commands and environment variables (built, being checked), and pairing a team’s own call kinds. Z2 and Z3 are the owner’s |
 | **Blockers** | None |
@@ -46,7 +46,7 @@
 - [x] Follow-up: Rebalance the browser shards: chromium 2/3 runs 185 tests in about 25 minutes, the others about 7 (#367)
 - [x] Follow-up: Four browser specs fail in a local clone with many fetched branches and pass in CI (evolution, play-forward, navigate_to Awareness, signal-to-lines): find why (#405)
 - [x] Follow-up: rules-overlay.spec drew no edges in CI: React Flow held every node measured and none with handle positions, and nothing measured them again; the canvas now does (`RemeasureHandles`) (#387)
-- [x] Follow-up: The plan-panel and inspector Allotment resize throws on load (minimumSize of undefined), caught and logged since Phase 31
+- [x] Follow-up: The plan-panel and inspector Allotment resize throws on load (minimumSize of undefined), caught and logged since Phase 31 (#406)
 - [ ] Follow-up: C5 is not yet seen reviewing on this repo: it has no CLAUDE_CODE_OAUTH_TOKEN secret, so codetrellis-review.yml and claude-review.yml review nothing. Deferred by the owner (2026-10-07): a public repo's PRs can read its secrets, so agent review here waits; deterministic rules (R10) come first
 - [ ] Follow-up: Path patterns: should `**/` match no folder too (`src/backend/**/*.ts` misses `src/backend/server.ts`)? Widening only and except loosens existing rules, so the owner decides
 - [ ] Follow-up: Cross-system map: pair a team's own kinds (a queue's publishers with its consumers)
