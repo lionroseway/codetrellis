@@ -159,6 +159,79 @@ Tools available: search_symbols, get_dependencies, check_architecture, create_pl
 
 ---
 
+## Agent review in CI, on a real repository (the SWF spike)
+
+Agent review in CI (Phase 33 C5) needs a model credential, and **this
+repository does not hold one**. It is public, and the owner keeps the
+`CLAUDE_CODE_OAUTH_TOKEN` out of it. So C5 is tested on a private repository
+that already has one: `lionroseway/swf`. Every unit and harness test of the
+review stands in for the model with a script. This spike is the only test
+that runs the real agent, on real code, through the real CI.
+
+### What is there
+
+- **`spike/codetrellis-base`**, a branch of SWF that holds two things:
+  - one rule SWF already keeps (`.codetrellis/rules/spike.yaml`): only
+    `app/payments/`, `migrations/`, `tests/` and `deploy/scripts/` may import
+    `stripe`, with `routes/users.py` counted as debt in `baseline.yaml`;
+  - a workflow, `.github/workflows/codetrellis-spike.yml`, with two jobs:
+    - **`check`, blocking:** `codetrellis check --suite spike`. No AI, no
+      secret.
+    - **`review`, advisory:** `docs/recipes/review.sh` with
+      `--verify --post`, signed in with SWF's own token.
+- **Two draft pull requests into that branch**, never into `main`, and never
+  to merge. Each carries the `codetrellis-review` label, which is what runs
+  the workflow.
+
+  | PR | Change | Expected |
+  |---|---|---|
+  | lionroseway/swf#336 | `core/paging.py` imports Stripe directly, with two planted bugs | `check` red on the import; the review finds the breach and both bugs |
+  | lionroseway/swf#337 | the same helper, written correctly | `check` green; the review finds nothing |
+
+- **The workflow installs CodeTrellis from `feat/phase-33`** when it runs.
+  So a re-run tests the code on that branch now, with no change to SWF. Once
+  the phase is in `main`, change the branch in both jobs' clone step.
+
+### How to run it
+
+Re-run the latest run of each pull request, from SWF's Actions tab or with
+the API (`POST /repos/lionroseway/swf/actions/runs/<id>/rerun`). A push to
+either branch runs it too. Then read:
+- each job's log;
+- the job summary;
+- on #336, the review's comment.
+
+### What passing looks like
+
+Last run: 2026-10-08, against `feat/phase-33` after #407.
+- **#336 `check`:** exit 3, `backend/fastapi/app/core/paging.py:4 imports
+  pypi:stripe`, naming `stripe-via-payments`.
+- **#336 `review`:** five findings, posted as a comment:
+  - the rule breach;
+  - both planted bugs: the 1-based page that skips its first page, and the
+    parser that swallows every error;
+  - a bug nobody planted: `Charge.list` returns one page of 10;
+  - the file's "never merge" docstring, as suspicious.
+
+  The second pass refuted none of the four it tested.
+- **#337:** `check` green; the review says "✓ nothing found".
+- **Times:** each job took about a minute, the review 30 seconds of it.
+
+### What it does not prove, and what to expect
+
+- **The model varies.** The findings' wording and count move a little
+  between runs: four on 2026-10-07, five on 2026-10-08. What must hold is
+  the rule breach and the two planted bugs on #336, and nothing on #337.
+- **`upload-sarif` logs an error there**, because SWF has no code scanning.
+  The step is `continue-on-error`. The findings reach the job summary and,
+  with `--post`, the pull request. A private repository needs
+  `actions: read` for the upload (the recipe grants it).
+- **It proves C5's CI mode only.** A review on a person's own device, counted
+  in CI with no secret (C9), is covered by the harness, because it needs no
+  model credential in CI.
+
+---
+
 ## Known Issues
 
 - The graph can be slow to load on first scan (parsing all files)
