@@ -18,15 +18,15 @@
 
 | | |
 |---|---|
-| **Stage / step** | B7: docs for the blocks |
+| **Stage / step** | Z1: the docs |
 | **Status** | In review |
-| **In flight** | B7 in review (#400) on `feat/phase-33-b7-docs`; Z1 building on `feat/phase-33-z1-docs` |
-| **Last merged** | C9 (#399, `748c05d`) |
-| **Next action** | Merge B7 when CI is green, then Z1 (docs), rebuilt on top of B7's rules.md |
+| **In flight** | Z1 building on `feat/phase-33-z1-docs` |
+| **Last merged** | B7 (#400, `53fb62a`) |
+| **Next action** | Merge Z1 when CI is green; then Z2, the owner's phase review on a packaged build, and Z3, into main and release |
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `748c05d`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `53fb62a`, with open PRs from GitHub.
 
 ---
 
@@ -110,7 +110,7 @@
 - [x] B4 Your own patterns: what counts as a call, or as any entry (queue:, event:, flag:), without code (#396)
 - [x] B5 Engine per rule: deterministic, fuzzy or agent, independent of strength; an agent rule blocks only when its owner says block (#397)
 - [x] B6 Pipelines: stages in order or in parallel, needs and when, and later stages grounded by earlier results (#398)
-- [ ] B7 Docs for the blocks: a worked example each in rules.md, and pipeline recipes (#400) — in review
+- [x] B7 Docs for the blocks: a worked example each in rules.md, and pipeline recipes (#400)
 
 ### Stage Z: close
 - [ ] Z1 Docs: `docs/claude/rules.md`, CLI and MCP references, the change-control security rule — building
@@ -221,6 +221,48 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-08 — B7 merged; Z1 built: the docs
+
+- **B7 (#400) merged.**
+- **Z1: the docs.** `docs/claude/rules.md` is now the whole of rules and
+  checks, on one page, above B7's building blocks:
+  - **The rulebook:**
+    - every kind (`imports`, `package`, `symbol`, `calls`, `folder`,
+      `grep`, and agent rules), with matchers and your own patterns;
+    - engines and strengths;
+    - the baseline.
+  - **Change control:**
+    - what counts as a loosening, a raised fuzzy threshold and an agent
+      rule's reworded words among them;
+    - the pipeline, held as the rules are;
+    - approvals that verify only against keys on the base.
+  - **Checks anywhere:** a session, the app and any CI, scoped checks, the
+    pipeline, check runs, and findings where the code is.
+  - **Agent checks, four ways:** in a session, headless, in CI on the
+    team's key, and signed on your device (C9); then graduation.
+
+  It was rebuilt from Z1's first draft (written before B1), so two claims
+  that draft carried are corrected:
+  - `check` has no `--engine` or `--strength` flag: `check_changes` and
+    pipeline stages select by those;
+  - the GitHub recipe runs `check.sh`'s steps itself rather than calling
+    it.
+- **CLAUDE.md:**
+  - rules.md's reference line covers the whole page;
+  - three security rules:
+    - rules and the pipeline change only through a person;
+    - a reviewing agent is held by code, not by its prompt;
+    - a signed review is CodeTrellis's signature, never the agent's, and is
+      trusted only against keys the base lists.
+- **cli.md and mcp-tools.md** were checked against what is registered:
+  - every Phase 33 MCP tool and CLI verb is documented;
+  - mcp-tools.md now points to rules.md from the rules tools.
+- **Locally:** unit 2232, and the docs examples (7 harness tests) against
+  the merged page.
+- **That is the last step of the agreed order** (R10, B1–B6, C9, B7, Z1).
+  Z2 (the phase review on a packaged build) and Z3 (into `main` and
+  release) are the owner's.
 
 ### 2026-10-08 — C9 merged; B7 built: docs for the blocks, every example a test
 
