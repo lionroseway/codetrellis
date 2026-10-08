@@ -20,7 +20,7 @@
 |---|---|
 | **Stage / step** | Follow-ups after Z1 |
 | **Status** | #407 merged (commands and environment variables). Pairing a team's own kinds is in review. The owner's two decisions are being built: ** matches no folder (built, in its harness run), and C5 proven on the SWF spike (re-run under way). Rule tags with a stage selector are being built. |
-| **In flight** | nothing open |
+| **In flight** | #408 in review on `feat/phase-33-fu-own-kinds-pairing` |
 | **Last merged** | Z1 (#401, #402, `d293a94`) |
 | **Next action** | Merge the pairing pull request, then the ** change, then rule tags; write up the SWF spike in the testing docs |
 | **Blockers** | None |
