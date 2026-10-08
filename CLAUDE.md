@@ -29,7 +29,7 @@ Deep-dive docs live in `docs/claude/`:
 - [`docs/claude/mcp-tools.md`](docs/claude/mcp-tools.md) — the 18 MCP tool categories grouped by domain.
 - [`docs/claude/awareness.md`](docs/claude/awareness.md) — parallel awareness: workstreams, footprints, signals, the digest, notices, and the Claude Code skill and hook.
 - [`docs/claude/cli.md`](docs/claude/cli.md) — the `codetrellis` CLI in sessions and pipelines: `start`/`stop`, the SessionStart hook and CI recipes in `docs/recipes/`, the conformity gate and its exit codes.
-- [`docs/claude/rules.md`](docs/claude/rules.md) — the rules' building blocks (matchers, grep, fuzzy, your own patterns, agent rules, pipelines), a worked example each; every example is a test (`tests/e2e/rules-docs.test.ts`).
+- [`docs/claude/rules.md`](docs/claude/rules.md) — rules and checks (Phase 33): the rulebook (suites in `.codetrellis/rules/`, kinds, engines, strengths, the baseline), change control, checks anywhere, check runs, agent checks on the team's own agent or signed on your device, and the building blocks (matchers, grep, fuzzy, your own patterns, agent rules, pipelines), a worked example each; every example is a test (`tests/e2e/rules-docs.test.ts`).
 - [`docs/claude/record.md`](docs/claude/record.md) — the record and its evidence: the hash chain, retention, signed packs and the evidence export, verifying months later, and what it does not prove.
 
 The team's design docs (vision, UX, plans) live alongside these at the
@@ -134,6 +134,28 @@ existing code disagrees, the existing code is what Phase 19 is fixing.
   is visible.
 - **Remote surfaces are off by default** and require an explicit user
   action to enable. Discovery and API exposure are separate switches.
+- **Rules change only through a person** (Phase 33 R2, R3, B6). No tool or
+  agent writes a rule or the pipeline: `propose_rule` and graduation only
+  propose. Every loosening is confirmed and signed in the app, and the check
+  accepts an approval only against keys already on the base branch. Never
+  add a path by which an agent, a request body or the pull request itself
+  can loosen a rule or a pipeline stage, or bring the key that approves it.
+- **A reviewing agent is held by code, not by its prompt** (Phase 33 C4).
+  `codetrellis review` gives the agent's CLI:
+  - no built-in tools;
+  - one MCP server, the review sink, with its two tools;
+  - an empty working folder;
+  - an environment holding only the credential `--auth` names.
+
+  Files named like secrets never enter a review bundle. Never widen the
+  sink's tools, hand the agent a token (`--post` keeps its own), or let a
+  reviewer record a run itself. Its report is verified against the lines
+  it was shown.
+- **A signed review is CodeTrellis's signature, never the agent's** (Phase
+  33 C9). Only a report verified against the change is signed, only when
+  the files it read are the commit's, and CI trusts it only against device
+  keys the base lists. Never sign what an agent hands over unverified, or
+  accept a key from the branch under review.
 - **Chromium sandboxing stays on in every distributed format** that can
   enforce it. AppImage is the known exception and IS distributed — see the
   Tech Stack note below. Do not add another format that weakens the sandbox

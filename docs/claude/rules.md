@@ -1,14 +1,182 @@
-# Rules
+# Rules and checks
 
-A rulebook is YAML in `.codetrellis/rules/`, one suite per file, committed
-with the code. `codetrellis check` holds a change to the rules on the branch
-it goes into (the base), never the change's own copy: a branch cannot loosen
-the rules it is checked by (R2). The Rules view in the app writes the same
-files, and shows each rule with what breaks it today.
+Phase 33. A team writes down how its code is meant to be put together, and a
+check holds every change to it: on a laptop, in an agent's session, and in any
+CI. Changing a rule is a person's decision. An agent can review the change too,
+on the team's own model and key, under a contract that code enforces.
 
-This page is the building blocks rules are made of (Phase 33 B1–B6). The
-whole of the rulebook, change control and the checks are in
-[`cli.md`](cli.md) and [`mcp-tools.md`](mcp-tools.md).
+The design is in [`docs/phase-33/RULES-AND-CLARITY.md`](../phase-33/RULES-AND-CLARITY.md),
+[`docs/phase-33/AGENT-CHECKS-AND-REVIEW.md`](../phase-33/AGENT-CHECKS-AND-REVIEW.md)
+and [`docs/phase-33/BUILDING-BLOCKS.md`](../phase-33/BUILDING-BLOCKS.md).
+The commands, step by step, are in [`cli.md`](cli.md), and the tools are in
+[`mcp-tools.md`](mcp-tools.md). The [Building blocks](#building-blocks) below
+are worked through one example at a time, and each example is a test.
+
+## The rulebook
+
+Rules live in the repository, one YAML file per suite, committed with the code:
+`.codetrellis/rules/<suite>.yaml` (R1). A suite is named by its file, and its
+comments survive a rewrite, so a team can say who owns it. The Rules view in
+the app writes the same files, and shows each rule with what breaks it today.
+
+```yaml
+# Owned by the payments team; see CODEOWNERS.
+suite: payments
+because: Money moves through one place.
+rules:
+  - id: stripe-via-wrapper
+    kind: package
+    package: npm:stripe
+    only: [packages/web/src/payments.ts]
+    strength: block
+    because: The wrapper sets idempotency keys and retries.
+```
+
+What a rule can say:
+
+| Kind | Says | Since |
+|---|---|---|
+| `imports` (the default) | `from` may not import `mayNotImport`, `except` some files | A7, R1 |
+| `package` | only `only` may import an outside package (`npm:stripe`, `pypi:requests`) | R5 |
+| `symbol` | only `only` may import one export (`src/payments/charge.ts#createCharge`), through barrels too | R6 |
+| `calls` | only `only` may make a call: `http:api.stripe.com/v1`, `sql:invoices`, or a kind of your own (`queue:orders.*`) | R7, B4 |
+| `folder` | what the files in a folder are: named to `files`, of `kinds`, `exports: one`, with a `guide` | R8 |
+| `grep` | the files `in` a scope must, or must not, hold a line | B2 |
+| `engine: agent` | its words, judged by an agent review of the files `in` its scope | B5 |
+
+A target can say how it matches: `glob`, `regex` or `fuzzy` with a
+`threshold` (B1, B3). What counts as a call can be widened with your own
+patterns in `.codetrellis/patterns/` (B4). Each is worked through below.
+
+Every rule has an **engine**, which follows from the rule: `deterministic`
+(code over the graph and the text), `fuzzy` (a `match: fuzzy` target), or
+`agent`. How hard each holds is its **strength** (R4):
+
+- `block`: fails the check, or, for an agent rule, the review's run.
+- `warn`: said, and passes; `--strict` makes it fail. A new rule starts here.
+- `guide`: checks nothing. It is shown wherever work touches it: in an
+  agent's brief, the awareness digest, the review bundle and the Rules view
+  (R9). A `folder` rule at `guide` may carry only its guide (C6). An agent
+  rule with no review configured is a guide too.
+
+`.codetrellis/rules/baseline.yaml` holds the breaches each rule already had
+when it was written. A rule's count of old breaches may only fall (C3).
+
+## Change control
+
+Rules change only through a person (R2, R3):
+
+- **Agents propose.** No tool writes a rule. `propose_rule` keeps what an
+  agent wants, with why, for a person to accept or reject in the app.
+  Graduated findings arrive the same way (C6).
+- **Every change is previewed** against the code before it is made: what
+  becomes allowed, what becomes forbidden, and what breaks it today.
+- **A loosening is confirmed, then signed** with the person's key, beside
+  the suites (`.codetrellis/rules/approvals/`). A loosening is any of these:
+  - a rule removed;
+  - its scope narrowed;
+  - an exception added;
+  - its strength lowered;
+  - a fuzzy threshold raised;
+  - an agent rule's words changed.
+- **The pipeline is held as the rules are** (B6). Removing a stage, making
+  it advisory, or changing what it runs is a loosening, signed in the Rules
+  view's Pipeline panel.
+- **The check judges a branch by its base's rules.** A loosening passes only
+  with an approval that verifies against keys already on the base. So a pull
+  request cannot add a key and use it in the same change. An edit made
+  straight to the files is caught by the same check.
+
+## Checks anywhere
+
+The same check runs in every place, through one piece of code (`check_changes`):
+
+- **A session**: `codetrellis check`, or the `check_changes` tool. The
+  SessionStart hook starts CodeTrellis for the folder (`cli.md`).
+- **The app**: the Rules view's Checks tab, beside the rules (G7, G9).
+- **Any CI**: `docs/recipes/check.sh` is the whole job. The GitLab, Azure,
+  Bitbucket and Jenkins recipes call it (C2), and `github-actions.yml` runs the
+  same steps. `pipeline.sh` runs the pipeline instead (B7).
+
+Every check can be narrowed by `--suite`, `--rule` or `--path`, alone or
+together (C1). `check_changes` and a pipeline stage can also select rules by
+engine or strength. With `.codetrellis/pipeline.yaml`, `--pipeline` runs the
+rules in stages. Each
+rule and finding is written in words once (`shared/lib/check-words.ts`).
+The terminal, markdown, SARIF 2.1.0 and JSON render from those words, and so
+do the app and the phone (C8).
+
+Every check is a **check run** (C7): where it ran, by whom, the commit and
+base, the scope and what it found. With task state shared, runs travel with
+the repository (`.codetrellis/runs/checks/`), so CI's run shows in a
+teammate's app after a pull.
+
+The latest run's findings are shown where the code is (G10):
+
+- the code view's gutter and the diff;
+- the inspector;
+- a task's brief;
+- the phone's Needs you.
+
+## Agent checks
+
+An agent reviews the change, on the team's own agent, model and key.
+CodeTrellis builds no agent and holds no model key. It supplies the bundle,
+the contract and the verification.
+
+- **The bundle** (`services/review-bundle.ts`) holds:
+  - the change, as numbered lines marked as data, never instructions;
+  - the rules about the changed files, in the check's words, agent rules
+    among them;
+  - what the check already found, and what earlier pipeline stages found
+    (`grounding`);
+  - the task's criteria, when a task is named.
+
+  Files whose names say they hold secrets (`.env`, private keys, `.npmrc`)
+  are withheld from it.
+- **Grounding is checked by code** (`shared/lib/agent-review.ts`).
+  - Each finding must name a file in the change and lines the bundle
+    showed, and quote them.
+  - A rule finding must name a rule in scope.
+  - What fails is dropped and counted, with why.
+  - An instruction found in the change is reported as `suspicious`, not
+    followed.
+- **The outcome** is one of `pass`, `findings`, `inconclusive` or `error`.
+  It is advisory, unless `--fail-on` asks otherwise or a finding citing a
+  block-strength agent rule holds.
+
+Four ways in:
+
+- **Your own agent, in its session** (C4b): `get_review_bundle`, then
+  `report_review`.
+- **Headless** (C4): `codetrellis review` runs Claude Code's print mode, or
+  Codex's `exec`, held to a deny-by-default tool set by the CLI's own
+  settings:
+  - no built-in tools at all;
+  - one MCP server with two tools (report, and read a changed file);
+  - an empty folder and a scrubbed environment;
+  - budgets on turns, tool calls and time;
+  - one retry when it ends without reporting.
+
+  Every refused call is kept on the run.
+- **In CI, on the team's key** (C5): the same command.
+  - `--verify` adds a second pass that tries to refute each finding.
+  - It writes SARIF for code scanning and markdown for the job summary.
+  - `--post` comments on the pull request, with a token the model never sees.
+  - `--auth oidc:bedrock|vertex|foundry` signs in through the team's cloud.
+  - `docs/recipes/review.sh` adds the cost dial: auto, on-request or off.
+- **On your own device, counted in CI with no secret** (C9). A review of a
+  committed change, by any of the above, is signed with the device's key as
+  a git note on the commit, and `codetrellis review publish` pushes it. In
+  CI, `codetrellis review verify` checks it against the keys the base lists.
+  It is verified, stale (a review of an earlier commit), refused (edited, or
+  an unknown key) or absent. This needs no secret, no AI and no app.
+
+**Graduation** (C6): a reviewer gives each bug or risk a `topic`. A topic
+kept in two reviews becomes a proposed `guide` rule, once. That is how a
+review discovers rules, and the rules, being deterministic, are what block.
+A person can also harden an agent rule into a deterministic or fuzzy one
+once its shape is clear (B5).
 
 ## Every example on this page is a test
 
@@ -21,7 +189,9 @@ page says. An example that drifts from the code fails the build.
 The page marks this in each code block's first line, which a rendered page
 hides: `file=… at=main` or `at=change` for a file, `exit=3` on a command,
 and `text` for what the command prints. `tools/doc-examples/` reads them.
-To add an example, write it the same way; the test finds it.
+To add an example, write it the same way; the test finds it. A block with no
+`example=` is an illustration, like the suite under [The rulebook](#the-rulebook),
+and is not run.
 
 ## Building blocks
 
