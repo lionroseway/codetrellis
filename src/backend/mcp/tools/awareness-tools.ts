@@ -472,6 +472,10 @@ export function register(server: McpServer, deps: ToolDeps): void {
           run: r.run, outcome: r.review.outcome, reason: r.review.reason, says: reviewWords(r.review), kept: r.review.findings, dropped: r.review.dropped,
           // C6: a topic found in two reviews, proposed as a guide; a person decides.
           ...(proposed.length ? { proposed } : {}),
+          // C9: signed on this device as a git note on the commit, or why not.
+          ...('commit' in r.signed
+            ? { signed: { commit: r.signed.commit, signer: r.signed.signer, note: r.signed.note, says: `Signed as a review of ${r.signed.commit.slice(0, 7)}: push it with \`codetrellis review publish\`, and CI can verify it with no secret.` } }
+            : { unsigned: r.signed.why }),
         }, null, 2) }],
       };
     },

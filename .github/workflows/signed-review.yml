@@ -1,0 +1,68 @@
+# A review made on a developer's own device, verified on the pull request
+# (Phase 33 C9). No secret, no AI, no app: git and the device keys on the base.
+#
+# Anyone with CodeTrellis reviews their branch on their own machine, with any
+# agent (`codetrellis review`, or Cursor, Codex, Claude Code or any MCP client
+# through get_review_bundle and report_review). CodeTrellis checks the findings
+# and signs the review with the device's key, as a git note on the commit;
+# `codetrellis review publish` pushes it. This job reads the note on the head,
+# verifies it against the keys under .codetrellis/keys/ on the base branch, and
+# shows the review in the job summary and its findings on the changed lines.
+#
+# ADVISORY. A review that is stale (of an earlier commit), refused (edited after
+# it was signed, or by a key the base does not list) or missing is said, and
+# the job passes. A repository that wants a review on every head adds --require.
+#
+# Safe on a public repository: it reads only the pull request's own commits and
+# notes, and NEVER pull_request_target.
+name: Signed review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+concurrency:
+  group: signed-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Signed review (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # As ci.yml installs, and why (Phase 32 HD4c).
+      - name: Install
+        run: npm ci --ignore-scripts && npx patch-package && node scripts/check-patches.cjs
+
+      - name: Verify
+        env:
+          BASE: origin/${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          npm link
+          codetrellis review verify --base "$BASE" --head "$HEAD_SHA" --format markdown >> "$GITHUB_STEP_SUMMARY" || true
+          codetrellis review verify --base "$BASE" --head "$HEAD_SHA" --no-fetch --format sarif > signed-review.sarif || true
+
+      - name: Upload the findings
+        if: always() && hashFiles('signed-review.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: signed-review.sarif
+          category: signed-review

@@ -286,7 +286,7 @@ The blocks don't decide where the agent runs. Teams choose per repository:
 | Mode | Where the agent runs | Secret in CI? | Suits |
 |---|---|---|---|
 | CI token (C5) | in CI, on the team's key, OAuth token or cloud (OIDC) | yes, the team's | enterprises, private repositories |
-| Signed local (C9) | the developer's device, any agent (Cursor, Codex, Claude Code, any MCP client) | no | open source, bring your own agent |
+| Signed local (C9, built) | the developer's device, any agent (Cursor, Codex, Claude Code, any MCP client), signed as a git note | no | open source, bring your own agent |
 | Off | nowhere | no | deterministic and fuzzy rules only (R10) |
 
 ## Order
