@@ -20,7 +20,7 @@
 |---|---|
 | **Stage / step** | C9: a signed local review |
 | **Status** | In review |
-| **In flight** | C9 building on `feat/phase-33-c9-signed-local-review`; B7 building on `feat/phase-33-b7-docs`; Z1 building on `feat/phase-33-z1-docs` |
+| **In flight** | C9 in review (#399) on `feat/phase-33-c9-signed-local-review`; B7 building on `feat/phase-33-b7-docs`; Z1 building on `feat/phase-33-z1-docs` |
 | **Last merged** | B6 (#398, `8285b59`) |
 | **Next action** | Merge C9 when CI is green, then B7 (docs for the blocks), which is built; then Z1 |
 | **Blockers** | None |
@@ -83,7 +83,7 @@
 - [x] C6 Graduation (a repeated finding proposes a rule) (#391)
 - [x] C7 Check runs are records that travel (`.codetrellis/runs/checks/`), wherever they ran (#379)
 - [x] C8 One renderer for rules and findings: terminal, markdown, SARIF and the app say the same words (#378)
-- [ ] C9 A review run on your device counts on the pull request: any agent (Cursor, Codex, Claude Code, any MCP client), signed with your device key, read and verified by CI with no secret — building
+- [ ] C9 A review run on your device counts on the pull request: any agent (Cursor, Codex, Claude Code, any MCP client), signed with your device key, read and verified by CI with no secret (#399) — in review
 
 ### Track G: graph and clarity
 - [x] G1 One visual vocabulary (colour, glyph, dash, words) with a guard test (#371)
