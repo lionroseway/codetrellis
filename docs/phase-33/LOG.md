@@ -20,7 +20,7 @@
 |---|---|
 | **Stage / step** | B6: pipelines |
 | **Status** | In review |
-| **In flight** | C9 building on `feat/phase-33-c9-signed-local-review`; B6 building on `feat/phase-33-b6-pipelines`; B7 building on `feat/phase-33-b7-docs`; Z1 building on `feat/phase-33-z1-docs` |
+| **In flight** | C9 building on `feat/phase-33-c9-signed-local-review`; B6 in review (#398) on `feat/phase-33-b6-pipelines`; B7 building on `feat/phase-33-b7-docs`; Z1 building on `feat/phase-33-z1-docs` |
 | **Last merged** | B5 (#397, `0fc20ba`) |
 | **Next action** | Merge B6 when CI is green, then C9 (signed local review), which is built; B7 (docs for the blocks) is being written |
 | **Blockers** | None |
@@ -109,7 +109,7 @@
 - [x] B3 Fuzzy matching: look-alike names and near-duplicates, by a deterministic similarity score with a threshold (#395)
 - [x] B4 Your own patterns: what counts as a call, or as any entry (queue:, event:, flag:), without code (#396)
 - [x] B5 Engine per rule: deterministic, fuzzy or agent, independent of strength; an agent rule blocks only when its owner says block (#397)
-- [ ] B6 Pipelines: stages in order or in parallel, needs and when, and later stages grounded by earlier results — building
+- [ ] B6 Pipelines: stages in order or in parallel, needs and when, and later stages grounded by earlier results (#398) — in review
 - [ ] B7 Docs for the blocks: a worked example each in rules.md, and pipeline recipes — building
 
 ### Stage Z: close
