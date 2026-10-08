@@ -20,7 +20,7 @@
 |---|---|
 | **Stage / step** | B7: docs for the blocks |
 | **Status** | In review |
-| **In flight** | B7 building on `feat/phase-33-b7-docs`; Z1 building on `feat/phase-33-z1-docs` |
+| **In flight** | B7 in review (#400) on `feat/phase-33-b7-docs`; Z1 building on `feat/phase-33-z1-docs` |
 | **Last merged** | C9 (#399, `748c05d`) |
 | **Next action** | Merge B7 when CI is green, then Z1 (docs), rebuilt on top of B7's rules.md |
 | **Blockers** | None |
@@ -110,7 +110,7 @@
 - [x] B4 Your own patterns: what counts as a call, or as any entry (queue:, event:, flag:), without code (#396)
 - [x] B5 Engine per rule: deterministic, fuzzy or agent, independent of strength; an agent rule blocks only when its owner says block (#397)
 - [x] B6 Pipelines: stages in order or in parallel, needs and when, and later stages grounded by earlier results (#398)
-- [ ] B7 Docs for the blocks: a worked example each in rules.md, and pipeline recipes — building
+- [ ] B7 Docs for the blocks: a worked example each in rules.md, and pipeline recipes (#400) — in review
 
 ### Stage Z: close
 - [ ] Z1 Docs: `docs/claude/rules.md`, CLI and MCP references, the change-control security rule — building
