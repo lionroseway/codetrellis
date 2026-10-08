@@ -20,7 +20,7 @@
 |---|---|
 | **Stage / step** | Z1: the docs |
 | **Status** | In review |
-| **In flight** | Z1 building on `feat/phase-33-z1-docs` |
+| **In flight** | Z1 in review (#401) on `feat/phase-33-z1-docs` |
 | **Last merged** | B7 (#400, `53fb62a`) |
 | **Next action** | Merge Z1 when CI is green; then Z2, the owner's phase review on a packaged build, and Z3, into main and release |
 | **Blockers** | None |
@@ -113,7 +113,7 @@
 - [x] B7 Docs for the blocks: a worked example each in rules.md, and pipeline recipes (#400)
 
 ### Stage Z: close
-- [ ] Z1 Docs: `docs/claude/rules.md`, CLI and MCP references, the change-control security rule — building
+- [ ] Z1 Docs: `docs/claude/rules.md`, CLI and MCP references, the change-control security rule (#401) — in review
 - [ ] Z2 Phase review on a packaged build
 - [ ] Z3 Into `main` and release
 
