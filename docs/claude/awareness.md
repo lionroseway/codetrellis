@@ -63,7 +63,13 @@ graph.
 - **Changed files**: git, from the merge base with main, plus uncommitted
   and untracked work. Each folder has one light chokidar watcher and a
   debounced recompute (`workstream-watch-service.ts`; the debounce is
-  `CODETRELLIS_WORKSTREAM_DEBOUNCE_MS` in tests).
+  `CODETRELLIS_WORKSTREAM_DEBOUNCE_MS` in tests). At most 16 active folders
+  are watched at once (`treesToWatch`). Folders with agents in them come
+  first, then the main checkout and the project opened. The rest are read
+  from git when asked, at most every 20 seconds. On a checkout with 50
+  active worktrees this took the backend's inotify watches from about
+  101,000 to 34,000 (Phase 33 follow-up; `CODETRELLIS_MAX_WATCHED_TREES`
+  changes it).
 - **Symbols**: only the changed files are parsed, current vs merge base,
   giving added / removed / modified (`workstream-symbols.ts`, A1.5).
 - **Signatures and exports**: TS/JS and Python (A2.1); Go, Rust, Java, C#,

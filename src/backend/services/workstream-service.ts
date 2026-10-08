@@ -238,9 +238,9 @@ async function listAll(projectRoot: string, fresh: boolean): Promise<Workstream[
   });
   const all = derived.map((w) => (cloneRoots.has(w.root) ? { ...w, shape: 'clone' as const } : w));
   // This listing is the discovery pass: watch what is active, and stop
-  // watching what went idle.
+  // watching what went idle, or what is past the most worth watching.
   syncWorkstreamWatchers(
-    all.filter((w) => !w.idle).map((w) => ({ folder: w.root, mainRef })),
+    treesToWatch(all, projectRoot).map((folder) => ({ folder, mainRef })),
     all.map((w) => w.root),
   ).catch(() => {});
 
@@ -251,6 +251,30 @@ async function listAll(projectRoot: string, fresh: boolean): Promise<Workstream[
   // The rest of the worktrees' symbols once this answer is ready, not while it is worked out.
   warmSymbols(`${main?.path ?? projectRoot}\0trees`, main?.path ?? projectRoot, later);
   return withIntents([...all, ...branches]);
+}
+
+/**
+ * At most this many working trees are watched at once. A watcher holds a
+ * handle per folder of its tree, and a checkout with fifty worktrees, each
+ * active against an old main, kept fifty of them busy: the backend served
+ * slowly for as long as it ran. The rest are read again when asked, from git,
+ * at most every 20 seconds (`UNWATCHED_TTL_MS`).
+ */
+export const MAX_WATCHED_TREES = 16;
+
+/**
+ * The active trees worth watching, most first: those with agents in them
+ * (more agents first), then the main checkout and the project opened, then
+ * the rest as listed. Idle trees are never watched. Pure.
+ */
+export function treesToWatch(all: ReadonlyArray<Pick<Workstream, 'root' | 'idle' | 'main' | 'agents'>>, projectRoot: string, max = Number(process.env.CODETRELLIS_MAX_WATCHED_TREES) || MAX_WATCHED_TREES): string[] {
+  const rank = (w: Pick<Workstream, 'root' | 'main' | 'agents'>) => (w.agents.length > 0 ? 2 + w.agents.length : w.main || w.root === projectRoot ? 1 : 0);
+  return all
+    .map((w, i) => ({ w, i }))
+    .filter(({ w }) => !w.idle)
+    .sort((a, b) => rank(b.w) - rank(a.w) || a.i - b.i)
+    .slice(0, max)
+    .map(({ w }) => w.root);
 }
 
 /** Where a line of work is checked out, and on which branch: all a section check needs. */
