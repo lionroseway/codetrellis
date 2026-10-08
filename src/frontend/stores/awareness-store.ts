@@ -18,6 +18,13 @@ interface AwarenessState {
   /** Each workstream's own commits, by root, for the Timeline lanes (B2.2). */
   commits: Record<string, WorkstreamCommit[]>;
   loaded: boolean;
+  /**
+   * The lines of work have been listed at least once for this project. The
+   * signals come first (they are kept, and answer at once); the listing asks
+   * git about every working tree and can take seconds on a checkout with many
+   * (Phase 33 follow-up), so it fills in when it lands.
+   */
+  workstreamsLoaded: boolean;
   /** Set when the last read failed; the lists keep what they had. */
   error: string | null;
   refresh: (root: string | null) => Promise<void>;
@@ -33,11 +40,12 @@ export const useAwarenessStore = create<AwarenessState>((set, get) => ({
   signals: [],
   commits: {},
   loaded: false,
+  workstreamsLoaded: false,
   error: null,
 
   refresh: async (root) => {
-    if (!root) { set({ root: null, workstreams: [], signals: [], commits: {}, loaded: false, error: null }); return; }
-    if (root !== get().root) { commitsReadAt = 0; commitsHeads = ''; set({ root, workstreams: [], signals: [], commits: {}, loaded: false, error: null }); }
+    if (!root) { set({ root: null, workstreams: [], signals: [], commits: {}, loaded: false, workstreamsLoaded: false, error: null }); return; }
+    if (root !== get().root) { commitsReadAt = 0; commitsHeads = ''; set({ root, workstreams: [], signals: [], commits: {}, loaded: false, workstreamsLoaded: false, error: null }); }
     // One read at a time (Phase 32 E1). Every file change in any worktree
     // broadcasts workstreams-changed, and each used to start three reads at
     // once, unbounded: the browser's six connections filled with commit
@@ -111,19 +119,27 @@ async function readOnce(root: string, set: (s: Partial<AwarenessState>) => void,
   const q = `project=${encodeURIComponent(root)}`;
   const editsAtStart = localEdits;
   try {
-    const [ws, aw] = await Promise.all([fetch(`/api/workstreams?${q}&idle=1`), fetch(`/api/awareness?${q}`)]);
-    if (!ws.ok || !aw.ok) throw new Error(`Server returned ${ws.ok ? aw.status : ws.status}`);
-    const workstreams = (await ws.json()) as Workstream[];
+    // Both asked at once; the signals are shown as soon as they answer, and
+    // the lines of work when the listing does.
+    const wsAsk = fetch(`/api/workstreams?${q}&idle=1`);
+    wsAsk.catch(() => undefined); // awaited below; not unhandled if the signals fail first
+    const aw = await fetch(`/api/awareness?${q}`);
+    if (!aw.ok) throw new Error(`Server returned ${aw.status}`);
     const body = (await aw.json()) as { signals?: AwarenessSignal[] };
     if (get().root !== root) return; // the project changed while this was in flight
-    const list = Array.isArray(workstreams) ? workstreams : [];
     if (localEdits !== editsAtStart) {
       // Read before a person's answer landed: its signals are older than what is shown.
-      set({ workstreams: list, loaded: true, error: null });
+      set({ loaded: true, error: null });
       again = again ?? root;
     } else {
-      set({ workstreams: list, signals: Array.isArray(body.signals) ? body.signals : [], loaded: true, error: null });
+      set({ signals: Array.isArray(body.signals) ? body.signals : [], loaded: true, error: null });
     }
+    const ws = await wsAsk;
+    if (!ws.ok) throw new Error(`Server returned ${ws.status}`);
+    const workstreams = (await ws.json()) as Workstream[];
+    if (get().root !== root) return;
+    const list = Array.isArray(workstreams) ? workstreams : [];
+    set({ workstreams: list, workstreamsLoaded: true });
     // Commits are extra: failing to read them never costs the rest, and
     // neither does reading them slowly; they land when they arrive. Read
     // when a workstream's head moved (a commit landed) or every
