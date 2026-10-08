@@ -231,6 +231,15 @@ codetrellis check --pipeline --base main --agent claude-code --auth env:KEY   # 
   them (`GET /api/pipeline`, `POST /api/pipeline/approve`).
 - **Exit codes:** 3 when a stage that is not advisory fails, and 1 when the
   base's pipeline cannot be read.
+- **In CI** (B7): [`docs/recipes/pipeline.sh`](../recipes/pipeline.sh) runs
+  it on any host, once, so an agent stage is paid for once.
+  `CODETRELLIS_STAGE` runs one stage. `CODETRELLIS_AUTH` signs the agent
+  stages in; when its secret is empty, as on a fork's pull request, they are
+  skipped and said. GitHub Actions and GitLab variants call it:
+  [`github-actions-pipeline.yml`](../recipes/github-actions-pipeline.yml),
+  [`gitlab-ci-pipeline.yml`](../recipes/gitlab-ci-pipeline.yml).
+- **Worked through,** with every other building block, in
+  [`rules.md`](rules.md), whose examples are each a test.
 
 ### Old breaches may only fall (Phase 33 C3)
 

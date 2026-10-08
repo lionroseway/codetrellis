@@ -184,6 +184,11 @@ export function reviewWords(r: Pick<AgentReview, 'outcome' | 'reason' | 'finding
   ].filter(Boolean).join(' · ') + dropped;
 }
 
+/** B5: the review in words, saying first how many of its findings block: "✗ 1 block · ⚠ 2 findings". */
+export function reviewBlockWords(r: Pick<AgentReview, 'outcome' | 'reason' | 'findings' | 'dropped'>, blocks: number): string {
+  return `${blocks > 0 ? `✗ ${blocks} block · ` : ''}${reviewWords(r)}`;
+}
+
 /** "✗ bug · src/api.ts:12–14: …" — one finding in a line. */
 export function agentFindingLine(f: AgentFinding): string {
   const where = f.path ? `${f.path}${f.start ? `:${f.start}${f.end && f.end !== f.start ? `–${f.end}` : ''}` : ''}` : 'the change';

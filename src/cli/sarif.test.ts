@@ -5,6 +5,7 @@ import path from 'node:path';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { importLine, toSarif } from './sarif';
+import { findingAt } from '../shared/lib/import-line';
 import type { Gate } from './conformity';
 
 const schema = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'tools', 'sarif', 'sarif-schema-2.1.0.json'), 'utf8'));
@@ -69,4 +70,10 @@ test('the import line is found across languages, and not in a comment or a strin
   assert.equal(importLine('package main\n\nimport (\n  "fmt"\n)\nimport "example.com/ledger"\n', 'internal/ledger/ledger.go'), 6);
   assert.equal(importLine('const s = "client";\n', 'db/client.ts'), null);
   assert.equal(importLine("const c = require('./db/client');\n", 'db/client.js'), 1);
+  // B7: two calls to one host are two lines; the extractor's line tells them apart, the text cannot.
+  const two = "fetch('https://api.stripe.com/v1/charges');\nstripe.refunds.create({ charge: id });\n";
+  assert.equal(importLine(two, 'http:api.stripe.com/v1/refunds'), 1);
+  assert.equal(findingAt(two, 'http:api.stripe.com/v1/refunds', 2), 2);
+  assert.equal(findingAt(two, 'http:api.stripe.com/v1/refunds', 9), 1, 'a line the text does not have is not believed');
+  assert.equal(findingAt(two, 'http:api.stripe.com/v1/refunds', undefined), 1);
 });

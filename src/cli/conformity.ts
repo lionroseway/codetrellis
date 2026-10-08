@@ -14,7 +14,7 @@
 
 import type { Agent } from './agent';
 import { renderMarkdown, renderText, type CheckResult, type CheckedRule, type RuleFinding, type RulebookFinding } from '../shared/lib/check-words';
-import { importLine } from './sarif';
+import { findingAt } from '../shared/lib/import-line';
 
 // The work's changed files, since its base: one implementation, the backend's,
 // so the Checks view (G9) and the pipeline check the same files.
@@ -107,9 +107,8 @@ export function gateMarkdown(g: Gate, read?: (rel: string) => string | null): st
 export function withPlaces(g: Gate, read?: (rel: string) => string | null): CheckResult {
   const rules = (g.rules as RuleFinding[]).map((r) => {
     const text = read ? read(r.path) : null;
-    // B4: where the text names it, else where the extractor found it (a pattern's entry is not in the text).
-    const found = (r as { line_found?: number }).line_found ?? null;
-    const line = (text === null ? null : importLine(text, r.imports)) ?? (text !== null && found ? found : null);
+    // B7: where the extractor found it, else where the text names it (a pattern's entry is not in the text).
+    const line = text === null ? null : findingAt(text, r.imports, (r as { line_found?: number }).line_found);
     return { ...r, line, text: line ? text!.split('\n')[line - 1] : null };
   });
   return { ...g, rules, rulebook: g.rulebook as RulebookFinding[] };

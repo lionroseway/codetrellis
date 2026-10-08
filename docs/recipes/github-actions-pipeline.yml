@@ -1,0 +1,32 @@
+# CodeTrellis's pipeline in GitHub Actions (Phase 33 B7). Copy into
+# .github/workflows/. pipeline.sh does the work: the stages in the base's
+# .codetrellis/pipeline.yaml, in order and beside each other as it says.
+#
+# An agent stage reviews on your own key. A pull request from a fork gets no
+# secrets, so there the agent stages are skipped and their rules are guides;
+# the deterministic and fuzzy stages run either way.
+name: codetrellis-pipeline
+on: pull_request
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the merge base, and the base's rules and pipeline
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - name: Pipeline
+        env:
+          CODETRELLIS_BASE: ${{ github.base_ref }}
+          # Drop these two for deterministic and fuzzy stages only.
+          CODETRELLIS_AUTH: env:ANTHROPIC_API_KEY
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # A job per stage instead: one job each with CODETRELLIS_STAGE set,
+          # and the pipeline's `needs` said again as the jobs' `needs:`.
+          # CODETRELLIS_STAGE: fast
+        run: sh docs/recipes/pipeline.sh # or a copy of it in your repository
+

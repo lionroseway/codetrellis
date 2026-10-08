@@ -28,6 +28,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { flag, type Parsed } from './args';
 import { toSarif, ruleFileIn } from './sarif';
+import { findingWords, type ReviewFinding } from './review-output';
 import { BASELINE_FILE, baselineYaml, readBaseline, type Baseline } from '../backend/services/rule-baseline';
 import { writeFileWithin } from '../backend/services/confined-fs';
 import { version as CLI_VERSION } from '../../package.json';
@@ -302,11 +303,11 @@ async function pipelined(ctx: Ctx, root: string, changed: ReturnType<typeof chan
     review = async (stage, scope, grounding) => {
       // An agent stage fails on what a block-strength agent rule's finding holds (B5), and its output is read, not shown raw.
       const r = await runReview(ctx.agent, { ...o, scope: { suite: scope.suite, rule: scope.rule, path: scope.path, engine: scope.engine, strength: scope.strength }, stage: stage.id, grounding, format: 'json', failOn: new Set(['block']), post: null }, ctx.cwd, process.env, sinkFor, { version: CLI_VERSION });
-      let j: { passes?: Array<{ says: string; failing: boolean; kept: Array<{ path: string | null; says: string; rule: string | null }> }>; says?: string; error?: string };
+      let j: { passes?: Array<{ says: string; failing: boolean; kept: ReviewFinding[] }>; says?: string; error?: string };
       try { j = JSON.parse(r.out); } catch { return { error: r.out }; }
       if (j.error) return { error: j.error };
       const findings: StageFinding[] = (j.passes ?? []).flatMap((pass) => pass.kept.filter((k) => k.path).map((k) => ({ stage: stage.id, path: k.path!, says: k.says, rule: k.rule })));
-      return { ok: r.code === 0, out: j.says ?? (j.passes ?? []).map((pass) => `review: ${pass.says}`).join('\n'), findings };
+      return { ok: r.code === 0, out: j.says ?? (j.passes ?? []).flatMap((pass) => [`review: ${pass.says}`, ...pass.kept.map((k) => `  ${findingWords(k)}`)]).join('\n'), findings };
     };
   }
   const result = await runPipeline(got.pipeline, { gate: (scope) => gate(ctx.agent, root, changed, strict, scope), review }, flag(ctx.p, 'stage'));

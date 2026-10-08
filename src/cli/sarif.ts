@@ -19,7 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Gate } from './conformity';
 import { findingLine } from '../shared/lib/check-words';
-import { importLine } from '../shared/lib/import-line';
+import { findingAt, importLine } from '../shared/lib/import-line';
 
 export { importLine };
 
@@ -92,7 +92,7 @@ export function toSarif(
       ruleId: `rule/${id}`, level,
       // C8: the finding's own line, as every surface says it, and what to do after →.
       message: { text: `${findingLine({ path: file, imports, words: str(r.words) ?? id, because: str(r.because) ?? '' })}${str(r.fix) ? ` → ${str(r.fix)}` : ''}` },
-      locations: [at(file, text === null ? null : importLine(text, imports) ?? ((r as { line_found?: number }).line_found ?? null))],
+      locations: [at(file, text === null ? null : findingAt(text, imports, (r as { line_found?: number }).line_found))],
       partialFingerprints: { 'codetrellis/import': `${id}:${file}>${imports}` },
     });
   }

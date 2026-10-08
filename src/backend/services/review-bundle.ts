@@ -238,7 +238,7 @@ export function recordReview(input: {
   /** C5: findings a second pass refuted, each with why; kept as dropped. */
   refuted?: Array<{ says: string; why: string }>;
   verify?: string | null;
-}): { error: string } | { run: string; review: AgentReview; proposed: RuleProposal[]; signed: Attested } {
+}): { error: string } | { run: string; review: AgentReview; blocks: number; proposed: RuleProposal[]; signed: Attested } {
   const bundle = keptBundle(input.report.bundle);
   if (!bundle) return { error: `No bundle ${input.report.bundle} is kept here (bundles are kept for an hour): ask for the bundle again and review that.` };
   const { kept: findings, dropped } = input.error ? { kept: [], dropped: [] } : verifyFindings(bundle.diff, bundle.rules, input.report.findings ?? []);
@@ -262,5 +262,5 @@ export function recordReview(input: {
   const proposed = graduate(bundle.root, run, review, input.by);
   // C9: signed on this device, as a git note on the commit it reviewed, for CI to verify.
   const signed = attestReview(bundle.root, { head: bundle.head, base: bundle.since, files: bundle.files, agent: input.agent, review, scope: bundle.scope }, { writer: writerId(), name: writerName(bundle.root) });
-  return { run, review, proposed, signed };
+  return { run, review, blocks, proposed, signed };
 }

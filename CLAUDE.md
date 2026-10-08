@@ -29,6 +29,7 @@ Deep-dive docs live in `docs/claude/`:
 - [`docs/claude/mcp-tools.md`](docs/claude/mcp-tools.md) — the 18 MCP tool categories grouped by domain.
 - [`docs/claude/awareness.md`](docs/claude/awareness.md) — parallel awareness: workstreams, footprints, signals, the digest, notices, and the Claude Code skill and hook.
 - [`docs/claude/cli.md`](docs/claude/cli.md) — the `codetrellis` CLI in sessions and pipelines: `start`/`stop`, the SessionStart hook and CI recipes in `docs/recipes/`, the conformity gate and its exit codes.
+- [`docs/claude/rules.md`](docs/claude/rules.md) — the rules' building blocks (matchers, grep, fuzzy, your own patterns, agent rules, pipelines), a worked example each; every example is a test (`tests/e2e/rules-docs.test.ts`).
 - [`docs/claude/record.md`](docs/claude/record.md) — the record and its evidence: the hash chain, retention, signed packs and the evidence export, verifying months later, and what it does not prove.
 
 The team's design docs (vision, UX, plans) live alongside these at the

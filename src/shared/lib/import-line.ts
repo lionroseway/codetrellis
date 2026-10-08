@@ -44,6 +44,17 @@ export function importLine(text: string, target: string): number | null {
   return null;
 }
 
+/**
+ * Where a gate's finding is (Phase 33 B7): the line its extractor found it
+ * on, when the gate says and the text has that line, else the line that names
+ * it. Two calls to one host are two lines, which the text alone cannot tell
+ * apart: an SDK call a pattern found (B4) was put on the `fetch` above it.
+ */
+export function findingAt(text: string, target: string, found: number | null | undefined): number | null {
+  if (found && Number.isInteger(found) && found >= 1 && found <= text.split('\n').length) return found;
+  return importLine(text, target);
+}
+
 /** The first line naming the call: an HTTP host (else the path's first named segment), or a SQL table after a keyword. */
 function callLine(text: string, protocol: string, rest: string): number | null {
   const lines = text.split('\n');

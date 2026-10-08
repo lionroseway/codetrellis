@@ -28,7 +28,7 @@ import { holdsProject } from '../../services/replay-frames';
 import { importersOf, type Importer } from '../../services/importers';
 import { enforceEdit, editView } from '../../services/code-breakpoints';
 import { recordReview, reviewBundle } from '../../services/review-bundle';
-import { reviewWords } from '../../../shared/lib/agent-review';
+import { reviewBlockWords } from '../../../shared/lib/agent-review';
 import { checkTheChange } from '../../services/change-check';
 import { listCheckRuns } from '../../services/check-runs';
 import { authorFromExtra } from '../helpers';
@@ -467,9 +467,9 @@ export function register(server: McpServer, deps: ToolDeps): void {
       if (r.proposed.length) deps.broadcast?.('rules-changed', { project: r.proposed[0].projectRoot });
       const proposed = r.proposed.map((p) => ({ proposal: p.uid, rule: p.ruleId, words: p.words }));
       return {
-        _meta: { summary: `Review kept: ${reviewWords(r.review)}${proposed.length ? `; proposed ${proposed.map((p) => p.rule).join(', ')}` : ''}` },
+        _meta: { summary: `Review kept: ${reviewBlockWords(r.review, r.blocks)}${proposed.length ? `; proposed ${proposed.map((p) => p.rule).join(', ')}` : ''}` },
         content: [{ type: 'text' as const, text: JSON.stringify({
-          run: r.run, outcome: r.review.outcome, reason: r.review.reason, says: reviewWords(r.review), kept: r.review.findings, dropped: r.review.dropped,
+          run: r.run, outcome: r.review.outcome, reason: r.review.reason, says: reviewBlockWords(r.review, r.blocks), kept: r.review.findings, dropped: r.review.dropped,
           // C6: a topic found in two reviews, proposed as a guide; a person decides.
           ...(proposed.length ? { proposed } : {}),
           // C9: signed on this device as a git note on the commit, or why not.

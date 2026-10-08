@@ -1,0 +1,15 @@
+# CodeTrellis's pipeline in GitLab CI (Phase 33 B7): add to .gitlab-ci.yml.
+# pipeline.sh does the work: the stages in the base's
+# .codetrellis/pipeline.yaml, in order and beside each other as it says.
+# Set ANTHROPIC_API_KEY as a masked CI/CD variable for the agent stages;
+# without it they are skipped and their rules are guides.
+codetrellis-pipeline:
+  image: node:26
+  stage: test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    GIT_DEPTH: "0"            # the merge base, and the base's rules and pipeline
+    CODETRELLIS_AUTH: env:ANTHROPIC_API_KEY   # drop for deterministic and fuzzy stages only
+  script:
+    - sh docs/recipes/pipeline.sh   # or a copy of it in your repository
