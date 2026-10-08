@@ -18,7 +18,7 @@
 now:
   step: "Follow-ups after Z1"
   status: "In review"
-  next: "Merge the workstreams fix when CI is green; then the Allotment resize throw, subprocess and env callsites, and pairing a team’s own call kinds. Z2 and Z3 are the owner’s"
+  next: "Merge the Allotment fix when CI is green; then call rules for commands and environment variables (built, being checked), and pairing a team’s own call kinds. Z2 and Z3 are the owner’s"
   blockers: "None"
   updated: 2026-10-08
 sections:
@@ -79,6 +79,9 @@ sections:
           - 387
       - title: "The plan-panel and inspector Allotment resize throws on load (minimumSize of undefined), caught and logged since Phase 31"
         followUp: true
+        status: done
+        prs:
+          - 406
       - title: "C5 is not yet seen reviewing on this repo: it has no CLAUDE_CODE_OAUTH_TOKEN secret, so codetrellis-review.yml and claude-review.yml review nothing. Deferred by the owner (2026-10-07): a public repo's PRs can read its secrets, so agent review here waits; deterministic rules (R10) come first"
         followUp: true
       - title: "Path patterns: should `**/` match no folder too (`src/backend/**/*.ts` misses `src/backend/server.ts`)? Widening only and except loosens existing rules, so the owner decides"

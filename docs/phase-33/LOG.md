@@ -20,13 +20,13 @@
 |---|---|
 | **Stage / step** | Follow-ups after Z1 |
 | **Status** | In review |
-| **In flight** | #405 in review on `feat/phase-33-fu-workstreams-once` |
+| **In flight** | #406 in review on `feat/phase-33-fu-allotment-resize` |
 | **Last merged** | Z1 (#401, #402, `d293a94`) |
-| **Next action** | Merge the workstreams fix when CI is green; then the Allotment resize throw, subprocess and env callsites, and pairing a team’s own call kinds. Z2 and Z3 are the owner’s |
+| **Next action** | Merge the Allotment fix when CI is green; then call rules for commands and environment variables (built, being checked), and pairing a team’s own call kinds. Z2 and Z3 are the owner’s |
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `60fdaac`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `a7490b9`, with open PRs from GitHub.
 
 ---
 
@@ -46,7 +46,7 @@
 - [x] Follow-up: Rebalance the browser shards: chromium 2/3 runs 185 tests in about 25 minutes, the others about 7 (#367)
 - [x] Follow-up: Four browser specs fail in a local clone with many fetched branches and pass in CI (evolution, play-forward, navigate_to Awareness, signal-to-lines): find why (#405)
 - [x] Follow-up: rules-overlay.spec drew no edges in CI: React Flow held every node measured and none with handle positions, and nothing measured them again; the canvas now does (`RemeasureHandles`) (#387)
-- [ ] Follow-up: The plan-panel and inspector Allotment resize throws on load (minimumSize of undefined), caught and logged since Phase 31
+- [x] Follow-up: The plan-panel and inspector Allotment resize throws on load (minimumSize of undefined), caught and logged since Phase 31 (#406)
 - [ ] Follow-up: C5 is not yet seen reviewing on this repo: it has no CLAUDE_CODE_OAUTH_TOKEN secret, so codetrellis-review.yml and claude-review.yml review nothing. Deferred by the owner (2026-10-07): a public repo's PRs can read its secrets, so agent review here waits; deterministic rules (R10) come first
 - [ ] Follow-up: Path patterns: should `**/` match no folder too (`src/backend/**/*.ts` misses `src/backend/server.ts`)? Widening only and except loosens existing rules, so the owner decides
 - [ ] Follow-up: Cross-system map: pair a team's own kinds (a queue's publishers with its consumers)
@@ -222,6 +222,24 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-08 — Follow-ups: #405 merged; the panes are never resized on load
+
+- **The workstreams fix merged** (#405).
+- **The Allotment resize no longer throws on load.** Since Phase 31 every
+  load logged "[App] plan panel resize failed" and "[App] inspector resize
+  failed": `Cannot read properties of undefined (reading 'minimumSize')`.
+  - **The cause:** each effect skipped its first run with a "mounted" ref,
+    but StrictMode (development and the browser suite) runs an effect twice
+    on mount and keeps the ref. The second run resized while Allotment was
+    still putting its panes back. A packaged build never runs effects twice,
+    so users did not see it; it filled every browser run's console.
+  - **The fix:** the effects now resize only when what they follow changes,
+    against a ref of its last value.
+  - **The test:** `e2e/graph/pane-resize.spec.ts` failed on the old code
+    with both warnings on load, and passes. Nothing is logged on load, and
+    expanding and collapsing the plan panel still resizes it. The full
+    screen and layout specs pass beside it.
 
 ### 2026-10-08 — Follow-ups: C4b ticked; workstream listings answer on a checkout with many worktrees
 
