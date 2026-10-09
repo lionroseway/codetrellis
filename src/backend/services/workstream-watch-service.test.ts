@@ -42,6 +42,22 @@ const write = (dir: string, rel: string, body = 'x\n') => {
 const summary = (files: { path: string; status: string; from?: string }[]) =>
   files.map((f) => (f.from ? `${f.status} ${f.from} -> ${f.path}` : `${f.status} ${f.path}`));
 const settle = (ms = 600) => new Promise((r) => setTimeout(r, ms));
+/**
+ * Waited for, not slept on: on a loaded machine (the unit suite beside a
+ * browser run) the watcher's start and the git read after an edit took
+ * longer than a fixed 300-600 ms, and a test failed now and then. What must
+ * happen is polled for, up to 15 s; what must not is still given a fixed time.
+ */
+const until = async (ok: () => boolean | Promise<boolean>, ms = 15_000): Promise<boolean> => {
+  const end = Date.now() + ms;
+  while (!(await ok())) {
+    if (Date.now() > end) return false;
+    await settle(50);
+  }
+  return true;
+};
+/** Resolves once `folder`'s watcher is listening; set it before the sync that starts it. */
+const listening = (folder: string) => new Promise<void>((resolve) => setWorkstreamWatchStartedListener((f) => { if (f === folder) resolve(); }));
 
 before(() => {
   tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ct-ws-watch-')));
@@ -52,7 +68,8 @@ before(() => {
   write(main, 'src/session.ts', 'export const a = 1;\n');
   write(main, 'src/billing.ts', 'export const b = 1;\n');
   write(main, 'README.md', '# app\n');
-  write(main, '.gitignore', 'dist/\n');
+  // As a real repository does: what the watcher skips, git ignores too.
+  write(main, '.gitignore', 'dist/\nnode_modules/\n');
   git(main, 'add', '-A');
   git(main, 'commit', '-q', '-m', 'init');
   git(main, 'worktree', 'add', '-q', tree, '-b', 'auth-refresh');
@@ -61,6 +78,7 @@ before(() => {
 afterEach(async () => {
   await stopWorkstreamWatchers();
   setWorkstreamChangesListener(() => {});
+  setWorkstreamWatchStartedListener(() => {});
 });
 
 after(() => {
@@ -160,13 +178,13 @@ describe('watching', () => {
   test('a watched folder reports a new change after the debounce', async () => {
     const heard: Array<{ folder: string; files: string[] }> = [];
     setWorkstreamChangesListener((folder, c) => heard.push({ folder, files: c.files.map((f) => f.path) }));
+    const ready = listening(tree);
     await syncWorkstreamWatchers([{ folder: tree, mainRef: 'main' }]);
     assert.deepEqual(watchedWorkstreamFolders(), [tree]);
-    await settle(300); // let the watcher finish its initial scan
+    await ready; // the watcher has finished its initial scan
 
     write(tree, 'src/new-feature.ts');
-    await settle();
-    assert.ok(heard.length >= 1, 'the listener was told');
+    assert.ok(await until(() => heard.some((h) => h.files.includes('src/new-feature.ts'))), 'the listener was told');
     assert.equal(heard.at(-1)!.folder, tree);
     assert.ok(heard.at(-1)!.files.includes('src/new-feature.ts'));
     // And the answer is served from the watcher without asking git again.
@@ -176,17 +194,17 @@ describe('watching', () => {
   test('editing a file that is already changed tells the listener again, though the list is the same (bug 54)', async () => {
     const heard: string[][] = [];
     setWorkstreamChangesListener((_f, c) => heard.push(c.files.map((f) => f.path)));
+    const ready = listening(tree);
     await syncWorkstreamWatchers([{ folder: tree, mainRef: 'main' }]);
-    await settle(300);
+    await ready;
     write(tree, 'src/already.ts');
-    await settle();
+    assert.ok(await until(() => heard.some((h) => h.includes('src/already.ts'))));
+    await settle(); // its debounce over: an edit now is a second change, not part of the first
     const before = heard.length;
-    assert.ok(before >= 1);
     // Same file, edited again: the list of changed files does not move, but
     // its symbols and signature can, and signals follow them.
     fs.writeFileSync(path.join(tree, 'src/already.ts'), 'export function f(a: number, b: number) { return a + b; }\n');
-    await settle();
-    assert.ok(heard.length > before, 'told again');
+    assert.ok(await until(() => heard.length > before), 'told again');
     assert.deepEqual(heard.at(-1), heard[before - 1]);
     fs.rmSync(path.join(tree, 'src/already.ts'));
   });
@@ -221,7 +239,7 @@ describe('watching', () => {
       // no change is ever reported for it: the start is what says to look.
       write(tree, 'src/before-watching.ts');
       await syncWorkstreamWatchers([{ folder: tree, mainRef: 'main' }]);
-      await settle(300);
+      assert.ok(await until(() => started.length > 0));
       assert.deepEqual(started, [tree]);
       await syncWorkstreamWatchers([{ folder: tree, mainRef: 'main' }]);
       await settle(300);
@@ -235,8 +253,9 @@ describe('watching', () => {
   test('changes inside ignored folders do not wake it', async () => {
     let calls = 0;
     setWorkstreamChangesListener(() => { calls++; });
+    const ready = listening(tree);
     await syncWorkstreamWatchers([{ folder: tree, mainRef: 'main' }]);
-    await settle(300);
+    await ready;
     write(tree, 'node_modules/pkg/index.js');
     write(tree, 'dist/other.js');
     await settle();
@@ -264,8 +283,7 @@ describe('watching', () => {
     await settle(300);
     assert.equal(heard.length, 0, 'nothing watches the main checkout itself');
     nudgeWorkstream(main);
-    await settle();
-    assert.ok(heard.at(-1)?.includes('NOTES.md'), 'the nudge recomputes it');
+    assert.ok(await until(() => heard.at(-1)?.includes('NOTES.md') === true), 'the nudge recomputes it');
     fs.rmSync(path.join(main, 'NOTES.md'));
   });
 });
