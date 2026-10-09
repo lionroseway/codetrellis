@@ -70,8 +70,8 @@ import { listFolderRequests, takeFolderRequest, dismissFolderRequest, rememberDi
 import { captureSnapshot, setBaseline, computeDiff, getBaseline, baselineLabel, restoreBaseline, setBaselineStore } from './services/diff-engine';
 import { sqliteBaselineStore } from './services/baseline-store';
 import { startMcpServer, getMcpStatus, getMcpConfig, getMcpSetup } from './mcp/server';
-import { listWorktrees, listWorktreesWithPlans, createWorktree, WorktreeError } from './services/worktree-service';
-import { checkoutGitDir, currentBranch, hasCommits, localBranches } from './services/git-checkout';
+import { listWorktrees, listWorktreesWithPlans, createWorktree, describeWorktrees, WorktreeError } from './services/worktree-service';
+import { checkoutGitDir, currentBranch, hasCommits, localBranches, withoutNestedCheckouts } from './services/git-checkout';
 import { startAutoSave, saveNow } from './services/persistence';
 import { exportDatabase } from './services/database';
 import { approvePipeline, pipelineView } from './services/pipeline-approvals';
@@ -992,9 +992,9 @@ app.get('/api/git/info', (req, res) => {
 
   if (!checkoutGitDir(projectPath)) { res.json({ branches: [], worktrees: [], status: null }); return; }
 
-  const worktrees = listWorktrees(projectPath)
-    .filter((w) => !w.isCurrent && !w.bare)
-    .map((w) => ({ path: w.path, branch: w.branch }));
+  // Wherever git made them: inside the checkout, beside it, in a tool's
+  // own folder under home. Each says where, so the popover can show it.
+  const worktrees = describeWorktrees(listWorktrees(projectPath), projectPath, os.homedir());
 
   res.json({
     currentBranch: currentBranch(projectPath),
@@ -7223,7 +7223,8 @@ export function getGitWorkingTreeStatus(projectPath: string): {
     return {
       staged: [...staged],
       unstaged: [...unstaged],
-      untracked: [...untracked],
+      // A worktree inside the project is another checkout, not a new file.
+      untracked: withoutNestedCheckouts(projectPath, [...untracked], (p) => p),
       stagedAdded: [...stagedAdded],
       stagedModified: [...stagedModified],
       stagedDeleted: [...stagedDeleted],

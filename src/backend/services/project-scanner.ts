@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ignore, { type Ignore } from 'ignore';
 import type { FileTreeNode } from '../../shared/types';
+import { isLinkedWorktreeDir } from './git-checkout';
 
 // Always-ignored directory names. Only used as a SAFETY FLOOR — any heavy
 // non-source dir that's commonly missing from .gitignore lives here. The
@@ -172,6 +173,7 @@ export function scanDirectory(
     if (isIgnoredByPatterns(fullPath, entry.isDirectory(), childCtx)) continue;
 
     if (entry.isDirectory()) {
+      if (isLinkedWorktreeDir(fullPath)) continue;
       const children = scanDirectory(fullPath, childCtx, maxDepth - 1);
       if (children.length === 0) continue;
 

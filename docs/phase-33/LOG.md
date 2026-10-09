@@ -56,7 +56,7 @@
 - [x] Follow-up: A long plan name was cut off in the plan header (the owner's report); long headings in documents ran off the edge (#416)
 - [x] Follow-up: The workstream watcher's unit tests slept a fixed time and failed under load (#417)
 - [x] Follow-up: The open page's name was cut at 260px above its document (the owner's report); the plan name back to one line, at least 7rem, whole on hover (#419)
-- [ ] Follow-up: The branch popover ran off the window with sixty branches, did not scroll or search, and hid the worktrees below them (the owner's report, 0.1.17)
+- [ ] Follow-up: The branch popover ran off the window with sixty branches, did not scroll or search, and hid the worktrees below them; each worktree now says where it is, and one inside the project is no longer scanned as part of it (the owner's report, 0.1.17)
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
@@ -229,7 +229,7 @@ The suite was green at the start, so the three failures were ours:
 
 ## Entries
 
-### 2026-10-09 — The branch popover fits the window and finds worktrees
+### 2026-10-09 — The branch popover fits the window and finds every worktree
 
 - **The owner's report, on 0.1.17:** in a repository with sixty-odd
   branches, the branch chip's popover ran off the bottom of the window. It
@@ -242,9 +242,30 @@ The suite was green at the start, so the three failures were ours:
   - The worktrees come first.
   - A box at the top, focused on open, narrows branches and worktrees.
     Escape clears it, then closes the popover.
-- **Test:** `e2e/git/branch-popover-many.spec.ts` (serial) builds 80 branches
-  and three worktrees under `.claude/worktrees/`. It fails on the old
-  popover, which was 2290px tall in a 720px window.
+- **Wherever the worktrees are** (the owner's follow-up: Claude puts them in
+  its own folder, or a level up):
+  - `git worktree list` finds them all, wherever they are.
+  - Each now says where it is: `.claude/worktrees/x` inside the checkout,
+    `../x` beside it, `~/…` under home, or the whole path. The main checkout
+    comes first.
+  - One whose folder is gone shows as missing, and it cannot be clicked.
+- **A worktree inside the project is no longer part of it.**
+  - The scan read `.claude/worktrees/*` as the main checkout's own code.
+  - `git status` lists each one as one untracked folder, and the Explorer,
+    the graph and Changes showed it as a new file.
+  - Both skip a folder whose `.git` names `…/worktrees/<name>`. A submodule
+    (`…/modules/<name>`) is still scanned.
+- **Tests:**
+  - `e2e/git/branch-popover-many.spec.ts` (serial) builds 80 branches and
+    six worktrees: three under `.claude/worktrees/`, one beside, one
+    further off, one deleted. It fails on the old popover, which was 2290px
+    tall in a 720px window.
+  - `worktree-where.test.ts` covers the places, the order, the scan and the
+    status filter against real git.
+- **CI's serial run** found `nodes-stay-drawn` reading one graph node where
+  it needs two. `reachableNodes` returned at the first sample with one node
+  settled; it now takes the number the caller needs. The four specs that
+  need two pass it.
 
 ### 2026-10-09 — The open page's name shows in full; the plan name back to one line
 

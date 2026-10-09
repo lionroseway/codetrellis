@@ -115,7 +115,16 @@ function BranchPopover({ projectPath }: { projectPath: string }) {
   const [gitInfo, setGitInfo] = useState<{
     currentBranch: string | null;
     branches: string[];
-    worktrees: Array<{ path: string; branch: string | null }>;
+    // Main checkout first, then inside it, beside it, under home,
+    // elsewhere; a worktree whose folder is gone last (worktree-service).
+    worktrees: Array<{
+      path: string;
+      branch: string | null;
+      isMain?: boolean;
+      prunable?: boolean;
+      where?: 'main' | 'inside' | 'beside' | 'home' | 'elsewhere';
+      label?: string;
+    }>;
     hasCommits: boolean;
   } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -166,7 +175,7 @@ function BranchPopover({ projectPath }: { projectPath: string }) {
   // window, worktrees come first, and the box at the top narrows both.
   const q = query.trim().toLowerCase();
   const matches = (s: string | null | undefined) => !q || (s ?? '').toLowerCase().includes(q);
-  const worktrees = gitInfo?.worktrees.filter((wt) => matches(wt.branch) || matches(wt.path)) ?? [];
+  const worktrees = gitInfo?.worktrees.filter((wt) => matches(wt.branch) || matches(wt.path) || matches(wt.label)) ?? [];
   const showCurrent = !!gitInfo?.currentBranch && matches(gitInfo.currentBranch);
   const branches = gitInfo?.branches.filter((b) => b !== gitInfo.currentBranch && matches(b)) ?? [];
   const otherBranchCount = gitInfo?.branches.filter((b) => b !== gitInfo.currentBranch).length ?? 0;
@@ -234,22 +243,50 @@ function BranchPopover({ projectPath }: { projectPath: string }) {
                 <div className="text-[9px] text-foreground-subtle px-1 mb-0.5 leading-snug">
                   Click a worktree to open it in a tab.
                 </div>
-                {worktrees.map((wt) => (
-                  <button
-                    key={wt.path}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setOpen(false);
-                      // Open as a tab, or switch to it if it already is one.
-                      void openWorktreeTab(wt.path, wt.branch);
-                    }}
-                    className="w-full flex items-center gap-1.5 px-2 py-1 text-[11px] text-foreground-muted hover:text-foreground hover:bg-surface-hover rounded transition-colors text-left"
-                    title={wt.path}
-                  >
-                    <FolderOpen size={10} className="shrink-0" />
-                    <span className="truncate">{wt.branch || wt.path.split('/').pop()}</span>
-                  </button>
-                ))}
+                {worktrees.map((wt) => {
+                  const name = wt.branch || wt.path.split(/[\\/]/).pop();
+                  // Where it is, as a person would look for it: inside the
+                  // checkout, `../` beside it, `~/` under home, or the path.
+                  const where = wt.label ?? wt.path;
+                  if (wt.prunable) {
+                    return (
+                      <div
+                        key={wt.path}
+                        data-testid="branch-popover-worktree-missing"
+                        className="w-full flex items-start gap-1.5 px-2 py-1 text-[11px] text-foreground-subtle rounded"
+                        title={`${wt.path} is gone. \`git worktree prune\` removes it from git's list.`}
+                      >
+                        <AlertCircle size={10} className="shrink-0 mt-[3px] text-warning" />
+                        <span className="min-w-0 flex flex-col">
+                          <span className="truncate line-through">{name}</span>
+                          <span className="truncate font-mono text-[9px]">folder missing · {where}</span>
+                        </span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <button
+                      key={wt.path}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpen(false);
+                        // Open as a tab, or switch to it if it already is one.
+                        void openWorktreeTab(wt.path, wt.branch);
+                      }}
+                      className="w-full flex items-start gap-1.5 px-2 py-1 text-[11px] text-foreground-muted hover:text-foreground hover:bg-surface-hover rounded transition-colors text-left"
+                      title={wt.path}
+                    >
+                      <FolderOpen size={10} className="shrink-0 mt-[3px]" />
+                      <span className="min-w-0 flex-1 flex flex-col">
+                        <span className="flex items-center gap-1 min-w-0">
+                          <span className="truncate">{name}</span>
+                          {wt.isMain && <span className="shrink-0 text-[8px] text-accent">main checkout</span>}
+                        </span>
+                        <span className="truncate font-mono text-[9px] text-foreground-subtle" data-testid="branch-popover-worktree-where">{where}</span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
 
