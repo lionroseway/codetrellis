@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Z2 Phase review |
-| **Status** | Every step and follow-up of Phase 33 is merged into feat/phase-33, and the whole suite passed on the combined tip. The open page's name now shows in full above its document, and the plan name is back to one line (#419). What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3). |
-| **In flight** | nothing open |
+| **Status** | Every step and follow-up of Phase 33 is merged into feat/phase-33, and the whole suite passed on the combined tip. The branch popover now fits the window, finds what you type and shows the worktrees first (#420, in review). What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3). |
+| **In flight** | #420 in review on `feat/phase-33-fu-branch-popover` |
 | **Last merged** | Z1 (#401, #402, `d293a94`) |
 | **Next action** | The owner walks the outcomes in RULES-AND-CLARITY.md on a packaged build; anything short becomes a step or a follow-up. Then Z3: bring main in, run everything, verify a packaged build, follow docs/releases/RUNBOOK.md. |
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `60ed3ac`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `0d04426`, with open PRs from GitHub.
 
 ---
 
@@ -56,6 +56,7 @@
 - [x] Follow-up: A long plan name was cut off in the plan header (the owner's report); long headings in documents ran off the edge (#416)
 - [x] Follow-up: The workstream watcher's unit tests slept a fixed time and failed under load (#417)
 - [x] Follow-up: The open page's name was cut at 260px above its document (the owner's report); the plan name back to one line, at least 7rem, whole on hover (#419)
+- [ ] Follow-up: The branch popover ran off the window with sixty branches, did not scroll or search, and hid the worktrees below them (the owner's report, 0.1.17)
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
@@ -227,6 +228,23 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-09 — The branch popover fits the window and finds worktrees
+
+- **The owner's report, on 0.1.17:** in a repository with sixty-odd
+  branches, the branch chip's popover ran off the bottom of the window. It
+  did not scroll, nothing could be typed, and no worktrees showed.
+- **The worktrees were detected.** `/api/git/info` lists them. The popover
+  drew them after every branch, below the bottom of the screen, and the
+  popover had no height of its own. Unchanged on `feat/phase-33`.
+- **Fixed in #420:**
+  - The popover is held to the window, and its list scrolls.
+  - The worktrees come first.
+  - A box at the top, focused on open, narrows branches and worktrees.
+    Escape clears it, then closes the popover.
+- **Test:** `e2e/git/branch-popover-many.spec.ts` (serial) builds 80 branches
+  and three worktrees under `.claude/worktrees/`. It fails on the old
+  popover, which was 2290px tall in a 720px window.
 
 ### 2026-10-09 — The open page's name shows in full; the plan name back to one line
 
