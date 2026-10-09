@@ -18,17 +18,17 @@ export function Markdown({ source }: { source: string }) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          h1: ({ children }) => <h1 className="text-[18px] font-semibold mt-4 mb-1">{children}</h1>,
-          h2: ({ children }) => <h2 className="text-[16px] font-semibold mt-4 mb-1">{children}</h2>,
-          h3: ({ children }) => <h3 className="text-[14px] font-semibold mt-3 mb-1">{children}</h3>,
+          h1: ({ children }) => <h1 className="text-[18px] font-semibold mt-4 mb-1 [overflow-wrap:anywhere]">{children}</h1>,
+          h2: ({ children }) => <h2 className="text-[16px] font-semibold mt-4 mb-1 [overflow-wrap:anywhere]">{children}</h2>,
+          h3: ({ children }) => <h3 className="text-[14px] font-semibold mt-3 mb-1 [overflow-wrap:anywhere]">{children}</h3>,
           h4: ({ children }) => (
-            <h4 className="text-[13px] font-semibold uppercase tracking-wide text-foreground-muted mt-3 mb-1">{children}</h4>
+            <h4 className="text-[13px] font-semibold uppercase tracking-wide text-foreground-muted mt-3 mb-1 [overflow-wrap:anywhere]">{children}</h4>
           ),
           h5: ({ children }) => (
-            <h5 className="text-[12px] font-semibold uppercase tracking-wide text-foreground-muted mt-3 mb-1">{children}</h5>
+            <h5 className="text-[12px] font-semibold uppercase tracking-wide text-foreground-muted mt-3 mb-1 [overflow-wrap:anywhere]">{children}</h5>
           ),
           h6: ({ children }) => (
-            <h6 className="text-[11px] font-semibold uppercase tracking-wide text-foreground-muted mt-3 mb-1">{children}</h6>
+            <h6 className="text-[11px] font-semibold uppercase tracking-wide text-foreground-muted mt-3 mb-1 [overflow-wrap:anywhere]">{children}</h6>
           ),
           p: ({ children }) => <p>{children}</p>,
           ul: ({ children }) => <ul className="list-disc pl-5 space-y-1">{children}</ul>,

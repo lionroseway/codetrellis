@@ -41,6 +41,9 @@ import { peekCodeReturn, returnToCode, type CodeReturn } from '../../../lib/open
  * Entry animation is handled by App.tsx wrapping this in the
  * absolute-positioned z-30 overlay.
  */
+
+/** Past this many characters a plan's name gets a row of its own in the header. */
+const LONG_PLAN_NAME = 48;
 export function PlanWorkspaceShellV2() {
   const plan = usePlanStore((s) => s.activePlan);
   const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
@@ -148,7 +151,7 @@ export function PlanWorkspaceShellV2() {
       }`}
     >
       {/* Header */}
-      <div className="border-b border-white/[0.06] px-4 py-2 flex items-center gap-3 bg-[#0a0b14]">
+      <div className="border-b border-white/[0.06] px-4 py-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-[#0a0b14]" data-testid="plan-header">
         <button
           onClick={() => setWorkspaceMode('graph')}
           className="flex items-center gap-1.5 text-[12.5px] text-foreground-subtle hover:text-foreground transition-colors px-2.5 py-1 rounded hover:bg-white/[0.04]"
@@ -193,7 +196,11 @@ export function PlanWorkspaceShellV2() {
         <button
           onClick={() => selectItem(null)}
           disabled={!selectedItemUid}
-          className="text-[13px] font-semibold text-foreground truncate flex-1 min-w-0 text-left rounded px-1 -mx-1 transition-colors enabled:hover:text-accent enabled:hover:bg-white/[0.04] disabled:cursor-default"
+          // The whole name, wrapped: a long one was cut to "…" beside the chips.
+          // A long name takes the rest of the first row and the chips move to
+          // the next, rather than squeezing it into a narrow column.
+          className={`text-[13px] font-semibold text-foreground whitespace-normal [overflow-wrap:anywhere] leading-snug flex-1 min-w-[12rem] ${plan.title.length > LONG_PLAN_NAME ? 'basis-[calc(100%-8rem)]' : 'basis-[12rem]'} text-left rounded px-1 -mx-1 transition-colors enabled:hover:text-accent enabled:hover:bg-white/[0.04] disabled:cursor-default`}
+          data-testid="plan-header-title"
           title={selectedItemUid ? `Back to ${plan.title}` : plan.title}
         >
           {plan.title}
