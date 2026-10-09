@@ -183,6 +183,8 @@ export const SERIAL_SPECS = [
   '**/parsers/**',
   // Opens a temporary git worktree as the project.
   '**/git/worktree-checkout.spec.ts',
+  // Opens a temporary repository with eighty branches and three worktrees.
+  '**/git/branch-popover-many.spec.ts',
   // Counts every plan reload and notice the window takes: a parallel spec
   // writing exported plan files makes reloads of its own (Phase 33 S2).
   '**/realtime/plan-reload-burst.spec.ts',

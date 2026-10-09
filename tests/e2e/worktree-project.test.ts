@@ -77,6 +77,8 @@ test.describe.serial('A linked worktree opened as a project', () => {
     // The OTHER checkouts: from here, that is the main one.
     expect(info.worktrees.map((w) => w.branch)).toContain('main');
     expect(info.worktrees.map((w) => fs.realpathSync(w.path))).toContain(fs.realpathSync(main));
+    // Each says where it is; from here, the main checkout comes first.
+    expect(info.worktrees[0]).toMatchObject({ branch: 'main', isMain: true, where: 'main', prunable: false });
   });
 
   test('git/worktrees lists both checkouts and the plans on the other one\'s disk', async () => {

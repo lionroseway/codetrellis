@@ -24,7 +24,7 @@ import { gotoWithProject, reachableNodes, FIXTURE_PATH } from '../helpers/setup'
 
 test('selecting and clearing never hides a graph node', async ({ page }) => {
   await gotoWithProject(page, { projectPath: FIXTURE_PATH });
-  const nodes = await reachableNodes(page);
+  const nodes = await reachableNodes(page, 15_000, 2);
   expect(nodes.length).toBeGreaterThanOrEqual(2);
 
   // Every time any node's style says hidden, from now on.

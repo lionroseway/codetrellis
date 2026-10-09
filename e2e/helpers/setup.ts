@@ -423,8 +423,13 @@ async function describeCanvas(page: Page) {
  * the checkout — so `.react-flow__node` `.first()` was under the Auto-track
  * button on CI and clear of it locally, and 25 specs failed on one machine
  * only. A node counts when the element at its centre is inside it.
+ *
+ * `min` is how many the caller needs. It returned at the first sample with
+ * one node still and uncovered, which right after load can be the only one
+ * yet: a spec needing two read one (nodes-stay-drawn on #420's serial run,
+ * with the canvas still settling around a fully drawn graph).
  */
-export async function reachableNodes(page: Page, timeoutMs = 15_000): Promise<Locator[]> {
+export async function reachableNodes(page: Page, timeoutMs = 15_000, min = 1): Promise<Locator[]> {
   // A visible node: the first in the DOM can be a cluster node that stays
   // hidden (node-click on #224 waited on one for all 15 s).
   try {
@@ -458,7 +463,7 @@ export async function reachableNodes(page: Page, timeoutMs = 15_000): Promise<Lo
     );
     ids = sample.filter((s) => previous.get(s.id) === s.at).map((s) => s.id);
     previous = new Map(sample.map((s) => [s.id, s.at]));
-    if (ids.length > 0 || Date.now() > deadline) break;
+    if (ids.length >= min || Date.now() > deadline) break;
     await page.waitForTimeout(250);
   }
   if (ids.length === 0) {
