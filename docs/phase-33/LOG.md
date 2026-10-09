@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Z2 Phase review |
-| **Status** | Every step and follow-up of Phase 33 is merged into feat/phase-33 (#409-#413 for the last follow-ups). What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3). |
-| **In flight** | #414 in review on `feat/phase-33-fu-log-after-z1` |
+| **Status** | Every step and follow-up of Phase 33 is merged into feat/phase-33, and the whole suite passed on the combined tip (#415-#417 the last fixes). What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3). |
+| **In flight** | nothing open |
 | **Last merged** | Z1 (#401, #402, `d293a94`) |
 | **Next action** | The owner walks the outcomes in RULES-AND-CLARITY.md on a packaged build; anything short becomes a step or a follow-up. Then Z3: bring main in, run everything, verify a packaged build, follow docs/releases/RUNBOOK.md. |
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `158a590`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `11d55d3`, with open PRs from GitHub.
 
 ---
 
@@ -52,6 +52,9 @@
 - [x] Follow-up: Cross-system map: pair a team's own kinds (a queue's publishers with its consumers) (#408)
 - [x] Follow-up: B6: a tag selector for stages, once rules have tags (#411)
 - [x] Follow-up: A file rewritten at the same size in the same clock tick as a commit was missed by the live tree (a flaky git-refs unit test on #411 found it) (#413)
+- [x] Follow-up: The Docs spec's leak guard matched a commit subject in a full clone (found running the whole suite on the combined tip) (#415)
+- [x] Follow-up: A long plan name was cut off in the plan header (the owner's report); long headings in documents ran off the edge (#416)
+- [x] Follow-up: The workstream watcher's unit tests slept a fixed time and failed under load (#417)
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
@@ -223,6 +226,37 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-09 — The whole suite on the combined tip; a plan's long name wraps
+
+- **The whole suite, on the combined `feat/phase-33`.** CI runs only on pull
+  requests, so the tip with every follow-up merged had not run as one. In a
+  CI-like clone:
+  - typecheck and lint clean;
+  - unit: 2,253 passing;
+  - harness: 1,365 passing;
+  - browser: 564 chromium and 241 serial passing.
+
+  It found two problems:
+  - **The Docs spec's leak guard** (#415) matched #406's commit subject
+    ("…minimumSize of undefined") in the commit picker. CI's shallow checkout
+    hid this; a full clone fails it. The guard now reads the app's own text.
+  - **The artefact viewer's PDF test** fails only where `node_modules` is a
+    symlink. Vite then serves the pdf.js worker's `?url` import as the
+    script itself, and pdf.js refuses it. It passes from a real install: all
+    9 viewer tests pass from the main checkout, and in CI. It is the
+    environment, not the product.
+- **A plan's long name wraps** (#416, the owner's report). The header cut it
+  to a few words and "…" beside the chips. Now:
+  - the name wraps, and a long one takes its own row;
+  - headings in a plan's documents break long paths.
+
+  A browser test fails on the old header and passes now.
+- **The workstream watcher's tests wait for what they check** (#417). One
+  failed once under load: fixed sleeps after an edit were too short. They
+  now poll for the expected result, up to 15 s. That showed the
+  ignored-folders test's fixture did not ignore `node_modules/` in git; it
+  now does, as a real repository does.
 
 ### 2026-10-08 — Follow-ups after Z1, all closed: Phase 33 is built (#409–#413)
 
