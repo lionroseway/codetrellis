@@ -114,6 +114,19 @@ test.describe('Docs', () => {
     // still has to explain itself rather than render a blank panel.
     const surface = page.locator('body');
     await expect(surface.getByText(/doc/i).first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(/undefined|NaN|\[object Object\]/)).toHaveCount(0);
+    // What the app itself wrote, never the repository's own words: the commit
+    // picker lists this repository's commits, and a subject may say
+    // "undefined" (#406's did, and a full clone failed here; CI's shallow one
+    // did not).
+    const leaks = await page.evaluate(() => {
+      const found: string[] = [];
+      const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+        if (n.parentElement?.closest('select, option')) continue;
+        if (/undefined|NaN|\[object Object\]/.test(n.textContent ?? '')) found.push(n.textContent ?? '');
+      }
+      return found;
+    });
+    expect(leaks).toEqual([]);
   });
 });
