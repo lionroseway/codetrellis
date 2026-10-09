@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Z2 Phase review |
-| **Status** | Every step and follow-up of Phase 33 is merged into feat/phase-33, and the whole suite passed on the combined tip. The branch popover now fits the window, finds what you type and shows the worktrees first (#420, in review). What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3). |
-| **In flight** | #420 in review on `feat/phase-33-fu-branch-popover` |
+| **Status** | Every step and follow-up of Phase 33 is merged into feat/phase-33, and the whole suite passed on the combined tip. The branch popover now fits the window, finds what you type, and shows every worktree and where it is (#420). What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3). |
+| **In flight** | nothing open |
 | **Last merged** | Z1 (#401, #402, `d293a94`) |
 | **Next action** | The owner walks the outcomes in RULES-AND-CLARITY.md on a packaged build; anything short becomes a step or a follow-up. Then Z3: bring main in, run everything, verify a packaged build, follow docs/releases/RUNBOOK.md. |
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `0d04426`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `d5b1144`, with open PRs from GitHub.
 
 ---
 
@@ -56,7 +56,7 @@
 - [x] Follow-up: A long plan name was cut off in the plan header (the owner's report); long headings in documents ran off the edge (#416)
 - [x] Follow-up: The workstream watcher's unit tests slept a fixed time and failed under load (#417)
 - [x] Follow-up: The open page's name was cut at 260px above its document (the owner's report); the plan name back to one line, at least 7rem, whole on hover (#419)
-- [ ] Follow-up: The branch popover ran off the window with sixty branches, did not scroll or search, and hid the worktrees below them; each worktree now says where it is, and one inside the project is no longer scanned as part of it (the owner's report, 0.1.17)
+- [x] Follow-up: The branch popover ran off the window with sixty branches, did not scroll or search, and hid the worktrees below them; each worktree now says where it is, and one inside the project is no longer scanned as part of it (the owner's report, 0.1.17) (#420)
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
