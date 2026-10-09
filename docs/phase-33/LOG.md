@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Z2 Phase review |
-| **Status** | Every step and follow-up of Phase 33 is merged into feat/phase-33, and the whole suite passed on the combined tip (#415-#417 the last fixes). What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3). |
+| **Status** | Every step and follow-up of Phase 33 is merged into feat/phase-33, and the whole suite passed on the combined tip. The open page's name now shows in full above its document, and the plan name is back to one line (#419). What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3). |
 | **In flight** | nothing open |
 | **Last merged** | Z1 (#401, #402, `d293a94`) |
 | **Next action** | The owner walks the outcomes in RULES-AND-CLARITY.md on a packaged build; anything short becomes a step or a follow-up. Then Z3: bring main in, run everything, verify a packaged build, follow docs/releases/RUNBOOK.md. |
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `11d55d3`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `60ed3ac`, with open PRs from GitHub.
 
 ---
 
@@ -55,6 +55,7 @@
 - [x] Follow-up: The Docs spec's leak guard matched a commit subject in a full clone (found running the whole suite on the combined tip) (#415)
 - [x] Follow-up: A long plan name was cut off in the plan header (the owner's report); long headings in documents ran off the edge (#416)
 - [x] Follow-up: The workstream watcher's unit tests slept a fixed time and failed under load (#417)
+- [x] Follow-up: The open page's name was cut at 260px above its document (the owner's report); the plan name back to one line, at least 7rem, whole on hover (#419)
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
@@ -226,6 +227,26 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-09 — The open page's name shows in full; the plan name back to one line
+
+- **What the owner meant** was the page's name above its document (the
+  breadcrumb, "Where it starts…"). It was cut at 260px however much room the
+  pane had, with no way to see the rest. The page open now shows its whole
+  name, wrapping if it must. The pages above it stay short, with the whole
+  name on hover.
+- **The plan name in the header is back to one line** (#416 wrapped it, and
+  the owner called that a regression: it pushed the chips to a second row).
+  - It is truncated again, with the whole name on hover and on the plan's
+    own page.
+  - It is now at least 7rem wide. Before, a crowded header could squeeze it
+    to its first letter.
+  - At 1280px every chip and button fits.
+- **Tested:** `e2e/plan/plan-long-names.spec.ts`.
+  - It fails on the old breadcrumb.
+  - It checks the header is one line, holds the whole name in its tooltip,
+    is wide enough to read, and nothing in it runs past the edge.
+  - Long headings in a document still wrap (from #416).
 
 ### 2026-10-09 — The whole suite on the combined tip; a plan's long name wraps
 

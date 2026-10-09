@@ -17,7 +17,7 @@
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
   step: "Z2 Phase review"
-  status: "Every step and follow-up of Phase 33 is merged into feat/phase-33, and the whole suite passed on the combined tip (#415-#417 the last fixes). What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3)."
+  status: "Every step and follow-up of Phase 33 is merged into feat/phase-33, and the whole suite passed on the combined tip. The open page's name now shows in full above its document, and the plan name is back to one line (#419). What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3)."
   next: "The owner walks the outcomes in RULES-AND-CLARITY.md on a packaged build; anything short becomes a step or a follow-up. Then Z3: bring main in, run everything, verify a packaged build, follow docs/releases/RUNBOOK.md."
   blockers: "None"
   updated: 2026-10-08
@@ -128,6 +128,11 @@ sections:
         status: done
         prs:
           - 417
+      - title: "The open page's name was cut at 260px above its document (the owner's report); the plan name back to one line, at least 7rem, whole on hover"
+        followUp: true
+        status: done
+        prs:
+          - 419
   - title: "Stage 0: ground truth"
     goal: Numbers to measure against, the freeze measured, and every colour the app draws written down.
     items:
