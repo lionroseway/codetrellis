@@ -25,6 +25,48 @@ npm ci && npm link        # puts `codetrellis` on the PATH
 From a checkout, `bin/codetrellis.mjs` runs `src/cli/main.ts` through tsx, so
 the checkout keeps its `node_modules`. Node 26, as `.nvmrc` says.
 
+### From the desktop app
+
+The app carries the same CLI and can put `codetrellis` on the PATH, as Ollama
+and VS Code do with theirs. The first time the installed app opens, it offers
+to; **Settings → MCP Server → Command line** adds or removes it later. That
+command runs on the app's own binary in Node mode, so it needs no Node install
+and always matches the app's version.
+
+| Installed as | Where `codetrellis` goes |
+|---|---|
+| macOS app | A link at `/usr/local/bin/codetrellis` to the launcher in the bundle. macOS asks for an administrator's password unless that folder is writable. Survives updates in place |
+| Linux .deb / .rpm | The same link in `~/.local/bin`, no password |
+| Linux AppImage | A small launcher in `~/.local/bin` naming the AppImage file (its mount changes every launch). The app rewrites it at launch if the file has moved |
+| Windows installer | The launcher's folder, added to your user PATH. Open a new terminal afterwards |
+| Windows portable | Not offered: it unpacks to a temporary folder each time. Use the installer, or npm |
+
+A `codetrellis` already there that is not the app's (from npm, say) is named
+and replaced only when you choose **Replace**. The work is
+`src/backend/services/cli-install.ts`, reached from the app window only (IPC,
+never HTTP or MCP).
+
+How it runs, in `<resources>/cli/`:
+
+- `bin/codetrellis` (macOS, Linux) and `bin/codetrellis.cmd` (Windows) start
+  the app's binary with `ELECTRON_RUN_AS_NODE=1` on `bin/app.cjs`.
+- `app.cjs` puts the app's own packages (`app.asar/node_modules`) first on
+  `NODE_PATH`, ahead of any the shell had, and loads the compiled CLI from
+  `src/`, the same build as the npm package.
+- `node_modules/werift` is a one-file bundle of the WebRTC stack, built by
+  `build:cli-package` into `out/cli-vendor/`. The copy in app.asar is not
+  whole: electron-builder prunes a nested folder it needs, which is why the
+  app's own main code bundles werift too.
+- When this CLI starts itself again (`start`'s background serve, the review
+  sink an agent launches, the connector line `serve` prints), it uses the
+  app's binary on `app.cjs` with `ELECTRON_RUN_AS_NODE=1`
+  (`selfCommand`, args.ts); without that the child would open the app's
+  window.
+
+`connector-packaged.yml` builds the AppImage and the Windows app and runs the
+command the ways the app installs it (`scripts/smoke-cli-packaged.ts`):
+`--version`, then a scan of the sample app.
+
 ### The npm package (tools/cli-package)
 
 `npm run build:cli-package` writes it to `out/cli-package/`. It is not the
@@ -71,10 +113,20 @@ Once, by the owner:
    npm login
    npm publish ./out/cli-package --access public
    ```
-3. On npmjs.com, the package's **Settings → Trusted publishing**: GitHub
-   Actions, repository `lionroseway/codetrellis`, workflow `publish-cli.yml`.
-   Then, under **Publishing access**, require two-factor authentication and
-   disallow tokens, so the workflow is the only way in.
+3. On npmjs.com, the package's **Settings → Trusted Publisher**: GitHub
+   Actions, repository `lionroseway/codetrellis`, workflow `publish-cli.yml`,
+   no environment, and **Allow npm publish** ticked (unticked, the workflow
+   may only *stage* a version for a person to approve on npmjs.com). Then,
+   under **Publishing access**, require two-factor authentication and
+   disallow bypass tokens.
+
+Done for `codetrellis` on 2026-10-10, with 0.2.0 published by hand. npm marks
+a new trusted publisher *pending* until the workflow publishes once, within
+about two days, and the workflow can run only once it is on `main`. So
+**before each release, check the trusted publisher on npmjs.com is still
+there and active**; if it lapsed, delete it and add it again with the same
+fields. npm also lists a `0.0.0-stage` version, a placeholder its staging
+made on the first publish; `latest` is the real one.
 
 ## The desktop app: `codetrellis desktop`
 

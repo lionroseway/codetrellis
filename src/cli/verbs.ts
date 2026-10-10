@@ -26,7 +26,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { flag, type Parsed } from './args';
+import { flag, selfCommand, type Parsed } from './args';
 import { toSarif, ruleFileIn } from './sarif';
 import { findingWords, type ReviewFinding } from './review-output';
 import { BASELINE_FILE, baselineYaml, readBaseline, type Baseline } from '../backend/services/rule-baseline';
@@ -299,7 +299,8 @@ async function pipelined(ctx: Ctx, root: string, changed: ReturnType<typeof chan
       if (err instanceof ReviewUsageError) throw new UsageError(err.message);
       throw err;
     }
-    const sinkFor = (dir: string) => ({ command: process.execPath, args: [path.resolve(__dirname, '..', '..', 'bin', 'codetrellis.mjs'), 'review-sink', '--pass', dir] });
+    const me = selfCommand(path.resolve(__dirname, '..', '..', 'bin'), { execPath: process.execPath, electron: process.versions.electron });
+    const sinkFor = (dir: string) => ({ command: me.command, args: [...me.args, 'review-sink', '--pass', dir], env: me.env });
     review = async (stage, scope, grounding) => {
       // An agent stage fails on what a block-strength agent rule's finding holds (B5), and its output is read, not shown raw.
       const r = await runReview(ctx.agent, { ...o, scope: { suite: scope.suite, rule: scope.rule, path: scope.path, engine: scope.engine, strength: scope.strength, tag: scope.tag }, stage: stage.id, grounding, format: 'json', failOn: new Set(['block']), post: null }, ctx.cwd, process.env, sinkFor, { version: CLI_VERSION });

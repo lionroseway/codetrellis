@@ -24,6 +24,7 @@ import { setElectronScreenshotCapture, getMcpSetup } from '../backend/mcp/server
 import { applyClaudeDesktop, previewClaudeDesktop, thisMachine } from '../backend/services/claude-desktop-config';
 import { applyClaudeCode, previewClaudeCode, thisMachine as claudeCodeMachine } from '../backend/services/claude-code-parallel';
 import { applyGeminiHook, previewGeminiHook, thisMachine as geminiMachine } from '../backend/services/gemini-cli-hook';
+import { applyCliInstall, planCliInstall, refreshCliInstall, removeCliInstall, thisCliMachine } from '../backend/services/cli-install';
 import { dispatchAuthorised, type IpcRequest } from '../backend/services/ipc-dispatcher';
 import * as terminalService from '../backend/services/terminal-service';
 import { installFileLogger, getCurrentLogPath } from '../backend/services/logger';
@@ -417,6 +418,7 @@ app.whenReady().then(async () => {
 
   const backendOk = await bootstrap();
   createWindow(backendOk);
+  mainWindow?.webContents.once('did-finish-load', () => { setTimeout(() => void cliOnLaunch(), 1500); });
 
   // Session-persistence plan / Track A — wire AC monitor + start the
   // power state machine + drive the OS sleep-prevent assertion off
@@ -701,6 +703,52 @@ ipcMain.handle('gemini-cli:apply', (e, shownHash: unknown) => {
   if (typeof shownHash !== 'string' || !HASH.test(shownHash)) return { ok: false, reason: 'Preview the change first.' };
   return applyGeminiHook(geminiMachine(), getMcpSetup().connector ?? null, shownHash);
 });
+
+/**
+ * The `codetrellis` command, from the app (cli-install.ts). The same rules as
+ * the configs above: this window only, and the plan decided here, from where
+ * this app is installed, never from anything the window sends. `install`
+ * takes one choice: whether to replace a `codetrellis` that is not ours,
+ * which the window has shown the person.
+ */
+ipcMain.handle('cli:plan', (e) => {
+  if (!mainWindow || e.sender !== mainWindow.webContents) return { ok: false, reason: 'Not available here.' };
+  return planCliInstall(thisCliMachine());
+});
+ipcMain.handle('cli:install', (e, replace: unknown) => {
+  if (!mainWindow || e.sender !== mainWindow.webContents) return { ok: false, reason: 'Not available here.' };
+  return applyCliInstall(thisCliMachine(), { replace: replace === true });
+});
+ipcMain.handle('cli:remove', (e) => {
+  if (!mainWindow || e.sender !== mainWindow.webContents) return { ok: false, reason: 'Not available here.' };
+  return removeCliInstall(thisCliMachine());
+});
+
+/**
+ * On launch: a `codetrellis` the person added is kept pointing at this app
+ * where that needs no password (an AppImage that moved). And the first time
+ * the installed app opens, it offers to add one, as Ollama's and VS Code's
+ * do. Asked once; Settings → MCP Server adds or removes it later.
+ */
+async function cliOnLaunch(): Promise<void> {
+  const machine = thisCliMachine();
+  try { await refreshCliInstall(machine); } catch { /* a stale command is not worth a launch */ }
+  const plan = planCliInstall(machine);
+  const asked = path.join(app.getPath('userData'), 'cli-command-offered');
+  if (!plan.ok || plan.state !== 'missing' || fs.existsSync(asked) || process.env.CODETRELLIS_NO_CLI_OFFER || !mainWindow) return;
+  try { fs.writeFileSync(asked, `${new Date().toISOString()}\n`); } catch { return; }
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: 'question',
+    buttons: ['Add the command', 'Not now'],
+    defaultId: 0,
+    cancelId: 1,
+    message: 'Use CodeTrellis from your terminal?',
+    detail: `${plan.says}\n\nThen codetrellis works in any terminal, script or agent session, on this app's version, with no Node install. Add or remove it later in Settings → MCP Server.`,
+  });
+  if (response !== 0 || !mainWindow) return;
+  const r = await applyCliInstall(machine);
+  if (!r.ok) await dialog.showMessageBox(mainWindow, { type: 'warning', message: 'The codetrellis command was not added', detail: r.reason });
+}
 
 ipcMain.handle('artefacts:reveal', async (_e, uid: unknown) => {
   if (!isAttachmentUid(uid)) return false;

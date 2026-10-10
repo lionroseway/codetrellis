@@ -67,7 +67,7 @@ export interface AgentAdapter {
   passEnv: readonly string[];
   /** The credential and endpoint, as this CLI reads them. */
   env(o: { auth: ReviewAuth; endpoint: string | null; model: string | null }): Record<string, string>;
-  command(o: { instructions: string; message: string; sink: { command: string; args: string[] }; model: string | null; endpoint: string | null; maxTurns: number; dir: string; work: string; auth: ReviewAuth; tools: readonly string[] }): AdapterCommand;
+  command(o: { instructions: string; message: string; sink: { command: string; args: string[]; env?: Record<string, string> }; model: string | null; endpoint: string | null; maxTurns: number; dir: string; work: string; auth: ReviewAuth; tools: readonly string[] }): AdapterCommand;
   parse(stdout: string, stderr: string, code: number | null): AdapterRun;
 }
 
@@ -115,7 +115,10 @@ const claudeCode: AgentAdapter = {
   command({ instructions, message, sink, model, maxTurns, dir, auth, tools }) {
     const withKey = auth.kind === 'oidc' || (auth.kind === 'key' && !oauthToken(auth));
     const mcp = path.join(dir, 'mcp.json');
-    fs.writeFileSync(mcp, JSON.stringify({ mcpServers: { [SINK]: { type: 'stdio', command: sink.command, args: sink.args } } }));
+    // `env` only for the CLI the desktop app carries, whose binary needs
+    // ELECTRON_RUN_AS_NODE to act as Node (args.ts, selfCommand); no secret.
+    const env = sink.env && Object.keys(sink.env).length ? { env: sink.env } : {};
+    fs.writeFileSync(mcp, JSON.stringify({ mcpServers: { [SINK]: { type: 'stdio', command: sink.command, args: sink.args, ...env } } }));
     const system = path.join(dir, 'system.md');
     fs.writeFileSync(system, instructions);
     return {
@@ -213,6 +216,9 @@ const codex: AgentAdapter = {
         ...set('project_doc_max_bytes', '0'),
         ...set(`${server}.command`, toml(sink.command)),
         ...set(`${server}.args`, `[${sink.args.map(toml).join(', ')}]`),
+        ...(sink.env && Object.keys(sink.env).length
+          ? set(`${server}.env`, `{ ${Object.entries(sink.env).map(([k, v]) => `${k} = ${toml(v)}`).join(', ')} }`)
+          : []),
         ...set(`${server}.enabled_tools`, `[${tools.map(toml).join(', ')}]`),
         ...set(`${server}.default_tools_approval_mode`, toml('approve')),
         ...set('model_providers.codetrellis_review.name', toml('codetrellis review')),

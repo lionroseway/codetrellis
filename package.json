@@ -25,14 +25,14 @@
     "dev:electron": "electron-vite dev",
     "check:bundle": "bash scripts/check-no-relative-require.sh",
     "prepackage": "node scripts/build-icons.js",
-    "package": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder",
-    "package:mac": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder --mac --arm64",
-    "package:mac-x64": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder --mac --x64",
-    "package:mac-universal": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder --mac",
-    "package:mac:signed": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && CT_SIGN=1 electron-builder --mac --config electron-builder.signed.cjs",
-    "package:win": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder --win --x64",
-    "package:linux": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder --linux",
-    "package:all": "npm run check:bundle && electron-vite build && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder --mac --arm64 --win --x64 --linux",
+    "package": "npm run check:bundle && electron-vite build && npm run build:cli-package && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder",
+    "package:mac": "npm run check:bundle && electron-vite build && npm run build:cli-package && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder --mac --arm64",
+    "package:mac-x64": "npm run check:bundle && electron-vite build && npm run build:cli-package && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder --mac --x64",
+    "package:mac-universal": "npm run check:bundle && electron-vite build && npm run build:cli-package && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder --mac",
+    "package:mac:signed": "npm run check:bundle && electron-vite build && npm run build:cli-package && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && CT_SIGN=1 electron-builder --mac --config electron-builder.signed.cjs",
+    "package:win": "npm run check:bundle && electron-vite build && npm run build:cli-package && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder --win --x64",
+    "package:linux": "npm run check:bundle && electron-vite build && npm run build:cli-package && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder --linux",
+    "package:all": "npm run check:bundle && electron-vite build && npm run build:cli-package && npm run build:connector && npm run build:rendition && npm run build:reader && npm run fetch:rendition-engine && electron-builder --mac --arm64 --win --x64 --linux",
     "release": "bash scripts/release.sh",
     "release:dry-run": "bash scripts/release.sh --dry-run",
     "build:icons": "node scripts/build-icons.js",
@@ -184,6 +184,31 @@
       "!**/node_modules/@napi-rs/canvas*/**"
     ],
     "extraResources": [
+      {
+        "from": "out/cli-package",
+        "to": "cli",
+        "filter": [
+          "package.json",
+          "bin/codetrellis.mjs",
+          "src/**/*"
+        ]
+      },
+      {
+        "from": "out/cli-vendor/node_modules",
+        "to": "cli/node_modules",
+        "filter": [
+          "werift/**/*"
+        ]
+      },
+      {
+        "from": "resources/cli-launchers",
+        "to": "cli/bin",
+        "filter": [
+          "codetrellis",
+          "codetrellis.cmd",
+          "app.cjs"
+        ]
+      },
       {
         "from": "out/connector",
         "to": "connector",

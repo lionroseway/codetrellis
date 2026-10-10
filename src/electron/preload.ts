@@ -160,6 +160,16 @@ const electronAPI = {
     preview: (): Promise<unknown> => ipcRenderer.invoke('gemini-cli:preview'),
     apply: (shownHash: string): Promise<unknown> => ipcRenderer.invoke('gemini-cli:apply', shownHash),
   },
+  /**
+   * The `codetrellis` command on the PATH, from the app (cli-install.ts).
+   * `plan` says where it goes and whether it is there; `install` may replace
+   * another `codetrellis` only when told to.
+   */
+  cli: {
+    plan: (): Promise<unknown> => ipcRenderer.invoke('cli:plan'),
+    install: (replace?: boolean): Promise<unknown> => ipcRenderer.invoke('cli:install', replace === true),
+    remove: (): Promise<unknown> => ipcRenderer.invoke('cli:remove'),
+  },
   htmlReport: {
     show: (uid: string, bounds: { x: number; y: number; width: number; height: number }, scripts: boolean): Promise<{ ok: boolean; reason?: string }> =>
       ipcRenderer.invoke('artefacts:html:show', uid, bounds, scripts),

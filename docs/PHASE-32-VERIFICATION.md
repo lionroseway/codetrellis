@@ -20,7 +20,7 @@ records that — but "✗ none" is proof of a gap.
 | REST routes | 309 | 307 | 0 | 0 | 217 | 0 |
 | MCP tools | 217 | 217 | 0 | 0 | 185 | 0 |
 | Mobile RPC methods | 94 | 83 | 0 | 0 | 78 | 0 |
-| Frontend components | 149 | n/a | n/a | n/a | 0 | 23 |
+| Frontend components | 150 | n/a | n/a | n/a | 0 | 23 |
 | Mobile screens | 38 | n/a | n/a | n/a | 0 | 0 |
 | Settings sections | 0 | n/a | n/a | n/a | 0 | 0 |
 
@@ -38,7 +38,7 @@ records that — but "✗ none" is proof of a gap.
 | 0.4h Drift, governance, review | 13 | 28 | 9 | 0 | 0 | 0 |
 | 0.4i Terminals and audio | 10 | 12 | 8 | 3 | 0 | 0 |
 | 0.4j Mobile surface | 25 | 14 | 0 | 2 | 38 | 0 |
-| 0.4k Settings, updates, privacy | 22 | 0 | 3 | 12 | 0 | 0 |
+| 0.4k Settings, updates, privacy | 22 | 0 | 3 | 13 | 0 | 0 |
 | 0.4l System docs and intake | 7 | 11 | 6 | 1 | 0 | 0 |
 
 ## MCP tools: registry vs capability matrix
@@ -683,7 +683,7 @@ records that — but "✗ none" is proof of a gap.
 | l | `sysdoc.update` | write | ✗ none | 1 | ✓ 0.4j: saved, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 | l | `sysdoc.verify` | write | ✗ none | 1 | ✓ 0.4j: verified, desktop told; unknown refused (phone-terminals-sysdocs) |  |  |
 
-## Frontend components (149)
+## Frontend components (150)
 
 | Domain | Item | Detail | Unit | Harness | Behaviour | UX | Notes |
 |---|---|---|---|---|---|---|---|
@@ -827,6 +827,7 @@ records that — but "✗ none" is proof of a gap.
 | k | `settings/AddToClaudeDesktop.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/AddToGeminiCli.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/ArchitectureRulesSection.tsx` |  | n/a | n/a |  |  |  |
+| k | `settings/CommandLineTool.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/PlansFolderSection.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/RecordSection.tsx` |  | n/a | n/a |  |  |  |
 | k | `settings/RecurringSection.tsx` |  | n/a | n/a |  |  |  |

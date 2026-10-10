@@ -19,8 +19,9 @@
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import { builtinModules } from 'node:module';
 import path from 'node:path';
-import { transformWithEsbuild } from 'vite';
+import { build as viteBuild, transformWithEsbuild } from 'vite';
 import { cliManifest, requiredPackages, type RootPackage } from './manifest';
 
 const root = path.resolve(__dirname, '..', '..');
@@ -35,6 +36,49 @@ function walk(dir: string): string[] {
 }
 
 const isTest = (f: string) => /\.(test|spec)\.ts$/.test(f) || f.split(path.sep).includes('__tests__');
+
+/**
+ * werift, as one file, for the CLI the desktop app carries (out/cli-vendor,
+ * shipped as `<resources>/cli/node_modules/werift`). The app's own copy in
+ * app.asar is not whole: electron-builder prunes the nested node_modules that
+ * `@shinyoshiaki/binary-data` resolves `lib/binary-stream` from, which is why
+ * electron.vite.config.ts bundles werift into the app's main code. This
+ * bundles it the same way, from the same patched ESM entry, so the CLI finds
+ * it beside itself before it looks in app.asar. The npm package does not need
+ * it: npm installs werift whole.
+ */
+async function vendorWerift(): Promise<void> {
+  const dir = path.join(root, 'out', 'cli-vendor', 'node_modules', 'werift');
+  fs.rmSync(path.join(root, 'out', 'cli-vendor'), { recursive: true, force: true });
+  const entry = path.join(root, 'out', 'cli-vendor', 'entry.mjs');
+  fs.mkdirSync(path.dirname(entry), { recursive: true });
+  fs.writeFileSync(entry, "export * from 'werift';\n");
+  const builtins = [...builtinModules, ...builtinModules.map((m) => `node:${m}`)];
+  // binary-data's bare `lib/…`, `types/…` and `internal/…` requires, each to
+  // its file, as electron.vite.config.ts aliases them for the app's main code.
+  const nested = path.join(root, 'node_modules', '@shinyoshiaki', 'binary-data', 'src', 'node_modules');
+  const alias = Object.fromEntries(['lib', 'types', 'internal'].flatMap((d) =>
+    fs.readdirSync(path.join(nested, d)).filter((f) => f.endsWith('.js')).map((f) => [`${d}/${f.slice(0, -3)}`, path.join(nested, d, f)])));
+  await viteBuild({
+    configFile: false,
+    logLevel: 'warn',
+    root,
+    resolve: { alias },
+    build: {
+      outDir: dir,
+      commonjsOptions: { transformMixedEsModules: true },
+      emptyOutDir: true,
+      target: 'node22',
+      minify: false,
+      sourcemap: false,
+      ssr: entry,
+      rollupOptions: { external: builtins, output: { format: 'cjs', entryFileNames: 'index.js', inlineDynamicImports: true } },
+    },
+    ssr: { noExternal: true },
+  });
+  fs.writeFileSync(path.join(dir, 'package.json'), `${JSON.stringify({ name: 'werift', private: true, main: 'index.js' }, null, 2)}\n`);
+  fs.rmSync(entry);
+}
 
 async function main(): Promise<void> {
   fs.rmSync(out, { recursive: true, force: true });
@@ -98,6 +142,8 @@ async function main(): Promise<void> {
 
   fs.copyFileSync(path.join(__dirname, 'README.md'), path.join(out, 'README.md'));
   fs.copyFileSync(path.join(root, 'LICENSE'), path.join(out, 'LICENSE'));
+
+  await vendorWerift();
 
   const count = walk(out).length;
   console.log(`Wrote the codetrellis ${rootPkg.version} package to ${path.relative(root, out)}/ (${count} files). Try it: npm pack ./${path.relative(root, out)}`);

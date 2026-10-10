@@ -212,7 +212,7 @@ function readPass(dir: string): Pick<Ran, 'report' | 'verdicts' | 'refused' | 't
 }
 
 /** One run of the agent CLI, in a folder of its own. */
-async function runOnce(o: ReviewOptions, dir: string, setup: PassSetup, instructions: string, message: string, env: NodeJS.ProcessEnv, sinkFor: (dir: string) => { command: string; args: string[] }): Promise<Ran> {
+async function runOnce(o: ReviewOptions, dir: string, setup: PassSetup, instructions: string, message: string, env: NodeJS.ProcessEnv, sinkFor: (dir: string) => { command: string; args: string[]; env?: Record<string, string> }): Promise<Ran> {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, PASS_FILES.setup), JSON.stringify(setup));
   const work = path.join(dir, 'work');
@@ -247,7 +247,7 @@ function scrub(s: string, o: ReviewOptions): string {
 const SKIP_VERIFY = new Set(['question', 'suspicious']);
 
 /** One pass: bundle, agent, (verify,) report, record. */
-export async function runPass(agent: Agent, o: ReviewOptions, skill: { name: string; text: string }, cwd: string, env: NodeJS.ProcessEnv, sinkFor: (dir: string) => { command: string; args: string[] }): Promise<PassResult | { nothing: true } | { error: string }> {
+export async function runPass(agent: Agent, o: ReviewOptions, skill: { name: string; text: string }, cwd: string, env: NodeJS.ProcessEnv, sinkFor: (dir: string) => { command: string; args: string[]; env?: Record<string, string> }): Promise<PassResult | { nothing: true } | { error: string }> {
   const got = await agent.call('get_review_bundle', {
     ...(o.base ? { base: o.base } : {}), ...(o.scope.suite ? { suite: o.scope.suite } : {}), ...(o.scope.rule ? { rule: o.scope.rule } : {}),
     ...(o.scope.path ? { path: o.scope.path } : {}), ...(o.task ? { task_uid: o.task } : {}),
@@ -343,7 +343,7 @@ export interface ReviewDeps {
 }
 
 /** `codetrellis review`: every pass, then what each found, in the format asked. */
-export async function review(agent: Agent, o: ReviewOptions, cwd: string, env: NodeJS.ProcessEnv, sinkFor: (dir: string) => { command: string; args: string[] }, deps: ReviewDeps): Promise<{ out: string; code: number; note?: string }> {
+export async function review(agent: Agent, o: ReviewOptions, cwd: string, env: NodeJS.ProcessEnv, sinkFor: (dir: string) => { command: string; args: string[]; env?: Record<string, string> }, deps: ReviewDeps): Promise<{ out: string; code: number; note?: string }> {
   const passes: PassResult[] = [];
   let said: string | null = null;
   for (const skill of o.skills) {

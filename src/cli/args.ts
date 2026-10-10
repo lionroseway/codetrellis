@@ -98,17 +98,37 @@ export interface ConnectorLine {
 const quote = (s: string) => (/^[A-Za-z0-9_./:=@-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`);
 
 /**
- * How an agent reaches this backend: the CLI's own `mcp` command, which reads
- * the token and port on every connect, so the config carries no secret and
- * survives a restart.
+ * How to run this CLI again: for a child it starts (`start`'s serve, the
+ * review sink an agent launches) and for the config it prints. From npm or
+ * a checkout, Node and the launcher. Inside the desktop app (the CLI it
+ * carries, `resources/cli/`), the app's own binary on `bin/app.cjs`, which
+ * only acts as Node with ELECTRON_RUN_AS_NODE set: without it, the child
+ * would open the app's window instead.
  */
-export function connectorLine(nodePath: string, binPath: string, dataDir: string): ConnectorLine {
-  const args = [binPath, 'mcp', '--data-dir', dataDir];
+export interface SelfCommand {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}
+
+export function selfCommand(binDir: string, proc: { execPath: string; electron?: string }): SelfCommand {
+  if (proc.electron) return { command: proc.execPath, args: [path.join(binDir, 'app.cjs')], env: { ELECTRON_RUN_AS_NODE: '1' } };
+  return { command: proc.execPath, args: [path.join(binDir, 'codetrellis.mjs')], env: {} };
+}
+
+/**
+ * The line an agent's config needs: this CLI's own `mcp` command, for the
+ * data dir given. No token: the connector reads it on every connect.
+ */
+export function connectorLine(self: SelfCommand, dataDir: string): ConnectorLine {
+  const args = [...self.args, 'mcp', '--data-dir', dataDir];
+  const env = Object.keys(self.env).length ? self.env : undefined;
+  const envFlags = Object.entries(self.env).map(([k, v]) => `-e ${quote(`${k}=${v}`)} `).join('');
   return {
-    command: nodePath,
+    command: self.command,
     args,
-    claude: `claude mcp add codetrellis -- ${[nodePath, ...args].map(quote).join(' ')}`,
-    json: JSON.stringify({ mcpServers: { codetrellis: { command: nodePath, args } } }),
+    claude: `claude mcp add codetrellis ${envFlags}-- ${[self.command, ...args].map(quote).join(' ')}`,
+    json: JSON.stringify({ mcpServers: { codetrellis: { command: self.command, args, ...(env ? { env } : {}) } } }),
   };
 }
 

@@ -299,3 +299,91 @@ test.describe('Add breakpoints to Gemini CLI', () => {
     await expect(hook.getByRole('checkbox')).toBeDisabled();
   });
 });
+
+/**
+ * The `codetrellis` command from the desktop app. Where it goes and the file
+ * work are main-process only (cli-install.test.ts, and a packaged build in
+ * CI); here the page runs against a stand-in for that IPC, to prove the
+ * person is told where it goes before anything is done, sees whether it is
+ * there, and that someone else's `codetrellis` is replaced only on Replace.
+ */
+test.describe('The codetrellis command', () => {
+  const openMcp = async (page: import('@playwright/test').Page) => {
+    await gotoWithProject(page);
+    await page.locator('button[title*="Settings"]').click();
+    await page.getByRole('button', { name: 'MCP Server' }).click();
+  };
+  const plan = (state: string, extra: Record<string, unknown> = {}) => ({
+    ok: true, how: 'link', target: '/usr/local/bin/codetrellis',
+    source: '/Applications/CodeTrellis.app/Contents/Resources/cli/bin/codetrellis', admin: true, state, onPath: true,
+    says: 'Links /usr/local/bin/codetrellis to the codetrellis command inside the app. macOS asks for your password to write there.',
+    ...extra,
+  });
+
+  test('is not offered outside the desktop app', async ({ page }) => {
+    await openMcp(page);
+    await expect(page.getByTestId('mcp-config-snippet')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('command-line-tool')).toHaveCount(0);
+  });
+
+  test('says where it goes, adds it, then offers to remove it', async ({ page }) => {
+    await page.addInitScript((plans) => {
+      const calls: string[] = [];
+      let installed = false;
+      (window as unknown as { __cliCalls: string[] }).__cliCalls = calls;
+      (window as unknown as { electronAPI: unknown }).electronAPI = {
+        cli: {
+          plan: async () => { calls.push('plan'); return installed ? plans.installed : plans.missing; },
+          install: async (replace?: boolean) => { calls.push(`install:${replace === true}`); installed = true; return { ok: true, target: '/usr/local/bin/codetrellis', onPath: true }; },
+          remove: async () => { calls.push('remove'); installed = false; return { ok: true, target: '/usr/local/bin/codetrellis', onPath: true }; },
+        },
+      };
+    }, { missing: plan('missing'), installed: plan('installed') });
+    await openMcp(page);
+    const panel = page.getByTestId('command-line-tool');
+    await expect(panel.getByTestId('command-line-state')).toHaveText(/Links \/usr\/local\/bin\/codetrellis .* asks for your password/);
+    await panel.getByRole('button', { name: 'Add the codetrellis command' }).click();
+    await expect(panel.getByTestId('command-line-message')).toHaveText(/Added\. Open a new terminal and run codetrellis --help\./);
+    await expect(panel.getByTestId('command-line-state')).toHaveText('Added: /usr/local/bin/codetrellis.');
+    await page.screenshot({ path: test.info().outputPath('command-line-added.png') });
+    await panel.getByRole('button', { name: 'Remove' }).click();
+    await expect(panel.getByTestId('command-line-message')).toHaveText('Removed.');
+    // The plan is read on open (twice under React's development double run)
+    // and again after each change; the changes are exactly these.
+    const calls = await page.evaluate(() => (window as unknown as { __cliCalls: string[] }).__cliCalls);
+    expect(calls.filter((c) => c !== 'plan')).toEqual(['install:false', 'remove']);
+    expect(calls.slice(calls.indexOf('install:false') + 1)).toEqual(['plan', 'remove', 'plan']);
+  });
+
+  test('another codetrellis (from npm) is named, and replaced only on Replace', async ({ page }) => {
+    await page.addInitScript((other) => {
+      const calls: string[] = [];
+      (window as unknown as { __cliCalls: string[] }).__cliCalls = calls;
+      (window as unknown as { electronAPI: unknown }).electronAPI = {
+        cli: {
+          plan: async () => other,
+          install: async (replace?: boolean) => { calls.push(`install:${replace === true}`); return { ok: false, reason: 'stand-in' }; },
+          remove: async () => ({ ok: false, reason: 'not ours' }),
+        },
+      };
+    }, plan('other', { existing: 'a link to ../lib/node_modules/codetrellis/bin/codetrellis.mjs' }));
+    await openMcp(page);
+    const panel = page.getByTestId('command-line-tool');
+    await expect(panel.getByTestId('command-line-state')).toContainText('is already a link to ../lib/node_modules/codetrellis/bin/codetrellis.mjs, perhaps from npm');
+    await expect(panel.getByRole('button', { name: 'Remove' })).toHaveCount(0);
+    await panel.getByRole('button', { name: 'Replace it' }).click();
+    await expect(panel.getByTestId('command-line-message')).toHaveText('stand-in');
+    expect(await page.evaluate(() => (window as unknown as { __cliCalls: string[] }).__cliCalls)).toEqual(['install:true']);
+  });
+
+  test('where the app cannot add it, it says why', async ({ page }) => {
+    await page.addInitScript(() => {
+      (window as unknown as { electronAPI: unknown }).electronAPI = {
+        cli: { plan: async () => ({ ok: false, reason: 'The portable build unpacks to a temporary folder each time it starts.' }), install: async () => ({ ok: false, reason: '' }), remove: async () => ({ ok: false, reason: '' }) },
+      };
+    });
+    await openMcp(page);
+    await expect(page.getByTestId('command-line-unavailable')).toHaveText(/portable build/);
+    await expect(page.getByRole('button', { name: /Add the codetrellis command/ })).toHaveCount(0);
+  });
+});

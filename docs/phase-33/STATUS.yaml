@@ -140,6 +140,11 @@ sections:
           - 420
       - title: "The CLI as an npm package (codetrellis), published from CI with trusted publishing, and codetrellis desktop install, which downloads the app through the signed manifest (the owner's ask)"
         followUp: true
+        status: done
+        prs:
+          - 422
+      - title: "The desktop app carries the CLI and offers to put codetrellis on the PATH, as Ollama and VS Code do (the owner's ask)"
+        followUp: true
   - title: "Stage 0: ground truth"
     goal: Numbers to measure against, the freeze measured, and every colour the app draws written down.
     items:

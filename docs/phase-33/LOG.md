@@ -26,7 +26,7 @@
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `3246323`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `89c7a8f`, with open PRs from GitHub.
 
 ---
 
@@ -57,7 +57,8 @@
 - [x] Follow-up: The workstream watcher's unit tests slept a fixed time and failed under load (#417)
 - [x] Follow-up: The open page's name was cut at 260px above its document (the owner's report); the plan name back to one line, at least 7rem, whole on hover (#419)
 - [x] Follow-up: The branch popover ran off the window with sixty branches, did not scroll or search, and hid the worktrees below them; each worktree now says where it is, and one inside the project is no longer scanned as part of it (the owner's report, 0.1.17) (#420)
-- [ ] Follow-up: The CLI as an npm package (codetrellis), published from CI with trusted publishing, and codetrellis desktop install, which downloads the app through the signed manifest (the owner's ask)
+- [x] Follow-up: The CLI as an npm package (codetrellis), published from CI with trusted publishing, and codetrellis desktop install, which downloads the app through the signed manifest (the owner's ask) (#422)
+- [ ] Follow-up: The desktop app carries the CLI and offers to put codetrellis on the PATH, as Ollama and VS Code do (the owner's ask)
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
@@ -229,6 +230,49 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-10 — The name is claimed; the desktop app carries the CLI
+
+- **npm:**
+  - The owner published `codetrellis` 0.2.0 by hand, from the phase tip
+    (#422), and claimed the name. It runs from the registry
+    (`npx codetrellis@latest --version`).
+  - The trusted publisher is set: `lionroseway/codetrellis`,
+    `publish-cli.yml`, allowed to publish. Publishing access requires 2FA
+    and disallows bypass tokens.
+  - npm marks the trusted publisher *pending* until the workflow publishes,
+    by Oct 12. The workflow can run only once it is on `main`, so it may
+    lapse before the release. Hence the release check added to cli.md and
+    CLAUDE.md: re-add it if it lapsed.
+  - npm's new staged publishing left a `0.0.0-stage` placeholder in the
+    version list; `latest` is 0.2.0.
+- **Decision (owner):** this phase releases as **0.3.0**, since the CLI and
+  the pipeline are a major step. The bump comes with Z3, and the release
+  publishes the CLI as 0.3.0 from CI.
+- **The desktop app carries the CLI** (the owner's ask, as Ollama and VS Code
+  do):
+  - `<resources>/cli/` holds the same compiled CLI, run by the app's binary
+    with `ELECTRON_RUN_AS_NODE`.
+  - The packages come from app.asar (`NODE_PATH`, first). werift is a
+    one-file bundle beside the CLI, because app.asar's copy is pruned.
+  - The first launch offers to add the command, and Settings → MCP Server →
+    Command line adds or removes it later. Where it goes:
+    - macOS: a link in `/usr/local/bin`, with a password if needed;
+    - Linux .deb / .rpm: a link in `~/.local/bin`;
+    - AppImage: a launcher naming the file, rewritten if it moves;
+    - Windows: the user PATH.
+  - Someone else's `codetrellis` is replaced only on Replace.
+  - When the CLI starts itself again, it carries `ELECTRON_RUN_AS_NODE`:
+    `start`'s serve, the review sink (in both agents' configs) and the
+    connector line.
+- **Proved on a packaged Linux build here:**
+  - `--version`, through the launcher, a link, and the AppImage bootstrap;
+  - a scan of the sample app: the same 44 files and 202 symbols;
+  - `start`, `check` and `stop` on this repository;
+  - the install service run against it.
+
+  `connector-packaged.yml` now runs the same from the AppImage and the
+  Windows build.
 
 ### 2026-10-10 — The CLI as an npm package, and the desktop app from it
 
