@@ -1,0 +1,6 @@
+{
+  "_note": "Named voices a line can use ({ \"voice\": \"narrator\", \"text\": \"…\" }). A conversation is lines with different voices. `engine` is a module in audio/engines/; `voice` is that engine's own name for it (Kokoro's are listed by `npm run setup:voice`); `speed` 1 is normal. Synthetic voices only: never a clone of a real person's.",
+  "narrator": { "engine": "kokoro", "voice": "af_heart", "speed": 1.0 },
+  "you":      { "engine": "kokoro", "voice": "am_michael", "speed": 1.0 },
+  "agent":    { "engine": "kokoro", "voice": "bf_emma", "speed": 1.05 }
+}
