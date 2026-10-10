@@ -10,12 +10,15 @@
  * Run by smoke.sh.
  */
 
+import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { makeDocx, makePdf } from '../../src/backend/services/material-reader/fixtures.test-helper';
 
 async function main(): Promise<void> {
-  const pkg = path.resolve(process.argv[2] ?? '');
+  // Canonical: Node names a module's folder by its realpath, and on macOS the
+  // install is under the temp dir's /var, a link to /private/var.
+  const pkg = fs.realpathSync(path.resolve(process.argv[2] ?? ''));
   const host = createRequire(path.join(pkg, 'package.json'))('./src/backend/services/material-reader/reader-host.js') as typeof import('../../src/backend/services/material-reader/reader-host');
   const script = host.readerScript();
   if (script !== path.join(pkg, 'reader', 'material-reader.mjs')) throw new Error(`the CLI would start ${script}, not the package's reader bundle`);
