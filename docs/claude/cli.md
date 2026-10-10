@@ -8,14 +8,91 @@ and a pipeline pick it up (D1.4), with recipes you can copy from
 
 ## Installing it
 
-The package is not published to npm. From a checkout of this repository:
+From npm, as the package `codetrellis` (Node 22 or later):
+
+```
+npx codetrellis check            # run once, nothing installed
+npm install -g codetrellis       # or put `codetrellis` on the PATH
+```
+
+Until the first version is published (below), and to run what is on a
+branch, from a checkout of this repository:
 
 ```
 npm ci && npm link        # puts `codetrellis` on the PATH
 ```
 
-`bin/codetrellis.mjs` runs `src/cli/main.ts` through tsx, so the checkout
-keeps its `node_modules`. Node 26, as `.nvmrc` says.
+From a checkout, `bin/codetrellis.mjs` runs `src/cli/main.ts` through tsx, so
+the checkout keeps its `node_modules`. Node 26, as `.nvmrc` says.
+
+### The npm package (tools/cli-package)
+
+`npm run build:cli-package` writes it to `out/cli-package/`. It is not the
+repository's own package.json, which is the desktop app's: that would pull in
+React and the editor, and fail to start, because `tsx` is only a
+devDependency. The build instead:
+
+- compiles `src/cli`, `src/backend` and `src/shared` to JavaScript **one file
+  to one file**, keeping the source's layout, so every path the backend works
+  out from its own folder (the grammars, the review sink's launcher) lands
+  where it expects. Lazy `import()`s become `require`s;
+- copies `resources/tree-sitter/` and the material reader's bundle;
+- writes a package.json listing only the packages the compiled files
+  `require`, at the repository's ranges (`tools/cli-package/manifest.ts`). A
+  package the CLI needs that npm would not install, such as a devDependency,
+  fails the build.
+
+`npm run smoke:cli-package` installs the packed tarball into an empty prefix
+outside the checkout, with install scripts off, and runs it: `--version`,
+the native modules, a scan of the sample app, and `start`, `check` and `stop`
+on this repository. CI runs it on every pull request (`cli-package` in
+`ci.yml`). It is about 3.7 MB packed; `better-sqlite3` and `node-pty` load from
+the prebuilds they ship, so installing needs no compiler.
+
+### Publishing it
+
+`.github/workflows/publish-cli.yml` publishes the exact tarball it has just
+installed and run, with npm's **trusted publishing**: the workflow proves who
+it is with GitHub's OIDC token, so no npm token is stored anywhere, and each
+version on npm shows it was built from this repository by this workflow.
+`scripts/release.sh` starts it once the desktop release is up, so the CLI and
+the app ship the same version. Started by hand from the Actions tab, it is a
+dry run unless *publish* is ticked, and it skips a version npm already has.
+
+Once, by the owner:
+
+1. An npmjs.com account with two-factor authentication.
+2. The first version by hand, which claims the name (trusted publishing is
+   set on a package that exists):
+
+   ```
+   git checkout <the release commit> && npm ci
+   npm run build:cli-package && npm run smoke:cli-package
+   npm login
+   npm publish ./out/cli-package --access public
+   ```
+3. On npmjs.com, the package's **Settings → Trusted publishing**: GitHub
+   Actions, repository `lionroseway/codetrellis`, workflow `publish-cli.yml`.
+   Then, under **Publishing access**, require two-factor authentication and
+   disallow tokens, so the workflow is the only way in.
+
+## The desktop app: `codetrellis desktop`
+
+| Command | What it does |
+|---|---|
+| `codetrellis desktop install` | Downloads the app for this computer, checks it against the release's signed `SHA256SUMS`, saves it to `~/Downloads` (or `--dir`) and opens it: a DMG mounts, a Setup exe starts. An AppImage is made executable and its path printed |
+| `--version <v>` | That release instead of the latest |
+| `--platform <p>` | Another computer's installer (`darwin-arm64`, `darwin-x64`, `win32-x64`, `win32-arm64`, `linux-x64`, `linux-arm64`); downloaded, not opened |
+| `--no-open` | Download and check only |
+| `codetrellis desktop url` | The installer's link, without downloading; `--json` adds the version, file name and size |
+
+It downloads through the app's own update path
+(`update-download-service.ts`): the digest comes from the signed manifest,
+never from the API that named the file; every redirect is held to the release
+hosts; a file that does not match is deleted; and the copy into `--dir` is
+checked again. A release with nothing for the platform exits 1 and says so,
+rather than offering another architecture's installer. It installs nothing
+silently: the person still drags the app or clicks through the wizard.
 
 ## Starting and stopping
 

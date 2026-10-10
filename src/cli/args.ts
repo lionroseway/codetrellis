@@ -16,7 +16,7 @@ export interface Parsed {
 }
 
 /** Flags that never take a value, so `--json foo` keeps `foo` as an argument. */
-const SWITCHES = new Set(['json', 'help', 'no-wait', 'quiet', 'share-task-state', 'top', 'page', 'strict', 'no-color', 'verify', 'post', 'pipeline', 'require', 'no-fetch']);
+const SWITCHES = new Set(['json', 'help', 'no-wait', 'quiet', 'share-task-state', 'top', 'page', 'strict', 'no-color', 'verify', 'post', 'pipeline', 'require', 'no-fetch', 'no-open']);
 
 export function parseArgs(argv: readonly string[]): Parsed {
   const flags: Record<string, string | true> = {};
@@ -178,6 +178,18 @@ which; text, or --json):
                                                the head's signed review, checked against the keys on the base:
                                                verified, stale (of an earlier commit), refused, or none; no
                                                app, no secret, no AI. --require: exit 3 unless verified
+
+The desktop app:
+
+  codetrellis desktop install [--version <v>] [--platform <p>] [--dir <d>] [--no-open] [--json]
+                                               download the app for this computer (or --platform:
+                                               darwin-arm64, darwin-x64, win32-x64, win32-arm64, linux-x64,
+                                               linux-arm64), check it against the release's signed
+                                               checksums, save it to --dir (default ~/Downloads) and open it
+  codetrellis desktop url [--version <v>] [--platform <p>] [--json]
+                                               the installer's download link, without downloading
+
+  codetrellis --version                        this CLI's version
 
 Changing and committing the plan:
 

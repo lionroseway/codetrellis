@@ -45,6 +45,8 @@
     "test:unit": "node --import tsx --test 'src/**/*.test.ts' 'tools/**/*.test.ts'",
     "test:unit:junit": "node -e \"require('fs').mkdirSync('test-results',{recursive:true})\" && node --import tsx --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/unit.xml 'src/**/*.test.ts' 'tools/**/*.test.ts'",
     "inventory": "tsx tools/inventory/run.ts",
+    "build:cli-package": "tsx tools/cli-package/build.ts",
+    "smoke:cli-package": "bash tools/cli-package/smoke.sh",
     "status": "NODE_USE_ENV_PROXY=1 tsx tools/status/run.ts",
     "status:check": "NODE_USE_ENV_PROXY=1 tsx tools/status/run.ts --check",
     "status:page": "NODE_USE_ENV_PROXY=1 tsx tools/status/run.ts --page",

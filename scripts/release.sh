@@ -278,6 +278,27 @@ gh release create "$TAG" \
 
 log "Release published: https://github.com/${RELEASES_REPO_SLUG}/releases/tag/${TAG}"
 
+# --- The CLI on npm, the same version, from CI ---
+#
+# Published by .github/workflows/publish-cli.yml through npm's trusted
+# publishing, so no npm token lives on this machine. The desktop release is
+# already out at this point, so a failed CLI publish is a warning to act on,
+# not a reason to stop: re-run the workflow from the Actions tab with
+# "publish" ticked. It skips a version npm already has.
+if [[ "$MAC_ONLY" -eq 0 ]]; then
+  BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+  log "Publishing the codetrellis CLI ${VERSION} to npm (publish-cli.yml on ${BRANCH})…"
+  if gh workflow run publish-cli.yml --repo "$SOURCE_REPO_SLUG" --ref "$BRANCH" -f publish=true; then
+    sleep 8
+    CLI_RUN="$(gh run list --repo "$SOURCE_REPO_SLUG" --workflow publish-cli.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
+    gh run watch "$CLI_RUN" --repo "$SOURCE_REPO_SLUG" --exit-status \
+      && log "CLI published: https://www.npmjs.com/package/codetrellis/v/${VERSION}" \
+      || warn "The CLI did not publish (run ${CLI_RUN}). Fix it and re-run publish-cli.yml with publish ticked."
+  else
+    warn "Could not start publish-cli.yml. Run it from the Actions tab with publish ticked."
+  fi
+fi
+
 # Tidy up the transient CI staging release on the source repo.
 if [[ "$MAC_ONLY" -eq 0 ]]; then
   log "Deleting staging release ${STAGING_TAG} from ${SOURCE_REPO_SLUG}…"
