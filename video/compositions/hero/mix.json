@@ -1,0 +1,18 @@
+{
+  "_note": "How the narrated hero sounds: edit this, then `npm run narrate hero -- --remix` (seconds, no render). levels are dB per track; music is a library track (audio/library/library.json) or synth:pad, ducked under the voice; sfx maps each cue the build emits (move, push, reveal, tap, end) to a generated sound (audio/synth.mjs) and a gain, or null for none. loudness is the whole mix: -16 LUFS for the web, -14 for YouTube.",
+  "loudness": { "target": -16, "truePeak": -1.5 },
+  "levels": { "vo": 0, "music": -10, "sfx": -13 },
+  "music": {
+    "source": "library:heavenly-loop",
+    "fadeIn": 2.5,
+    "fadeOut": 4,
+    "duck": { "ratio": 5, "threshold": 0.03, "attack": 40, "release": 650 }
+  },
+  "sfx": {
+    "move":   { "sound": "whoosh", "gain": 0 },
+    "push":   { "sound": "push", "gain": -5 },
+    "reveal": { "sound": "pop", "gain": -11 },
+    "tap":    { "sound": "tap", "gain": -2 },
+    "end":    { "sound": "rise", "gain": -3 }
+  }
+}

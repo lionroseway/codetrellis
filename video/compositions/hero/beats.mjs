@@ -18,6 +18,12 @@
 // re-recording, `npm run review hero` shows every beat's moment to check.
 //
 // Footage points (fx, fy) are in the app's 1600x900 layout.
+//
+// `vo` is what the narrated cut says over a beat (audio/voiceover.mjs): a
+// line, or a list of { voice, text, pause } for a conversation. It repeats
+// what the beat already shows and says; it never claims more. The silent cut
+// ignores it; `npm run narrate hero` speaks it and stretches a beat that
+// cannot hold its line.
 
 // A clip opens `at` seconds into scene `scene` of its capture (the scene the
 // demo printed as "N. Title"; 0 is the start of the recording). Scenes, not
@@ -39,7 +45,7 @@ export const ACTS = [
     title: 'The pain',
     beats: [
       // The map lighting up under three agents, behind the line.
-      { layout: 'bleed', dur: 5, media: hero(2, 4.8),
+      { layout: 'bleed', vo: "Your agents write code faster than you can read it.", dur: 5, media: hero(2, 4.8),
         lines: ['Your agents write code', 'faster than you can <b>read</b> it.'] },
     ],
   },
@@ -47,7 +53,7 @@ export const ACTS = [
     id: 'act-1',
     title: 'The promise',
     beats: [
-      { layout: 'title', dur: 6.5, media: hero(1, 4),
+      { layout: 'title', vo: "Keep up with your agents. Check, correct and steer them at the speed they write code.", dur: 6.5, media: hero(1, 4),
         eyebrow: 'Observability for AI coding agents',
         headline: ['Keep up with', 'your agents.'],
         tagline: 'Check, correct and steer AI agents at the speed they write code, however complex your workflow.',
@@ -59,31 +65,31 @@ export const ACTS = [
     title: 'One agent, kept on track',
     beats: [
       // The project opens, then the agents arrive one by one in the top bar.
-      { layout: 'split', text: 'left', dur: 5.5, media: hero(0, 4.4),
+      { layout: 'split', vo: "Connect any agent that speaks MCP.", text: 'left', dur: 5.5, media: hero(0, 4.4),
         shots: [{}, { at: 2.4, fx: 1090, fy: 60, z: 1.55, d: 1.2 }],
         title: 'Connect <b>any</b> agent.',
         body: 'Claude Code, Codex, Cursor: anything that speaks MCP shows up with the work it is doing.' },
       // A plan a payments team would run: phases, every service, tickets, a budget.
-      { layout: 'split', text: 'right', dur: 6, media: scale(1, 0.5),
+      { layout: 'split', vo: "Turn a ticket into a plan the whole team runs.", text: 'right', dur: 6, media: scale(1, 0.5),
         shots: [{}, { at: 3.4, fx: 520, fy: 330, z: 1.2, d: 1.8 }],
         title: 'Turn a ticket into a plan <b>the whole team runs</b>.',
         body: 'Phases, tasks across every service, tickets, criteria and a budget, each task pointing at the files it will change. You approve it, not the agent.' },
       // CodeTrellis mapping itself: 1,506 files, and the imports between them.
-      { layout: 'full', dur: 6, media: scale(4, 15.7),
+      { layout: 'full', vo: "However large the codebase.", dur: 6, media: scale(4, 15.7),
         shots: [{}, { at: 2.4, fx: 760, fy: 300, z: 1.3, d: 2.8 }],
         caption: 'However <b>large</b> the codebase.' },
       // Three agents claim tasks and report progress: the task turns Assigned
       // with a bar, the tree fills in percentages, Activity takes each status.
-      { layout: 'full', dur: 7.5, media: scale(2, 4.5),
+      { layout: 'full', vo: "See every change as it happens.", dur: 7.5, media: scale(2, 4.5),
         shots: [{ fx: 470, fy: 330, z: 1.55 }],
         caption: 'See <b>every change</b> as it happens.' },
       // The reader opens on a line no plan item asked for.
-      { layout: 'split', text: 'left', dur: 5.5, media: main(7, 1.9),
+      { layout: 'split', vo: "Check it did what you asked: every changed line, against the plan.", text: 'left', dur: 5.5, media: main(7, 1.9),
         shots: [{}, { at: 1.4, fx: 600, fy: 230, z: 1.55, d: 1.3 }],
         title: 'Check it did <b>what you asked</b>.',
         body: 'Every changed line against the plan: green where they agree, pink where something changed that no item asked for.' },
       // Line history comes on: the agent beside each line, and how CodeTrellis knows.
-      { layout: 'split', text: 'right', dur: 4.5, media: history(1, 8.2),
+      { layout: 'split', vo: "See which agent wrote every line.", text: 'right', dur: 4.5, media: history(1, 8.2),
         shots: [{}, { at: 1.6, fx: 560, fy: 270, z: 1.45, d: 1.2 }],
         title: 'See which agent wrote <b>every line</b>.',
         body: 'From the commit message, or "probably", from when its session was open in that checkout. CodeTrellis says which.' },
@@ -96,14 +102,14 @@ export const ACTS = [
       // A HIGH overlap; Claude Code's claim waits in Needs you, with why.
       // The signature change lands at ~39 s, the held claim at ~40.5 s; the
       // freeze takes the window at 42 s, so the beat ends there.
-      { layout: 'split', text: 'left', dur: 5, media: hero(5, 0.6),
+      { layout: 'split', vo: "Serious overlaps wait for your answer.", text: 'left', dur: 5, media: hero(5, 0.6),
         shots: [{}, { at: 0.9, fx: 640, fy: 765, z: 2.1, d: 1.2 }],
         title: 'Serious overlaps <b>wait for you</b>.',
         body: 'When two lines of work change the same function, the next step waits in Needs you, with why. Nothing is claimed until you answer.' },
       // A breakpoint on shared code: held from ~0.25 s into the scene,
       // Continue at ~2.8 s. Opened before the scene so the 60% frame is on
       // the held edit and Continue still lands inside the beat.
-      { layout: 'split', text: 'right', dur: 4.8, media: parallel(6, -0.6),
+      { layout: 'split', vo: "A breakpoint holds the edit until you answer.", text: 'right', dur: 4.8, media: parallel(6, -0.6),
         shots: [{}, { at: 0.7, fx: 630, fy: 775, z: 2.1, d: 1.1 }],
         title: 'Ask me <b>before this changes</b>.',
         body: 'Put a breakpoint on code that matters. The edit is held, not made, until you continue, steer or stop it.' },
@@ -114,15 +120,15 @@ export const ACTS = [
     title: 'Together',
     beats: [
       // Two worktrees edit isValidEmail; Awareness names it, the chips go red.
-      { layout: 'full', dur: 6, media: parallel(2, 0.4),
+      { layout: 'full', vo: "Several agents on one task, told before they collide.", dur: 6, media: parallel(2, 0.4),
         shots: [{ z: 1.04 }, { at: 1.6, fx: 620, fy: 740, z: 1.45, d: 1.6 }],
         caption: 'Several agents on one task, <b>told before they collide</b>.' },
       // Dana's own branch, beside the agents': the same function, flagged.
-      { layout: 'split', text: 'left', dur: 6, media: hero(4, 3.5),
+      { layout: 'split', vo: "Your teammates, beside the agents. Both sides see the overlap.", text: 'left', dur: 6, media: hero(4, 3.5),
         shots: [{}, { at: 1.3, fx: 640, fy: 765, z: 2.1, d: 1.3 }],
         title: 'Your teammates, <b>beside the agents</b>.',
         body: 'A developer\'s branch is a line of work like any agent\'s. When it touches the same function, both sides see it.' },
-      { layout: 'mosaic', dur: 7,
+      { layout: 'mosaic', vo: "A whole team, in one view.", dur: 7,
         media: observe(3, 1.9),
         shots: [{ fx: 640, fy: 760, z: 1.5 }],
         tiles: [
@@ -140,11 +146,11 @@ export const ACTS = [
     title: 'Hold the line',
     beats: [
       // The team's rule, with its reason, in Settings.
-      { layout: 'split', text: 'left', dur: 6, media: teams(1, 1.3),
+      { layout: 'split', vo: "Write your architecture down once. Every agent checks the same rule.", text: 'left', dur: 6, media: teams(1, 1.3),
         shots: [{}, { at: 1.2, fx: 880, fy: 310, z: 1.5, d: 1.3 }],
         title: 'Write your architecture down <b>once</b>.',
         body: '“Routes may not import config: routes read settings through the app.” Every agent and the pipeline check the same rule.' },
-      { layout: 'mosaic', dur: 7,
+      { layout: 'mosaic', vo: "Guardrails agents check themselves. Done means tested. Release week means frozen.", dur: 7,
         media: teams(4, 1.4),
         shots: [{ fx: 1450, fy: 260, z: 1.6 }],
         tiles: [
@@ -156,7 +162,7 @@ export const ACTS = [
         title: 'Guardrails agents <b>check themselves</b>.',
         body: '“Done” means tested on the code as it is. Release week means frozen. A vague plan is flagged before anyone starts.' },
       // A real `codetrellis check`: exit 3 on the breach, 0 after the fix.
-      { layout: 'terminal', dur: 9, bar: 'exports-v2 · ci',
+      { layout: 'terminal', vo: "And CI fails when work drifts.", dur: 9, bar: 'exports-v2 · ci',
         box: { x: 96, y: 120, w: 1040 },
         recipe: { x: 96, y: 700, w: 1040, name: '.github/workflows/conformity.yml', at: 3.4, lines: [
           '- name: Start CodeTrellis',
@@ -175,19 +181,19 @@ export const ACTS = [
     title: 'Anywhere',
     beats: [
       // The digest: who overlaps, whether they were told, what you are asked.
-      { layout: 'split', text: 'left', dur: 6, media: hero(7, 0.9),
+      { layout: 'split', vo: "Catch up in under a minute.", text: 'left', dur: 6, media: hero(7, 0.9),
         shots: [{}, { at: 1.3, fx: 640, fy: 770, z: 2.1, d: 1.3 }],
         title: 'Catch up in <b>under a minute</b>.',
         body: 'Who overlaps, what changed, whether the agents were told, and what you are asked.' },
       // The agent drives the window: the overlap on the graph, then the lines.
-      { layout: 'full', dur: 7.5, media: hero(7, 6.1),
+      { layout: 'full', vo: [{ voice: "you", text: "Show me where they overlap." }, { voice: "agent", text: "Here. Both lines of work change this function.", pause: 0.45 }], dur: 7.5, media: hero(7, 6.1),
         shots: [{ z: 1.04 }],
         caption: 'Ask your agent to <b>show you</b>.' },
       // The breakpoint answered from the phone. The desktop footage is lined
       // up so its card clears (~2.8 s into the scene) as the phone's tap
       // lands (delay + tap.at, from the phone capture's tap.json), which is
       // what an answer from the phone does.
-      { layout: 'phone', dur: 6.5, media: parallel(6, 0.4),
+      { layout: 'phone', vo: "Take it with you: answer from your phone.", dur: 6.5, media: parallel(6, 0.4),
         shots: [{ fx: 630, fy: 775, z: 1.9 }],
         phone: { src: 'phone-breakpoint.mp4', done: 'phone-breakpoint-done.png', start: 0, delay: 0.9, tap: { x: 68, y: 215, at: 1.51 } },
         caption: 'Take it with you: <b>answer from your phone</b>.' },
@@ -198,17 +204,17 @@ export const ACTS = [
     title: 'Proof and trust',
     beats: [
       // The stack as it was at 10:45, scrubbed back.
-      { layout: 'split', text: 'right', dur: 5.5, media: observe(2, 0.2),
+      { layout: 'split', vo: "Replay exactly what happened.", text: 'right', dur: 5.5, media: observe(2, 0.2),
         shots: [{}, { at: 1.0, fx: 700, fy: 720, z: 1.75, d: 1.3 }],
         title: 'Replay <b>exactly</b> what happened.',
         body: 'Scrub back to any moment: the stack, the overlaps and who was told, as they were then.' },
       // A person approves; the record checks its chain.
       // Approved at ~13.5 s; Settings → Data checks the chain at ~18.5 s.
-      { layout: 'split', text: 'left', dur: 7.8, media: record(1, 6.3),
+      { layout: 'split', vo: "Prove it later. An agent cannot approve its own work, and the record keeps who decided.", text: 'left', dur: 7.8, media: record(1, 6.3),
         shots: [{ fx: 1450, fy: 200, z: 1.7 }, { at: 5.8, fx: 1100, fy: 620, z: 1.25, d: 1.1 }],
         title: 'Prove it <b>later</b>.',
         body: 'An agent cannot approve its own work. The record keeps who decided, in a chain anyone can check months on.' },
-      { layout: 'strip', dur: 4.5,
+      { layout: 'strip', vo: "On your machine. Free and open source.", dur: 4.5,
         lines: ['On your machine. No telemetry.', 'Free and <b>open source</b>.'],
         groups: [['13 languages + SQL', 'Any MCP agent', '212 tools', 'Desktop, iOS, Android']] },
     ],
@@ -219,7 +225,7 @@ export const ACTS = [
     beats: [
       // 17 s on the large map: from just after it renders (clusters, then
       // files), ending before the demo puts the small project back.
-      { layout: 'rotate', dur: 17, media: scale(4, 5.8), shots: [{ z: 1.1 }],
+      { layout: 'rotate', vo: "Use CodeTrellis to keep up with your agents.", dur: 17, media: scale(4, 5.8), shots: [{ z: 1.1 }],
         lead: 'Use CodeTrellis to…',
         lines: [
           'keep agents to the work you agreed',
@@ -233,7 +239,7 @@ export const ACTS = [
           'replay exactly what happened',
         ],
         more: 'And many more features and use cases.' },
-      { layout: 'end', dur: 5,
+      { layout: 'end', vo: "codetrellis.dev", dur: 5,
         headline: 'Keep up with your agents.',
         pills: ['Free and open source', 'Apache 2.0'],
         url: 'codetrellis.dev' },
