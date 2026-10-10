@@ -12,6 +12,11 @@ if (process.resourcesPath) {
   require('module').Module._initPaths();
 }
 // Started with `-e` (the AppImage launcher), argv has no script; the CLI
-// reads its arguments from argv[2].
-if (process.argv[1] !== __filename) process.argv.splice(1, 0, __filename);
+// reads its arguments from argv[2]. That launcher ends with --no-sandbox, so
+// the AppImage's AppRun does not add it where Node mode refuses it; it is not
+// the CLI's.
+if (process.argv[1] !== __filename) {
+  process.argv.splice(1, 0, __filename);
+  if (process.argv[process.argv.length - 1] === '--no-sandbox') process.argv.pop();
+}
 require('../src/cli/main.js');

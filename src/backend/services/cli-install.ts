@@ -80,7 +80,10 @@ export function appImageLauncher(appImage: string): string {
     '#!/bin/sh',
     `# codetrellis: ${LAUNCHER_MARK} for the AppImage below; it rewrites this`,
     '# file if the AppImage moves. Runs the CLI the app carries, in Node mode.',
-    `ELECTRON_RUN_AS_NODE=1 exec ${q} -e "require(require('path').join(process.resourcesPath, 'cli', 'bin', 'app.cjs'))" -- "$@"`,
+    // --no-sandbox last, after --: the AppImage's AppRun adds it as the first
+    // argument unless it is already there, and in Node mode that is a "bad
+    // option". As the connector's AppImage command does; app.cjs drops it.
+    `ELECTRON_RUN_AS_NODE=1 exec ${q} -e "require(require('path').join(process.resourcesPath, 'cli', 'bin', 'app.cjs'))" -- "$@" --no-sandbox`,
     '',
   ].join('\n');
 }

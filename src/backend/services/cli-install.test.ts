@@ -164,7 +164,8 @@ describe('adding it', () => {
     const text = fs.readFileSync(path.join(home, '.local', 'bin', 'codetrellis'), 'utf8');
     assert.equal(text, appImageLauncher(appImage));
     assert.ok(text.includes(LAUNCHER_MARK));
-    assert.match(text, /ELECTRON_RUN_AS_NODE=1 exec '.*CodeTrellis-0\.3\.0-x86_64\.AppImage' -e ".*'cli', 'bin', 'app\.cjs'.*" -- "\$@"/);
+    // --no-sandbox last, after --, or AppRun puts it first, where Node mode refuses it.
+    assert.match(text, /ELECTRON_RUN_AS_NODE=1 exec '.*CodeTrellis-0\.3\.0-x86_64\.AppImage' -e ".*'cli', 'bin', 'app\.cjs'.*" -- "\$@" --no-sandbox\n/);
     assert.equal(fs.statSync(path.join(home, '.local', 'bin', 'codetrellis')).mode & 0o111, 0o111);
   });
 });
