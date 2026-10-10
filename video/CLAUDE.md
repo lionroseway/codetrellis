@@ -50,3 +50,20 @@ bounds it. No model identifiers, customer names or anything from `docs/private/`
 - After any re-recording or recut, run `npm run review <composition>` and look
   at every frame against `beats.txt`.
 - Captures, renders and staged assets stay out of git (`.gitignore`).
+
+## Voice
+
+- A beat's `vo` repeats what the beat shows and says; it never claims more
+  than the picture and the atlas do. The same "Say carefully" list bounds it.
+- Synthetic voices only (`audio/voices.json`), never a clone of a real
+  person's, and say so wherever a narrated cut is published.
+- Keep `audio/` free of composition knowledge: a composition writes lines and
+  a mix spec, the library speaks, mixes and checks them.
+- After any change to a `vo` line or a voice, run `npm run narrate <name>`,
+  listen to it, and read `npm run review <name> -- --audio`. `audio:check`
+  passing means the timing fits, not that the line is right.
+- Music and sound from other people come only through `audio/library/library.json`,
+  added after reading the licence on the source page yourself: CC0, CC-BY or
+  Apache-2.0, never NC, ND or a site's own terms, and the file's sha256
+  recorded. `audio:check` enforces it; publish `out/<name>-credits.txt` when
+  one is written.

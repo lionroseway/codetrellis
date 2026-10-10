@@ -6,10 +6,17 @@
 // dissolves in inside it, so nothing cuts and nothing jumps. Text moves
 // around the window, never over the product unless it is a caption.
 //
-// Usage: node build.mjs   (bin/render.sh hero runs it)
+// Usage: node build.mjs               the silent hero (bin/render.sh hero runs it)
+//        node build.mjs --lines <f>   only write the voiceover lines to speak
+//        node build.mjs --audio       the narrated cut: beats stretched to hold
+//                                     their speech (assets/vo/vo.json), and
+//                                     audio.json, the mix (bin/narrate.sh runs it)
 import fs from 'node:fs';
 import path from 'node:path';
 import { ACTS } from './beats.mjs';
+import { lines as voLines, fit as voFit, spec as voSpec } from '../../audio/voiceover.mjs';
+import { track as sfxTrack } from '../../audio/sfx.mjs';
+import { track as musicTrack } from '../../audio/music.mjs';
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -89,6 +96,33 @@ const beats = ACTS.flatMap((a) => a.beats.map((b) => ({
   media: resolve(b.media),
   ...(b.tiles ? { tiles: b.tiles.map(resolve) } : {}),
 })));
+// Voiceover: a beat's `vo` is said over it (audio/voiceover.mjs). The speech
+// starts once the window has settled and ends before it moves on.
+beats.forEach((b, i) => { b.key = String(i).padStart(2, '0'); });
+const VO = { lead: PRE + 0.05, tail: PRE + 0.15 };
+const arg = (f) => { const i = process.argv.indexOf(f); return i < 0 ? null : process.argv[i + 1] ?? ''; };
+if (arg('--lines') !== null) {
+  const out = path.resolve(arg('--lines') || path.join(here, 'assets', 'vo', 'lines.json'));
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  const ls = voLines(beats);
+  fs.writeFileSync(out, JSON.stringify({ lines: ls }, null, 2) + '\n');
+  console.log(`${ls.length} voiceover lines from ${beats.filter((b) => b.vo).length} beats -> ${path.relative(process.cwd(), out)}`);
+  process.exit(0);
+}
+const AUDIO = process.argv.includes('--audio');
+const voManifest = AUDIO ? (() => {
+  const f = path.join(here, 'assets', 'vo', 'vo.json');
+  if (!fs.existsSync(f)) throw new Error('no assets/vo/vo.json: speak the lines first (npm run narrate hero)');
+  return JSON.parse(fs.readFileSync(f, 'utf8'));
+})() : null;
+const stretched = [];
+if (AUDIO) {
+  for (const [i, f] of voFit(beats, voManifest, VO).entries()) {
+    const b = beats[i];
+    if (f.stretch > 0) stretched.push({ beat: f.key, words: b.title ?? b.caption ?? b.lead ?? [b.headline ?? b.lines ?? ''].flat().join(' '), by: f.stretch });
+    beats[i].dur = f.need;
+  }
+}
 let t = 0;
 for (const b of beats) { b.at = +t.toFixed(2); t += b.dur; }
 const TOTAL = +t.toFixed(2);
@@ -99,9 +133,16 @@ const layers = [];
 let n = 0;
 const id = (p) => `${p}${++n}`;
 
+// What happens, for the narrated cut's sound effects (audio/sfx.mjs): each
+// cue names an event, and mix.json says what it sounds like.
+const cues = [];
+/** How far the window travels between two frames, 0–1: a long glide is louder. */
+const travel = (a, b) => Math.min(1, 0.3 + (Math.abs(a.x - b.x) + Math.abs(a.y - b.y) + Math.abs(a.w - b.w)) / 1920);
+
 let lastFrame = FRAMES.full;
 beats.forEach((b, i) => {
   const frame = frameFor(b, lastFrame);
+  const fromFrame = lastFrame;
   lastFrame = frame;
   const shots = b.shots?.length ? b.shots : [{}];
   const first = cam(frame, shots[0]);
@@ -116,6 +157,7 @@ beats.forEach((b, i) => {
     const at = Math.max(b.at - PRE, 0);
     js.push(`tl.to('#frame', { ...${JSON.stringify(frameCss(frame))}, duration: ${MOVE}, ease: 'power3.inOut' }, ${at});`);
     js.push(`tl.to('#cam', { ...${JSON.stringify(first)}, duration: ${MOVE}, ease: 'power3.inOut' }, ${at});`);
+    cues.push({ at, kind: 'move', dur: MOVE, strength: +travel(fromFrame, frame).toFixed(2), beat: b.key });
   }
   // The window fades out for a beat with no product on screen, and back.
   const shown = !HIDDEN.has(b.layout);
@@ -129,6 +171,7 @@ beats.forEach((b, i) => {
   if (shots.length > 1) {
     for (const sh of shots.slice(1)) {
       js.push(`tl.to('#cam', { ...${JSON.stringify(cam(frame, sh))}, duration: ${sh.d ?? 1.4}, ease: '${sh.ease ?? 'power2.inOut'}' }, ${b.at + sh.at});`);
+      cues.push({ at: b.at + sh.at, kind: 'push', dur: sh.d ?? 1.4, strength: Math.min(1, 0.4 + Math.abs((sh.z ?? 1) - (shots[0].z ?? 1)) * 0.5), beat: b.key });
     }
   } else if (b.drift !== false) {
     const sh = shots[0];
@@ -157,6 +200,9 @@ beats.forEach((b, i) => {
   const tid = id('t');
   const inAt = +(b.at + (prev ? PRE * 0.6 : 0.25)).toFixed(2);
   const outAt = +(b.at + b.dur - PRE - 0.15).toFixed(2);
+  cues.push({ at: inAt, kind: 'reveal', beat: b.key });
+  // The end card arrives on a swell that peaks as it lands.
+  if (b.layout === 'end') cues.push({ at: Math.max(0, b.at - 1.4), kind: 'end', dur: 1.4, beat: b.key });
   switch (b.layout) {
     case 'bleed':
       layers.push(`<div class="layer center" id="${tid}"><div class="big light">${b.lines.map((l) => `<span class="line"><span>${rich(l)}</span></span>`).join('')}</div></div>`);
@@ -239,6 +285,7 @@ beats.forEach((b, i) => {
       if (p.tap) {
         js.push(`gsap.set('#${pid}t', { scale: 0.4, opacity: 0 });`);
         js.push(`tl.to('#${pid}t', { opacity: 1, scale: 1, duration: 0.18, ease: 'power2.out' }, ${(start + (p.delay ?? 0.4) + p.tap.at - 0.15).toFixed(2)});`);
+        cues.push({ at: +(start + (p.delay ?? 0.4) + p.tap.at).toFixed(3), kind: 'tap', beat: b.key });
         js.push(`tl.to('#${pid}t', { opacity: 0, scale: 1.6, duration: 0.45, ease: 'power2.out' }, ${(start + (p.delay ?? 0.4) + p.tap.at + 0.05).toFixed(2)});`);
       }
       layers.push(`<div class="layer" id="${tid}" style="inset:0">
@@ -373,7 +420,32 @@ fs.writeFileSync(path.join(here, 'timing.json'), JSON.stringify(beats.map((b) =>
   act: b.act, at: b.at, dur: b.dur, layout: b.layout,
   words: plain(b.title ?? b.caption ?? b.lead ?? [b.headline ?? b.lines ?? ''].flat().join(' ')),
   media: b.media ? `${b.media.src} @ ${b.media.start ?? 0}s` : null,
+  vo: b.vo ? [b.vo].flat().map((l) => (typeof l === 'string' ? l : `${l.voice ? `${l.voice}: ` : ''}${l.text ?? l.file}`)).join(' / ') : null,
 })), null, 2) + '\n');
+// The narrated cut's mix (mix.json): the voice, every line at its time and a
+// window per beat that speaks; the effects, one per cue; the music under both.
+if (AUDIO) {
+  const cfg = JSON.parse(fs.readFileSync(path.join(here, 'mix.json'), 'utf8'));
+  const levels = cfg.levels ?? {};
+  const voice = voSpec(beats, voManifest, { dir: 'assets/vo', duration: TOTAL, loudness: cfg.loudness, ...(cfg.voice?.compress !== undefined ? { compress: cfg.voice.compress } : {}), ...VO });
+  if (!voice.tracks[0].compress) delete voice.tracks[0].compress;
+  voice.tracks[0].gain = levels.vo ?? 0;
+  const tracks = [...voice.tracks];
+  const sounds = path.join(here, 'assets', 'sfx');
+  if (cfg.sfx) {
+    const { track, unknown } = sfxTrack(cues, { sounds: cfg.sfx, dir: sounds, base: here, gain: levels.sfx ?? 0 });
+    if (unknown.length) console.log(`  mix.json has no sound for cue kind(s): ${unknown.join(', ')} (silent)`);
+    tracks.push(track);
+  }
+  if (cfg.music) {
+    const { track, warnings } = musicTrack(cfg.music, { duration: TOTAL, dir: sounds, base: here, gain: levels.music ?? 0 });
+    for (const w of warnings) console.log(`  music: ${w}`);
+    tracks.push(track);
+  }
+  fs.writeFileSync(path.join(here, 'audio.json'), JSON.stringify({ ...voice, tracks, stretched }, null, 2) + '\n');
+  for (const s of stretched) console.log(`  beat ${s.beat} stretched ${s.by.toFixed(2)} s to hold its speech: ${plain(s.words)}`);
+  console.log(`audio.json: ${tracks.map((t) => `${t.name} ×${t.clips.length}`).join(', ')}`);
+}
 for (const a of ACTS) {
   const bs = beats.filter((b) => b.act === a.id);
   const end = bs[bs.length - 1].at + bs[bs.length - 1].dur;

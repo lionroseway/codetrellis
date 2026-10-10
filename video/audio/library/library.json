@@ -1,0 +1,27 @@
+{
+  "_note": "Sounds and music by other people, with their licences (audio/library.mjs). `file` is fetched into files/ (not in git) and must match `sha256`: npm run library -- fetch. Add an entry only after reading the licence on `page` yourself; `licence` must be one library.mjs allows (CC0-1.0, CC-BY-3.0, CC-BY-4.0, Apache-2.0). Never NC, ND or a site's own terms.",
+  "heavenly-loop": {
+    "kind": "music",
+    "title": "Heavenly Loop",
+    "author": "isaiah658",
+    "licence": "CC0-1.0",
+    "page": "https://opengameart.org/content/heavenly-loop",
+    "url": "https://opengameart.org/sites/default/files/Heavenly%20Loop_0.ogg",
+    "file": "heavenly-loop.ogg",
+    "sha256": "a842e9e054019132cacc8fd352e7b31c000ebb51e0b227a2511e1bccb4eb166e",
+    "loops": true,
+    "notes": "33.7 s, seamless. Dreamy, stays out of the way."
+  },
+  "contemplation": {
+    "kind": "music",
+    "title": "Contemplation",
+    "author": "Joth",
+    "licence": "CC0-1.0",
+    "page": "https://opengameart.org/content/contemplation-0",
+    "url": "https://opengameart.org/sites/default/files/Contemplation.mp3",
+    "file": "contemplation.mp3",
+    "sha256": "283962d3a975c93613c46cda30c9f0816176ae3e2899f961591a49e2d41b4bf3",
+    "loops": false,
+    "notes": "120 s. Ambience, no melody."
+  }
+}
