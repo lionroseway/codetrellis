@@ -47,6 +47,12 @@ interface ElectronAPI {
     preview: () => Promise<GeminiHookPreview>;
     apply: (shownHash: string) => Promise<GeminiHookApplied>;
   };
+  /** The `codetrellis` command on the PATH, from the installed app (desktop only). */
+  cli?: {
+    plan: () => Promise<CliPlan>;
+    install: (replace?: boolean) => Promise<CliApplied>;
+    remove: () => Promise<CliApplied>;
+  };
   /** Phase 31 §7.3 — an HTML report in its own sandboxed view (desktop only). */
   htmlReport?: {
     show: (uid: string, bounds: { x: number; y: number; width: number; height: number }, scripts: boolean) => Promise<{ ok: boolean; reason?: string }>;
@@ -91,3 +97,18 @@ type ClaudeCodeWritten = { path: string; backupPath: string | null; status: 'add
 type ClaudeCodeApplied =
   | { ok: true; skill?: ClaudeCodeWritten; hook?: ClaudeCodeWritten }
   | { ok: false; reason: string; changed?: boolean };
+/** The shapes `cli-install.ts` returns: where the `codetrellis` command goes, and whether it is there. */
+type CliPlan =
+  | {
+      ok: true;
+      how: 'link' | 'launcher' | 'path';
+      target: string;
+      source: string;
+      admin: boolean;
+      state: 'installed' | 'missing' | 'stale' | 'other';
+      existing?: string;
+      onPath: boolean;
+      says: string;
+    }
+  | { ok: false; reason: string };
+type CliApplied = { ok: true; target: string; onPath: boolean } | { ok: false; reason: string };

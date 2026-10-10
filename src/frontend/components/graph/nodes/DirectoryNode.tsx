@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { ChevronDown, ChevronRight, Folder, FolderOpen } from 'lucide-react';
 
+import { GRAPH_CHROME } from '../../../lib/visual-language';
 import { useUiStore } from '../../../stores/ui-store';
 
 interface DirectoryNodeData {
@@ -18,9 +19,9 @@ function DirectoryNodeComponent({ data }: NodeProps) {
   const perf = useUiStore((s) => s.graphStyle) === 'performance';
 
   return (
-    <div className={`group relative w-[230px] overflow-hidden rounded-[20px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.14),rgba(13,17,28,0.7))] px-3.5 py-3 hover:border-white/18 ${perf ? 'bg-[#0e1422]' : 'backdrop-blur-xl shadow-[0_18px_40px_rgba(0,0,0,0.35)] transition-all duration-300 hover:-translate-y-0.5'}`}>
+    <div className={`group relative w-[230px] overflow-hidden rounded-[20px] border border-white/10 ${GRAPH_CHROME.directoryCard} px-3.5 py-3 hover:border-white/18 ${perf ? GRAPH_CHROME.perfGround : `backdrop-blur-xl ${GRAPH_CHROME.directoryShadow} transition-all duration-300 hover:-translate-y-0.5`}`}>
       <Handle type="target" position={Position.Top} className="!h-2 !w-2 !border-0 !bg-white/70" />
-      <div className="pointer-events-none absolute inset-0 rounded-[20px] bg-[radial-gradient(circle_at_top_left,rgba(148,163,184,0.16),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.12),transparent_40%)]" />
+      <div className={`pointer-events-none absolute inset-0 rounded-[20px] ${GRAPH_CHROME.directorySheen}`} />
       <div className="relative z-10 flex items-center gap-2">
         <button
           onClick={(e) => { e.stopPropagation(); d.onToggle?.(); }}
@@ -28,10 +29,11 @@ function DirectoryNodeComponent({ data }: NodeProps) {
         >
           {d.expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         </button>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-white/8 bg-sky-500/10">
+        {/* Structure, not state: neutral, so sky keeps its one meaning (staged). */}
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-white/8 bg-white/8">
           {d.expanded
-            ? <FolderOpen size={17} className="text-sky-100 shrink-0 drop-shadow-[0_0_8px_rgba(56,189,248,0.35)]" />
-            : <Folder size={17} className="text-sky-100/90 shrink-0 drop-shadow-[0_0_8px_rgba(56,189,248,0.35)]" />
+            ? <FolderOpen size={17} className="text-zinc-100 shrink-0" />
+            : <Folder size={17} className="text-zinc-100/90 shrink-0" />
           }
         </div>
         <div className="min-w-0 flex-1">

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderOpen, Plug, Plus, X, GitBranch, RefreshCw, AlertCircle, Camera, GitCompare, Settings as SettingsIcon, GraduationCap, BookOpen, Zap, FileCode, ClipboardList } from 'lucide-react';
+import { FolderOpen, Plug, Plus, X, GitBranch, RefreshCw, AlertCircle, Camera, GitCompare, Settings as SettingsIcon, GraduationCap, BookOpen, Zap, FileCode, ClipboardList, ShieldCheck } from 'lucide-react';
 import { useProjectStore, type ProjectTab } from '../../stores/project-store';
 import { useGraphStore } from '../../stores/graph-store';
 import { useUiStore } from '../../stores/ui-store';
@@ -111,10 +111,20 @@ async function rescanActiveTab() {
 
 function BranchPopover({ projectPath }: { projectPath: string }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const [gitInfo, setGitInfo] = useState<{
     currentBranch: string | null;
     branches: string[];
-    worktrees: Array<{ path: string; branch: string | null }>;
+    // Main checkout first, then inside it, beside it, under home,
+    // elsewhere; a worktree whose folder is gone last (worktree-service).
+    worktrees: Array<{
+      path: string;
+      branch: string | null;
+      isMain?: boolean;
+      prunable?: boolean;
+      where?: 'main' | 'inside' | 'beside' | 'home' | 'elsewhere';
+      label?: string;
+    }>;
     hasCommits: boolean;
   } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -126,6 +136,10 @@ function BranchPopover({ projectPath }: { projectPath: string }) {
       .then(setGitInfo)
       .catch(() => {});
   }, [open, projectPath]);
+
+  useEffect(() => {
+    if (open) setQuery('');
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -155,6 +169,18 @@ function BranchPopover({ projectPath }: { projectPath: string }) {
     }
   }, [open]);
 
+  // A repository with sixty branches ran the list off the bottom of the
+  // window with no way to scroll, and the worktrees, listed after every
+  // branch, could not be reached at all. The list now scrolls inside the
+  // window, worktrees come first, and the box at the top narrows both.
+  const q = query.trim().toLowerCase();
+  const matches = (s: string | null | undefined) => !q || (s ?? '').toLowerCase().includes(q);
+  const worktrees = gitInfo?.worktrees.filter((wt) => matches(wt.branch) || matches(wt.path) || matches(wt.label)) ?? [];
+  const showCurrent = !!gitInfo?.currentBranch && matches(gitInfo.currentBranch);
+  const branches = gitInfo?.branches.filter((b) => b !== gitInfo.currentBranch && matches(b)) ?? [];
+  const otherBranchCount = gitInfo?.branches.filter((b) => b !== gitInfo.currentBranch).length ?? 0;
+  const nothingAtAll = !!gitInfo && gitInfo.branches.length === 0 && gitInfo.worktrees.length === 0;
+
   return (
     <div ref={ref}>
       <button
@@ -174,8 +200,17 @@ function BranchPopover({ projectPath }: { projectPath: string }) {
       {open && gitInfo && createPortal(
         <div
           data-branch-popover
-          style={{ position: 'fixed', top: popoverPos.top, left: popoverPos.left, zIndex: 9999 }}
-          className="w-56 bg-surface-solid/95 backdrop-blur-xl border border-white/[0.08] rounded-lg shadow-[0_0_20px_rgba(0,0,0,0.5)] py-1"
+          style={{
+            position: 'fixed', top: popoverPos.top, left: popoverPos.left, zIndex: 9999,
+            maxHeight: `calc(100vh - ${popoverPos.top + 12}px)`,
+          }}
+          className="w-72 flex flex-col bg-surface-solid/95 backdrop-blur-xl border border-white/[0.08] rounded-lg shadow-[0_0_20px_rgba(0,0,0,0.5)] py-1"
+          onKeyDown={(e) => {
+            if (e.key !== 'Escape') return;
+            e.stopPropagation();
+            if (query) setQuery('');
+            else setOpen(false);
+          }}
         >
           {!gitInfo.hasCommits && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] text-warning border-b border-white/[0.06]">
@@ -184,77 +219,135 @@ function BranchPopover({ projectPath }: { projectPath: string }) {
             </div>
           )}
 
-          <div className="px-2 py-1">
-            <span className="text-[9px] text-foreground-subtle uppercase tracking-wider px-1">Branches</span>
-            <div className="text-[9px] text-foreground-subtle px-1 mb-0.5 leading-snug">
-              Click a branch to pin it as the diff baseline.
+          {!nothingAtAll && (
+            <div className="px-2 pt-1 pb-1.5 border-b border-white/[0.06] shrink-0">
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Find a branch or worktree"
+                aria-label="Find a branch or worktree"
+                data-testid="branch-popover-search"
+                className="w-full px-2 py-1 text-[11px] rounded bg-white/[0.04] border border-white/[0.08] text-foreground placeholder:text-foreground-subtle focus:outline-none focus:border-accent/40"
+              />
             </div>
-            {/* Always show current branch */}
-            {gitInfo.currentBranch && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setOpen(false);
-                  captureBaselineFromBranch(projectPath, gitInfo.currentBranch!);
-                }}
-                className="group w-full flex items-center gap-1.5 px-2 py-1 text-[11px] rounded text-accent hover:bg-accent/10 transition-colors text-left"
-                title="Pin baseline to current branch's HEAD"
-              >
-                <GitBranch size={10} />
-                <span className="truncate">{gitInfo.currentBranch}</span>
-                <span className="text-[8px] text-accent ml-auto">current</span>
-                <Camera size={9} className="opacity-0 group-hover:opacity-70" />
-              </button>
+          )}
+
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain" data-testid="branch-popover-list">
+            {worktrees.length > 0 && (
+              <div className="px-2 py-1 border-b border-white/[0.06]" data-testid="branch-popover-worktrees">
+                <div className="flex items-center px-1">
+                  <span className="text-[9px] text-foreground-subtle uppercase tracking-wider">Worktrees</span>
+                  <span className="ml-auto text-[9px] text-foreground-subtle">{worktrees.length}</span>
+                </div>
+                <div className="text-[9px] text-foreground-subtle px-1 mb-0.5 leading-snug">
+                  Click a worktree to open it in a tab.
+                </div>
+                {worktrees.map((wt) => {
+                  const name = wt.branch || wt.path.split(/[\\/]/).pop();
+                  // Where it is, as a person would look for it: inside the
+                  // checkout, `../` beside it, `~/` under home, or the path.
+                  const where = wt.label ?? wt.path;
+                  if (wt.prunable) {
+                    return (
+                      <div
+                        key={wt.path}
+                        data-testid="branch-popover-worktree-missing"
+                        className="w-full flex items-start gap-1.5 px-2 py-1 text-[11px] text-foreground-subtle rounded"
+                        title={`${wt.path} is gone. \`git worktree prune\` removes it from git's list.`}
+                      >
+                        <AlertCircle size={10} className="shrink-0 mt-[3px] text-warning" />
+                        <span className="min-w-0 flex flex-col">
+                          <span className="truncate line-through">{name}</span>
+                          <span className="truncate font-mono text-[9px]">folder missing · {where}</span>
+                        </span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <button
+                      key={wt.path}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpen(false);
+                        // Open as a tab, or switch to it if it already is one.
+                        void openWorktreeTab(wt.path, wt.branch);
+                      }}
+                      className="w-full flex items-start gap-1.5 px-2 py-1 text-[11px] text-foreground-muted hover:text-foreground hover:bg-surface-hover rounded transition-colors text-left"
+                      title={wt.path}
+                    >
+                      <FolderOpen size={10} className="shrink-0 mt-[3px]" />
+                      <span className="min-w-0 flex-1 flex flex-col">
+                        <span className="flex items-center gap-1 min-w-0">
+                          <span className="truncate">{name}</span>
+                          {wt.isMain && <span className="shrink-0 text-[8px] text-accent">main checkout</span>}
+                        </span>
+                        <span className="truncate font-mono text-[9px] text-foreground-subtle" data-testid="branch-popover-worktree-where">{where}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             )}
-            {/* Show other branches — clickable to pin as baseline */}
-            {gitInfo.branches
-              .filter((b) => b !== gitInfo.currentBranch)
-              .map((b) => (
-                <button
-                  key={b}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setOpen(false);
-                    captureBaselineFromBranch(projectPath, b);
-                  }}
-                  className="group w-full flex items-center gap-1.5 px-2 py-1 text-[11px] rounded text-foreground-muted hover:text-foreground hover:bg-surface-hover transition-colors text-left"
-                  title={`Pin baseline to ${b}'s HEAD — see diff against this branch`}
-                >
-                  <GitBranch size={10} />
-                  <span className="truncate">{b}</span>
-                  <GitCompare size={9} className="ml-auto opacity-0 group-hover:opacity-70" />
-                </button>
-              ))}
+
+            {(showCurrent || branches.length > 0) && (
+              <div className="px-2 py-1" data-testid="branch-popover-branches">
+                <div className="flex items-center px-1">
+                  <span className="text-[9px] text-foreground-subtle uppercase tracking-wider">Branches</span>
+                  <span className="ml-auto text-[9px] text-foreground-subtle">{branches.length + (showCurrent ? 1 : 0)}</span>
+                </div>
+                <div className="text-[9px] text-foreground-subtle px-1 mb-0.5 leading-snug">
+                  Click a branch to pin it as the diff baseline.
+                </div>
+                {showCurrent && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpen(false);
+                      captureBaselineFromBranch(projectPath, gitInfo.currentBranch!);
+                    }}
+                    className="group w-full flex items-center gap-1.5 px-2 py-1 text-[11px] rounded text-accent hover:bg-accent/10 transition-colors text-left"
+                    title={`Pin baseline to ${gitInfo.currentBranch}'s HEAD, the current branch`}
+                  >
+                    <GitBranch size={10} className="shrink-0" />
+                    <span className="truncate">{gitInfo.currentBranch}</span>
+                    <span className="text-[8px] text-accent ml-auto">current</span>
+                    <Camera size={9} className="shrink-0 opacity-0 group-hover:opacity-70" />
+                  </button>
+                )}
+                {/* Other branches — clickable to pin as baseline */}
+                {branches.map((b) => (
+                  <button
+                    key={b}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpen(false);
+                      captureBaselineFromBranch(projectPath, b);
+                    }}
+                    className="group w-full flex items-center gap-1.5 px-2 py-1 text-[11px] rounded text-foreground-muted hover:text-foreground hover:bg-surface-hover transition-colors text-left"
+                    title={`Pin baseline to ${b}'s HEAD — see diff against this branch`}
+                  >
+                    <GitBranch size={10} className="shrink-0" />
+                    <span className="truncate">{b}</span>
+                    <GitCompare size={9} className="shrink-0 ml-auto opacity-0 group-hover:opacity-70" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {nothingAtAll && (
+              <div className="px-3 py-2 text-[10px] text-foreground-subtle">
+                No branches or worktrees found
+              </div>
+            )}
+            {!nothingAtAll && q && worktrees.length === 0 && !showCurrent && branches.length === 0 && (
+              <div className="px-3 py-2 text-[10px] text-foreground-subtle" data-testid="branch-popover-none">
+                Nothing matches “{query.trim()}” among {otherBranchCount + (gitInfo.currentBranch ? 1 : 0)} branches and {gitInfo.worktrees.length} worktrees
+              </div>
+            )}
           </div>
 
-          {gitInfo.worktrees.length > 0 && (
-            <div className="px-2 py-1 border-t border-white/[0.06]">
-              <span className="text-[9px] text-foreground-subtle uppercase tracking-wider px-1">Worktrees</span>
-              {gitInfo.worktrees.map((wt, i) => (
-                <button
-                  key={i}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setOpen(false);
-                    // Open as a tab, or switch to it if it already is one.
-                    void openWorktreeTab(wt.path, wt.branch);
-                  }}
-                  className="w-full flex items-center gap-1.5 px-2 py-1 text-[11px] text-foreground-muted hover:text-foreground hover:bg-surface-hover rounded transition-colors text-left"
-                >
-                  <FolderOpen size={10} />
-                  <span className="truncate">{wt.branch || wt.path.split('/').pop()}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {gitInfo.branches.length === 0 && gitInfo.worktrees.length === 0 && (
-            <div className="px-3 py-2 text-[10px] text-foreground-subtle">
-              No branches or worktrees found
-            </div>
-          )}
-
-          <div className="border-t border-white/[0.06] px-2 py-1">
+          <div className="border-t border-white/[0.06] px-2 py-1 shrink-0">
             <button
               onClick={(e) => { e.stopPropagation(); setOpen(false); rescanActiveTab(); }}
               className="w-full flex items-center gap-1.5 px-2 py-1 text-[11px] text-foreground-muted hover:text-foreground hover:bg-surface-hover rounded transition-colors"
@@ -334,6 +427,38 @@ function DocsToggle() {
     >
       <BookOpen size={12} />
       Docs
+    </button>
+  );
+}
+
+/**
+ * Phase 33 G7 — the Rules view: the team's architecture rules in a workspace
+ * of their own, beside graph, plans, docs and code, not in Settings.
+ */
+function RulesToggle() {
+  const root = useProjectStore((s) => s.root);
+  const workspaceMode = useUiStore((s) => s.workspaceMode);
+  const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
+  if (!root) return null;
+
+  const active = workspaceMode === 'rules';
+  return (
+    <button
+      type="button"
+      onClick={() => setWorkspaceMode(active ? 'graph' : 'rules')}
+      aria-pressed={active}
+      className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg border transition-all shrink-0 ${
+        active
+          ? 'border-accent/60 text-accent bg-accent/10 shadow-[0_0_10px_rgba(59,130,246,0.15)]'
+          : 'border-border text-foreground-muted hover:text-foreground hover:border-border-glow hover:shadow-[0_0_8px_rgba(59,130,246,0.1)]'
+      }`}
+      title={active ? 'Back to graph' : 'Architecture rules'}
+      aria-label="Rules"
+    >
+      <ShieldCheck size={12} />
+      {/* The word from 1280px; narrower, the icon and its name, so the bar
+          still fits the 900px minimum window (workstream-strip.spec). */}
+      <span className="hidden xl:inline">Rules</span>
     </button>
   );
 }
@@ -491,6 +616,7 @@ export function TopBar() {
       <BriefToggle />
       <CodeModeToggle />
       <DocsToggle />
+      <RulesToggle />
 
       <button
         onClick={() => window.dispatchEvent(new CustomEvent('open-mcp-guide'))}

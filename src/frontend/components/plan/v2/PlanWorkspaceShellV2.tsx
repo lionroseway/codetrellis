@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Allotment } from 'allotment';
 import { ChevronLeft, Minimize2, Activity as ActivityIcon, ListChecks, PanelRightOpen, MessageCircle, History, ArrowLeft } from 'lucide-react';
 import { useUiStore } from '../../../stores/ui-store';
@@ -24,6 +24,7 @@ import { PlanStatusChip } from './PlanStatusChip';
 import { ApprovePlanButton } from './ApprovePlanButton';
 import { usePlanStatus } from '../../../lib/plan-status';
 import { peekCodeReturn, returnToCode, type CodeReturn } from '../../../lib/open-file-at';
+import { isTypingTarget } from '../../../lib/typing-target';
 
 /**
  * Phase 15 §15.D — V2 plan workspace shell.
@@ -88,11 +89,13 @@ export function PlanWorkspaceShellV2() {
     useChannelsStore.getState().hydrate(plan.uid).catch(() => {});
   }, [plan?.uid, activeStorePlanUid, hydratePlan, resetForPlan, resetChannels]);
 
-  // Esc minimizes (matches V1 behaviour from Phase 14.B).
-  useEffect(() => {
+  // Esc minimizes (matches V1 behaviour from Phase 14.B). A layout effect, so
+  // the listener is there before the workspace is painted: a passive effect
+  // runs after paint, and an Escape pressed as the plan appeared on a busy
+  // page went to nobody (#370), as the Settings dialog's did (#367).
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || (t as HTMLElement).isContentEditable)) return;
+      if (isTypingTarget(e.target as HTMLInputElement | null)) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         setWorkspaceMode('graph');
@@ -145,7 +148,7 @@ export function PlanWorkspaceShellV2() {
       }`}
     >
       {/* Header */}
-      <div className="border-b border-white/[0.06] px-4 py-2 flex items-center gap-3 bg-[#0a0b14]">
+      <div className="border-b border-white/[0.06] px-4 py-2 flex items-center gap-3 bg-[#0a0b14]" data-testid="plan-header">
         <button
           onClick={() => setWorkspaceMode('graph')}
           className="flex items-center gap-1.5 text-[12.5px] text-foreground-subtle hover:text-foreground transition-colors px-2.5 py-1 rounded hover:bg-white/[0.04]"
@@ -190,7 +193,12 @@ export function PlanWorkspaceShellV2() {
         <button
           onClick={() => selectItem(null)}
           disabled={!selectedItemUid}
-          className="text-[13px] font-semibold text-foreground truncate flex-1 min-w-0 text-left rounded px-1 -mx-1 transition-colors enabled:hover:text-accent enabled:hover:bg-white/[0.04] disabled:cursor-default"
+          // One line beside the chips; the whole name is in its tooltip, and
+          // on the plan's own page (a wrapped header pushed the chips to a
+          // second row, which read worse than "…"). At least 7rem, so the
+          // chips cannot squeeze it to its first letter.
+          className="text-[13px] font-semibold text-foreground truncate flex-1 min-w-[7rem] text-left rounded px-1 -mx-1 transition-colors enabled:hover:text-accent enabled:hover:bg-white/[0.04] disabled:cursor-default"
+          data-testid="plan-header-title"
           title={selectedItemUid ? `Back to ${plan.title}` : plan.title}
         >
           {plan.title}

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { baseRef, changedFiles, gateWords } from './conformity';
+import { baseRef, changedFiles, gateWords, ranIn } from './conformity';
 
 const GIT_ENV = { ...process.env, GIT_AUTHOR_NAME: 'Sam', GIT_AUTHOR_EMAIL: 's@x', GIT_COMMITTER_NAME: 'Sam', GIT_COMMITTER_EMAIL: 's@x' };
 
@@ -50,20 +50,69 @@ test('the base: --base, else the pull request\'s base in GitHub Actions, else or
   assert.equal(baseRef(root, 'main', { GITHUB_BASE_REF: 'feat/phase-32' }), 'main');
 });
 
-test('the gate in words: what was checked, then one line per finding', () => {
-  const base = { files: 3, base: 'origin/main', breakpoints: [], tests: [], criteria: [], docs: [], rules: [] };
+test('the gate in words: what was checked, the findings by kind, the exit code last (C8)', () => {
+  const base = { files: 3, base: 'origin/main', breakpoints: [], tests: [], criteria: [], docs: [], rules: [], rulebook: [], notes: [] };
   assert.equal(
     gateWords({ ...base, ok: true, says: [] }),
-    'Conforms: 3 changed files since origin/main. No breakpoint holds them, none of their tests fail or are older than the code, no done task fails its checks, no doc that describes them is stale, and they add no import an architecture rule forbids.',
+    'Conforms: 3 changed files since origin/main. No breakpoint holds them, none of their tests fail or are older than the code, no done task fails its checks, no doc that describes them is stale, they add no import an architecture rule forbids, and they loosen no rule.\n\nNothing blocks this change (exit 0).',
   );
   assert.equal(
     gateWords({ ...base, files: 1, ok: false, says: ['src/a.ts: ✗ 1 of 2 tests failing'] }),
-    'Does not conform (1 changed file since origin/main):\n  src/a.ts: ✗ 1 of 2 tests failing',
+    'Does not conform (1 changed file since origin/main):\n\nalso\n  src/a.ts: ✗ 1 of 2 tests failing\n\n1 finding blocks this change (exit 3).',
   );
-  // A7.3: a rule's line, and a note when the rules could not be read.
+  // A7.3: a rule's finding, under its suite and rule, with where in the file when it can be read.
+  const rule = { path: 'web/reports.ts', imports: 'db/client.ts', rule: 'web-not-db', words: 'web/ may not import db/', because: 'web talks to db through the API', strength: 'block', suite: 'architecture', fix: null };
   assert.equal(
-    gateWords({ ...base, files: 1, ok: false, says: ['✗ web/reports.ts now imports db/client.ts, which the rule “web/ may not import db/” forbids: web talks to db through the API'] }),
-    'Does not conform (1 changed file since origin/main):\n  ✗ web/reports.ts now imports db/client.ts, which the rule “web/ may not import db/” forbids: web talks to db through the API',
+    gateWords({ ...base, files: 1, ok: false, rules: [rule], says: ['✗ web/reports.ts now imports db/client.ts, which the rule “web/ may not import db/” forbids: web talks to db through the API'] }, {
+      read: (rel) => (rel === 'web/reports.ts' ? "import { a } from './a';\nimport { query } from '../db/client';\n" : null),
+    }),
+    [
+      'Does not conform (1 changed file since origin/main):', '',
+      'architecture  ✗ 1 blocks', '',
+      '  ✗ web-not-db   web/ may not import db/',
+      "      web/reports.ts:2 imports db/client.ts   import { query } from '../db/client';",
+      '      → web talks to db through the API', '',
+      '1 finding blocks this change (exit 3).',
+    ].join('\n'),
   );
-  assert.match(gateWords({ ...base, ok: true, says: [], rulesNote: 'The architecture rules were not checked.' }), /forbids\.\nThe architecture rules were not checked\.$/);
+  assert.match(gateWords({ ...base, ok: true, says: [], rulesNote: 'The architecture rules were not checked.' }), /\n\nThe architecture rules were not checked\.\n\nNothing blocks this change \(exit 0\)\.$/);
+  // Phase 33 R2: a rule added or tightened is said, and does not fail the gate.
+  assert.match(
+    gateWords({ ...base, ok: true, says: [], notes: ['⚠ This change adds the rule “api/ may not import db/” (api-not-db). It is checked once it is on the base branch.'] }),
+    /\n\nnotes\n {2}⚠ This change adds the rule “api\/ may not import db\/” \(api-not-db\)\. It is checked once it is on the base branch\.\n/,
+  );
+});
+
+test('a change to the rules alone is still a change to check (Phase 33 R2)', () => {
+  const { root, git, write } = repo();
+  git('checkout', '-qb', 'sam/loosen');
+  write('.codetrellis/rules/architecture.yaml', 'rules: []\n');
+  const c = changedFiles(root, 'main', {});
+  assert.deepEqual(c.files, [], 'still not a file of the work');
+  assert.equal(c.rulebook, true);
+  write('.codetrellis/plans/exports/plan.yaml', 'title: Exports\n');
+  const { root: other, write: w2 } = repo();
+  w2('.codetrellis/plans/exports/plan.yaml', 'title: Exports\n');
+  assert.equal(changedFiles(other, undefined, {}).rulebook, false, 'a plan changing is not the rules changing');
+});
+
+test('a scoped check says what it checked, and answers only that (C1)', () => {
+  const base = { files: 2, base: 'origin/main', breakpoints: [], tests: [], criteria: [], docs: [], rules: [], rulebook: [], notes: [], scope: 'suite payments' };
+  assert.equal(gateWords({ ...base, ok: true, says: [] }), 'Conforms to suite payments: 2 changed files since origin/main. They add no import those rules forbid, and loosen none of them.\n\nNothing blocks this change (exit 0).');
+  const rule = { path: 'web/a.ts', imports: 'npm:stripe', rule: 'stripe-via-wrapper', words: 'only src/payments/index.ts may import npm:stripe', because: '', strength: 'block', suite: 'payments', fix: 'use src/payments/index.ts instead' };
+  assert.equal(
+    gateWords({ ...base, ok: false, rules: [rule], says: ['✗ web/a.ts now imports npm:stripe, which the rule “only src/payments/index.ts may import npm:stripe” forbids'] }),
+    'Does not conform to suite payments (2 changed files since origin/main):\n\npayments  ✗ 1 blocks\n\n  ✗ stripe-via-wrapper   only src/payments/index.ts may import npm:stripe\n      web/a.ts imports npm:stripe\n      → use src/payments/index.ts instead\n\n1 finding blocks this change (exit 3).',
+  );
+});
+
+test('a check run says where it ran: the CI host the job names, else CI, else a terminal (C7)', () => {
+  assert.equal(ranIn({ GITHUB_ACTIONS: 'true', CI: 'true' }), 'GitHub Actions');
+  assert.equal(ranIn({ GITLAB_CI: 'true' }), 'GitLab CI');
+  assert.equal(ranIn({ BITBUCKET_BUILD_NUMBER: '12' }), 'Bitbucket Pipelines');
+  assert.equal(ranIn({ TF_BUILD: 'True' }), 'Azure Pipelines');
+  assert.equal(ranIn({ JENKINS_URL: 'https://ci.acme.test/' }), 'Jenkins');
+  assert.equal(ranIn({ CI: 'true' }), 'CI');
+  assert.equal(ranIn({ CI: 'false' }), 'a terminal');
+  assert.equal(ranIn({}), 'a terminal');
 });

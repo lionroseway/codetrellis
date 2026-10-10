@@ -82,8 +82,9 @@ export interface ExportDeclaration {
  * subprocess invocation. Used by the cross-system matcher to surface
  * runtime coupling between systems that don't share imports.
  */
-export type CallsiteKind = 'http_call' | 'http_route' | 'sql_query' | 'subprocess' | 'env_lookup';
-export type CallsiteProtocol = 'http' | 'sql' | 'subprocess' | 'env';
+export type CallsiteKind = 'http_call' | 'http_route' | 'sql_query' | 'subprocess' | 'env_lookup' | 'entry';
+/** `entry` (Phase 33 B4): a kind of the team's own, found by its patterns; `urlPattern` holds the whole entry, `queue:orders.created`. */
+export type CallsiteProtocol = 'http' | 'sql' | 'subprocess' | 'env' | 'entry';
 
 export interface Callsite {
   kind: CallsiteKind;
@@ -93,6 +94,8 @@ export interface Callsite {
   // HTTP specifics
   method?: string;        // 'GET' / 'POST' / 'PUT' / 'DELETE' / 'PATCH'
   urlPattern?: string;    // '/api/users', '/api/users/:id'
+  /** Phase 33 R7: an outbound call's host, lowercase, when its URL names one: `api.stripe.com`. */
+  host?: string;
   // SQL specifics (later phases)
   sqlText?: string;
   // Free-form context (function name, decorator name, etc.)

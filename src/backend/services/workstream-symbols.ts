@@ -285,6 +285,22 @@ export async function withSymbolChanges(
   }
 }
 
+/**
+ * How many of these files a `withSymbolChanges` call would parse now: the
+ * ones within MAX_PARSED_FILES not cached for their current version. A
+ * listing uses it to keep its own parsing inside a budget (Phase 33 0.1).
+ */
+export function uncachedSymbolFiles(folder: string, changes: WorkstreamChanges, atCommit?: { head: string }): number {
+  let n = 0;
+  for (const [i, f] of changes.files.entries()) {
+    if (i >= MAX_PARSED_FILES) break;
+    const k = `${folder}\0${atCommit ? `@${atCommit.head}` : ''}\0${f.path}`;
+    const stamp = atCommit ? `${changes.base}|${atCommit.head}|${f.status}|${f.from ?? ''}` : stampOf(folder, changes.base, f);
+    if (cache.get(k)?.stamp !== stamp) n++;
+  }
+  return n;
+}
+
 /** Forget every parsed answer. For tests. */
 export function clearSymbolCache(): void {
   cache.clear();

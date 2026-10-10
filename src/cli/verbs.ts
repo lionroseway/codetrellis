@@ -26,11 +26,18 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { flag, type Parsed } from './args';
-import { changedFiles, gate, gateWords } from './conformity';
+import { flag, selfCommand, type Parsed } from './args';
+import { toSarif, ruleFileIn } from './sarif';
+import { findingWords, type ReviewFinding } from './review-output';
+import { BASELINE_FILE, baselineYaml, readBaseline, type Baseline } from '../backend/services/rule-baseline';
+import { writeFileWithin } from '../backend/services/confined-fs';
+import { version as CLI_VERSION } from '../../package.json';
+import { changedFiles, gate, gateMarkdown, gateWords, wantsColor, withPlaces } from './conformity';
+import { pipelineAt, readPipeline } from '../backend/services/pipeline';
+import { pipelineWords, runPipeline, type PipelineRunners, type StageFinding } from './pipeline';
 import type { Agent, ToolAnswer } from './agent';
 
-export const VERBS = new Set(['next', 'claim', 'update', 'stuck', 'done', 'request', 'brief', 'awareness', 'check', 'report-tests']);
+export const VERBS = new Set(['next', 'claim', 'update', 'stuck', 'done', 'request', 'brief', 'awareness', 'check', 'report-tests', 'rules']);
 
 export class UsageError extends Error {}
 /** A verb's outcome: what to print, and how the process exits. */
@@ -159,6 +166,10 @@ export async function runVerb(verb: string, agent: Agent, p: Parsed, cwd: string
       }, ctx);
     }
     case 'check': return check(ctx, first);
+    case 'rules': {
+      if (first !== 'baseline') throw new UsageError('codetrellis rules baseline — record each rule\'s breaches now, so the check fails on new ones');
+      return writeBaseline(ctx, projectRoot(cwd));
+    }
     case 'report-tests': {
       if (!first) throw new UsageError('Which report? codetrellis report-tests <junit.xml>');
       const a = await agent.call('report_tests', { path: first, project_path: projectRoot(cwd) });
@@ -243,8 +254,108 @@ async function check(ctx: Ctx, file: string | undefined): Promise<Outcome> {
 async function conforms(ctx: Ctx, root: string): Promise<Outcome> {
   let changed;
   try { changed = changedFiles(root, flag(ctx.p, 'base'), process.env); } catch (err) { throw new UsageError((err as Error).message); }
-  const g = await gate(ctx.agent, root, changed);
+  // B6: the base's pipeline, stage by stage.
+  if (ctx.p.flags.pipeline === true || flag(ctx.p, 'stage') !== undefined) {
+    const piped = await pipelined(ctx, root, changed);
+    if (piped) return piped;
+  }
+  const g = await gate(ctx.agent, root, changed, ctx.p.flags.strict === true, { suite: flag(ctx.p, 'suite'), rule: flag(ctx.p, 'rule'), path: flag(ctx.p, 'path'), tag: flag(ctx.p, 'tag') });
   if ('error' in g) return { out: g.error, code: 1 };
-  if (ctx.json) return { out: JSON.stringify(g), code: g.ok ? 0 : 3 };
-  return { out: gateWords(g), code: g.ok ? 0 : 3 };
+  const format = flag(ctx.p, 'format') ?? (ctx.json ? 'json' : 'text');
+  if (format === 'sarif') {
+    // C2: for any host that reads SARIF; the exit code still says whether it conforms.
+    const read = (rel: string): string | null => {
+      try { return fs.readFileSync(path.join(root, rel), 'utf8'); } catch { return null; }
+    };
+    return { out: JSON.stringify(toSarif(g, { version: CLI_VERSION, root, read, ruleFile: ruleFileIn(root) }), null, 2), code: g.ok ? 0 : 3 };
+  }
+  const read = (rel: string): string | null => {
+    try { return fs.readFileSync(path.join(root, rel), 'utf8'); } catch { return null; }
+  };
+  // C8: JSON carries what the text says, each finding's line and import text included.
+  if (format === 'json') return { out: JSON.stringify({ ...g, rules: withPlaces(g, read).rules }), code: g.ok ? 0 : 3 };
+  // C8: the same words in every format; colour only for a terminal that wants it.
+  if (format === 'markdown') return { out: gateMarkdown(g, read), code: g.ok ? 0 : 3 };
+  if (format !== 'text') throw new UsageError(`--format is text, json, markdown or sarif, not ${format}`);
+  return { out: gateWords(g, { read, color: wantsColor(process.stdout, process.env, ctx.p.flags['no-color'] === true) }), code: g.ok ? 0 : 3 };
+}
+
+/**
+ * B6: `check --pipeline` (or `--stage <id>`): the base's pipeline, stage by
+ * stage; null when there is none, and the check runs every rule in one stage
+ * as before. Agent stages run only with a reviewer (`--agent`, and the rest of
+ * `codetrellis review`'s flags).
+ */
+async function pipelined(ctx: Ctx, root: string, changed: ReturnType<typeof changedFiles>): Promise<Outcome | null> {
+  const got = changed.since ? await pipelineAt(root, changed.since) : readPipeline(root);
+  if (!got) return null;
+  if (!got.pipeline) return { out: `The pipeline${changed.since ? ` at ${changed.since.slice(0, 7)}` : ''} could not be read: ${got.problems.join('; ')}`, code: 1 };
+  const strict = ctx.p.flags.strict === true;
+  let review: PipelineRunners['review'] = null;
+  if (flag(ctx.p, 'agent') !== undefined) {
+    const { review: runReview, reviewOptions, ReviewUsageError } = await import('./review');
+    let o: ReturnType<typeof reviewOptions>;
+    try { o = reviewOptions(ctx.p, ctx.cwd, process.env); } catch (err) {
+      if (err instanceof ReviewUsageError) throw new UsageError(err.message);
+      throw err;
+    }
+    const me = selfCommand(path.resolve(__dirname, '..', '..', 'bin'), { execPath: process.execPath, electron: process.versions.electron });
+    const sinkFor = (dir: string) => ({ command: me.command, args: [...me.args, 'review-sink', '--pass', dir], env: me.env });
+    review = async (stage, scope, grounding) => {
+      // An agent stage fails on what a block-strength agent rule's finding holds (B5), and its output is read, not shown raw.
+      const r = await runReview(ctx.agent, { ...o, scope: { suite: scope.suite, rule: scope.rule, path: scope.path, engine: scope.engine, strength: scope.strength, tag: scope.tag }, stage: stage.id, grounding, format: 'json', failOn: new Set(['block']), post: null }, ctx.cwd, process.env, sinkFor, { version: CLI_VERSION });
+      let j: { passes?: Array<{ says: string; failing: boolean; kept: ReviewFinding[] }>; says?: string; error?: string };
+      try { j = JSON.parse(r.out); } catch { return { error: r.out }; }
+      if (j.error) return { error: j.error };
+      const findings: StageFinding[] = (j.passes ?? []).flatMap((pass) => pass.kept.filter((k) => k.path).map((k) => ({ stage: stage.id, path: k.path!, says: k.says, rule: k.rule })));
+      return { ok: r.code === 0, out: j.says ?? (j.passes ?? []).flatMap((pass) => [`review: ${pass.says}`, ...pass.kept.map((k) => `  ${findingWords(k)}`)]).join('\n'), findings };
+    };
+  }
+  const result = await runPipeline(got.pipeline, { gate: (scope) => gate(ctx.agent, root, changed, strict, scope), review }, flag(ctx.p, 'stage'));
+  const code = result.stages.some((s) => !s.ok && !s.advisory && (s.gate && 'error' in s.gate)) ? 1 : result.ok ? 0 : 3;
+  if (ctx.json || flag(ctx.p, 'format') === 'json') return { out: JSON.stringify(result), code };
+  const read = (rel: string): string | null => {
+    try { return fs.readFileSync(path.join(root, rel), 'utf8'); } catch { return null; }
+  };
+  const color = wantsColor(process.stdout, process.env, ctx.p.flags['no-color'] === true);
+  return { out: pipelineWords(result, (g) => gateWords(g, { read, color })), code };
+}
+
+/**
+ * C3: record each rule's breaches now in `.codetrellis/rules/baseline.yaml`.
+ * A rule new to the baseline starts with what breaks it; one already in it
+ * only loses the entries fixed since, because a baseline only shrinks (the
+ * check holds a branch to that too). Commit the file with the code.
+ */
+async function writeBaseline(ctx: Ctx, root: string): Promise<Outcome> {
+  const a = await ctx.agent.call('list_rules', { project_path: root });
+  if (a.isError) return { out: a.text, code: 1 };
+  const views = (asObj(a.json).rules as Array<{ rule: { id: string; strength?: string }; breaches: Array<{ from: string; to: string }> | null }> | undefined) ?? [];
+  if (views.some((v) => v.rule.strength !== 'guide' && v.breaches === null)) {
+    return { out: 'The rules\' breaches could not be read: this project\'s imports are not loaded. Run `codetrellis start` in it first.', code: 1 };
+  }
+  const now: Baseline = new Map(views.filter((v) => v.rule.strength !== 'guide').map((v) => [v.rule.id, new Set((v.breaches ?? []).map((b) => `${b.from} > ${b.to}`))]));
+  const before = readBaseline(root);
+  const next: Baseline = new Map();
+  const lines: string[] = [];
+  let held = 0;
+  for (const [id, entries] of now) {
+    const was = before?.get(id);
+    if (!was) {
+      next.set(id, entries);
+      lines.push(`  ${id}: ${entries.size} ${entries.size === 1 ? 'breach' : 'breaches'} recorded`);
+      continue;
+    }
+    const kept = new Set([...entries].filter((e) => was.has(e)));
+    held += entries.size - kept.size;
+    next.set(id, kept);
+    lines.push(`  ${id}: ${kept.size}${kept.size < was.size ? `, down from ${was.size}` : ''}`);
+  }
+  // Through the confined-file helper, like every write into a project: a link at .codetrellis/ is refused.
+  writeFileWithin(root, BASELINE_FILE, baselineYaml(next), 'rule baseline');
+  if (ctx.json) return { out: JSON.stringify({ file: BASELINE_FILE, rules: Object.fromEntries([...next].map(([k, v]) => [k, [...v]])), notAdded: held }), code: 0 };
+  return {
+    out: [`Wrote ${BASELINE_FILE}:`, ...lines, ...(held ? [`${held} new ${held === 1 ? 'breach is' : 'breaches are'} not added: a baseline only shrinks. Fix ${held === 1 ? 'it' : 'them'}, or change the rule in the app.`] : []), 'Commit it with the code.'].join('\n'),
+    code: 0,
+  };
 }

@@ -201,6 +201,31 @@ test('a project in a subfolder of its repository lists and compares only its own
   assert.deepEqual(r.files.map((f) => `${f.status} ${f.path}`), ['modified index.ts']);
 });
 
+test('a file rewritten at the same size in the same clock tick as the commit is still seen as changed', () => {
+  // The working copy's tree is written through a copy of the index. git
+  // re-reads a file whose recorded time is not older than the index's own
+  // ("racily clean"); a copy made now looked newer than every entry, so git
+  // trusted the stale stat and missed the change. It failed about 3 runs in
+  // 100 in CI. Here the tick is made the same on purpose: the times by hand,
+  // and ctime (which only the kernel sets) by telling git not to trust it.
+  const { dir } = repo();
+  git(dir, 'config', 'core.trustctime', 'false');
+  write(dir, 'packages/api/index.ts', 'a\n');
+  const file = path.join(dir, 'packages', 'api', 'index.ts');
+  // A whole second, so the time git records is exactly the one set again
+  // below; in the past, so the commit does not already mark the entry racy.
+  const tick = new Date(Math.floor(Date.now() / 1000) * 1000 - 10_000);
+  fs.utimesSync(file, tick, tick);
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-qm', 'api');
+  fs.writeFileSync(file, 'b\n');
+  fs.utimesSync(file, tick, tick);
+  fs.utimesSync(path.join(dir, '.git', 'index'), tick, tick);
+  const r = filesBetween(path.join(dir, 'packages', 'api'), 'commit:HEAD', 'live', []);
+  assert.ok(r.ok);
+  assert.deepEqual(r.files.map((f) => `${f.status} ${f.path}`), ['modified index.ts']);
+});
+
 test('a worktree named through a link is the same worktree; a link elsewhere is not one', () => {
   // git names worktrees by their realpath. A project opened through a link
   // (macOS's /var and /tmp are links) gave ids in the opened spelling, and

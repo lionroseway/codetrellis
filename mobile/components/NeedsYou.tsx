@@ -6,6 +6,10 @@
  * words, each opening its detail. The counts ride in the live snapshot
  * (`waitingBreakpoints`, `openSignals`); the words are pulled when they move.
  * Nothing waiting says so in a line, not a blank.
+ *
+ * Phase 33 G10: a check run that blocks is here too, the latest from each
+ * place it ran (CI, a terminal, an agent's session), with what it found and
+ * what to do instead. A place whose latest run passes is not.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -33,12 +37,14 @@ export default function NeedsYou() {
   useEffect(() => { void load(); }, [load, open]);
 
   const signals = data?.signals ?? [];
-  const nothing = held === 0 && open === 0 && signals.length === 0;
+  const checks = data?.checks ?? [];
+  const nothing = held === 0 && open === 0 && signals.length === 0 && checks.length === 0;
+  const count = held + open + checks.length;
 
   return (
     <View style={styles.section} testID="needs-you">
       <View style={styles.titleRow}>
-        <Text style={styles.sectionTitle}>NEEDS YOU{held + open > 0 ? ` (${held + open})` : ''}</Text>
+        <Text style={styles.sectionTitle}>NEEDS YOU{count > 0 ? ` (${count})` : ''}</Text>
         <TouchableOpacity onPress={() => router.push('/workstreams')} accessibilityRole="button" accessibilityLabel="All lines of work">
           <Text style={styles.link}>Lines of work ›</Text>
         </TouchableOpacity>
@@ -47,7 +53,7 @@ export default function NeedsYou() {
       {error && <Text style={styles.error}>Could not read what overlaps: {error}</Text>}
 
       {nothing && !error && (
-        <Text style={styles.calm}>Nothing is waiting on you. Agents held at a breakpoint and overlaps between lines of work show here.</Text>
+        <Text style={styles.calm}>Nothing is waiting on you. Agents held at a breakpoint, overlaps between lines of work and checks that block show here.</Text>
       )}
 
       {held > 0 && (
@@ -61,6 +67,29 @@ export default function NeedsYou() {
           <Text style={styles.headline}>{held === 1 ? 'An agent is waiting on you' : `${held} agents are waiting on you`}</Text>
         </TouchableOpacity>
       )}
+
+      {checks.map((c) => (
+        <View
+          key={c.id}
+          style={[styles.card, { borderLeftColor: '#ef4444' }]}
+          accessible
+          accessibilityLabel={`A check blocks: ${c.outcome}, ${c.who} in ${c.ranIn}`}
+          testID="needs-you-check"
+        >
+          <View style={styles.row}>
+            <Text style={[styles.kind, { color: '#ef4444' }]}>✗ A check blocks{c.scope ? ` · ${c.scope}` : ''}</Text>
+            <Text style={styles.age}>{ago(c.at)}</Text>
+          </View>
+          <Text style={styles.headline}>{c.who} in {c.ranIn}: {c.outcome}</Text>
+          {c.findings.map((f) => (
+            <View key={`${f.rule}${f.where}`} style={styles.finding}>
+              <Text style={styles.findingWhere}>{f.where} · {f.rule}</Text>
+              {f.fix ? <Text style={styles.summary}>→ {f.fix}</Text> : null}
+            </View>
+          ))}
+          {c.more > 0 && <Text style={styles.more}>and {c.more} more; the desktop's Checks view has them all</Text>}
+        </View>
+      ))}
 
       {data && data.digest.lines.length > 0 && (
         <View style={styles.digest} testID="needs-you-digest">
@@ -119,4 +148,6 @@ const styles = StyleSheet.create({
   digestText: { color: '#e4e4e7', fontSize: 13, lineHeight: 18 },
   digestQuestion: { color: '#a1a1aa', fontSize: 12, lineHeight: 17 },
   more: { color: '#71717a', fontSize: 12 },
+  finding: { marginTop: 8, gap: 2 },
+  findingWhere: { color: '#e4e4e7', fontSize: 12, fontFamily: 'monospace' },
 });

@@ -5,21 +5,27 @@
  * preset names (claude, codex, aider, shell).
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIResponse } from '@playwright/test';
 import { gotoWithProject, API } from '../helpers/setup';
 
 test.describe('Terminal presets', () => {
+  // Only the sessions this file started: terminals are the whole backend's,
+  // and deleting every one killed a parallel spec's shell under it (#387).
+  const mine: string[] = [];
+  const started = async (res: APIResponse) => {
+    const session = await res.json();
+    if (session?.id) mine.push(session.id);
+    return session;
+  };
   test.afterEach(async ({ request }) => {
-    const res = await request.get(`${API}/terminals`);
-    if (res.ok()) {
-      const sessions = await res.json();
-      for (const s of sessions) {
-        await request.delete(`${API}/terminals/${s.id}`);
-      }
-    }
+    for (const id of mine.splice(0)) await request.delete(`${API}/terminals/${id}`);
   });
 
   test('New terminal button is visible in the panel', async ({ page }) => {
+    // Opening the panel with no sessions starts a shell: that one is ours too.
+    page.on('response', (r) => {
+      if (r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/terminals' && r.ok()) void started(r);
+    });
     await gotoWithProject(page);
 
     // Open terminal panel
@@ -35,7 +41,7 @@ test.describe('Terminal presets', () => {
       data: { preset: 'shell', cwd: process.cwd(), title: 'Preset Shell' },
     });
     expect(res.ok()).toBeTruthy();
-    const session = await res.json();
+    const session = await started(res);
     expect(session.preset).toBe('shell');
   });
 
@@ -44,7 +50,7 @@ test.describe('Terminal presets', () => {
       data: { preset: 'claude', cwd: process.cwd(), title: 'Preset Claude' },
     });
     expect(res.ok()).toBeTruthy();
-    const session = await res.json();
+    const session = await started(res);
     expect(session.preset).toBe('claude');
   });
 
@@ -53,7 +59,7 @@ test.describe('Terminal presets', () => {
       data: { preset: 'codex', cwd: process.cwd(), title: 'Preset Codex' },
     });
     expect(res.ok()).toBeTruthy();
-    const session = await res.json();
+    const session = await started(res);
     expect(session.preset).toBe('codex');
   });
 
@@ -62,7 +68,7 @@ test.describe('Terminal presets', () => {
       data: { preset: 'aider', cwd: process.cwd(), title: 'Preset Aider' },
     });
     expect(res.ok()).toBeTruthy();
-    const session = await res.json();
+    const session = await started(res);
     expect(session.preset).toBe('aider');
   });
 });

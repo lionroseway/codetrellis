@@ -74,7 +74,8 @@ test.describe('Git indicators', () => {
 
     await page.waitForTimeout(3000);
 
-    // Check for staged (A) badges with text-sky-300
+    // Check for staged (●) badges with text-sky-300. Staged is ● since
+    // Phase 33 G1: "A" means added, as in the Changes panel.
     const stagedBadges = page.locator('.glass-panel.border-r .text-sky-300');
     const count = await stagedBadges.count();
     expect(count).toBeGreaterThanOrEqual(0);
@@ -85,11 +86,12 @@ test.describe('Git indicators', () => {
 
     await page.waitForTimeout(3000);
 
-    // Directory aggregate badges show patterns like "3M", "2U", "1A", "1D"
-    // These are rendered inside .react-flow__node or sidebar buttons
+    // Directory aggregate badges show patterns like "3M", "2U", "1●", "1D"
+    // (● is staged since Phase 33 G1). These are rendered inside
+    // .react-flow__node or sidebar buttons
     const sidebar = page.locator('.glass-panel.border-r');
-    // Check for any aggregate count patterns (NM, NU, NA, ND)
-    const aggregates = sidebar.locator('span').filter({ hasText: /^\d+[MUAD]$/ });
+    // Check for any aggregate count patterns (NM, NU, N●, ND)
+    const aggregates = sidebar.locator('span').filter({ hasText: /^\d+[MU●D]$/ });
     const count = await aggregates.count();
     // May be 0 if working dir is clean
     expect(count).toBeGreaterThanOrEqual(0);

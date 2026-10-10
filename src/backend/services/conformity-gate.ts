@@ -30,7 +30,20 @@ export interface HeldFile { path: string; breakpoint: string; note: string | nul
 export interface TestTrouble { path: string; state: 'failing' | 'stale'; says: string }
 export interface FailingCriterion { itemUid: string; task: string; criterion: string; findings: string[] }
 export interface StaleDoc { uid: string; title: string; slug: string; verifiedAt: string; files: string[] }
-export interface RuleImport { path: string; imports: string; rule: string; words: string; because: string }
+export interface RuleImport {
+  path: string; imports: string; rule: string; words: string; because: string;
+  /** R4: a `block` breach fails the gate; a `warn` one is said and passes, unless strict. */
+  strength: 'block' | 'warn';
+  /** C8: the suite the rule is kept in, and what to do instead when the rule says. */
+  suite?: string;
+  fix?: string | null;
+  /** B4: the line the extractor found it on, for an entry whose text the code does not hold (a pattern's). */
+  line?: number;
+}
+export type { RuleChange } from './rule-changes';
+import { changeWords, type RuleChange } from './rule-changes';
+import { findingLine } from '../../shared/lib/check-words';
+import type { RatchetFinding } from './rule-baseline';
 
 /** The imports these changed files add across the rules, or null when they could not be read (injected). */
 export type RuleChecker = (files: readonly string[]) => RuleImport[] | null | Promise<RuleImport[] | null>;
@@ -47,6 +60,15 @@ export interface Conformity {
   rules: RuleImport[];
   /** False when the rules could not be checked: the project's imports are not loaded here. */
   rulesChecked: boolean;
+  /**
+   * What this change does to the rulebook against its base (Phase 33 R2):
+   * loosening is a finding in `says`; tightening and rewording are `notes`.
+   */
+  rulebook: RuleChange[];
+  /** Said, but not a reason to fail: a rule added or tightened, a reason reworded, a base not read. */
+  notes: string[];
+  /** C3: the debt ratchet's findings. */
+  ratchet: RatchetFinding[];
 }
 
 /** A criterion's check, as the criterion loop runs it (injected so tests need no files). */
@@ -75,12 +97,30 @@ function changedSince(root: string, commit: string): Set<string> | null {
   }
 }
 
-export async function checkChanges(root: string, changed: readonly string[], checkCriterion: CriterionChecker, checkRules?: RuleChecker): Promise<Conformity> {
+export async function checkChanges(
+  root: string,
+  changed: readonly string[],
+  checkCriterion: CriterionChecker,
+  checkRules?: RuleChecker,
+  rulebook: readonly RuleChange[] = [],
+  notes: readonly string[] = [],
+  /** `--strict`: a rule at warn fails the gate like one at block (R4). */
+  strict = false,
+  /** C1: a check of part of the rulebook judges only those rules; breakpoints, tests, tasks and docs are not its question. */
+  scoped = false,
+  /** C3: the debt ratchet's findings, with each rule's strength (a warn rule's breach is said, not failed, unless strict). */
+  ratchet: ReadonlyArray<RatchetFinding & { strength?: string }> = [],
+): Promise<Conformity> {
   const files = cleanChanged(changed);
   const says: string[] = [];
+  const said = [...notes];
+
+  // The rulebook first (R2): a change that loosens a rule is the first thing a reviewer must see.
+  // R3: a loosening a person approved, signed, is said and does not fail.
+  for (const c of rulebook) (c.effect === 'loosens' && !c.approval?.ok ? says : said).push(changeWords(c));
 
   const breakpoints: HeldFile[] = [];
-  const code = listBreakpoints().filter((b) => b.kind === 'code' && b.projectRoot === root);
+  const code = scoped ? [] : listBreakpoints().filter((b) => b.kind === 'code' && b.projectRoot === root);
   for (const f of files) {
     for (const b of code) {
       if (!codeCovers(b.target, f)) continue;
@@ -92,10 +132,22 @@ export async function checkChanges(root: string, changed: readonly string[], che
   // The team's architecture rules (A7.3): one line per import, with the rule's reason.
   const found = files.length && checkRules ? await checkRules(files) : [];
   const rules = found ?? [];
-  for (const r of rules) says.push(`✗ ${r.path} now imports ${r.imports}, which the rule “${r.words}” forbids${r.because ? `: ${r.because}` : ''}`);
+  for (const r of rules) {
+    const line = findingLine(r); // C8: in the words every surface uses
+    if (r.strength === 'block' || strict) says.push(`✗ ${line}`);
+    else said.push(`⚠ ${line} (the rule warns; it does not fail the check)`);
+  }
+
+  // C3: the whole tree against the base's baseline. An import the change adds is already said above, once.
+  const said1 = new Set(rules.map((r) => `${r.path}>${r.imports}`));
+  for (const f of ratchet) {
+    if (f.kind === 'breach' && said1.has(`${f.from}>${f.to}`)) continue;
+    if (f.kind === 'fell' || (f.kind === 'breach' && f.strength === 'warn' && !strict)) said.push(f.words);
+    else says.push(f.words);
+  }
 
   const tests: TestTrouble[] = [];
-  for (const f of files) {
+  for (const f of scoped ? [] : files) {
     let g;
     try { g = groundingOf(root, f); } catch { continue; } // deleted, or not a file
     if (g.state === 'failing' || g.state === 'stale') {
@@ -105,7 +157,7 @@ export async function checkChanges(root: string, changed: readonly string[], che
   }
 
   const criteria: FailingCriterion[] = [];
-  for (const plan of listPlans(root)) {
+  for (const plan of scoped ? [] : listPlans(root)) {
     if (plan.status === 'archived') continue;
     for (const item of listItemSummaries(plan.uid)) {
       if (item.status !== 'done') continue;
@@ -122,7 +174,7 @@ export async function checkChanges(root: string, changed: readonly string[], che
   const docs: StaleDoc[] = [];
   const seen = new Map<string, StaleDoc>();
   const diffs = new Map<string, Set<string> | null>();
-  for (const f of files) {
+  for (const f of scoped ? [] : files) {
     for (const ref of findDocsByReferencedFile(root, f)) {
       const doc = getSystemDoc(ref.uid);
       if (!doc?.capturedAgainstCommit || !(doc.references.files ?? []).some((x) => x.replace(/^\.\/+/, '') === f)) continue;
@@ -138,5 +190,5 @@ export async function checkChanges(root: string, changed: readonly string[], che
   }
   for (const d of docs) says.push(`⚠ The system doc "${d.title}" describes ${d.files.join(', ')}, which changed after it was verified at ${d.verifiedAt}`);
 
-  return { ok: says.length === 0, says, files, breakpoints, tests, criteria, docs, rules, rulesChecked: found !== null };
+  return { ok: says.length === 0, says, files, breakpoints, tests, criteria, docs, rules, rulesChecked: found !== null, rulebook: [...rulebook], notes: said, ratchet: ratchet.map(({ strength: _s, ...f }) => f) };
 }

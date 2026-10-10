@@ -28,6 +28,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import type { ChangedFileStatus, Workstream } from '../../shared/types';
 import { isSafeGitRef } from './git-safety';
+import { withoutNestedCheckouts } from './git-checkout';
 
 export type SourceChangeStatus = ChangedFileStatus | 'untracked';
 export type SourceGroupKind = 'staged' | 'changes' | 'untracked' | 'since-opened' | 'workstream';
@@ -163,7 +164,10 @@ export function sourceControl(projectRoot: string, baselineCommit: string | null
   const headSpec = head ? 'commit:HEAD' : 'none';
   const at = head ? `${branch ?? 'HEAD'} ${head.sha}` : 'no commit yet';
   try {
-    const { staged, changes, untracked } = parsePorcelain(git(project, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', '.']), prefix);
+    const parsed = parsePorcelain(git(project, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', '.']), prefix);
+    const { staged, changes } = parsed;
+    // A worktree inside the project is another checkout, not a new file.
+    const untracked = withoutNestedCheckouts(project, parsed.untracked, (f) => f.path);
     if (staged.length) groups.push({ id: 'staged', kind: 'staged', title: 'Ready to commit', words: `Staged: these go into the next commit. Compared with the last commit (${at})`, git: { term: 'staged', command: 'git diff --cached' }, before: headSpec, after: 'index', labels: { before: `Last commit (${head?.sha ?? 'none'})`, after: 'Staged' }, files: staged.slice(0, MAX_FILES), truncated: staged.length > MAX_FILES || undefined });
     if (changes.length) groups.push({ id: 'changes', kind: 'changes', title: 'Changed, not staged', words: 'Edited but not yet staged for a commit. Compared with what is staged', git: { term: 'unstaged', command: 'git diff' }, before: 'index', after: 'live', labels: { before: 'Staged', after: 'Working tree' }, files: changes.slice(0, MAX_FILES), truncated: changes.length > MAX_FILES || undefined });
     if (untracked.length) groups.push({ id: 'untracked', kind: 'untracked', title: 'New files', words: 'Files git is not tracking yet, so there is nothing earlier to compare them with', git: { term: 'untracked', command: 'git status --untracked-files' }, before: 'none', after: 'live', labels: { before: 'Nothing (new file)', after: 'Working tree' }, files: untracked.slice(0, MAX_FILES), truncated: untracked.length > MAX_FILES || undefined });

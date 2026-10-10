@@ -43,6 +43,7 @@ import type {
   PlanItem, TaskStatus, Comment,
 } from '@shared/types';
 import { authorKind } from '../../../lib/author-words';
+import { isTypingTarget } from '../../../lib/typing-target';
 import { UnverifiedIf } from '../../UnverifiedTag';
 
 const STATUS_META: Record<TaskStatus, { label: string; tint: string; Icon: typeof Circle }> = {
@@ -83,10 +84,7 @@ export function PlanItemCanvas() {
     if (!selectedItemUid) return;
     const handler = async (e: ClipboardEvent) => {
       // Don't fight a textarea / input that owns the focus.
-      const target = document.activeElement;
-      if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || (target as HTMLElement).isContentEditable)) {
-        return;
-      }
+      if (isTypingTarget(document.activeElement as HTMLInputElement | null)) return;
       const items = e.clipboardData?.items ?? [];
       for (const item of Array.from(items)) {
         if (item.kind !== 'file') continue;
@@ -837,25 +835,33 @@ function Breadcrumb({ item }: { item: PlanItem }) {
   }, [item, itemsByUid]);
 
   return (
-    <div className="border-b border-white/[0.06] px-6 py-2.5 flex items-center gap-1.5 bg-[#0a0b14] text-[13px] text-foreground-subtle">
-      {chain.map((c, i) => (
-        <span key={c.uid} className="flex items-center gap-1.5">
-          {i > 0 && <ChevronRight size={12} className="opacity-50" />}
-          <button
-            onClick={() => selectItem(c.uid)}
-            className={`flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-white/[0.04] transition-colors ${
-              c.uid === item.uid ? 'text-foreground font-medium' : 'hover:text-foreground-muted'
-            }`}
-          >
-            {c.kind === 'action' ? (
-              <Zap size={12} className="text-accent" />
-            ) : (
-              <FileText size={12} className="text-foreground-subtle" />
-            )}
-            <span className="max-w-[260px] truncate">{c.title || 'untitled'}</span>
-          </button>
-        </span>
-      ))}
+    <div className="border-b border-white/[0.06] px-6 py-2.5 flex items-center gap-1.5 bg-[#0a0b14] text-[13px] text-foreground-subtle" data-testid="item-breadcrumb">
+      {chain.map((c, i) => {
+        // The page open is named in full, wrapping if it must: it was cut at
+        // 260px however much room the pane had. The pages above it stay short,
+        // with the whole name on hover.
+        const current = c.uid === item.uid;
+        return (
+          <span key={c.uid} className={`flex items-center gap-1.5 ${current ? 'flex-1 min-w-0' : 'shrink-0'}`}>
+            {i > 0 && <ChevronRight size={12} className="opacity-50 shrink-0" />}
+            <button
+              onClick={() => selectItem(c.uid)}
+              title={current ? undefined : c.title || 'untitled'}
+              data-testid={current ? 'item-breadcrumb-current' : undefined}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-white/[0.04] transition-colors text-left min-w-0 ${
+                current ? 'text-foreground font-medium' : 'hover:text-foreground-muted'
+              }`}
+            >
+              {c.kind === 'action' ? (
+                <Zap size={12} className="text-accent shrink-0" />
+              ) : (
+                <FileText size={12} className="text-foreground-subtle shrink-0" />
+              )}
+              <span className={current ? 'min-w-0 [overflow-wrap:anywhere]' : 'max-w-[260px] truncate'}>{c.title || 'untitled'}</span>
+            </button>
+          </span>
+        );
+      })}
     </div>
   );
 }

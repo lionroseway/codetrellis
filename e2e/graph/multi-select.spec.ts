@@ -14,7 +14,7 @@ test.describe('Multi-select', () => {
     await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.waitForTimeout(2000);
-    const nodes = await reachableNodes(page);
+    const nodes = await reachableNodes(page, 15_000, 2);
     const count = nodes.length;
 
     // The sample app always has more than two clusters: fewer is a failure, not a pass.
@@ -41,7 +41,7 @@ test.describe('Multi-select', () => {
     await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
     await page.waitForTimeout(2000);
-    const nodes = await reachableNodes(page);
+    const nodes = await reachableNodes(page, 15_000, 2);
     const count = nodes.length;
 
     // The sample app always has more than two clusters: fewer is a failure, not a pass.

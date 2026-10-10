@@ -52,6 +52,20 @@ export interface PhoneNeedsYou {
   projectRoot: string | null;
   digest: { needsYou: number; low: number; moreLines: number; lines: DigestLine[] };
   signals: PhoneSignal[];
+  /** Phase 33 G10: check runs that block, the latest from each place. Absent from a desktop older than that. */
+  checks?: PhoneCheckRun[];
+}
+
+/** A check run that blocks: where it ran, by whom, and a few of its findings with what to do. */
+export interface PhoneCheckRun {
+  id: string;
+  who: string;
+  ranIn: string;
+  scope: string | null;
+  at: number;
+  outcome: string;
+  findings: Array<{ where: string; rule: string; fix: string | null }>;
+  more: number;
 }
 
 export interface PhoneWorkstream {

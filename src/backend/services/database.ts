@@ -1,9 +1,12 @@
 import type { Database } from 'sql.js';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ParsedFile, ParsedSymbol, AliasMapping, DiscoveredSystem, SupportedLanguage } from '../../shared/types';
+import type { Callsite, ParsedFile, ParsedSymbol, AliasMapping, DiscoveredSystem, SupportedLanguage } from '../../shared/types';
 import { getDataDir, ensureDataDir } from './persistence';
 import { getResolverForLanguage } from './resolvers';
+import { packageEntry } from '../../shared/lib/package-entry';
+import { callEntry } from '../../shared/lib/call-entry';
+import { exportCount, fileFact } from '../../shared/lib/folder-entry';
 import { reconcileSchemaFromSql } from './schema-reconciler';
 // Called, never read at load: the two modules name each other.
 import { importersOf } from './importers';
@@ -393,8 +396,8 @@ export function storeParsedFile(parsed: ParsedFile, projectRoot: string): void {
     d.run(`DELETE FROM callsites WHERE file_id = ?`, [fileId]);
     for (const cs of parsed.callsites ?? []) {
       d.run(
-        `INSERT INTO callsites (file_id, kind, protocol, method, url_pattern, sql_text, line, context)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO callsites (file_id, kind, protocol, method, url_pattern, sql_text, line, context, host)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           fileId,
           cs.kind,
@@ -404,6 +407,7 @@ export function storeParsedFile(parsed: ParsedFile, projectRoot: string): void {
           cs.sqlText ?? null,
           cs.line ?? null,
           cs.context ?? null,
+          cs.host ?? null,
         ]
       );
     }
@@ -803,6 +807,130 @@ export function getDependencyEdges(): Array<{
     targetRelative: row[3] as string,
     specifiers: JSON.parse((row[4] as string) || '[]'),
   }));
+}
+
+/**
+ * Phase 33 R5 — every outside import in the graph, as the package it comes
+ * from: an import that resolved to no project file, kept as `npm:stripe`,
+ * `pypi:requests`, `go:github.com/stripe/stripe-go` (see package-entry.ts).
+ * The edges package rules are checked against; relative imports and the
+ * standard library are left out.
+ */
+/**
+ * Phase 33 R8: each scanned file's own fact, its name and how many names it
+ * exports (as a parse on a branch counts them), for folder rules.
+ */
+export function getFileFacts(): Array<{ sourceRelative: string; targetRelative: string }> {
+  let files;
+  let symbols;
+  try {
+    files = getDb().exec(`SELECT id, relative_path, language FROM files`);
+    symbols = getDb().exec(`SELECT file_id, name, modifiers FROM symbols WHERE parent_symbol_id IS NULL`);
+  } catch {
+    return [];
+  }
+  const byFile = new Map<number, Array<{ name: string; modifiers: string[] }>>();
+  for (const [fileId, name, mods] of symbols[0]?.values ?? []) {
+    const list = byFile.get(Number(fileId)) ?? [];
+    list.push({ name: String(name), modifiers: JSON.parse((mods as string) || '[]') as string[] });
+    byFile.set(Number(fileId), list);
+  }
+  return (files[0]?.values ?? []).map(([id, rel, lang]) => ({
+    sourceRelative: String(rel),
+    targetRelative: fileFact(String(rel), exportCount(String(lang ?? ''), byFile.get(Number(id)) ?? [])),
+  }));
+}
+
+/**
+ * Phase 33 R7: each file and the calls it makes, as call entries
+ * (`http:api.stripe.com/v1/charges`, `sql:payments`), for call rules.
+ */
+/**
+ * Phase 33 B4: replace what a project's patterns found in each of these files
+ * (callsites whose context is `pattern:<id>`), leaving every extractor's own.
+ * For when the patterns changed and the files did not. Absolute paths.
+ */
+export function replacePatternCallsites(found: ReadonlyArray<{ path: string; callsites: readonly Callsite[] }>): number {
+  const d = getDb();
+  let n = 0;
+  d.run('BEGIN');
+  try {
+    for (const f of found) {
+      const row = d.exec(`SELECT id FROM files WHERE path = ?`, [f.path])[0]?.values?.[0];
+      if (!row) continue;
+      const fileId = Number(row[0]);
+      d.run(`DELETE FROM callsites WHERE file_id = ? AND context LIKE 'pattern:%'`, [fileId]);
+      for (const cs of f.callsites) {
+        d.run(`INSERT INTO callsites (file_id, kind, protocol, method, url_pattern, sql_text, line, context, host) VALUES (?,?,?,?,?,?,?,?,?)`,
+          [fileId, cs.kind, cs.protocol, cs.method ?? null, cs.urlPattern ?? null, cs.sqlText ?? null, cs.line ?? null, cs.context ?? null, cs.host ?? null]);
+        n++;
+      }
+    }
+    d.run('COMMIT');
+  } catch (err) {
+    d.run('ROLLBACK');
+    throw err;
+  }
+  return n;
+}
+
+/** Whether anything in the graph was found by a pattern (B4). */
+export function hasPatternCallsites(): boolean {
+  try {
+    return (getDb().exec(`SELECT 1 FROM callsites WHERE context LIKE 'pattern:%' LIMIT 1`)[0]?.values?.length ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
+export function getCallEdges(): Array<{ sourceRelative: string; targetRelative: string }> {
+  let results;
+  try {
+    results = getDb().exec(`
+      SELECT DISTINCT f.relative_path, c.kind, c.url_pattern, c.host
+      FROM callsites c
+      JOIN files f ON c.file_id = f.id
+      WHERE c.kind IN ('http_call', 'sql_query', 'entry', 'subprocess', 'env_lookup')
+      ORDER BY f.relative_path
+    `);
+  } catch {
+    return [];
+  }
+  const out: Array<{ sourceRelative: string; targetRelative: string }> = [];
+  const seen = new Set<string>();
+  for (const row of results[0]?.values ?? []) {
+    const entry = callEntry({ kind: String(row[1]), urlPattern: row[2] as string | null, host: row[3] as string | null });
+    const key = `${row[0]}\0${entry}`;
+    if (!entry || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ sourceRelative: String(row[0]), targetRelative: entry });
+  }
+  return out;
+}
+
+export function getPackageEdges(): Array<{ sourceRelative: string; targetRelative: string }> {
+  let results;
+  try {
+    results = getDb().exec(`
+      SELECT DISTINCT f.relative_path, f.language, i.source_path, i.is_relative
+      FROM imports i
+      JOIN files f ON i.file_id = f.id
+      WHERE i.resolved_path IS NULL
+      ORDER BY f.relative_path
+    `);
+  } catch {
+    return []; // no scan yet, or no database
+  }
+  const out: Array<{ sourceRelative: string; targetRelative: string }> = [];
+  const seen = new Set<string>();
+  for (const row of results[0]?.values ?? []) {
+    const entry = packageEntry(String(row[1]), String(row[2]), Number(row[3]) === 1);
+    const key = `${row[0]}\0${entry}`;
+    if (!entry || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ sourceRelative: String(row[0]), targetRelative: entry });
+  }
+  return out;
 }
 
 /**

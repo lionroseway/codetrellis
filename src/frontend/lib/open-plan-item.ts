@@ -1,4 +1,40 @@
 /**
+ * Open a plan and show it (Phase 33 G6). The owner's report: opening a plan
+ * that was minimised to its chip left it minimised, because the workspace
+ * flips to the plan only when the active plan CHANGES (App.tsx), so opening
+ * the plan already active did nothing visible from eight places. Every
+ * person's "open this plan" goes through here: it sets the plan, then brings
+ * the plan workspace to the front, from a chip too. The Brief is the one
+ * exception, as in App.tsx: there, opening a plan is part of reading it,
+ * unless `leaveBrief` says the plan itself was asked for (an agent's
+ * navigate_to / open_plan).
+ *
+ * The plan is brought forward only if the person has not left it since it
+ * appeared. setActivePlan goes on awaiting after the plan is active (the
+ * projection, the plan's own project), and App.tsx shows a newly active plan
+ * the moment it lands: bringing it forward again at the end pushed it back
+ * over a person who had minimised it in between (#373).
+ */
+export async function showPlan(planUid: string, opts: { item?: string; leaveBrief?: boolean } = {}): Promise<void> {
+  const { usePlanStore } = await import('../stores/plan-store');
+  const { useUiStore } = await import('../stores/ui-store');
+  let left = false;
+  const stop = useUiStore.subscribe((s, prev) => {
+    if (s.workspaceMode !== prev.workspaceMode && s.workspaceMode !== 'plan'
+      && usePlanStore.getState().activePlanUid === planUid) left = true;
+  });
+  try {
+    // With an item, the plan is opened and the item selected in the order F9 fixed.
+    if (opts.item) await openPlanItem(planUid, opts.item);
+    else if (usePlanStore.getState().activePlanUid !== planUid) await usePlanStore.getState().setActivePlan(planUid);
+  } finally {
+    stop();
+  }
+  if (left || usePlanStore.getState().activePlanUid !== planUid) return;
+  if (opts.leaveBrief || useUiStore.getState().workspaceMode !== 'brief') useUiStore.getState().setWorkspaceMode('plan');
+}
+
+/**
  * Open a plan item — activate its plan, hydrate the tree, select it.
  *
  * Extracted rather than copied. This sequence is load-bearing and subtle:

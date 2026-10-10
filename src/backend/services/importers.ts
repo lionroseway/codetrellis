@@ -94,6 +94,24 @@ export function exportedNames(filePath: string): Set<string> {
   return out;
 }
 
+/**
+ * Every exported name in the scanned project, by file (Phase 33 B1): what a
+ * symbol rule's glob or regex is matched against, the same names
+ * `exportedNames` reads one file at a time.
+ */
+export function exportedSymbols(): Array<{ path: string; rel: string; name: string }> {
+  const res = getDb().exec(
+    `SELECT f.path, f.relative_path, s.name, s.modifiers, f.language FROM symbols s JOIN files f ON s.file_id = f.id
+      WHERE s.parent_symbol_id IS NULL`,
+  );
+  const out: Array<{ path: string; rel: string; name: string }> = [];
+  for (const [p, rel, name, mods, lang] of res[0]?.values ?? []) {
+    const modifiers = JSON.parse((mods as string) || '[]') as string[];
+    if (modifiers.includes('export') || (lang === 'python' && !(name as string).startsWith('_'))) out.push({ path: p as string, rel: rel as string, name: name as string });
+  }
+  return out;
+}
+
 /** The absolute path a caller's path names, as the graph stores it. */
 function stored(filePath: string): string {
   const row = getDb().exec(
@@ -152,4 +170,32 @@ export function importersOf(filePath: string, names?: readonly string[]): Import
 
   visit(target, names ? new Set(names) : null, []);
   return [...found.values()].sort((a, b) => a.via.length - b.via.length || a.relativePath.localeCompare(b.relativePath));
+}
+
+/**
+ * Where a name a file offers comes from (Phase 33 R6): the file itself, then
+ * each module it re-exports that name from, through barrels, nearest first.
+ * So an import of `createCharge` from `src/payments/index.ts` is known to be
+ * an import of `src/payments/charge.ts#createCharge` too. `*` (a namespace
+ * import) follows every re-export. Absolute paths, as the graph stores them.
+ */
+export function originsOf(filePath: string, name: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const visit = (file: string, depth: number) => {
+    if (seen.has(file) || depth > MAX_DEPTH) return;
+    seen.add(file);
+    out.push(file);
+    const res = getDb().exec(
+      `SELECT i.resolved_path, i.specifiers FROM imports i JOIN files f ON i.file_id = f.id
+        WHERE f.path = ? AND i.is_reexport = 1 AND i.resolved_path IS NOT NULL`,
+      [file],
+    );
+    for (const [resolved, specs] of res[0]?.values ?? []) {
+      const names = JSON.parse((specs as string) || '[]') as string[];
+      if (name === '*' || names.includes(name) || names.includes('*')) visit(resolved as string, depth + 1);
+    }
+  };
+  visit(stored(filePath), 0);
+  return out;
 }

@@ -63,7 +63,13 @@ graph.
 - **Changed files**: git, from the merge base with main, plus uncommitted
   and untracked work. Each folder has one light chokidar watcher and a
   debounced recompute (`workstream-watch-service.ts`; the debounce is
-  `CODETRELLIS_WORKSTREAM_DEBOUNCE_MS` in tests).
+  `CODETRELLIS_WORKSTREAM_DEBOUNCE_MS` in tests). At most 16 active folders
+  are watched at once (`treesToWatch`). Folders with agents in them come
+  first, then the main checkout and the project opened. The rest are read
+  from git when asked, at most every 20 seconds. On a checkout with 50
+  active worktrees this took the backend's inotify watches from about
+  101,000 to 34,000 (Phase 33 follow-up; `CODETRELLIS_MAX_WATCHED_TREES`
+  changes it).
 - **Symbols**: only the changed files are parsed, current vs merge base,
   giving added / removed / modified (`workstream-symbols.ts`, A1.5).
 - **Signatures and exports**: TS/JS and Python (A2.1); Go, Rust, Java, C#,
@@ -97,9 +103,9 @@ written by CodeTrellis.
 |---|---|---|
 | `collision` | Two workstreams change the same file (declared intent counts) | high on the same symbol, else medium |
 | `contract` | An exported signature changed or an export was removed, and the other side's changed files import it | high; medium for a namespace import only |
-| `drift` | Changes outside the workstream's scope | medium |
+| `drift` | Changes outside the workstream's scope. Where a rule is about a file it reached, guides included, `subject.rules` names each with its suite, strength and files, and the summary and digest say so (Phase 33 R9) | medium |
 | `stale-base` | Main changed files this workstream changes, since it branched | low |
-| `rule` | The workstream adds an import across one of the team's architecture rules (A7.2): `subject.rule` names it in words with why, `subject.edges` each import. Only imports it *adds* against its merge base count; one already there is listed by the rule (A7.1), never signalled | high |
+| `rule` | The workstream adds an import across one of the team's architecture rules (A7.2): `subject.rule` names it in words with why, `subject.edges` each import. Only imports it *adds* against its merge base count; one already there is listed by the rule (A7.1), never signalled. A rule at `guide` is never checked (Phase 33 R4) | high at `block`, medium at `warn` |
 
 **Staying quiet** (spec §4.4):
 - The id is derived from kind, subject and workstreams, so a signal that
@@ -519,10 +525,264 @@ run as a plain `codex` client with no hook and no watcher in
 ## Architecture rules: the team's boundaries (A7, M7)
 
 A rule is a boundary between two sets of paths, written once by a person in
-Settings → Architecture rules and committed in `.codetrellis/config.json`:
-`from` may not import `mayNotImport`, `except` some doors, `because` the
-team's reason. One file every laptop, agent and pipeline reads.
+the Rules view (Phase 33 G7; it was Settings → Architecture rules) and committed in a suite file,
+`.codetrellis/rules/<suite>.yaml` (Phase 33 R1; new rules go into
+`architecture.yaml`): `from` may not import `mayNotImport`, `except` some
+doors, `because` the team's reason. Files every laptop, agent and pipeline
+read, and a pull request reviews. Rules Phase 32 kept in
+`.codetrellis/config.json` still count until the person moves them
+(`POST /api/rules/move-from-config`, offered in the same section).
 
+A **package rule** (Phase 33 R5) says who alone may import an outside
+package, the Stripe example:
+
+```yaml
+  - id: stripe-via-wrapper
+    kind: package
+    package: npm:stripe
+    only: [src/payments/index.ts]
+    strength: block
+    because: The wrapper sets idempotency keys and retries.
+```
+
+An import that resolves to no file in the project is kept as the package it
+comes from, in every language: `npm:` (scope kept), `pypi:` (the top
+module), `go:` (the module path), `cargo:`, `gem:`, `maven:`, `nuget:`,
+`composer:` (the whole dotted or `\` name, which a rule names a prefix of:
+`maven:com.stripe`), and `swift:`. Relative imports and the standard
+library are not packages (`src/shared/lib/package-entry.ts`). `from` limits
+where the rule applies (everywhere when omitted); `except` names parts of
+the package anyone may import (`npm:stripe/types`). Letting more files
+import it loosens the rule (R2, R3).
+
+A **symbol rule** (Phase 33 R6) says who alone may import one named export:
+
+```yaml
+  - id: charges-via-payments
+    kind: symbol
+    symbol: src/payments/charge.ts#createCharge
+    only: [src/payments/]
+    strength: block
+    because: Charging goes through the payments module.
+```
+
+Importing it through a barrel counts: an import of `createCharge` from
+`src/payments/index.ts`, which passes it on, is an import of
+`src/payments/charge.ts#createCharge` too (`originsOf` in
+`services/importers.ts` follows re-exports, up to five deep). A namespace
+import of the module may use any of its names, and counts. The module that
+defines it, and the files in `only`, may. `from` limits where it applies;
+it has no `except`. The gate reads each named import a change adds
+(`src/shared/lib/symbol-entry.ts`); the rules view reads the graph's
+importers of the symbol.
+
+A **call rule** (Phase 33 R7) says who alone may make a call out of the
+code: to an HTTP host or path, or into a SQL table.
+
+```yaml
+  - id: stripe-api-via-clients
+    kind: calls
+    calls: http:api.stripe.com
+    only: [src/payments/client.ts, services/api/app/billing.py]
+    strength: block
+```
+
+It reads the callsites the extractors already find (`services/callsites/`,
+`services/sql/`): `http:api.stripe.com` matches any path on that host,
+`http:api.stripe.com/v1/charges` that path and under it, `http:/api/admin`
+that path on any host, and `sql:invoices` the table. The host is kept on each
+HTTP callsite for this (`callsites.host`; pairing still uses the path alone).
+A finding reads "calls api.stripe.com/v1/charges" or "uses the table
+invoices", on the line that names it. Subprocess commands and environment
+variables are in the design but no extractor finds them yet.
+
+**Your own patterns** (Phase 33 B4, `services/patterns.ts`) add what the
+extractors cannot see: a team's own clients, and kinds of entry of its own.
+
+```yaml
+# .codetrellis/patterns/payments.yaml
+patterns:
+  - id: payments-sdk
+    find: { match: regex, value: "paymentsClient\\.(charge|refund)\\(" }
+    is: http:api.stripe.com/v1/charges
+    method: POST
+  - id: orders-queue
+    in: [services/]
+    find: { match: regex, value: "publish\\(['\"]orders\\.(\\w+)" }
+    is: queue:orders.$1
+```
+
+- **`find`** is read line by line, as a grep rule's text is: literal, a glob,
+  or a regex (B1's limits). `$1`…`$9` in `is` are the regex's groups.
+- **`is: http:` or `sql:`** makes a callsite like any extractor's, normalised
+  the same way. So call rules, the gate, reviews and the cross-system map
+  read it unchanged. `method` lets the map pair it with a route; without
+  one it is `ANY`.
+- **Any other lowercase kind** (`queue:`, `event:`, `flag:`) is an entry of
+  the team's own. A call rule holds it as it holds an HTTP call: a name and
+  everything under it by `.`, `/` or `:`, or a glob, as in
+  `calls: queue:orders.*` ("only services/billing/ may reach
+  queue:orders.*"). A finding reads "now reaches queue:orders.cancelled".
+- **Which patterns a file gets:** those of the nearest folder above it with
+  a `.codetrellis/patterns/`, read through the confined-file helper. So the
+  scan, the watcher, the gate and reviews read the same ones. Each callsite
+  says which pattern found it (`pattern:<id>`), and the gate gives the line
+  it was found on.
+- **Changing patterns:** an incremental scan redoes every file's pattern
+  finds when the patterns changed, without parsing them again.
+- **Not yet:**
+  - patterns read only files a parser reads (the languages above), not
+    YAML or Markdown;
+  - the cross-system map does not pair a team's own kinds, such as a
+    queue's publishers with its consumers.
+
+A package, symbol or call target can be a pattern (Phase 33 B1,
+`src/shared/lib/matcher.ts`). A `*` makes it a **glob** without saying so:
+`*` is any run but `/`, `**` any run at all, so `http:*.stripe.com` is every
+Stripe host (not `stripe.com` itself, nor `evilstripe.com`), `sql:payments_*`
+every such table, `npm:@aws-sdk/*` the scope, `src/db.ts#raw*` the exports
+named so. A **regex** is written as `{ match: regex, value: … }` and holds
+over the whole entry, anchored at both ends:
+
+```yaml
+  - id: providers-via-client
+    kind: calls
+    calls: { match: regex, value: "http:api\\.(stripe|paypal)\\.com(/.*)?" }
+    only: [src/payments/client.ts]
+    strength: block
+```
+
+The suite file keeps it as `calls:` plus `match: regex` (`match: glob` for a
+glob), and the words say it: "only … may make a call matching /…/". A regex
+is at most 200 characters and may not repeat a group that itself repeats
+(`(a+)+`), since a pull request can change it and CI runs it. Changing a
+target's pattern or matcher counts as loosening: what a pattern covers is not
+proven from its text. Paths (`from`, `only`, `except`) are prefixes or globs,
+as before.
+
+**Fuzzy** (Phase 33 B3, `src/shared/lib/fuzzy.ts`) is a look-alike: like the
+target, and not the target itself.
+
+```yaml
+  - id: no-requests-lookalikes
+    kind: package
+    package: { match: fuzzy, value: pypi:requests }   # threshold 0.85 unless said
+    strength: block
+```
+
+- **The score:** both names are normalised (split at case, `-`, `_`, `.`,
+  `/`, `:`, `@`, lowercased). The score is one less the edit distance (a swap
+  of two side by side counts one) over the longer name's length. So
+  `reqeusts` is 0.88 like `requests`, on every run.
+- **What is compared:** a package's name in the same ecosystem; an export's
+  name in any file (a second `formatMoney`); a call's host, or its host and
+  path when the target names one.
+- **`only` may be empty,** and then nothing may use a look-alike.
+- **The finding's fix** says how alike, and to what: "pypi:reqeusts is 0.88
+  like pypi:requests: did you mean it?".
+- **Grep:** a fuzzy grep rule reads whole words (`mustNot` only).
+- **Change control:** a lower `threshold` tightens, and a higher one
+  loosens.
+
+A **folder rule** (Phase 33 R8) says what the files in a folder are, and
+carries the judgement half as a guide:
+
+```yaml
+  - id: services-are-services
+    kind: folder
+    folder: src/backend/services/
+    files: "*-service.ts"
+    exports: one
+    strength: warn
+    guide: One service per file, named for its domain; pure helpers go in lib/.
+```
+
+`files` are name patterns (`*` within the name), `kinds` file extensions,
+and `exports: one` one exported name per file (counted the same on a branch
+and in the scan: `export`-marked names in TypeScript and JavaScript, public
+names in Python; other languages are not judged on it). Each file gives one
+fact (`file:<name>:<exports>`, `src/shared/lib/folder-entry.ts`), so the
+gate judges the files a change adds, renames or re-exports from, never an old
+file it only edits; the rules view lists the old ones as what breaks it today.
+A finding says what is wrong: "is named helpers.ts, not *-service.ts",
+"exports 2 names, not one". The guide is never checked; it is shown on the
+rule in the Rules view and in a task's brief.
+
+A **grep rule** (Phase 33 B2) says what text files may not hold, or must.
+It needs no parser, so it holds for every language and every kind of file:
+
+```yaml
+  - id: no-console-in-backend
+    kind: grep
+    in: [src/backend/]
+    except: ['**/*.test.ts']
+    mustNot: { match: regex, value: "console\\.(log|debug)\\(" }
+    strength: warn
+    because: The backend logs through services/logger, which redacts.
+
+  - id: routes-check-auth
+    kind: grep
+    in: [src/routes/*.ts]
+    must: requireAuth
+    strength: block
+```
+
+- **`mustNot`** reports each line that holds the text. **`must`** reports each
+  file in `in` with no line that holds it, on its first line.
+- **The text** is literal by default, and a `*` in it is a `*`, because code is
+  full of them. `match: glob` makes `*` any run of characters, and
+  `match: regex` searches each line (B1's limits apply).
+  `ignoreCase: true` reads it in any case. A line is read to its first 2000
+  characters, and a file with a NUL in its first 8000 is not read.
+- **Entries are keyed** by the line's text and the rule's terms
+  (`grep:<key>:+<line>`, `src/shared/lib/grep-entry.ts`). An edit above a
+  line moves it without making it new, so the gate reports only the lines a
+  change adds. A second copy of a line already in the file is not new either.
+  The Rules view reads every file git knows under `in`, up to 1 MB each,
+  through the confined-file helper.
+- **Old breaches:** baselined like any rule's (C3). The finding reads
+  "now contains “console.log('booting');”" or "never contains “requireAuth”".
+
+An **agent rule** (Phase 33 B5) is words that only a reader can judge.
+Every rule has an **engine**, whatever its strength:
+
+- **`deterministic`:** code over the graph and the text. This is every kind
+  above.
+- **`fuzzy`:** code by likeness, a `match: fuzzy` target (B3).
+- **`agent`:** a review, against the rule's words.
+
+```yaml
+  - id: money-through-ledger
+    engine: agent
+    rule: Code that moves money records it through services/ledger, never by writing balances directly.
+    in: [src/]
+    strength: warn
+```
+
+- **No code checks it.** The gate does not count it among the rules that
+  hold, and the Rules view says who judges it.
+- **In a review:** a review's bundle lists it with `engine: agent`, and the
+  contract tells the agent it is the review's alone. A finding that cites it
+  is held to the contract like any other: it must quote the change, and the
+  rule must be in scope.
+- **It blocks only at `block`.** Then a kept finding citing it fails the
+  review's run (`blocks`), and `codetrellis review --fail-on block` exits 3.
+  At `warn` it is said.
+- **With no review run,** it is a guide: shown in briefs and where it
+  applies, checked nowhere.
+- **Change control:** rewording it, or changing what it is about, loosens
+  it.
+- **In the Rules view,** its form kind is **Words**.
+
+Everything below holds for every kind.
+
+- **On the graph** (Phase 33 G8): the Rules overlay (Overlays → Rules)
+  draws an import that breaks a rule in the breach style (red, ⊘, the rule
+  named on hover), on a file edge or a cluster edge holding one, and puts a
+  ⊘ mark with the count on the file (or cluster) it starts from; the legend
+  explains both. The inspector lists the rules about the selected file and
+  what breaks them there; "Show the … suite" fades every node no rule of
+  that suite is about.
 - **Today** (A7.1): each rule lists the imports that already break it ("1
   import breaks this today"); `check_conformity` refuses a proposed import
   with the rule and why; `list_rules` reads them.

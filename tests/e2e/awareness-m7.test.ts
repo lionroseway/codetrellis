@@ -13,6 +13,19 @@
  * `codetrellis check` against main fails (exit 3) naming the import and the
  * rule. The routes' import of db.py, there before the branch, is not the
  * branch's. With the import taken out, the gate passes.
+ *
+ * Phase 33 R2: the pipeline judges with the base branch's rules, so the rule
+ * is committed on main, as a team keeps it. A branch that deletes the rule
+ * and adds the import it forbade still fails, and says it loosens the rule;
+ * a branch that only adds a rule passes, and says so.
+ *
+ * Phase 33 R4: on a base where the rule is at warn, the same import is said
+ * and the check passes; `--strict` fails it; at guide it is not checked.
+ *
+ * Phase 33 R3: Sam stops the rule in the app on a branch. The app signs his
+ * approval with his device key, which main already lists, and the check
+ * passes, saying who approved it. The same approval with a key the branch
+ * itself introduces does not count.
  */
 
 import fs from 'node:fs';
@@ -31,8 +44,25 @@ const ADDED = 'from app.config import DATABASE_URL\n';
 const NOTICE = '── CodeTrellis awareness ──';
 const RULE = 'services/api/app/routes/ may not import services/api/app/config.py';
 const BECAUSE = 'routes read settings through the app';
+/** The gate's finding (C8: with its suite, its fix, and where in the file). */
+const FOUND = (strength: string) => ({
+  path: USERS, imports: CONFIG, rule: 'routes-not-config', words: RULE, because: BECAUSE, strength,
+  suite: 'architecture', fix: null, line: expect.any(Number), text: ADDED.trim(),
+});
+/** The terminal's lines for it: under its suite and rule, where it is, then what to do. */
+const FOUND_TEXT = (since: string) => new RegExp([
+  `^Does not conform \\(1 changed file since ${since}\\):`, '',
+  'architecture {2}✗ 1 blocks', '',
+  ` {2}✗ routes-not-config {3}${RULE.replace(/[.]/g, '\\.')}`,
+  ` {6}${USERS.replace(/[.]/g, '\\.')}:\\d+ imports ${CONFIG.replace(/[.]/g, '\\.')} {3}${ADDED.trim().replace(/[.]/g, '\\.')}`,
+  ` {6}→ ${BECAUSE}`, '',
+  '1 finding blocks this change \\(exit 3\\)\\.$',
+].join('\n'));
 
-interface Gate { ok: boolean; says: string[]; files: number; rules: Array<{ path: string; imports: string; rule: string; words: string; because: string }>; rulesNote?: string }
+interface Gate {
+  ok: boolean; says: string[]; files: number; rules: Array<{ path: string; imports: string; rule: string; words: string; because: string; strength: string }>; rulesNote?: string;
+  rulebook: Array<{ rule: string; change: string; effect: string; words: string }>; notes: string[];
+}
 
 test.describe.serial('M7: the team\'s architecture, kept by every agent and the pipeline', () => {
   test.setTimeout(240_000);
@@ -47,7 +77,7 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
   const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', env: { ...process.env, ...ENV } }).trim();
   const ct = (...args: string[]) => {
     const r = spawnSync(process.execPath, [BIN, ...args, '--data-dir', h.fixture.dataDir], {
-      cwd: root, env: { ...(process.env as Record<string, string>), ...ENV, CLAUDECODE: '1', CODETRELLIS_AGENT: '', GITHUB_BASE_REF: '' }, encoding: 'utf8', timeout: 120_000,
+      cwd: root, env: { ...(process.env as Record<string, string>), ...ENV, CLAUDECODE: '1', CODETRELLIS_AGENT: '', FORCE_COLOR: '', GITHUB_BASE_REF: '' }, encoding: 'utf8', timeout: 120_000,
     });
     return { code: r.status, out: r.stdout.trim(), err: r.stderr.trim() };
   };
@@ -71,9 +101,12 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
     main = git(root, 'rev-parse', '--abbrev-ref', 'HEAD');
     await h.client.scanProject(root);
     const res = await h.client.raw('PUT', `/api/rules/routes-not-config?project=${encodeURIComponent(root)}`, {
-      from: 'services/api/app/routes/', mayNotImport: CONFIG, because: BECAUSE,
+      from: 'services/api/app/routes/', mayNotImport: CONFIG, because: BECAUSE, strength: 'block',
     });
     expect(res.status, await res.clone().text()).toBe(200);
+    // The team's rule is committed on main (R2: the pipeline judges by the base's rules).
+    git(root, 'add', '.codetrellis/rules');
+    git(root, 'commit', '-qm', 'Rule: routes read settings through the app');
     exportsTree = `${root}-exports-v2`;
     authTree = `${root}-auth-fix`;
     git(root, 'worktree', 'add', '-q', exportsTree, '-b', 'exports-v2');
@@ -135,12 +168,23 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
       const g = JSON.parse(r.out) as Gate;
       expect(g.ok).toBe(false);
       // The import of db.py was there before the branch: not the branch's.
-      expect(g.rules).toEqual([{ path: USERS, imports: CONFIG, rule: 'routes-not-config', words: RULE, because: BECAUSE }]);
+      expect(g.rules).toEqual([FOUND('block')]);
       expect(g.rulesNote).toBeUndefined();
 
       const words = ct('check', '--base', main);
       expect(words.code).toBe(3);
-      expect(words.out).toBe(`Does not conform (1 changed file since ${main}):\n  ✗ ${USERS} now imports ${CONFIG}, which the rule “${RULE}” forbids: ${BECAUSE}`);
+      expect(words.out).toMatch(FOUND_TEXT(main));
+
+      // C2: the same finding as SARIF, at the line that imports it, for any host to show.
+      const sarif = ct('check', '--base', main, '--format', 'sarif');
+      expect(sarif.code, sarif.err).toBe(3);
+      const run = (JSON.parse(sarif.out) as { version: string; runs: Array<{ results: Array<{ ruleId: string; level: string; locations: Array<{ physicalLocation: { artifactLocation: { uri: string }; region?: { startLine: number } } }> }> }> });
+      expect(run.version).toBe('2.1.0');
+      const [hit] = run.runs[0].results;
+      expect(hit).toMatchObject({ ruleId: 'rule/routes-not-config', level: 'error' });
+      const lines = fs.readFileSync(path.join(root, USERS), 'utf-8').split('\n');
+      expect(lines[hit.locations[0].physicalLocation.region!.startLine - 1]).toBe(ADDED.trim());
+      expect(ct('check', '--base', main, '--format', 'yaml').code).toBe(2);
 
       edit(root, USERS, ADDED, '');
       git(root, 'commit', '-qam', 'Exports read the URL through the app');
@@ -149,6 +193,226 @@ test.describe.serial('M7: the team\'s architecture, kept by every agent and the 
       expect((JSON.parse(fixed.out) as Gate).rules).toEqual([]);
     } finally {
       git(root, 'checkout', '-q', main);
+    }
+  });
+
+  test('R2: a branch that deletes the rule and adds the import it forbade still fails, and says it loosens the rule', async () => {
+    git(root, 'checkout', '-qb', 'quiet-loosening', main);
+    try {
+      const suite = path.join(root, '.codetrellis', 'rules', 'architecture.yaml');
+      fs.writeFileSync(suite, 'suite: architecture\nrules: []\n');
+      edit(root, USERS, 'from app.db import', `${ADDED}from app.db import`);
+      git(root, 'commit', '-qam', 'Drop the routes rule and read the URL directly');
+
+      const r = ct('check', '--base', main, '--json');
+      expect(r.code, r.err || r.out).toBe(3);
+      const g = JSON.parse(r.out) as Gate;
+      // Judged by main's rules: the import is still a breach.
+      expect(g.rules).toEqual([FOUND('block')]);
+      // And the rule's removal is a finding of its own, first.
+      expect(g.rulebook).toEqual([expect.objectContaining({ rule: 'routes-not-config', change: 'removed', effect: 'loosens' })]);
+      expect(g.says[0]).toMatch(/^✗ This change removes the rule “services\/api\/app\/routes\/ may not import services\/api\/app\/config\.py” \(routes-not-config\)(: \d+ imports? it forbade become allowed)?\. Loosening a rule needs a person's approval in the app\.$/);
+
+      // A change to the rules alone is checked too.
+      git(root, 'checkout', '-q', main);
+      git(root, 'checkout', '-qb', 'only-the-rule', main);
+      fs.writeFileSync(suite, 'suite: architecture\nrules: []\n');
+      git(root, 'commit', '-qam', 'Drop the routes rule');
+      const only = ct('check', '--base', main, '--json');
+      expect(only.code, only.err || only.out).toBe(3);
+      expect((JSON.parse(only.out) as Gate).rulebook.map((c) => c.effect)).toEqual(['loosens']);
+    } finally {
+      git(root, 'checkout', '-q', '-f', main);
+    }
+  });
+
+  test('R2: a branch that only adds a rule passes, and says the rule it adds', async () => {
+    git(root, 'checkout', '-qb', 'new-rule', main);
+    try {
+      fs.writeFileSync(path.join(root, '.codetrellis', 'rules', 'web.yaml'), [
+        'suite: web',
+        'rules:',
+        '  - id: web-not-api-internals',
+        '    from: packages/web/',
+        '    mayNotImport: services/api/app/',
+        '    because: the web app calls the API over HTTP',
+      ].join('\n'));
+      git(root, 'add', '.codetrellis/rules/web.yaml');
+      git(root, 'commit', '-qm', 'Rule: the web app calls the API over HTTP');
+      const r = ct('check', '--base', main, '--json');
+      expect(r.code, r.err || r.out).toBe(0);
+      const g = JSON.parse(r.out) as Gate;
+      expect(g.ok).toBe(true);
+      expect(g.rulebook).toEqual([expect.objectContaining({ rule: 'web-not-api-internals', change: 'added', effect: 'tightens' })]);
+      expect(g.notes).toEqual([expect.stringMatching(/^⚠ This change adds the rule “packages\/web\/ may not import services\/api\/app\/” \(web-not-api-internals\).*It is checked once it is on the base branch\.$/)]);
+      const words = ct('check', '--base', main);
+      expect(words.code).toBe(0);
+      expect(words.out).toMatch(/\n\nrulebook\n {2}⚠ This change adds the rule/);
+    } finally {
+      git(root, 'checkout', '-q', '-f', main);
+    }
+  });
+
+  test('R4: a rule at warn says the import and passes; --strict fails it; a guide is not checked', async () => {
+    const suite = path.join(root, '.codetrellis', 'rules', 'architecture.yaml');
+    const atStrength = (strength: string) => {
+      // A base where the team keeps the rule at this strength, and a branch from it adding the import.
+      git(root, 'checkout', '-qB', `base-${strength}`, main);
+      fs.writeFileSync(suite, fs.readFileSync(suite, 'utf-8').replace(/strength: block/, `strength: ${strength}`));
+      git(root, 'commit', '-qam', `The routes rule at ${strength}`);
+      git(root, 'checkout', '-qB', `adds-import-${strength}`);
+      edit(root, USERS, 'from app.db import', `${ADDED}from app.db import`);
+      git(root, 'commit', '-qam', 'Read the URL directly');
+    };
+    try {
+      atStrength('warn');
+      const r = ct('check', '--base', 'base-warn', '--json');
+      expect(r.code, r.err || r.out).toBe(0);
+      const g = JSON.parse(r.out) as Gate;
+      expect(g.ok).toBe(true);
+      expect(g.rules).toEqual([FOUND('warn')]);
+      expect(g.notes).toEqual([`⚠ ${USERS} now imports ${CONFIG}, which the rule “${RULE}” forbids: ${BECAUSE} (the rule warns; it does not fail the check)`]);
+      const strict = ct('check', '--base', 'base-warn', '--strict');
+      expect(strict.code, strict.err || strict.out).toBe(3);
+      expect(strict.out).toMatch(FOUND_TEXT('base-warn'));
+
+      git(root, 'checkout', '-q', '-f', main);
+      atStrength('guide');
+      const guide = ct('check', '--base', 'base-guide', '--strict', '--json');
+      expect(guide.code, guide.err || guide.out).toBe(0);
+      expect((JSON.parse(guide.out) as Gate).rules).toEqual([]);
+    } finally {
+      git(root, 'checkout', '-q', '-f', main);
+    }
+  });
+
+  test('R3: a loosening Sam confirms in the app is signed and passes, with a key main lists; a key the branch adds does not count', async () => {
+    const q = `project=${encodeURIComponent(root)}`;
+    const keysDir = path.join(root, '.codetrellis', 'keys');
+    const approvals = path.join(root, '.codetrellis', 'rules', 'approvals');
+    try {
+      // Sam's device key reaches main first, the way any key does: with an earlier change he made.
+      git(root, 'checkout', '-qB', 'r3-main', main);
+      expect((await h.client.raw('PUT', `/api/rules/scratch-rule?${q}`, { from: 'packages/web/', mayNotImport: 'packages/web/legacy/' })).status).toBe(200);
+      expect((await h.client.raw('DELETE', `/api/rules/scratch-rule?${q}&confirm=1`)).status).toBe(200);
+      expect(fs.readdirSync(keysDir).length).toBe(1);
+      git(root, 'add', '.codetrellis');
+      git(root, 'commit', '-qm', 'Sam\'s device key, with a rule he tried and stopped');
+
+      git(root, 'checkout', '-qB', 'r3-stops-the-rule');
+      const stop = await h.client.raw('DELETE', `/api/rules/routes-not-config?${q}&confirm=1`);
+      expect(stop.status, await stop.clone().text()).toBe(200);
+      const { approval } = (await stop.json()) as { approval: { file: string; how: string; as: string } };
+      expect(approval.how).toBe('device');
+      git(root, 'add', '.codetrellis');
+      git(root, 'commit', '-qm', 'Stop the routes rule (approved in the app)');
+
+      const r = ct('check', '--base', 'r3-main', '--json');
+      expect(r.code, r.err || r.out).toBe(0);
+      const g = JSON.parse(r.out) as Gate;
+      expect(g.rulebook).toEqual([expect.objectContaining({ rule: 'routes-not-config', change: 'removed', effect: 'loosens', approval: expect.objectContaining({ ok: true, how: 'device', file: approval.file }) })]);
+      expect(g.notes[0]).toMatch(new RegExp(`^✓ This change removes the rule “services/api/app/routes/ may not import services/api/app/config\\.py” \\(routes-not-config\\)\\. ${approval.as.replace(/[+/]/g, '\\$&')} approved it in the app, signed \\(${approval.file.replace(/\./g, '\\.')}\\)\\.$`));
+
+      // The same change on a base that does not list the key: the approval is there, and does not count.
+      git(root, 'checkout', '-q', '-f', main);
+      git(root, 'checkout', '-qB', 'r3-unlisted', main);
+      git(root, 'checkout', 'r3-stops-the-rule', '--', '.codetrellis');
+      git(root, 'commit', '-qm', 'Stop the routes rule, with a key main has never seen');
+      const unlisted = ct('check', '--base', main, '--json');
+      expect(unlisted.code, unlisted.err || unlisted.out).toBe(3);
+      const u = JSON.parse(unlisted.out) as Gate;
+      expect(u.says[0]).toMatch(/^✗ This change removes the rule .* Loosening a rule needs a person's approval in the app\. An approval is attached, but .*(base branch does not list|before this change's base)/);
+    } finally {
+      git(root, 'checkout', '-q', '-f', main);
+      fs.rmSync(approvals, { recursive: true, force: true });
+      fs.rmSync(keysDir, { recursive: true, force: true });
+    }
+  });
+
+  test('C1: `check --suite`, `--rule` and `--path` judge only those rules', async () => {
+    try {
+      // A payments suite beside the team's architecture suite, on the base.
+      git(root, 'checkout', '-qB', 'c1-base', main);
+      fs.writeFileSync(path.join(root, '.codetrellis', 'rules', 'payments.yaml'), [
+        'suite: payments', 'rules:',
+        '  - id: web-not-payments', '    from: packages/web/', '    mayNotImport: services/payments/', '    strength: block',
+      ].join('\n'));
+      git(root, 'add', '.codetrellis/rules/payments.yaml');
+      git(root, 'commit', '-qm', 'A payments suite');
+      // The branch breaks the architecture suite's rule, not the payments one.
+      git(root, 'checkout', '-qB', 'c1-branch');
+      edit(root, USERS, 'from app.db import', `${ADDED}from app.db import`);
+      git(root, 'commit', '-qam', 'Read the URL directly');
+
+      const payments = ct('check', '--base', 'c1-base', '--suite', 'payments');
+      expect(payments.code, payments.err || payments.out).toBe(0);
+      expect(payments.out).toMatch(/^Conforms to suite payments: 1 changed file since c1-base\. They add no import those rules forbid, and loosen none of them\.\n\npayments {2}✓ \d+ rules? holds?\n\nNothing blocks this change \(exit 0\)\.$/);
+
+      const named = ct('check', '--base', 'c1-base', '--rule', 'routes-not-config', '--json');
+      expect(named.code, named.err || named.out).toBe(3);
+      expect((JSON.parse(named.out) as Gate).rules.map((r) => r.rule)).toEqual(['routes-not-config']);
+
+      const about = ct('check', '--base', 'c1-base', '--path', 'packages/web/');
+      expect(about.code, about.err || about.out).toBe(0);
+      expect(about.out).toMatch(/^Conforms to rules about packages\/web\/: /);
+      expect(ct('check', '--base', 'c1-base', '--path', 'services/api/app/routes/users.py').code).toBe(3);
+
+      // The window's list takes the same scope.
+      const listed = (await (await h.client.raw('GET', `/api/rules?project=${encodeURIComponent(root)}&suite=payments`)).json()) as { rules: Array<{ rule: { id: string } }>; scope: string };
+      expect(listed).toMatchObject({ scope: 'suite payments' });
+      expect(listed.rules.map((v) => v.rule.id)).toEqual(['web-not-payments']);
+    } finally {
+      git(root, 'checkout', '-q', '-f', main);
+      fs.rmSync(path.join(root, '.codetrellis', 'rules', 'payments.yaml'), { force: true });
+    }
+  });
+
+  test('C3: the baseline records the breaches there are; a new one fails, a fixed one says the count fell, a bigger baseline fails', async () => {
+    const ORDERS_DB = 'from app.db import add_order, list_orders\n';
+    const baselineFile = path.join(root, '.codetrellis', 'rules', 'baseline.yaml');
+    try {
+      // The team adds a rule both routes already break, and baselines them.
+      git(root, 'checkout', '-qB', 'c3-base', main);
+      fs.writeFileSync(path.join(root, '.codetrellis', 'rules', 'service.yaml'), [
+        'suite: service', 'rules:',
+        '  - id: routes-not-db', '    from: services/api/app/routes/', '    mayNotImport: services/api/app/db.py', '    strength: block',
+      ].join('\n'));
+      await h.client.scanProject(root);
+      const wrote = ct('rules', 'baseline');
+      expect(wrote.code, wrote.err || wrote.out).toBe(0);
+      expect(wrote.out).toMatch(/routes-not-db: 2 breaches recorded/);
+      const recorded = fs.readFileSync(baselineFile, 'utf-8');
+      expect(recorded).toContain(`${ORDERS} > services/api/app/db.py`);
+      expect(recorded).toContain(`${USERS} > services/api/app/db.py`);
+      git(root, 'add', '.codetrellis/rules');
+      git(root, 'commit', '-qm', 'Rule and baseline: routes go through the service layer');
+
+      // Fixed one: passes, and says the count fell.
+      git(root, 'checkout', '-qB', 'c3-fix', 'c3-base');
+      edit(root, ORDERS, ORDERS_DB, 'from app.service import add_order, list_orders\n');
+      git(root, 'commit', '-qam', 'Orders through the service');
+      await h.client.scanProject(root);
+      const fixed = ct('check', '--base', 'c3-base', '--json');
+      expect(fixed.code, fixed.err || fixed.out).toBe(0);
+      expect((JSON.parse(fixed.out) as Gate).notes).toContain('↓ routes-not-db: 1 breach left, down from 2 in the baseline. Run `codetrellis rules baseline` to lock in the lower count.');
+      // Locked in, the file shrinks.
+      expect(ct('rules', 'baseline').out).toMatch(/routes-not-db: 1, down from 2/);
+      expect(fs.readFileSync(baselineFile, 'utf-8')).not.toContain(ORDERS);
+
+      // A bigger baseline: the branch writes an entry the base did not have.
+      git(root, 'checkout', '-q', '-f', 'c3-base');
+      git(root, 'checkout', '-qB', 'c3-grow', 'c3-base');
+      fs.appendFileSync(baselineFile, '    - services/api/app/routes/health.py > services/api/app/db.py\n');
+      git(root, 'commit', '-qam', 'Forgive one more');
+      await h.client.scanProject(root);
+      const grown = ct('check', '--base', 'c3-base', '--json');
+      expect(grown.code, grown.err || grown.out).toBe(3);
+      expect((JSON.parse(grown.out) as Gate).says).toContain('✗ This change adds 1 entry to the baseline of routes-not-db (services/api/app/routes/health.py > services/api/app/db.py); a baseline may only shrink.');
+    } finally {
+      git(root, 'checkout', '-q', '-f', main);
+      fs.rmSync(path.join(root, '.codetrellis', 'rules', 'service.yaml'), { force: true });
+      fs.rmSync(baselineFile, { force: true });
+      await h.client.scanProject(root);
     }
   });
 });

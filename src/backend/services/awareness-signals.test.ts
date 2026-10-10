@@ -256,6 +256,26 @@ describe('drift (A2.5)', () => {
     assert.deepEqual(d[0].workstreams, ['/r/billing']);
   });
 
+  test('R9: drift names the rules about the files it reaches, guides included; a rule about nothing it reached is not named', () => {
+    const rules: FootprintInput['rules'] = [
+      { id: 'stripe-via-wrapper', suite: 'payments', words: 'only src/payments/index.ts may import npm:stripe', strength: 'block', kind: 'package', from: '**', mayNotImport: 'npm:stripe', only: ['src/payments/index.ts'] },
+      { id: 'payments-guide', suite: 'payments', words: 'src/payments/ may not import src/web/', strength: 'guide', from: 'src/payments/', mayNotImport: 'src/web/' },
+      { id: 'web-not-db', words: 'web/ may not import db/', strength: 'warn', from: 'web/', mayNotImport: 'db/' },
+    ];
+    const d = computeSignals([ws('/r/billing', 'billing-v2', [file('src/billing/invoice.ts'), file('src/payments/refund.ts')], { scope: scope(), rules })]);
+    assert.deepEqual(d[0].subject.rules, [
+      { id: 'payments-guide', suite: 'payments', words: 'src/payments/ may not import src/web/', strength: 'guide', files: ['src/payments/refund.ts'] },
+      { id: 'stripe-via-wrapper', suite: 'payments', words: 'only src/payments/index.ts may import npm:stripe', strength: 'block', files: ['src/payments/refund.ts'] },
+    ]);
+    assert.equal(d[0].summary, '`billing-v2` changes 1 file outside the scope its claimed item gives it: src/payments/refund.ts. 2 rules are about it: payments-guide (payments, guide), stripe-via-wrapper (payments, block)');
+    // A Python file is not what an npm rule is about; a config rule has no suite.
+    const py = computeSignals([ws('/r/billing', 'billing-v2', [file('src/billing/invoice.ts'), file('scripts/refund.py'), file('web/app.ts')], { scope: scope(), rules })]);
+    assert.deepEqual(py[0].subject.rules?.map((r) => `${r.id} ${r.suite} ${r.files.join('+')}`), ['stripe-via-wrapper payments web/app.ts', 'web-not-db architecture web/app.ts']);
+    // Rules about nothing it reached: the signal is as before.
+    const none = computeSignals([ws('/r/billing', 'billing-v2', [file('src/billing/invoice.ts'), file('config/shared.yaml')], { scope: scope(), rules })]);
+    assert.deepEqual(none[0].subject, { files: ['config/shared.yaml'], items: ['item-1'] });
+  });
+
   test('inside the scope, nothing: files named, anything under a folder, both ends of a move, and plan files', () => {
     const s = scope({ dirs: ['src/billing/'], paths: ['src/old.ts', 'src/new.ts'] });
     assert.deepEqual(outsideScope([
@@ -366,5 +386,23 @@ describe('rule (A7.2)', () => {
     assert.equal(one[0].id, two[0].id);
     assert.notEqual(one[0].shape, two[0].shape);
     assert.deepEqual(computeSignals([ws('/r/x', 'x', [file('web/a.ts')], { ruleBreaches: [] })]), []);
+  });
+
+  test('a rule at warn raises a medium signal; at block, or written before strength, a high one (R4)', () => {
+    const at = (strength?: 'block' | 'warn') => computeSignals([ws('/r/x', 'x', [file('web/a.ts')], {
+      ruleBreaches: [{ rule: { ...RULE, ...(strength ? { strength } : {}) }, edges: [{ from: 'web/a.ts', to: 'db/a.ts' }] }],
+    })])[0].severity;
+    assert.deepEqual([at('warn'), at('block'), at()], ['medium', 'high', 'high']);
+  });
+});
+
+describe('rule signals in the check\'s words for every kind (Phase 33 R5–R8)', () => {
+  test('a package, call or folder rule says what the file now does, not "imports … from **"', () => {
+    const stripe = { id: 'stripe-via-wrapper', kind: 'package' as const, from: '**', mayNotImport: 'npm:stripe', only: ['src/pay.ts'], except: [], because: 'keys', strength: 'block' as const };
+    const d = computeSignals([ws('/r/billing', 'billing-v2', [file('src/api.ts')], { ruleBreaches: [{ rule: stripe, edges: [{ from: 'src/api.ts', to: 'npm:stripe' }] }] })]);
+    assert.equal(d[0].summary, '`billing-v2`: src/api.ts imports npm:stripe, which the rule “only src/pay.ts may import npm:stripe” forbids: keys');
+    const calls = { ...stripe, id: 'stripe-api', kind: 'calls' as const, mayNotImport: 'http:api.stripe.com' };
+    const c = computeSignals([ws('/r/billing', 'billing-v2', [file('src/api.ts')], { ruleBreaches: [{ rule: calls, edges: [{ from: 'src/api.ts', to: 'http:api.stripe.com/v1/charges' }] }] })]);
+    assert.match(c[0].summary, /^`billing-v2`: src\/api\.ts calls api\.stripe\.com\/v1\/charges, which the rule “only src\/pay\.ts may call api\.stripe\.com” forbids/);
   });
 });

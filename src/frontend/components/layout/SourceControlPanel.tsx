@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { GIT, TONES } from '../../lib/visual-language';
 import { Check, ChevronDown, ChevronRight, Copy, GitBranch, GitCommitHorizontal, RefreshCw } from 'lucide-react';
 import { useProjectStore } from '../../stores/project-store';
 import { useSourceControlStore, type SourceChangeStatus, type SourceGroup } from '../../stores/source-control-store';
@@ -20,11 +21,13 @@ import { singleFlight } from '../../lib/single-flight';
 const REFRESH_MS = 10_000;
 
 export const STATUS_MARK: Record<SourceChangeStatus, { letter: string; tone: string; words: string }> = {
-  modified: { letter: 'M', tone: 'text-amber-300', words: 'modified' },
-  added: { letter: 'A', tone: 'text-emerald-300', words: 'added' },
-  untracked: { letter: 'U', tone: 'text-emerald-300', words: 'untracked' },
-  deleted: { letter: 'D', tone: 'text-red-300', words: 'deleted' },
-  renamed: { letter: 'R', tone: 'text-sky-300', words: 'renamed' },
+  // The vocabulary's git tones (Phase 33 G1): modified is orange as in the
+  // Explorer (it was amber here), renamed is a modification (it was sky).
+  modified: { letter: 'M', tone: TONES[GIT.modified.tone].text, words: 'modified' },
+  added: { letter: 'A', tone: TONES[GIT.added.tone].text, words: 'added' },
+  untracked: { letter: 'U', tone: TONES[GIT.untracked.tone].text, words: 'untracked' },
+  deleted: { letter: 'D', tone: TONES[GIT.deleted.tone].text, words: 'deleted' },
+  renamed: { letter: 'R', tone: TONES[GIT.renamed.tone].text, words: 'renamed' },
 };
 
 const split = (p: string) => {

@@ -92,7 +92,9 @@ function lineText(kind: AwarenessSignal['kind'], group: AwarenessSignal[], label
   }
   if (kind === 'drift') {
     const files = [...new Set(group.flatMap((s) => s.subject.files ?? []))];
-    return `${names(first.workstreams)[0]} changes ${plural(files.length, 'file')} outside its scope: ${listed(files)}`;
+    // R9: and the rules about them, by name, when it reached any.
+    const rules = [...new Set(group.flatMap((s) => (s.subject.rules ?? []).map((r) => r.id)))];
+    return `${names(first.workstreams)[0]} changes ${plural(files.length, 'file')} outside its scope: ${listed(files)}${rules.length ? `, where ${rules.length === 1 ? 'the rule' : 'the rules'} ${rules.length <= 2 ? rules.join(' and ') : listed(rules)} ${rules.length === 1 ? 'applies' : 'apply'}` : ''}`;
   }
   if (kind === 'rule') {
     // One line per workstream: which rules, and the first imports across them.

@@ -7,6 +7,7 @@ import { EvolutionView } from './EvolutionView';
 import { useSourceControlStore, groupOfFile, changeWords } from '../../stores/source-control-store';
 import { GitCommand } from './SourceControlPanel';
 import { useProjectStore } from '../../stores/project-store';
+import { useFileFindings } from '../../hooks/useCheckRuns';
 import { useUiStore } from '../../stores/ui-store';
 import { CodePreview, type FileContent } from '../inspector/CodePreview';
 import { PlaybackBar, type PlaybackFrame } from '../inspector/PlaybackBar';
@@ -81,6 +82,9 @@ export function CodeWorkspace() {
     if (!selectedNode || !root) return null;
     return selectedNode.startsWith('/') ? selectedNode.slice(root.length + 1) : selectedNode;
   }, [selectedNode, root]);
+
+  // Phase 33 G10 — what the latest check run found in this file, on its lines.
+  const fileFindings = useFileFindings(root, relativePath);
 
   const absPath = useMemo(() => {
     if (!selectedNode) return null;
@@ -434,6 +438,7 @@ export function CodeWorkspace() {
             // hover feedback and no behaviour — worse than not looking
             // clickable at all.
             highlightLine={selectedNodeMeta?.line}
+            findings={fileFindings}
             // Leaving a breadcrumb on the way out. Without it the only
             // route back was the top bar's Code button, which is a mode
             // toggle and does not know what you were reading — so "go
@@ -465,6 +470,8 @@ export function CodeWorkspace() {
                 before={compareWith ? `workstream:${compareWith.id}` : diffSides!.before}
                 after={compareWith ? 'live' : diffSides!.after}
                 labels={compareWith ? { after: ownName ? `this copy (${ownName})` : 'this copy' } : diffSides?.labels}
+                // G10: findings are about the file as it is, so only on a live after side.
+                findings={compareWith || diffSides?.after === 'live' ? fileFindings : null}
               />
           </Suspense>
           </>

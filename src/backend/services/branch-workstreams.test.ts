@@ -255,6 +255,25 @@ describe('many branches: off the request path (HD4b)', () => {
     }
   });
 
+  test('past its time, a branch still being worked out is the warmer\'s, from the same work (Phase 33 follow-up)', async () => {
+    const inline = await branchWorkstreamsOf(repo, opts());
+    resetBranchWorkstreamCache();
+    const told: string[] = [];
+    setBranchWorkstreamsWarmedListener((r) => { told.push(r); });
+    try {
+      // Within the count, but no time to wait: the answer comes without them, at once.
+      assert.deepEqual(await branchWorkstreamsOf(repo, opts({ inline: 8, inlineMs: 0 })), []);
+      await branchWorkstreamsWarmed(repo);
+      assert.deepEqual(told, [repo]);
+      assert.deepEqual(
+        (await branchWorkstreamsOf(repo, opts({ inline: 0 }))).map((b) => b.short).sort(),
+        inline.map((b) => b.short).sort(),
+      );
+    } finally {
+      setBranchWorkstreamsWarmedListener(() => {});
+    }
+  });
+
   test('within the budget, a branch is answered inline, as before', async () => {
     resetBranchWorkstreamCache();
     assert.deepEqual((await branchWorkstreamsOf(repo, opts({ inline: 8 }))).map((b) => b.short).sort(), ['feature-a', 'origin/cloud-agent']);

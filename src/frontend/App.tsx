@@ -1,3 +1,4 @@
+import { RulesView } from './components/rules/RulesView';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Allotment, type AllotmentHandle } from 'allotment';
 import 'allotment/dist/style.css';
@@ -103,6 +104,10 @@ export function App() {
   const inspectorExpanded = useUiStore((s) => s.inspectorExpanded);
   const workspaceMode = useUiStore((s) => s.workspaceMode);
   const planPanelVisible = useUiStore((s) => s.agentPanelVisible);
+  // G4 — a hidden panel's pane collapses too. The panels return null when
+  // hidden, and without `visible` their panes kept their width, empty.
+  const sidebarVisible = useUiStore((s) => s.sidebarVisible);
+  const inspectorVisible = useUiStore((s) => s.inspectorVisible);
   const setWorkspaceMode = useUiStore((s) => s.setWorkspaceMode);
   const splitView = useUiStore((s) => s.splitView);
   const activePlanUid = usePlanStore((s) => s.activePlanUid);
@@ -202,18 +207,52 @@ export function App() {
     return () => clearTimeout(t);
   }, []);
 
-  // Skip the very first effect run — Allotment is still wiring up its
-  // internal views and calling resize() too early throws "Cannot read
-  // properties of undefined (reading 'minimumSize')". On mount we let
-  // Allotment use the Pane preferredSize/minSize props.
-  const planResizeMounted = useRef(false);
-  const inspectorResizeMounted = useRef(false);
+  // Never resize on mount: Allotment is still putting its panes in and
+  // resize() throws "Cannot read properties of undefined (reading
+  // 'minimumSize')". The plan and inspector effects below resize only when
+  // what they follow changes; on mount the Panes' preferredSize/minSize hold.
+  // G4 — a side pane shown again comes back at the width it had. Allotment
+  // re-shows a hidden pane at its minimum (the sidebar at 180, not the 240
+  // it was), so full screen and back did not restore the layout. Widths are
+  // remembered as the person drags; on showing, the panes are put back.
+  const sideWidths = useRef({ sidebar: SIDEBAR_DEFAULT, inspector: INSPECTOR_DEFAULT });
+  // While panes come back Allotment squeezes the others to fit them (the
+  // sidebar to 180 as the inspector returns): not the person's widths.
+  const restoringPanes = useRef(false);
+  const onHorizontalChange = useCallback((sizes: number[]) => {
+    if (sizes.length !== 3 || restoringPanes.current) return;
+    if (sizes[0] > 0) sideWidths.current.sidebar = sizes[0];
+    if (sizes[2] > 0) sideWidths.current.inspector = sizes[2];
+  }, []);
+  const panesShown = useRef({ sidebarVisible, inspectorVisible });
+  if ((sidebarVisible && !panesShown.current.sidebarVisible) || (inspectorVisible && !panesShown.current.inspectorVisible)) {
+    restoringPanes.current = true;
+  }
+  useEffect(() => {
+    const was = panesShown.current;
+    panesShown.current = { sidebarVisible, inspectorVisible };
+    if ((was.sidebarVisible || !sidebarVisible) && (was.inspectorVisible || !inspectorVisible)) return; // nothing came back
+    const raf = requestAnimationFrame(() => {
+      const handle = horizontalRef.current;
+      if (!handle) return;
+      const side = sidebarVisible ? sideWidths.current.sidebar : 0;
+      const insp = inspectorVisible ? sideWidths.current.inspector : 0;
+      try { handle.resize([side, Math.max(window.innerWidth - side - insp, 320), insp]); } catch (err) { console.warn('[App] pane restore failed', err); }
+      requestAnimationFrame(() => { restoringPanes.current = false; });
+    });
+    return () => { cancelAnimationFrame(raf); restoringPanes.current = false; };
+  }, [sidebarVisible, inspectorVisible]);
+
+  // The values each resize last followed. A "mounted" ref skipped only the
+  // first run, but StrictMode runs an effect twice on mount and keeps the
+  // ref, so the second run resized too early, on every load (Phase 33
+  // follow-up). A value that has not changed resizes nothing.
+  const planResizedFor = useRef(planPanelExpanded);
+  const inspectorResizedFor = useRef(inspectorExpanded);
 
   useEffect(() => {
-    if (!planResizeMounted.current) {
-      planResizeMounted.current = true;
-      return;
-    }
+    if (planResizedFor.current === planPanelExpanded) return;
+    planResizedFor.current = planPanelExpanded;
     const handle = verticalRef.current;
     if (!handle) return;
     // Defer one frame so Allotment finishes any in-flight layout work.
@@ -233,10 +272,8 @@ export function App() {
   }, [planPanelExpanded]);
 
   useEffect(() => {
-    if (!inspectorResizeMounted.current) {
-      inspectorResizeMounted.current = true;
-      return;
-    }
+    if (inspectorResizedFor.current === inspectorExpanded) return;
+    inspectorResizedFor.current = inspectorExpanded;
     const handle = horizontalRef.current;
     if (!handle) return;
     const raf = requestAnimationFrame(() => {
@@ -274,8 +311,8 @@ export function App() {
             shared context they sat ABOVE every takeover, invisible, and took
             the clicks meant for whatever lay under them: on macOS's metrics,
             code mode's Diff button. */}
-        <Allotment className="absolute inset-0 z-0" ref={horizontalRef}>
-          <Allotment.Pane preferredSize={SIDEBAR_DEFAULT} minSize={180} maxSize={400}>
+        <Allotment className="absolute inset-0 z-0" ref={horizontalRef} onChange={onHorizontalChange}>
+          <Allotment.Pane preferredSize={SIDEBAR_DEFAULT} minSize={180} maxSize={400} visible={sidebarVisible}>
             <Sidebar />
           </Allotment.Pane>
           <Allotment.Pane>
@@ -299,7 +336,7 @@ export function App() {
               </Allotment.Pane>
             </Allotment>
           </Allotment.Pane>
-          <Allotment.Pane preferredSize={INSPECTOR_DEFAULT} minSize={220}>
+          <Allotment.Pane preferredSize={INSPECTOR_DEFAULT} minSize={220} visible={inspectorVisible}>
             <InspectorPanel />
           </Allotment.Pane>
         </Allotment>
@@ -333,7 +370,7 @@ export function App() {
         {workspaceMode === 'code' && (
           <div className="absolute inset-0 z-30 bg-background">
             <Allotment>
-              <Allotment.Pane preferredSize={SIDEBAR_DEFAULT} minSize={180} maxSize={400}>
+              <Allotment.Pane preferredSize={SIDEBAR_DEFAULT} minSize={180} maxSize={400} visible={sidebarVisible}>
                 <Sidebar />
               </Allotment.Pane>
               <Allotment.Pane>
@@ -348,6 +385,13 @@ export function App() {
         {workspaceMode === 'brief' && (
           <div className="absolute inset-0 z-30 bg-background">
             <BriefWorkspace />
+          </div>
+        )}
+
+        {/* Phase 33 G7 — the Rules view, a workspace of its own. */}
+        {workspaceMode === 'rules' && (
+          <div className="absolute inset-0 z-30 bg-background">
+            <RulesView />
           </div>
         )}
 

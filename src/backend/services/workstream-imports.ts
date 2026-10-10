@@ -17,12 +17,23 @@ import type { ChangedFile, Workstream } from '../../shared/types';
 import { parseVirtualFile } from './ast-parser';
 import { getAllFileHashes, getImportResolutionContext, resolutionContextRoot } from './database';
 import { getResolverForLanguage } from './resolvers';
+import { packageEntry } from '../../shared/lib/package-entry';
+import { symbolEntry } from '../../shared/lib/symbol-entry';
+import { callEntry } from '../../shared/lib/call-entry';
+import { exportCount, fileFact } from '../../shared/lib/folder-entry';
+import { grepEntries, grepKey } from '../../shared/lib/grep-entry';
+import { patternStamp } from './patterns';
+import { originsOf } from './importers';
+import { ruleFix } from '../../shared/lib/check-words';
 import { showAtAsync } from './branch-workstreams';
 import { baseContent, currentContent } from './workstream-symbols';
-import { checkEdges, rulesOf } from './architecture-rules';
+import { checkEdges, grepReads, ruleStatement, rulesOf } from './architecture-rules';
+import { lookAlikeFix } from './architecture-rule';
 import type { RuleImport } from './conformity-gate';
+import type { ArchitectureRule } from '../../shared/types/architecture-rules';
 
-export interface ImportEdge { from: string; to: string }
+/** `line`: where the file names it, when its extractor knew (a callsite's, B4), so a pattern's entry has a place. */
+export interface ImportEdge { from: string; to: string; line?: number }
 
 const MAX_CACHED = 5_000;
 const cache = new Map<string, { stamp: string; added: ImportEdge[] }>();
@@ -44,7 +55,12 @@ function stampOf(folder: string, base: string | null, file: ChangedFile, head: s
  * is the main checkout, where a branch workstream (no folder of its own) is
  * read at its head commit.
  */
-export async function importsAdded(projectRoot: string, w: Pick<Workstream, 'root' | 'shape' | 'head' | 'changes'>, mainRoot: string | null): Promise<ImportEdge[]> {
+export async function importsAdded(
+  projectRoot: string,
+  w: Pick<Workstream, 'root' | 'shape' | 'head' | 'changes'>,
+  mainRoot: string | null,
+  opts: { packages?: boolean; symbols?: boolean; calls?: boolean; files?: boolean; grep?: readonly ArchitectureRule[] } = {},
+): Promise<ImportEdge[]> {
   const base = w.changes.base;
   const branch = w.shape === 'branch' && w.head && mainRoot ? w.head : null;
   const folder = branch ? mainRoot! : w.root;
@@ -54,18 +70,44 @@ export async function importsAdded(projectRoot: string, w: Pick<Workstream, 'roo
   for (const f of w.changes.files) if (f.status !== 'deleted') known.add(path.join(projectRoot, f.path));
   const { aliasMap, systems } = getImportResolutionContext(projectRoot);
 
-  const targets = (rel: string, content: string | null): Set<string> => {
+  const targets = (rel: string, content: string | null, scopeRel = rel, lines?: Map<string, number>): Set<string> => {
     const out = new Set<string>();
     if (content === null) return out;
+    // B2: the lines it holds that grep rules read, by the file's path now, so a rename is not news.
+    for (const rule of opts.grep ?? []) if (grepReads(rule, scopeRel)) for (const e of grepEntries(rule, content)) out.add(e);
     const abs = path.join(projectRoot, rel);
     let parsed: ReturnType<typeof parseVirtualFile> = null;
-    try { parsed = parseVirtualFile(abs, content); } catch { return out; }
+    try { parsed = parseVirtualFile(abs, content); } catch { parsed = null; }
+    // R8: the file's own fact (its name, what it exports), parsed or not, for folder rules.
+    if (opts.files) out.add(fileFact(rel, parsed ? exportCount(parsed.language, parsed.symbols) : null));
     if (!parsed) return out;
+    // R7: the calls it makes, for call rules to read (no resolver needed).
+    if (opts.calls) {
+      for (const cs of parsed.callsites ?? []) {
+        const e = callEntry(cs);
+        if (!e) continue;
+        out.add(e);
+        if (lines && cs.line && !lines.has(e)) lines.set(e, cs.line);
+      }
+    }
     const resolver = getResolverForLanguage(parsed.language);
     if (!resolver) return out;
     for (const imp of parsed.imports) {
       const hit = resolver.resolve({ importSource: imp.source, importerPath: abs, projectRoot, knownFiles: known, aliasMap, systems, isRelative: imp.isRelative });
       if (hit) out.add(posix(path.relative(projectRoot, hit)));
+      if (hit && opts.symbols && !imp.isReexport) {
+        // R6: each name it imports, where it is defined as well as where it was
+        // imported from, so a barrel does not hide it. A namespace may use any.
+        const names = imp.isNamespace ? ['*'] : [...imp.specifiers, ...(imp.isDefault ? ['default'] : [])];
+        for (const name of names) {
+          for (const origin of originsOf(hit, name)) out.add(symbolEntry(posix(path.relative(projectRoot, origin)), name));
+        }
+      }
+      else if (opts.packages) {
+        // R5: an outside import, as its package, for package rules to read.
+        const entry = packageEntry(parsed.language, imp.source, imp.isRelative);
+        if (entry) out.add(entry);
+      }
     }
     return out;
   };
@@ -73,14 +115,15 @@ export async function importsAdded(projectRoot: string, w: Pick<Workstream, 'roo
   const edges: ImportEdge[] = [];
   for (const file of w.changes.files) {
     if (file.status === 'deleted') continue;
-    const key = `${folder}\0${file.path}`;
+    const key = `${folder}\0${file.path}\0${opts.packages ? 'p' : ''}${opts.symbols ? 's' : ''}${opts.calls ? `c${patternStamp(projectRoot)}` : ''}${opts.files ? 'f' : ''}${(opts.grep ?? []).map((r) => `g${grepKey(r)}${r.in?.join(',')}|${r.except.join(',')}`).join('')}`;
     const stamp = stampOf(folder, base, file, branch);
     const hit = cache.get(key);
     if (hit && hit.stamp === stamp) { edges.push(...hit.added); continue; }
     const beforePath = file.status === 'renamed' && file.from ? file.from : file.path;
-    const after = targets(file.path, await read(file.path));
-    const before = file.status === 'added' || !base ? new Set<string>() : targets(beforePath, await baseContent(folder, base, beforePath));
-    const added = [...after].filter((t) => !before.has(t)).sort().map((to) => ({ from: file.path, to }));
+    const lines = new Map<string, number>();
+    const after = targets(file.path, await read(file.path), file.path, lines);
+    const before = file.status === 'added' || !base ? new Set<string>() : targets(beforePath, await baseContent(folder, base, beforePath), file.path);
+    const added = [...after].filter((t) => !before.has(t)).sort().map((to) => ({ from: file.path, to, ...(lines.has(to) ? { line: lines.get(to)! } : {}) }));
     if (cache.size >= MAX_CACHED) cache.clear();
     cache.set(key, { stamp, added });
     edges.push(...added);
@@ -104,18 +147,26 @@ export function importsReadableFor(projectRoot: string): boolean {
  * The gate's question (A7.3): which imports do these changed files, in the
  * project's own folder, add across its rules since `base` (a commit)? Null
  * when the project's imports cannot be read here; empty when it has no rules.
+ * `rules` are the ones to judge by: the base's (Phase 33 R2), else the
+ * project's own.
  */
-export async function ruleImports(projectRoot: string, files: readonly string[], base: string | null): Promise<RuleImport[] | null> {
-  const rules = rulesOf(projectRoot);
+export async function ruleImports(projectRoot: string, files: readonly string[], base: string | null, judgeBy?: readonly ArchitectureRule[]): Promise<RuleImport[] | null> {
+  const rules = judgeBy ? [...judgeBy] : rulesOf(projectRoot);
   if (rules.length === 0) return [];
   if (!importsReadableFor(projectRoot)) return null;
   const edges = await importsAdded(projectRoot, {
     root: projectRoot, shape: 'shared', head: null,
     changes: { base, files: files.map((f) => ({ path: f, status: 'modified' as const })), truncated: false },
-  }, null);
+  }, null, { packages: true, symbols: rules.some((r) => r.kind === 'symbol'), calls: rules.some((r) => r.kind === 'calls'), files: rules.some((r) => r.kind === 'folder'), grep: rules.filter((r) => r.kind === 'grep' && r.strength !== 'guide') });
   const byId = new Map(rules.map((r) => [r.id, r]));
+  const lineOf = new Map(edges.filter((e) => e.line).map((e) => [`${e.from}>${e.to}`, e.line!]));
   return checkEdges(rules, edges).map((b) => {
     const rule = byId.get(b.rule)!;
-    return { path: b.from, imports: b.to, rule: rule.id, words: `${rule.from} may not import ${rule.mayNotImport}`, because: rule.because };
+    const line = lineOf.get(`${b.from}>${b.to}`);
+    return {
+      path: b.from, imports: b.to, ...(line ? { line } : {}), rule: rule.id, words: ruleStatement({ ...rule, except: [] }), because: rule.because, strength: rule.strength === 'block' ? 'block' : 'warn',
+      // B3: a look-alike's fix says how alike, and what it is like.
+      suite: rule.suite ?? 'architecture', fix: lookAlikeFix(rule, b.to) ?? ruleFix(rule),
+    };
   });
 }

@@ -12,7 +12,7 @@
 import type { AwarenessSignal, Workstream } from '@shared/types';
 import { lineCounts } from '../../shared/lib/line-changes';
 
-export type OverlayId = 'plan' | 'workstreams' | 'collisions' | 'breakpoints' | 'tests';
+export type OverlayId = 'plan' | 'workstreams' | 'collisions' | 'breakpoints' | 'tests' | 'rules';
 
 export const OVERLAYS: ReadonlyArray<{ id: OverlayId; label: string; hint: string }> = [
   { id: 'plan', label: 'Plan intent', hint: 'Files and edges the active plan means to change' },
@@ -20,6 +20,7 @@ export const OVERLAYS: ReadonlyArray<{ id: OverlayId; label: string; hint: strin
   { id: 'collisions', label: 'Collision zones', hint: 'Files two workstreams both change, while the overlap is open' },
   { id: 'breakpoints', label: 'Breakpoints', hint: 'Files and folders a person asked to be asked about first' },
   { id: 'tests', label: 'Test grounding', hint: '✓ passing · ✗ failing · ⚠ tests older than the code · ○ no tests, from the reports agents handed over' },
+  { id: 'rules', label: 'Rules', hint: '⊘ imports that break an architecture rule, and the files they start from' },
 ];
 
 export const ALL_OVERLAYS: readonly OverlayId[] = OVERLAYS.map((o) => o.id);

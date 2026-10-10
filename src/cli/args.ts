@@ -16,7 +16,7 @@ export interface Parsed {
 }
 
 /** Flags that never take a value, so `--json foo` keeps `foo` as an argument. */
-const SWITCHES = new Set(['json', 'help', 'no-wait', 'quiet', 'share-task-state', 'top', 'page']);
+const SWITCHES = new Set(['json', 'help', 'no-wait', 'quiet', 'share-task-state', 'top', 'page', 'strict', 'no-color', 'verify', 'post', 'pipeline', 'require', 'no-fetch', 'no-open']);
 
 export function parseArgs(argv: readonly string[]): Parsed {
   const flags: Record<string, string | true> = {};
@@ -98,17 +98,37 @@ export interface ConnectorLine {
 const quote = (s: string) => (/^[A-Za-z0-9_./:=@-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`);
 
 /**
- * How an agent reaches this backend: the CLI's own `mcp` command, which reads
- * the token and port on every connect, so the config carries no secret and
- * survives a restart.
+ * How to run this CLI again: for a child it starts (`start`'s serve, the
+ * review sink an agent launches) and for the config it prints. From npm or
+ * a checkout, Node and the launcher. Inside the desktop app (the CLI it
+ * carries, `resources/cli/`), the app's own binary on `bin/app.cjs`, which
+ * only acts as Node with ELECTRON_RUN_AS_NODE set: without it, the child
+ * would open the app's window instead.
  */
-export function connectorLine(nodePath: string, binPath: string, dataDir: string): ConnectorLine {
-  const args = [binPath, 'mcp', '--data-dir', dataDir];
+export interface SelfCommand {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}
+
+export function selfCommand(binDir: string, proc: { execPath: string; electron?: string }): SelfCommand {
+  if (proc.electron) return { command: proc.execPath, args: [path.join(binDir, 'app.cjs')], env: { ELECTRON_RUN_AS_NODE: '1' } };
+  return { command: proc.execPath, args: [path.join(binDir, 'codetrellis.mjs')], env: {} };
+}
+
+/**
+ * The line an agent's config needs: this CLI's own `mcp` command, for the
+ * data dir given. No token: the connector reads it on every connect.
+ */
+export function connectorLine(self: SelfCommand, dataDir: string): ConnectorLine {
+  const args = [...self.args, 'mcp', '--data-dir', dataDir];
+  const env = Object.keys(self.env).length ? self.env : undefined;
+  const envFlags = Object.entries(self.env).map(([k, v]) => `-e ${quote(`${k}=${v}`)} `).join('');
   return {
-    command: nodePath,
+    command: self.command,
     args,
-    claude: `claude mcp add codetrellis -- ${[nodePath, ...args].map(quote).join(' ')}`,
-    json: JSON.stringify({ mcpServers: { codetrellis: { command: nodePath, args } } }),
+    claude: `claude mcp add codetrellis ${envFlags}-- ${[self.command, ...args].map(quote).join(' ')}`,
+    json: JSON.stringify({ mcpServers: { codetrellis: { command: self.command, args, ...(env ? { env } : {}) } } }),
   };
 }
 
@@ -147,10 +167,49 @@ which; text, or --json):
   codetrellis brief <task>                     what the task needs
   codetrellis awareness                        what overlaps your work
   codetrellis check <path>                     before an edit: overlaps, and whether a breakpoint holds it
-  codetrellis check [--base <ref>]             does this work conform? exit 3 when a breakpoint holds a
+  codetrellis check [--base <ref>] [--strict]  does this work conform? exit 3 when a breakpoint holds a
                                                changed file, its tests fail or are older than the code, a
-                                               done task fails its checks, or a doc describing it is stale
+                                               done task fails its checks, a doc describing it is stale,
+                                               it adds an import a rule at block forbids, or it loosens a
+                                               rule; a rule at warn is said and passes (--strict: it fails)
+  codetrellis check --format sarif             the same, as SARIF 2.1.0 for any CI host (or text, json, markdown)
+  codetrellis check --no-color                 plain text in a terminal too (NO_COLOR does the same)
+  codetrellis check --suite <s> | --rule <id> | --path <p> | --tag <t>
+                                               only those rules (comma-separated): one suite's, named
+                                               rules, the rules about a path, or those with a tag
+  codetrellis check --pipeline [--stage <id>]  the base's .codetrellis/pipeline.yaml, stage by stage; agent
+                                               stages too with --agent and the review's flags
+  codetrellis rules baseline                   record each rule's breaches now; the check then fails on
+                                               any it does not list, and the file may only shrink
   codetrellis report-tests <junit.xml>         tell CodeTrellis how the tests went
+  codetrellis review [--agent claude-code] [--model <m>] [--endpoint <url>] [--auth env:<VAR>]
+                     [--skills <dir>] [--suite <s> | --rule <id> | --path <p> | --tag <t>] [--base <ref>] [--task <uid>]
+                     [--max-turns <n>] [--timeout <s>] [--max-tool-calls <n>] [--fail-on block,error] [--verify]
+                     [--format text|markdown|sarif|json] [--sarif-out <f>] [--markdown-out <f>] [--post [--pr <n>]]
+                                               your own agent reviews the change, headless, with no shell,
+                                               files or web; each finding must cite the diff, and each pass
+                                               is kept as a check run. --verify: a second pass tries to refute
+                                               each finding. --auth oidc:bedrock|vertex|foundry signs in through
+                                               your cloud. --post comments on the pull request. Advisory: exit 3
+                                               only with --fail-on. A review of a commit is signed with this
+                                               device's key, as a git note on it
+  codetrellis review publish [--remote <r>]    push the signed reviews, for CI to read
+  codetrellis review verify --base <ref> [--head <ref>] [--require] [--format text|markdown|sarif|json]
+                                               the head's signed review, checked against the keys on the base:
+                                               verified, stale (of an earlier commit), refused, or none; no
+                                               app, no secret, no AI. --require: exit 3 unless verified
+
+The desktop app:
+
+  codetrellis desktop install [--version <v>] [--platform <p>] [--dir <d>] [--no-open] [--json]
+                                               download the app for this computer (or --platform:
+                                               darwin-arm64, darwin-x64, win32-x64, win32-arm64, linux-x64,
+                                               linux-arm64), check it against the release's signed
+                                               checksums, save it to --dir (default ~/Downloads) and open it
+  codetrellis desktop url [--version <v>] [--platform <p>] [--json]
+                                               the installer's download link, without downloading
+
+  codetrellis --version                        this CLI's version
 
 Changing and committing the plan:
 
@@ -159,7 +218,7 @@ Changing and committing the plan:
   codetrellis plan edit <task> [--title <text>] [--body <text>]
   codetrellis plan move <task> (--under <task> | --top) [--position N]
   codetrellis commit [-m <subject>]            commits only CodeTrellis's own files (.codetrellis/)
-  codetrellis status [--base <ref>]            plans, what is under way, blocked, and waiting on you,
+  codetrellis status [--base <ref>] [--strict] plans, what is under way, blocked, and waiting on you,
                                                and whether this work conforms (exit 3 when not)
 
   <task> is a uid, or its first characters ("6cb8cf43", "task 6cb8cf43").

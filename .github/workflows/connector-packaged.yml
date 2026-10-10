@@ -1,4 +1,4 @@
-name: Connector in packaged builds
+name: Connector and CLI in packaged builds
 
 # The agent connector's command is different in the Linux AppImage (it names
 # the .AppImage file, because the mount changes every launch) and in the
@@ -8,6 +8,11 @@ name: Connector in packaged builds
 # accept it. So this builds each one and runs the command for real — see
 # scripts/smoke-connector-packaged.ts.
 #
+# The same goes for the `codetrellis` command the app carries (cli-install.ts):
+# it runs on the app's own binary in Node mode, its packages from app.asar,
+# so only a built app shows that it starts. scripts/smoke-cli-packaged.ts runs
+# it the ways the app installs it, on both.
+#
 # Nothing is uploaded or published: this is a check, not a release step.
 
 on:
@@ -15,6 +20,11 @@ on:
     paths:
       - 'src/backend/mcp/connector/**'
       - 'scripts/smoke-connector-packaged.ts'
+      - 'scripts/smoke-cli-packaged.ts'
+      - 'src/backend/services/cli-install.ts'
+      - 'src/cli/**'
+      - 'resources/cli-launchers/**'
+      - 'tools/cli-package/**'
       - '.github/workflows/connector-packaged.yml'
   workflow_dispatch:
 
@@ -47,6 +57,8 @@ jobs:
         run: npm run package:linux -- AppImage --x64 --publish never
       - name: Run the connector command it hands out
         run: npx tsx scripts/smoke-connector-packaged.ts appimage out/make/*.AppImage
+      - name: Run the codetrellis command the app carries
+        run: npx tsx scripts/smoke-cli-packaged.ts linux out/make/linux-unpacked out/make/*.AppImage
 
   portable:
     runs-on: windows-latest
@@ -71,3 +83,6 @@ jobs:
       - name: Run the connector command it hands out
         shell: bash
         run: npx tsx scripts/smoke-connector-packaged.ts portable out/make/*Portable*.exe
+      - name: Run the codetrellis command the app carries
+        shell: bash
+        run: npx tsx scripts/smoke-cli-packaged.ts win out/make/win-unpacked

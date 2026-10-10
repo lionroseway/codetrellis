@@ -1,0 +1,18 @@
+# CodeTrellis in GitLab CI (Phase 33 C2): add to .gitlab-ci.yml.
+# check.sh does the work; GitLab shows the SARIF as a code-quality-style report
+# when your plan includes SAST reports, and keeps it as an artifact either way.
+codetrellis:
+  image: node:26
+  stage: test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    GIT_DEPTH: "0"            # the merge base, and the commits docs were verified at
+    CODETRELLIS_JUNIT: test-results/junit.xml
+  script:
+    - sh docs/recipes/check.sh   # or a copy of it in your repository
+  artifacts:
+    when: always
+    paths: [codetrellis.sarif]
+    reports:
+      sast: codetrellis.sarif

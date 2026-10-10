@@ -14,6 +14,8 @@ import {
 } from '../../lib/plan-overlay';
 import { lineVerdict, verdictTooltip, VERDICT_STYLE } from '../../lib/line-verdict';
 import { ownGlyph, type GutterMark, type GutterMarks } from '../../lib/line-marks';
+import { findingHover, placeFindings, type PlacedFinding, type RunFinding } from '../../../shared/lib/open-findings';
+import { ATTENTION, TONES } from '../../lib/visual-language';
 
 export type LineAnnotation = 'unchanged' | 'added' | 'modified';
 
@@ -68,6 +70,12 @@ interface Props {
    * beside the line numbers; choosing a run opens its card.
    */
   lineHistory?: LineHistoryGutter | null;
+  /**
+   * Phase 33 G10 — what the latest check run found in this file: a ⊘ on the
+   * line that makes the import, the finding in words on hover, and a click
+   * opens the run in the Checks view. Absent, no column.
+   */
+  findings?: { runId: string; findings: RunFinding[] } | null;
 }
 
 /** Line history for the gutter: the runs, the chosen line, and how to choose one. */
@@ -77,7 +85,7 @@ export interface LineHistoryGutter {
   onChoose: (line: number) => void;
 }
 
-export function CodePreview({ content, error, highlightLine, onClose, overlay, onOpenItem, workMarks, lineHistory }: Props) {
+export function CodePreview({ content, error, highlightLine, onClose, overlay, onOpenItem, workMarks, lineHistory, findings }: Props) {
 
   if (error) {
     return (
@@ -103,6 +111,7 @@ export function CodePreview({ content, error, highlightLine, onClose, overlay, o
       onOpenItem={onOpenItem}
       workMarks={workMarks}
       lineHistory={lineHistory}
+      findings={findings}
     />
   );
 }
@@ -115,6 +124,7 @@ function CodePreviewInner({
   onOpenItem,
   workMarks,
   lineHistory,
+  findings,
 }: {
   content: FileContent;
   highlightLine?: number;
@@ -123,6 +133,7 @@ function CodePreviewInner({
   onOpenItem?: (itemUid: string, planUid: string) => void;
   workMarks?: GutterMarks | null;
   lineHistory?: LineHistoryGutter | null;
+  findings?: { runId: string; findings: RunFinding[] } | null;
 }) {
   /**
    * Scroll the highlighted line into view.
@@ -159,6 +170,15 @@ function CodePreviewInner({
   // small and every line renders anyway.
   const overlayIndex: OverlayIndex = useMemo(() => indexMarkers(overlay?.markers ?? []), [overlay]);
   const lines = useMemo(() => content.content.split('\n'), [content.content]);
+  // Phase 33 G10 — each finding on the line that imports it, in the text shown.
+  const findingsByLine = useMemo(() => {
+    const by = new Map<number, PlacedFinding[]>();
+    if (!findings) return null;
+    for (const f of placeFindings(findings.findings, findings.runId, content.content, content.startLine)) {
+      by.set(f.line, [...(by.get(f.line) ?? []), f]);
+    }
+    return by.size > 0 ? by : null;
+  }, [findings, content.content, content.startLine]);
   const driftBorder = useMemo(() => driftBorderClass(content.drift?.status), [content.drift?.status]);
 
   const handleLineClick = useCallback((lineNum: number, e: React.MouseEvent) => {
@@ -241,6 +261,7 @@ function CodePreviewInner({
                       onOpenItem={onOpenItem}
                       work={workMarks ? { own: workMarks.own.get(lineNum), others: workMarks.others.get(lineNum) } : undefined}
                       blame={lineHistory ? blameCell(lineHistory, lineNum) : undefined}
+                      findings={findingsByLine ? findingsByLine.get(lineNum) ?? [] : undefined}
                     />
                   </Fragment>
                 );
@@ -516,6 +537,7 @@ function LineRow({
   onOpenItem,
   work,
   blame,
+  findings,
 }: {
   lineNum: number;
   annotation: LineAnnotation | undefined;
@@ -534,6 +556,8 @@ function LineRow({
   work?: { own?: GutterMark[]; others?: GutterMark[] };
   /** Phase 32 E4 — present when line history is shown. */
   blame?: BlameCell;
+  /** Phase 33 G10 — present when the file has findings: this line's, maybe none. */
+  findings?: PlacedFinding[];
 }) {
   const lineProps = getLineProps({ line });
   const marker = planMarkers && planMarkers.length > 0 ? planMarkers[0] : null;
@@ -618,6 +642,8 @@ function LineRow({
           {blame.first ? blame.text : '·'}
         </button>
       )}
+      {/* Phase 33 G10 — a rule breach the latest check found here. */}
+      {findings && <FindingMark findings={findings} lineNum={lineNum} />}
       {/* line number */}
       <span className="select-none text-foreground-subtle/50 w-10 text-right pr-2 shrink-0 border-r border-white/[0.04]">
         {lineNum}
@@ -651,6 +677,32 @@ function LineRow({
         </span>
       )}
     </div>
+  );
+}
+
+/**
+ * Phase 33 G10 — the ⊘ for an import the latest check run found breaking a
+ * rule: the finding in words on hover, the run on a click. The column is there
+ * on every line once the file has a finding, so the code does not shift.
+ */
+function FindingMark({ findings, lineNum }: { findings: PlacedFinding[]; lineNum: number }) {
+  const openCheckRun = useUiStore((s) => s.openCheckRun);
+  if (findings.length === 0) return <span className="select-none w-4 shrink-0" aria-hidden="true" />;
+  const words = findings.map(findingHover).join('\n');
+  const failing = findings.some((f) => f.failing);
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); openCheckRun(findings[0].runId); }}
+      title={`${words}\nOpen the check run`}
+      aria-label={`Line ${lineNum}: ${words}. Open the check run`}
+      className={`select-none w-4 shrink-0 text-center text-[11px] leading-snug ${failing ? TONES[ATTENTION.breach.tone].text : TONES.attention.text} hover:bg-white/[0.06]`}
+      data-testid="code-finding"
+      data-line={lineNum}
+      data-rule={findings.map((f) => f.rule).join(' ')}
+    >
+      {ATTENTION.breach.glyph}
+    </button>
   );
 }
 

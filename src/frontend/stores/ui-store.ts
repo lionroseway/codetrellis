@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { parseOverlays, type OverlayId } from '../lib/graph-overlays';
+import { parseEdgeKinds, type EdgeKind } from '../lib/graph-edge-kinds';
 
 export type SelectedNodeKind = 'cluster' | 'file' | 'symbol' | 'directory' | 'ghost' | null;
 
@@ -39,7 +40,7 @@ export interface SelectedNodeMeta {
  * Phase 26 — `code` is a peer of `graph`, not a panel inside it. When it
  * is active the graph does not mount, so its layout cost is not paid.
  */
-export type WorkspaceMode = 'graph' | 'plan' | 'docs' | 'code' | 'brief';
+export type WorkspaceMode = 'graph' | 'plan' | 'docs' | 'code' | 'brief' | 'rules';
 
 /** The bottom panel's tabs (`PlanPanel`). */
 export type PlanPanelTab = 'plans' | 'stack' | 'timeline' | 'awareness' | 'review' | 'changes' | 'proposed' | 'comments';
@@ -109,6 +110,12 @@ interface UiState {
   showSidebar: () => void;
   toggleInspector: () => void;
   toggleAgentPanel: () => void;
+  /**
+   * Phase 33 G4 — the panels as they were before full screen, or null when
+   * the graph is not full screen. Toggling again puts them back as they were.
+   */
+  fullScreenFrom: { sidebar: boolean; inspector: boolean; planPanel: boolean } | null;
+  toggleFullScreen: () => void;
   setSidebarWidth: (w: number) => void;
   setInspectorWidth: (w: number) => void;
   setAgentPanelHeight: (h: number) => void;
@@ -126,6 +133,20 @@ interface UiState {
   /** Phase 32 B3.3 — the graph overlays that are on. */
   graphOverlays: OverlayId[];
   toggleGraphOverlay: (id: OverlayId) => void;
+  /** Phase 33 G8 — "Show this suite": the suite whose rules the graph keeps lit, the rest faded; null for none. */
+  ruleSuiteFocus: string | null;
+  /** Phase 33 G9 — the Rules view's tab: what the rules are, or what the checks say. */
+  rulesViewTab: 'rules' | 'checks';
+  setRulesViewTab: (tab: 'rules' | 'checks') => void;
+  /** Phase 33 G10 — the check run open in the Checks view, or null. */
+  checkRunOpen: string | null;
+  setCheckRunOpen: (id: string | null) => void;
+  /** Phase 33 G10 — open one run in the Checks view, from wherever its findings are shown. */
+  openCheckRun: (id: string) => void;
+  setRuleSuiteFocus: (suite: string | null) => void;
+  /** Phase 33 G3 — the kinds of edge the graph draws. */
+  graphEdges: EdgeKind[];
+  toggleGraphEdge: (id: EdgeKind) => void;
   setGraphStyle: (style: GraphStyle) => void;
 }
 
@@ -165,6 +186,18 @@ function readGraphOverlays(): OverlayId[] {
   }
 }
 
+/** Per machine too: which kinds of edge a person keeps drawn (G3). */
+const GRAPH_EDGES_KEY = 'codetrellis.graphEdges';
+
+function readGraphEdges(): EdgeKind[] {
+  try {
+    const raw = localStorage.getItem(GRAPH_EDGES_KEY);
+    return parseEdgeKinds(raw ? JSON.parse(raw) : undefined);
+  } catch {
+    return parseEdgeKinds(undefined);
+  }
+}
+
 function readGraphStyle(): GraphStyle {
   try {
     return localStorage.getItem(GRAPH_STYLE_KEY) === 'glass' ? 'glass' : 'performance';
@@ -195,11 +228,32 @@ export const useUiStore = create<UiState>((set) => ({
     try { localStorage.setItem(GRAPH_STYLE_KEY, graphStyle); } catch { /* private window — session only */ }
     set({ graphStyle });
   },
+  ruleSuiteFocus: null,
+  rulesViewTab: 'rules',
+  setRulesViewTab: (rulesViewTab) => set({ rulesViewTab }),
+  checkRunOpen: null,
+  setCheckRunOpen: (checkRunOpen) => set({ checkRunOpen }),
+  openCheckRun: (id) => set({ checkRunOpen: id, rulesViewTab: 'checks', workspaceMode: 'rules' }),
+  setRuleSuiteFocus: (ruleSuiteFocus) => set((s) => {
+    // Showing a suite turns the Rules overlay on, so what it is about is drawn.
+    if (ruleSuiteFocus && !s.graphOverlays.includes('rules')) {
+      const graphOverlays = [...s.graphOverlays, 'rules' as OverlayId];
+      try { localStorage.setItem(GRAPH_OVERLAYS_KEY, JSON.stringify(graphOverlays)); } catch { /* private window — session only */ }
+      return { ruleSuiteFocus, graphOverlays };
+    }
+    return { ruleSuiteFocus };
+  }),
   graphOverlays: readGraphOverlays(),
   toggleGraphOverlay: (id) => set((s) => {
     const graphOverlays = s.graphOverlays.includes(id) ? s.graphOverlays.filter((x) => x !== id) : [...s.graphOverlays, id];
     try { localStorage.setItem(GRAPH_OVERLAYS_KEY, JSON.stringify(graphOverlays)); } catch { /* private window — session only */ }
     return { graphOverlays };
+  }),
+  graphEdges: readGraphEdges(),
+  toggleGraphEdge: (id) => set((s) => {
+    const graphEdges = s.graphEdges.includes(id) ? s.graphEdges.filter((x) => x !== id) : [...s.graphEdges, id];
+    try { localStorage.setItem(GRAPH_EDGES_KEY, JSON.stringify(graphEdges)); } catch { /* private window — session only */ }
+    return { graphEdges };
   }),
   splitView: false,
   toggleSplitView: () => set((s) => ({ splitView: !s.splitView })),
@@ -219,6 +273,20 @@ export const useUiStore = create<UiState>((set) => ({
   showSidebar: () => set({ sidebarVisible: true }),
   toggleInspector: () => set((s) => ({ inspectorVisible: !s.inspectorVisible })),
   toggleAgentPanel: () => set((s) => ({ agentPanelVisible: !s.agentPanelVisible })),
+  fullScreenFrom: null,
+  toggleFullScreen: () => set((s) => (s.fullScreenFrom
+    ? {
+      sidebarVisible: s.fullScreenFrom.sidebar,
+      inspectorVisible: s.fullScreenFrom.inspector,
+      agentPanelVisible: s.fullScreenFrom.planPanel,
+      fullScreenFrom: null,
+    }
+    : {
+      fullScreenFrom: { sidebar: s.sidebarVisible, inspector: s.inspectorVisible, planPanel: s.agentPanelVisible },
+      sidebarVisible: false,
+      inspectorVisible: false,
+      agentPanelVisible: false,
+    })),
   setSidebarWidth: (w) => set({ sidebarWidth: w }),
   setInspectorWidth: (w) => set({ inspectorWidth: w }),
   setAgentPanelHeight: (h) => set({ agentPanelHeight: h }),

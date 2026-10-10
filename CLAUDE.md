@@ -23,37 +23,48 @@ from their phone.
 
 Deep-dive docs live in `docs/claude/`:
 
-- [`docs/claude/architecture.md`](docs/claude/architecture.md) — runtime topology, directory layout, service domains, session persistence, power awareness.
+- [`docs/claude/architecture.md`](docs/claude/architecture.md) — runtime topology, directory layout, service domains, session persistence, power awareness, dependency advisories (what `npm audit` still reports and why).
 - [`docs/claude/peer-network.md`](docs/claude/peer-network.md) — BYO-VPN model, mDNS discovery, WebRTC mesh, the four data channels, QR pairing.
 - [`docs/claude/mobile-companion.md`](docs/claude/mobile-companion.md) — Expo app, routes, RPC/bridge layers, mobile MCP commands, release flow.
 - [`docs/claude/mcp-tools.md`](docs/claude/mcp-tools.md) — the 18 MCP tool categories grouped by domain.
 - [`docs/claude/awareness.md`](docs/claude/awareness.md) — parallel awareness: workstreams, footprints, signals, the digest, notices, and the Claude Code skill and hook.
 - [`docs/claude/cli.md`](docs/claude/cli.md) — the `codetrellis` CLI in sessions and pipelines: `start`/`stop`, the SessionStart hook and CI recipes in `docs/recipes/`, the conformity gate and its exit codes.
+- [`docs/claude/rules.md`](docs/claude/rules.md) — rules and checks (Phase 33): the rulebook (suites in `.codetrellis/rules/`, kinds, engines, strengths, the baseline), change control, checks anywhere, check runs, agent checks on the team's own agent or signed on your device, and the building blocks (matchers, grep, fuzzy, your own patterns, agent rules, pipelines), a worked example each; every example is a test (`tests/e2e/rules-docs.test.ts`).
 - [`docs/claude/record.md`](docs/claude/record.md) — the record and its evidence: the hash chain, retention, signed packs and the evidence export, verifying months later, and what it does not prove.
 
 The team's design docs (vision, UX, plans) live alongside these at the
 `docs/` root — `ARCHITECTURE.md`, `MCP-INTEGRATION.md`, etc.
 
-## Phase 32 — Parallel awareness (in progress on `feat/phase-32`)
+## Phase 33 — Rules and clarity (in progress on `feat/phase-33`)
 
-**Read [`docs/PHASE-32-LOG.md`](docs/PHASE-32-LOG.md) first.** Its
+**Read [`docs/phase-33/LOG.md`](docs/phase-33/LOG.md) first.** Its
 **Now** block names the current step and the very next action. The work
 is long-running and runs across sessions, so the log, not the
-conversation, is the state. **Now and the checklist are generated.**
-[`docs/PHASE-32-STATUS.yaml`](docs/PHASE-32-STATUS.yaml) holds only intent
+conversation, is the state. The design is
+[`docs/phase-33/RULES-AND-CLARITY.md`](docs/phase-33/RULES-AND-CLARITY.md)
+(the rulebook, checks anywhere, change control, and the owner's clarity
+reports); the steps are [`docs/phase-33/EXECUTION.md`](docs/phase-33/EXECUTION.md).
+**Now and the checklist are generated.**
+[`docs/phase-33/STATUS.yaml`](docs/phase-33/STATUS.yaml) holds only intent
 (steps, titles, order, parts, follow-ups, next action); whether a step is
 building, in review or done, and its PRs, is **read from git and GitHub**
-(its branch `feat/phase-32-<id>-…`, its squash commit `Phase 32 <id>: …
+(its branch `feat/phase-33-<id>-…`, its squash commit `Phase 33 <id>: …
 (#N)`). Edit the YAML and run `npm run status` (it needs
-`git fetch origin feat/phase-32`); `tools/status/status.test.ts` fails when
-the log's items differ from the YAML. Name every step branch and merge
-title that way, or git cannot see the step. Update it at the start and end of every
+`git fetch origin feat/phase-33`; it serves the newest phase, and
+`--phase 32` the last); `tools/status/status.test.ts` fails when a log's
+items differ from its YAML. Name every step branch and merge title that
+way, or git cannot see the step. Update it at the start and end of every
 step, after every decision, before any long command, and at least every
-30 minutes ([`docs/PHASE-32-EXECUTION.md`](docs/PHASE-32-EXECUTION.md)
-§1).
+30 minutes (EXECUTION §1). **The owner follows progress on a page**:
+`npm run status:page` writes it, and it is republished to the artifact
+linked in EXECUTION §1.1 whenever Now changes.
 
-- **Branches:** one step, one branch `feat/phase-32-<step>-<slug>`, one
-  PR into `feat/phase-32`. The phase merges into `main` once, at the end.
+Phase 32 (parallel awareness) is done and in `main` (0.1.18, 0.2.0); its
+log, [`docs/PHASE-32-LOG.md`](docs/PHASE-32-LOG.md), is the record. These
+rules, set in Phase 32, hold for Phase 33 and after:
+
+- **Branches:** one step, one branch `feat/phase-33-<step>-<slug>`, one
+  PR into `feat/phase-33`. The phase merges into `main` once, at the end.
 - **The suite was fully green at the start**, so any failure is ours.
   Never skip, disable or quarantine a test.
 - **Stage 0 verifies what exists** (inventory, tests for everything,
@@ -123,6 +134,28 @@ existing code disagrees, the existing code is what Phase 19 is fixing.
   is visible.
 - **Remote surfaces are off by default** and require an explicit user
   action to enable. Discovery and API exposure are separate switches.
+- **Rules change only through a person** (Phase 33 R2, R3, B6). No tool or
+  agent writes a rule or the pipeline: `propose_rule` and graduation only
+  propose. Every loosening is confirmed and signed in the app, and the check
+  accepts an approval only against keys already on the base branch. Never
+  add a path by which an agent, a request body or the pull request itself
+  can loosen a rule or a pipeline stage, or bring the key that approves it.
+- **A reviewing agent is held by code, not by its prompt** (Phase 33 C4).
+  `codetrellis review` gives the agent's CLI:
+  - no built-in tools;
+  - one MCP server, the review sink, with its two tools;
+  - an empty working folder;
+  - an environment holding only the credential `--auth` names.
+
+  Files named like secrets never enter a review bundle. Never widen the
+  sink's tools, hand the agent a token (`--post` keeps its own), or let a
+  reviewer record a run itself. Its report is verified against the lines
+  it was shown.
+- **A signed review is CodeTrellis's signature, never the agent's** (Phase
+  33 C9). Only a report verified against the change is signed, only when
+  the files it read are the commit's, and CI trusts it only against device
+  keys the base lists. Never sign what an agent hands over unverified, or
+  accept a key from the branch under review.
 - **Chromium sandboxing stays on in every distributed format** that can
   enforce it. AppImage is the known exception and IS distributed — see the
   Tech Stack note below. Do not add another format that weakens the sandbox
@@ -369,6 +402,19 @@ installed here; `fnm exec --using=26 -- <cmd>` or putting
 
 ## Key Conventions
 
+- **This repository's architecture is held by its own rulebook**,
+  `.codetrellis/rules/` (Phase 33 R10):
+  - **`layers`:** frontend, backend, shared and electron import only what
+    they may.
+  - **`native`:** better-sqlite3, node-pty, werift, web-tree-sitter and
+    electron each stay in the one module that wraps it.
+  - **`conventions`:** guides, and calls to GitHub's API.
+
+  `ci.yml`'s conformity step runs `codetrellis check` on every pull request,
+  with no AI and no secret, and a breach fails it. Breaches that already
+  existed are counted in `baseline.yaml`, which may only shrink. Change a rule
+  through the app's Rules view or `propose_rule`, never by editing the suites
+  in a pull request: a loosening fails the check without a signed approval.
 - Plan / phase / spec-doc / proposed-change / template authoring lives
   in dedicated services under `src/backend/services/plan-*-service.ts`.
 - Plan templates are pure data in `services/plan-templates.ts`.
@@ -434,6 +480,9 @@ installed here; `fnm exec --using=26 -- <cmd>` or putting
   for backend/electron, which are CommonJS, and on for the bundled
   frontend.
 - `npm run typecheck` — Run TypeScript type checking
+- `npm run build:cli-package` — The `codetrellis` npm package, in
+  `out/cli-package/`; `npm run smoke:cli-package` installs and runs it
+  (`docs/claude/cli.md`, "The npm package")
 - `npm run test:unit` — Pure-logic tests under Node's runner, plus
   `tools/**/*.test.ts` (~975 tests, ~30 s)
 - `npm run test:phone` — The phone's screens rendered through
@@ -526,6 +575,22 @@ How the script is shaped, and why (see [`saif-desktop-app-releases`]):
 - **Signing identity comes from the environment**
   (`CSC_NAME="…" npm run package:mac`), never the build config — a
   machine with no certificate still produces a build instead of failing.
+- **The CLI goes to npm as `codetrellis`, the same version, from CI.**
+  `release.sh` starts `.github/workflows/publish-cli.yml` once the desktop
+  release is up; it builds the package (`npm run build:cli-package`),
+  installs the tarball and runs it, then publishes that tarball through npm's
+  trusted publishing, so no npm token exists anywhere. The first version is
+  published by hand, which claims the name; the steps are in
+  `docs/claude/cli.md`, "Publishing it". **Before each release, check the
+  trusted publisher on npmjs.com is still active** (a new one lapses unless
+  the workflow publishes within two days). `codetrellis desktop install`
+  downloads the app through the same signed manifest the updater checks.
+- **The app carries the CLI too** (`<resources>/cli/`, built by
+  `build:cli-package` inside every `package:*` script) and offers to put
+  `codetrellis` on the PATH; see `docs/claude/cli.md`, "From the desktop
+  app". It runs on the app's binary in Node mode, so a packaged build is
+  what proves it: `connector-packaged.yml` runs it from the AppImage and the
+  Windows build.
 - **The release manifest is signed** — `SHA256SUMS` plus a detached Ed25519
   signature, generated by `scripts/sign-release-manifest.js` from the same
   file list that gets uploaded. The private key is `scripts/release-signing-key.pem`

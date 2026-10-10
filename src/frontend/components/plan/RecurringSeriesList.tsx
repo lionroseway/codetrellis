@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Repeat } from 'lucide-react';
 import type { RecurringRun, RecurringSeries } from '../../../shared/types/recurring';
-import { usePlanStore } from '../../stores/plan-store';
+import { showPlan } from '../../lib/open-plan-item';
 import { useRecurring, startRecurringRun } from '../../hooks/useRecurring';
 
 /**
@@ -32,7 +32,7 @@ export function RecurringSeriesList({ root }: { root: string | null }) {
 function SeriesRow({ root, series: s, onStarted }: { root: string; series: RecurringSeries; onStarted: () => Promise<void> }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const open = (uid: string) => { void usePlanStore.getState().setActivePlan(uid); };
+  const open = (uid: string) => { void showPlan(uid); };
   const start = async () => {
     setBusy(true);
     setError(null);

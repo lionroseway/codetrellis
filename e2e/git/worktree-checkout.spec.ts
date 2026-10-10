@@ -51,9 +51,10 @@ test.describe('A linked worktree as a project', () => {
     await expect(popover).toBeVisible();
     await expect(popover.getByText('No commits yet')).toHaveCount(0);
     // `main` twice: once as the other local branch, once as the main
-    // checkout under Worktrees.
+    // checkout under Worktrees, which says it is the main checkout.
     await expect(popover.getByText('Worktrees')).toBeVisible();
-    await expect(popover.getByRole('button', { name: /^main$/ })).toHaveCount(2);
+    await expect(popover.getByTestId('branch-popover-branches').getByRole('button', { name: /^main$/ })).toHaveCount(1);
+    await expect(popover.getByTestId('branch-popover-worktrees').getByRole('button', { name: /^main main checkout/ })).toHaveCount(1);
     await page.screenshot({ path: test.info().outputPath('worktree-branch-popover.png') });
   });
 });

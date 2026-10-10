@@ -1,7 +1,7 @@
 import type { CallsiteExtractor } from './base';
 import type { Callsite } from '../../../shared/types';
 import {
-  VERB_SET, lineOf, joinPath, normalizeRoute, normalizeUrl,
+  VERB_SET, lineOf, joinPath, normalizeRoute, normalizeUrl, hostField,
   isLikelyApiPath, countBraces, stripLineComment, type BlockPrefix,
 } from './shared';
 
@@ -229,6 +229,7 @@ function extractOutbound(content: string): Callsite[] {
       line: lineOf(content, m.index),
       method: verb.toUpperCase(),
       urlPattern: normalizeUrl(url),
+      ...hostField(url),
       context: `http.${verb}`,
     });
   }
@@ -249,6 +250,7 @@ function extractOutbound(content: string): Callsite[] {
       line: lineOf(content, m.index),
       method: verb,
       urlPattern: normalizeUrl(url),
+      ...hostField(url),
       context: 'http.NewRequest',
     });
   }

@@ -24,7 +24,7 @@ import path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
 import type { ChangedFile, WorkstreamChanges } from '../../shared/types';
 import { isSafeGitRef } from './git-safety';
-import { gitAsync, refreshIndexOccasionallyAsync } from './git-env';
+import { gitAsync, inBackground, refreshIndexOccasionallyAsync } from './git-env';
 import { checkoutWatchOptions } from './watch-ignore';
 import { watchTree, type TreeWatcher } from './tree-watcher';
 
@@ -254,7 +254,8 @@ function schedule(folder: string, entry: Entry, why: 'event' | 'check' = 'event'
     entry.timer = null;
     const event = entry.pendingEvent === true;
     entry.pendingEvent = false;
-    void recompute(folder, entry, event);
+    // Nobody waits on a recheck: its git gives way to callers' (git-env `inBackground`).
+    void inBackground(() => recompute(folder, entry, event));
   }, debounceMs());
 }
 

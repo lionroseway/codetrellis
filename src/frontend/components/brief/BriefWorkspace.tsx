@@ -27,6 +27,7 @@ import { CriteriaBlock } from '../plan/v2/CriteriaBlock';
 import { AgentTurnList, useAgentTurns } from '../layout/AgentTurns';
 import { openArtefactAt } from '../../lib/open-artefact-at';
 import { BRIEF_WORDS, briefState } from '../../lib/brief-vocabulary';
+import { TaskRules } from './TaskRules';
 import { SignoffPackControls } from './SignoffPackControls';
 import { EvidenceControls } from './EvidenceControls';
 import type { ItemCriterion, PlanItem, TaskAttachment } from '@shared/types';
@@ -322,6 +323,7 @@ export function BriefWorkspace() {
               </section>
             )}
             <OtherWorkAffected taskUid={task.uid} />
+            <TaskRules taskUid={task.uid} />
             <ArtefactRows title={BRIEF_WORDS.materials} rows={files.filter((a) => a.role === 'material')} itemUid={task.uid} testId="brief-materials" />
             <ArtefactRows title={BRIEF_WORDS.outputs} rows={files.filter((a) => a.role === 'output')} itemUid={task.uid} testId="brief-outputs" />
             <ArtefactRows title={BRIEF_WORDS.evidence} rows={files.filter((a) => a.role === 'evidence')} itemUid={task.uid} testId="brief-evidence" />

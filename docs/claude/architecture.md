@@ -59,6 +59,46 @@ The `src/backend/services/` directory holds ~50 services. Grouped by responsibil
 - **Schema self-heal** via `schema-reconciler` — recovers from drift in user-owned data.
 - **Tree-sitter WASM** grammars for AST analysis (TS/TSX/JS/JSX/Python/Rust/PHP/Java). Per-language plugins live under `services/parsers/<lang>.ts`, `services/resolvers/<lang>.ts`, `services/callsites/<lang>.ts` and register in the matching `index.ts`.
 
+## Dependency advisories
+
+`npm audit` reads the same GitHub advisory database Dependabot does, so it
+answers "what would Dependabot flag" from a checkout. Run it in each folder
+with a lockfile: the root, `mobile/`, `video/` and
+`video/compositions/remotion-hero/`. Add `--omit=dev` to the root's to see
+only what the desktop app ships.
+
+Fix within the declared ranges first: `npm update <package>` on the
+vulnerable package, or on the parent that pins it (`concurrently` pins
+`shell-quote` exactly), then compare the lockfile before and after. Prefer that
+to `npm audit fix`, which also moved electron-builder, werift's crypto and a
+dozen unrelated packages to fix three. Never `--force`: it proposes
+downgrades (Expo 44, React Native 0.72) that are no fix at all.
+
+**Where it stood on 2026-10-10** (Phase 33 follow-up, "audit"):
+
+- **Fixed:** `shell-quote` 1.12.0 (critical, command injection in `quote()`),
+  `source-map-js` 1.2.2 and `http-cache-semantics` 4.3.0 in the root, and
+  `shell-quote` and `source-map-js` in `mobile/`. These were Dependabot's
+  #348, #349 and #357, which close once the phase reaches `main`.
+- **The npm package:** 0 when resolved fresh. It no longer carries mammoth's
+  `argparse` 1 → `sprintf-js` chain (docs/claude/cli.md, "The npm package").
+- **Shipped by the desktop app (`--omit=dev`):** 0.
+- **Open, no release fixes them,** all in build or dev tooling and none in
+  what ships:
+  - `braces` ≤ 3.0.3 (GHSA-vfj7-8cjw-p6xm, stack exhaustion on a deeply
+    nested pattern). Root: patch-package → find-yarn-workspace-root →
+    micromatch. Mobile: Metro's and Expo's file maps. The patterns are ours
+    and fixed, never a user's.
+  - `sprintf-js` ≤ 1.1.3 (GHSA-hp3w-g68c-fv3c, a huge precision specifier).
+    Root: electron-builder → @electron/get → global-agent → roarr, at
+    packaging time, with format strings that are roarr's own.
+  - `node-forge` ≤ 1.4.0, the latest release (GHSA-86w9-cpqp-85rv, RSA
+    signature verification). Mobile only: `@expo/cli` and its code-signing
+    helper, on the developer's machine; not in the phone app.
+
+  Re-check each one when its parent releases. Each closes on a plain
+  `npm update` once a fixed version exists.
+
 ## Secrets and review hosts (Phase 32 C2.2)
 
 - **Secrets** (`services/secret-store.ts`). A review host's token is the only

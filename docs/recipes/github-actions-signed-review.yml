@@ -1,0 +1,54 @@
+# A review made on a developer's own device, verified on the pull request
+# (Phase 33 C9). Copy into .github/workflows/. No secret, no AI, no app.
+#
+# Each developer reviews their branch on their own machine with any agent:
+# `codetrellis review`, or Cursor, Codex, Claude Code or any MCP client through
+# get_review_bundle and report_review. CodeTrellis checks the findings and signs
+# the review with the device's key, as a git note on the commit; then
+#
+#     codetrellis review publish
+#
+# pushes it. This job verifies the note on the head against the device keys on
+# the base branch (.codetrellis/keys/, which a key reaches by being merged
+# there once) and shows the review in the job summary and on the changed lines.
+#
+# Advisory as written. To require a fresh, verified review on every head, add
+# --require to the first command and drop `|| true`.
+name: signed-review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+      security-events: write
+      # upload-sarif reads the run; a private repository refuses it without this.
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - name: Install CodeTrellis
+        run: |
+          git clone --depth 1 https://github.com/lionroseway/codetrellis "$RUNNER_TEMP/codetrellis"
+          (cd "$RUNNER_TEMP/codetrellis" && npm ci --ignore-scripts && npx patch-package && npm link)
+      - name: Verify
+        env:
+          BASE: origin/${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          codetrellis review verify --base "$BASE" --head "$HEAD_SHA" --format markdown >> "$GITHUB_STEP_SUMMARY" || true
+          codetrellis review verify --base "$BASE" --head "$HEAD_SHA" --no-fetch --format sarif > signed-review.sarif || true
+      - name: Upload the findings
+        if: always() && hashFiles('signed-review.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: signed-review.sarif
+          category: signed-review

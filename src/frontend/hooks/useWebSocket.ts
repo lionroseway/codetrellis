@@ -11,6 +11,25 @@ import { usePlayForwardStore } from '../stores/play-forward-store';
 import { useSourceControlStore } from '../stores/source-control-store';
 import { useArtefactViewStore } from '../stores/artefact-view-store';
 import type { AgentEvent } from '../../shared/types';
+import { burst } from '../../shared/lib/burst';
+import { planReload, type PlanImported } from '../lib/plan-reload';
+
+/**
+ * Plans reloaded from disk, taken as one per burst (Phase 33 S2). A pull that
+ * touches several plans sends one `plan-imported` each; the window refetches
+ * the list once, the open plan once if it was among them, and shows one
+ * notice that a later burst replaces rather than stacks.
+ */
+const planReloads = burst<'disk', PlanImported>((_key, payloads) => {
+  const { planUids, title, message } = planReload(payloads);
+  const plans = usePlanStore.getState();
+  plans.fetchPlans(plans.planScope === 'all' ? undefined : plans.planScope).catch(() => {});
+  if (plans.activePlanUid && planUids.includes(plans.activePlanUid)) {
+    // Re-fetch the open plan so the view reflects the disk change.
+    plans.fetchPlan(plans.activePlanUid).catch(() => {});
+  }
+  useToastStore.getState().addToast({ type: 'info', title, message, duration: 5000, key: 'plan-reloaded-from-disk' });
+}, { quietMs: 300, maxWaitMs: 1000 });
 
 /**
  * Connects to the backend WebSocket and routes messages
@@ -192,31 +211,15 @@ export function useWebSocket() {
           }
 
           if (type === 'plan-imported') {
-            // An external import (MCP, another window, future
-            // auto-sync) loaded a plan. Refresh the list so the
-            // user sees it, respecting the current plan scope.
-            const scope = usePlanStore.getState().planScope;
-            usePlanStore.getState().fetchPlans(scope === 'all' ? undefined : scope).catch(() => {});
-            // Phase 13 §B: file-watcher-driven auto-syncs are common
-            // (every git pull, every external edit). Distinguish them
-            // so the toast text matches what just happened.
+            // Phase 13 §B: file-watcher-driven auto-syncs are common (every
+            // git pull, every external edit), and come in bursts: gathered
+            // and taken as one (Phase 33 S2, above).
             if (payload?.source === 'file-watcher') {
-              const planUid = payload?.planUid;
-              const active = usePlanStore.getState().activePlanUid;
-              if (planUid && planUid === active) {
-                // Re-fetch the in-flight plan so the open view
-                // reflects the disk change.
-                usePlanStore.getState().fetchPlan(planUid).catch(() => {});
-              }
-              useToastStore.getState().addToast({
-                type: 'info',
-                title: 'Plan reloaded from disk',
-                message: payload?.warnings?.length
-                  ? `External change picked up (${payload.warnings.length} warnings).`
-                  : 'External change picked up.',
-                duration: 5000,
-              });
+              planReloads.add('disk', payload as PlanImported);
             } else {
+              // An import someone asked for (MCP, another window): at once.
+              const scope = usePlanStore.getState().planScope;
+              usePlanStore.getState().fetchPlans(scope === 'all' ? undefined : scope).catch(() => {});
               useToastStore.getState().addToast({ type: 'info', title: 'Plan imported', message: payload?.source || 'from disk' });
             }
           }
@@ -294,16 +297,11 @@ export function useWebSocket() {
               : breakpointRef ? { kind: 'breakpoint', id: breakpointRef, at: Date.now() } : null);
             if (target !== 'artefact') useArtefactViewStore.getState().close();
             if (target === 'plan' || target === 'plans') {
-              // Await setActivePlan so activePlanUid is set before the
-              // workspace mode flips — otherwise the render condition
-              // (workspaceMode === 'plan' && activePlanUid) fails when
-              // no plan was previously open.
-              (async () => {
-                if (planUid) {
-                  await usePlanStore.getState().setActivePlan(planUid);
-                }
-                useUiStore.getState().setWorkspaceMode('plan');
-              })();
+              // showPlan sets the plan before the workspace mode flips (the
+              // render condition needs activePlanUid), and does not push it
+              // back over a person who minimised it as it appeared (#373).
+              if (planUid) void import('../lib/open-plan-item').then((m) => m.showPlan(planUid, { leaveBrief: true }));
+              else useUiStore.getState().setWorkspaceMode('plan');
             } else if (target === 'awareness' || target === 'stack' || target === 'review') {
               // A tab of the side panel, opened as a person's click on it
               // would: the panel shows if it was hidden.
@@ -361,22 +359,16 @@ export function useWebSocket() {
                 });
               }
             } else if (target === 'split') {
-              (async () => {
-                if (planUid) {
-                  await usePlanStore.getState().setActivePlan(planUid);
-                }
-                useUiStore.getState().setSplitView(true);
-                useUiStore.getState().setWorkspaceMode('plan');
-              })();
+              useUiStore.getState().setSplitView(true);
+              if (planUid) void import('../lib/open-plan-item').then((m) => m.showPlan(planUid, { leaveBrief: true }));
+              else useUiStore.getState().setWorkspaceMode('plan');
             } else if (target === 'timeline') {
               // F11 — "timeline" means the plan event/activity feed. Open the
               // plan workspace AND its activity drawer so this is visibly
               // distinct from a plain 'plan' navigation (previously a no-op).
               (async () => {
-                if (planUid) {
-                  await usePlanStore.getState().setActivePlan(planUid);
-                }
-                useUiStore.getState().setWorkspaceMode('plan');
+                if (planUid) await (await import('../lib/open-plan-item')).showPlan(planUid, { leaveBrief: true });
+                else useUiStore.getState().setWorkspaceMode('plan');
                 if (!usePlanItemsStore.getState().activityDrawerOpen) {
                   usePlanItemsStore.getState().toggleActivityDrawer();
                 }
@@ -469,6 +461,10 @@ export function useWebSocket() {
           // Phase 32 B8.3a — a test report was handed over: the grounding overlay reads again.
           if (type === 'tests-reported') {
             window.dispatchEvent(new CustomEvent('tests-reported', { detail: payload }));
+          }
+          // Phase 33 C7 — a teammate's check run arrived after a pull, or sharing went off.
+          if (type === 'check-runs-changed') {
+            window.dispatchEvent(new CustomEvent('check-runs-changed', { detail: payload }));
           }
           // Phase 32 C3.1 — sharing task state through the project's files turned on or off.
           if (type === 'shared-task-state-changed') {
@@ -622,11 +618,12 @@ export function useWebSocket() {
             if (planUid && itemUid) {
               // Shared with the code reader's overlay banner — see
               // `lib/open-plan-item`. The ordering in there is what F9
-              // fixed; keeping one copy is how it stays fixed.
+              // fixed; keeping one copy is how it stays fixed. Phase 33 G6:
+              // the plan shows, though it was the active one, minimised.
               (async () => {
                 try {
-                  const { openPlanItem } = await import('../lib/open-plan-item');
-                  await openPlanItem(planUid, itemUid);
+                  const { showPlan } = await import('../lib/open-plan-item');
+                  await showPlan(planUid, { item: itemUid });
                 } catch (err) {
                   console.error('[WS] select_item failed:', err);
                 }

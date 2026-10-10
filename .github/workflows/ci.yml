@@ -114,6 +114,10 @@ jobs:
   desktop:
     name: Desktop (typecheck + build)
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    permissions:
+      contents: read
+      # Phase 33 C2: the conformity check's SARIF, shown on the changed lines.
+      security-events: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -189,16 +193,61 @@ jobs:
       # this pull request's change does not conform: a changed file whose
       # tests fail or are older than the code, a done task whose criterion
       # check fails, or a system doc describing a changed file gone stale.
+      # Phase 33 C2: also as SARIF, uploaded below so GitHub shows each
+      # finding on the line it is about. The words step decides the job.
       - name: CodeTrellis conformity
         if: github.event_name == 'pull_request' && always() && steps.unit.outcome != 'skipped'
         run: |
           node bin/codetrellis.mjs start --quiet
           node bin/codetrellis.mjs report-tests test-results/unit.xml
+          node bin/codetrellis.mjs check --format sarif > codetrellis.sarif || true
           node bin/codetrellis.mjs check
+
+      - name: Upload the conformity SARIF
+        # A fork's pull request has no write token: the check above still gates it.
+        if: github.event_name == 'pull_request' && always() && hashFiles('codetrellis.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: codetrellis.sarif
+          category: codetrellis
 
       - name: Stop CodeTrellis
         if: always()
         run: node bin/codetrellis.mjs stop || true
+
+  # ---------------------------------------------------------------------------
+  # The npm package of the CLI (tools/cli-package), as a user gets it: built,
+  # packed, installed into an empty prefix with install scripts off, and run
+  # (--version, the native modules, a scan of the sample app, and start, check
+  # and stop on this repository). publish-cli.yml runs the same on the tarball
+  # it publishes; this keeps a pull request from breaking it in between.
+  # ---------------------------------------------------------------------------
+  cli-package:
+    name: CLI package (packed and installed)
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci --ignore-scripts && npx patch-package && node scripts/check-patches.cjs
+
+      - name: Build the package
+        run: npm run build:cli-package
+
+      - name: Install it and run it
+        env:
+          CODETRELLIS_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD~1' }}
+        run: npm run smoke:cli-package
 
   # ---------------------------------------------------------------------------
   # Mobile: typecheck only.
@@ -415,8 +464,15 @@ jobs:
           git config --global user.name "CodeTrellis CI"
       - name: Install Playwright runner
         run: npx playwright install --with-deps chromium
+      # Shards balanced by weight, not cut into equal runs of tests (Phase 33
+      # follow-up): Playwright's --shard put most of e2e/plan/*, page tests
+      # at ~15 s each, in one shard, which ran 25 minutes while the others
+      # took 7. tools/e2e-shards/split.ts deals whole files out by weight;
+      # every shard computes the same split, and each file is in one.
       - name: Browser suite, ${{ matrix.project }} shard ${{ matrix.shard }}
-        run: npx playwright test --project=${{ matrix.project }} --shard=${{ matrix.shard }} --reporter=list,html
+        run: |
+          node --import tsx tools/e2e-shards/split.ts ${{ matrix.project }} ${{ matrix.shard }} > shard-files.txt
+          npx playwright test --project=${{ matrix.project }} --test-list shard-files.txt --reporter=list,html
       - name: What each failing page showed
         # The snapshot Playwright writes beside every failure, in the log itself.
         if: failure()
@@ -448,7 +504,7 @@ jobs:
     name: CI passed
     if: always()
     # `harness` (four shards) and `browser` (five: chromium 3, serial 2) block (Phase 32).
-    needs: [no-private-docs, desktop, mobile, phone, html-view, harness, browser]
+    needs: [no-private-docs, desktop, cli-package, mobile, phone, html-view, harness, browser]
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - name: Check results

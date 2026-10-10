@@ -121,6 +121,9 @@ export const FIXTURE_SPECS = [
   // tools/e2e-serial/serial-specs.test.ts, which fails on the next one.
   '**/graph/canvas-rescan-wait.spec.ts',
   '**/graph/grounding-overlay.spec.ts',
+  '**/graph/rules-overlay.spec.ts',
+  // Phase 33 G10: opens the sample app and follows a finding through the graph.
+  '**/rules/findings-where.spec.ts',
   '**/graph/nodes-stay-drawn.spec.ts',
   '**/live-agent/multi-agent-contention.spec.ts',
   '**/plan/play-forward.spec.ts',
@@ -147,6 +150,15 @@ export const SERIAL_SPECS = [
   '**/graph/mcp-view-tools.spec.ts',
   // So do the UI tools (open_plan, select_item, the drawers and dialogs).
   '**/agent/mcp-ui-tools.spec.ts',
+  // "No agents connected" is a fact about the whole backend: any parallel
+  // spec's MCP client makes it false (#367, once shards were balanced).
+  '**/agent/connected-agents.spec.ts',
+  // "The last session is closed" is too: terminals are the whole backend's,
+  // so a parallel spec's shell is in its window, and it deletes every one.
+  '**/terminal/empty-state.spec.ts',
+  // Opens throwaway projects, which swaps the one project every parallel spec
+  // reads: the re-exports spec read a temporary folder's graph (#370).
+  '**/onboarding/recent-projects.spec.ts',
   // Changes shared settings — plan visibility, identity — that a parallel
   // spec creating plans would pick up.
   '**/settings/sections-save.spec.ts',
@@ -171,6 +183,13 @@ export const SERIAL_SPECS = [
   '**/parsers/**',
   // Opens a temporary git worktree as the project.
   '**/git/worktree-checkout.spec.ts',
+  // Opens a temporary repository with eighty branches and three worktrees.
+  '**/git/branch-popover-many.spec.ts',
+  // Counts every plan reload and notice the window takes: a parallel spec
+  // writing exported plan files makes reloads of its own (Phase 33 S2).
+  '**/realtime/plan-reload-burst.spec.ts',
+  // The same, at load (S3).
+  '**/realtime/plan-reload-load.spec.ts',
 ];
 
 export default defineConfig({

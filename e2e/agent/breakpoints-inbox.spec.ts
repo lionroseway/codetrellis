@@ -72,6 +72,9 @@ test.describe('Breakpoints from the window', () => {
       const paused = JSON.parse((await agent.callTool('claim_item', { uid: task })).content[0].text);
       expect(paused).toMatchObject({ paused: true });
 
+      // Escape from the box just ticked still minimises the workspace. The box
+      // kept the focus only on a slow runner, where Escape did nothing (#430).
+      await ask.getByTestId('ask-me-task').focus();
       await openAwareness(page, true);
       const card = page.getByTestId('breakpoint-waiting').filter({ hasText: title });
       await expect(card).toBeVisible({ timeout: 10_000 });

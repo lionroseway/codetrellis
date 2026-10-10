@@ -1,0 +1,18 @@
+# CodeTrellis in Azure Pipelines (Phase 33 C2): a job to add to azure-pipelines.yml.
+# check.sh does the work; the SARIF is published for the Scans tab (the
+# "SARIF SAST Scans Tab" extension) and kept as an artifact.
+jobs:
+  - job: codetrellis
+    pool: { vmImage: ubuntu-latest }
+    steps:
+      - checkout: self
+        fetchDepth: 0
+      - task: UseNode@1
+        inputs: { version: '26.x' }
+      - script: sh docs/recipes/check.sh
+        displayName: CodeTrellis conformity
+        env:
+          CODETRELLIS_JUNIT: test-results/junit.xml
+      - task: PublishBuildArtifacts@1
+        condition: always()
+        inputs: { PathtoPublish: codetrellis.sarif, ArtifactName: CodeAnalysisLogs }

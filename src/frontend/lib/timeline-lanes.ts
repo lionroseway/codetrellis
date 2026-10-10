@@ -6,7 +6,7 @@
  *   ●  an agent turn (tool calls and edits, grouped as the turn list does)
  *   ✎  a turn that edited a spec or an item's description (B1.2)
  *   ⚠  a signal raised about it (A1.6–A3), on every lane it names
- *   ◆  a commit on it, ⧫ a merge (B2.2)
+ *   ◉  a commit on it, ⧫ a merge (B2.2); ◆ means unplanned, never a commit (G1)
  *   ✓ / ✗  criteria checked or decided for items worked in it (B2.2)
  *
  *   ⏸  a call held at a breakpoint, drawn as a span from the hit to the

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -36,6 +36,7 @@ import { FETCH_INTERVAL_CHOICES, type AppSettings, type SettingsSection, type Po
 import { useProjectStore } from '../../stores/project-store';
 import { useBranchesStore } from '../../stores/branches-store';
 import { AddToClaudeDesktop } from './AddToClaudeDesktop';
+import { CommandLineTool } from './CommandLineTool';
 import { ReviewHostSection } from './ReviewHostSection';
 import { SharedTaskStateSection } from './SharedTaskStateSection';
 import { PlansFolderSection } from './PlansFolderSection';
@@ -349,7 +350,11 @@ function Backdrop({ children, onClose }: { children: React.ReactNode; onClose: (
   // other dialog here do. Neither was true of Settings: a screen reader had
   // no dialog to announce, and the keyboard had no way out but Tab-hunting
   // for the close button.
-  useEffect(() => {
+  //
+  // A layout effect, so the listener is there before the dialog is painted:
+  // a passive effect runs after paint, and on a busy page (the graph still
+  // drawing) an Escape pressed as the dialog appeared went to nobody (#367).
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -699,6 +704,12 @@ function McpSection({
           </details>
         )}
       </Field>
+
+      {window.electronAPI?.cli && (
+        <Field label="Command line">
+          <CommandLineTool />
+        </Field>
+      )}
 
       <p className="text-[10px] text-foreground-subtle leading-relaxed">
         Claude Code: run the command. Claude Desktop: <strong>Add to Claude Desktop</strong> in the desktop app, or paste

@@ -12,12 +12,17 @@
  * same reasoning as Phase 24.
  */
 
+import { architectureMarkdown, architectureOf } from '../../services/review-architecture';
+import { lastMark, markReviewed, sinceLastLook } from '../../services/review-marks';
+import { taskMarkdown, taskOutcome } from '../../services/review-task';
+import { authorFromExtra } from '../helpers';
+import { isSafeGitRef } from '../../services/git-safety';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDeps } from '../types';
 import { compareSnapshots, comparandBranches, listComparands } from '../../services/snapshot-compare-service';
-import { reviewPlan, renderReviewMarkdown } from '../../services/plan-review-service';
-import { buildPrDraft } from '../../services/pr-draft-service';
+import { reviewPlan, renderReviewMarkdown, withArchitecture } from '../../services/plan-review-service';
+import { draftArchitecture, buildPrDraft } from '../../services/pr-draft-service';
 import { reviewQueue } from '../../services/review-queue-service';
 
 const COMPARAND_HELP =
@@ -88,10 +93,12 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ plan_uid, project_path, before, after, format }) => {
-      const result = reviewPlan({ planUid: plan_uid, projectPath: project_path, before, after });
-      if (!result.ok) {
-        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }], isError: true };
+      const reviewed = reviewPlan({ planUid: plan_uid, projectPath: project_path, before, after });
+      if (!reviewed.ok) {
+        return { content: [{ type: 'text' as const, text: JSON.stringify(reviewed, null, 2) }], isError: true };
       }
+      // V1 — what the change does to the architecture, at the top.
+      const result = { ok: true as const, review: await withArchitecture(reviewed.review, project_path) };
 
       if (format === 'markdown') {
         const plan = deps.planService.getPlan(plan_uid);
@@ -127,7 +134,7 @@ export function register(server: McpServer, deps: ToolDeps): void {
       },
     },
     async ({ plan_uid, project_path, before, after }) => {
-      const result = buildPrDraft({ planUid: plan_uid, projectPath: project_path, before, after });
+      const result = buildPrDraft({ planUid: plan_uid, projectPath: project_path, before, after, architecture: await draftArchitecture(project_path, before, after) });
       if (!result.ok) {
         return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }], isError: true };
       }
@@ -153,6 +160,51 @@ export function register(server: McpServer, deps: ToolDeps): void {
     async ({ project_path }) => {
       const queue = reviewQueue(project_path);
       return { content: [{ type: 'text' as const, text: JSON.stringify(queue, null, 2) }] };
+    },
+  );
+  // --- review_change (Phase 33 V1) ---
+  server.registerTool(
+    'review_change',
+    {
+      description:
+        'What a change does to the architecture, with no plan needed: between two commits (a branch and its base), the imports added and ' +
+        'removed between folders, outside packages added or dropped (package.json, requirements.txt, go.mod), HTTP calls, routes and SQL ' +
+        'added or dropped, imports across the team\'s rules, and what it does to the rulebook. Read it before the text diff. ' +
+        'When head is a branch a plan item names, it also says whether the change did what the task said (task): each criterion with where it ' +
+        'stands, the planned files touched and not, and the changed files nobody planned. Without a linked task there is no task section. ' +
+        'format="markdown" gives the section for a pull request comment.',
+      inputSchema: {
+        base: z.string().max(200).describe('The commit or branch the change started from, e.g. origin/main.'),
+        head: z.string().max(200).optional().describe('The change: a commit or branch. Defaults to HEAD.'),
+        project_path: z.string().optional().describe('An opened project. Omit for the one open in the app.'),
+        format: z.enum(['json', 'markdown']).optional().describe('Defaults to json.'),
+        mark_reviewed: z.boolean().optional().describe(
+          'Remember that you reviewed it at its head now. Your next review_change of the same head says what moved since, and which of these findings the pushes addressed.'),
+      },
+    },
+    async ({ base, head, project_path, format, mark_reviewed }, extra: any) => {
+      const root = project_path ?? deps.getActiveProjectPath();
+      if (!root) return { isError: true, content: [{ type: 'text' as const, text: 'No project is open.' }] };
+      if (!isSafeGitRef(base) || (head !== undefined && !isSafeGitRef(head))) {
+        return { isError: true, content: [{ type: 'text' as const, text: 'base and head must be commits or branch names.' }] };
+      }
+      const a = await architectureOf(root, base, head ?? 'HEAD');
+      if ('error' in a) return { isError: true, content: [{ type: 'text' as const, text: a.error }] };
+      // V3 — since this agent's last look at the same head, then (if asked) remember this one.
+      const who = authorFromExtra(deps, extra);
+      const target = head ?? 'HEAD';
+      const mark = lastMark(root, target, who.author);
+      const since = mark ? sinceLastLook(root, mark, a.head, a.words) : null;
+      if (mark_reviewed) markReviewed(root, { target, reviewer: who.author, reviewerType: who.authorType, base: a.base, commit: a.head, findings: a.words });
+      // V6 — only when the head is a task's branch; otherwise absent.
+      const task = taskOutcome(root, base, target);
+      if (format === 'markdown') {
+        return { content: [{ type: 'text' as const, text: `${since ? `${since.words}\n\n` : ''}${architectureMarkdown(a)}${task ? `\n\n${taskMarkdown(task)}` : ''}` }] };
+      }
+      return {
+        _meta: { summary: `${a.words.length} architecture finding${a.words.length === 1 ? '' : 's'} between ${base} and ${head ?? 'HEAD'}` },
+        content: [{ type: 'text' as const, text: JSON.stringify({ ...a, ...(since ? { since } : {}), ...(task ? { task } : {}) }, null, 2) }],
+      };
     },
   );
 }

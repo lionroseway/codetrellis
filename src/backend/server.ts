@@ -70,10 +70,12 @@ import { listFolderRequests, takeFolderRequest, dismissFolderRequest, rememberDi
 import { captureSnapshot, setBaseline, computeDiff, getBaseline, baselineLabel, restoreBaseline, setBaselineStore } from './services/diff-engine';
 import { sqliteBaselineStore } from './services/baseline-store';
 import { startMcpServer, getMcpStatus, getMcpConfig, getMcpSetup } from './mcp/server';
-import { listWorktrees, listWorktreesWithPlans, createWorktree, WorktreeError } from './services/worktree-service';
-import { checkoutGitDir, currentBranch, hasCommits, localBranches } from './services/git-checkout';
+import { listWorktrees, listWorktreesWithPlans, createWorktree, describeWorktrees, WorktreeError } from './services/worktree-service';
+import { checkoutGitDir, currentBranch, hasCommits, localBranches, withoutNestedCheckouts } from './services/git-checkout';
 import { startAutoSave, saveNow } from './services/persistence';
 import { exportDatabase } from './services/database';
+import { approvePipeline, pipelineView } from './services/pipeline-approvals';
+import { notePatternsRead, refreshPatternFinds } from './services/pattern-scan';
 import * as planService from './services/plan-service';
 import * as budgetService from './services/budget-service';
 import { compareSnapshots, comparandBranches, listComparands, readFileAt } from './services/snapshot-compare-service';
@@ -83,16 +85,31 @@ import { fetchRemotes, listBranches, startRemoteKeeper } from './services/git-br
 import { fileHistory, FileHistoryError } from './services/file-history';
 import { recordedKnowledge, isProjectRelativePath } from './services/commit-attribution';
 import { lineHistory, LineHistoryError } from './services/line-history';
-import { reviewPlan, renderReviewMarkdown } from './services/plan-review-service';
+import { reviewPlan, renderReviewMarkdown, withArchitecture } from './services/plan-review-service';
 import { reviewQueue } from './services/review-queue-service';
 import { buildStack } from './services/stack-service';
 import { buildPlayForward } from './services/play-forward';
 import { resequence, tellAgents, leaveOverlap, OverlapActionError, noteApproval, approvalNotices, markNoticeSeen } from './services/planned-overlap-actions';
 import { seriesFor, setRule, removeRule, startRun, dismissDue, recurrenceOf, RecurringError } from './services/recurring-service';
 import { isRunAgent, setRunAgent, startRunAgent } from './services/recurring-agent';
-import { rulesView, setRule as setArchitectureRule, removeRule as removeArchitectureRule, edgesIfLoaded, RuleError } from './services/architecture-rules';
+import { rulesView, setRule as setArchitectureRule, removeRule as removeArchitectureRule, edgesIfLoaded, RuleError, rulesInConfig, rulebookProblems, moveRulesFromConfig, proposedRule, findRule } from './services/architecture-rules';
+import type { RuleChange } from './services/rule-changes';
+import { previewChange, previewJson, type RulePreview } from './services/rule-preview';
+import { signRuleChange } from './services/rule-approvals';
+import { architectureMarkdown, architectureOf } from './services/review-architecture';
+import { lastMark, markReviewed, sinceLastLook } from './services/review-marks';
+import { taskMarkdown, taskOutcome } from './services/review-task';
+import { inScope, parseScope, scopeWords } from './services/rule-scope';
+import { getCheckRun, listCheckRuns } from './services/check-runs';
+import { taskRules } from './services/task-rules';
+import { checkTheChange } from './services/change-check';
+import { changedFiles } from './services/work-changes';
+import { debtByRule, ruleHistory, suiteSummaries } from './services/rules-overview';
+import { decideRuleProposal, getRuleProposal, listRuleProposals } from './services/rule-proposals';
+import { writerId as taskRecordWriterId } from './services/task-records/shared-state';
+import type { ArchitectureRule } from '../shared/types/architecture-rules';
 import { startRecurringScheduler } from './services/recurring-scheduler';
-import { buildPrDraft } from './services/pr-draft-service';
+import { draftArchitecture, buildPrDraft } from './services/pr-draft-service';
 import { buildSignoffPack, renderPackHtml, verifyPack, packFromText, PackError } from './services/signoff-pack';
 import { sealPack, checkSeal } from './services/pack-seal';
 import { buildEvidence, sealEvidence, renderEvidenceHtml, verifyEvidence, evidenceFromText, EvidenceError, decisionsBetween } from './services/evidence';
@@ -106,7 +123,7 @@ import { listTestReports, listTestResults, testsSummary } from './services/tests
 import { groundingMap, groundingMapAt, groundingOf, NotAFileError } from './services/tests/grounding';
 import { teammateRunSummaries } from './services/tests/teammate-runs';
 import { taskGrounding } from './services/task-grounding';
-import { getSharedTaskState, keepMyState, readAndTell, setRecordAppliedListener, setSharedMaterialReads, setSharedTaskState, setRunsChangedListener, setSplitChangedListener, startRecordWatcher, stopRecordWatcher, trustTeammateKey, writeRecordFor } from './services/task-records/shared-state';
+import { getSharedTaskState, keepMyState, readAndTell, setRecordAppliedListener, setSharedMaterialReads, setSharedTaskState, setRunsChangedListener, setCheckRunsChangedListener, setSplitChangedListener, startRecordWatcher, stopRecordWatcher, trustTeammateKey, writeRecordFor } from './services/task-records/shared-state';
 import { buildFileOverlay, relativeTo } from './services/plan-overlay-service';
 import { buildPlaybackSequence } from './services/playback-service';
 import * as commentService from './services/comment-service';
@@ -975,9 +992,9 @@ app.get('/api/git/info', (req, res) => {
 
   if (!checkoutGitDir(projectPath)) { res.json({ branches: [], worktrees: [], status: null }); return; }
 
-  const worktrees = listWorktrees(projectPath)
-    .filter((w) => !w.isCurrent && !w.bare)
-    .map((w) => ({ path: w.path, branch: w.branch }));
+  // Wherever git made them: inside the checkout, beside it, in a tool's
+  // own folder under home. Each says where, so the popover can show it.
+  const worktrees = describeWorktrees(listWorktrees(projectPath), projectPath, os.homedir());
 
   res.json({
     currentBranch: currentBranch(projectPath),
@@ -1370,10 +1387,15 @@ async function runScan(projectPath: string): Promise<ScanStats> {
       console.log(`[Scan] Incremental: ${toParse.length} changed / ${filePaths.length} total files (${stalePaths.length} removed)`);
       parsedFiles = await parseFiles(toParse);
       await storeParsedFiles(parsedFiles, projectPath);
+      // Phase 33 B4: the project's patterns changed, and the files did not.
+      const reparsed = new Set(toParse);
+      const refreshed = refreshPatternFinds(projectPath, filePaths.filter((f) => !reparsed.has(f)));
+      if (refreshed !== null) console.log(`[Scan] Patterns changed: ${refreshed} finds redone`);
     } else {
       clearAstData();
       parsedFiles = await parseFiles(filePaths);
       await storeParsedFiles(parsedFiles, projectPath);
+      notePatternsRead(projectPath);
     }
 
     lastScannedProject = projectPath;
@@ -2723,31 +2745,172 @@ app.put('/api/recurring/:id', (req, res) => {
   }
 });
 
-// Phase 32 A7.1 — architecture rules: path boundaries the team keeps in the
-// committed config. Reading them, with what breaks each today, is anyone's;
-// setting or stopping one is the person's, as a plans folder is.
-const RULES_WHERE = 'Settings → Architecture rules';
+// Phase 32 A7.1 — architecture rules: path boundaries the team keeps in
+// committed files (`.codetrellis/rules/<suite>.yaml` since Phase 33 R1).
+// Reading them, with what breaks each today, is anyone's; setting, stopping
+// or moving one is the person's, as a plans folder is.
+const RULES_WHERE = 'Rules view';
 
 app.get('/api/rules', (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
-  res.json({ rules: rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)) });
+  // C1: ?suite=, ?rule=, ?path= (and ?tag=) show part of the rulebook, as `check` scopes it.
+  const scope = parseScope({ suite: req.query.suite, rule: req.query.rule, path: req.query.path, tag: req.query.tag });
+  const views = rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)).filter((v) => inScope(v.rule, scope));
+  // G7: each rule's debt (the baseline's count), and each suite with its status.
+  const debt = debtByRule(projectRoot);
+  res.json({
+    rules: views.map((v) => ({ ...v, debt: debt.get(v.rule.id) ?? 0 })),
+    suites: suiteSummaries(views, debt),
+    ...(scope ? { scope: scopeWords(scope) } : {}),
+    // Rules still in config.json, waiting for a person to move them (R1).
+    inConfig: rulesInConfig(projectRoot).length,
+    problems: rulebookProblems(projectRoot),
+  });
+});
+
+// Phase 33 G7 — the history of changes to the project's rules, newest first.
+app.get('/api/rules/history', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json({ history: ruleHistory(projectRoot) });
+});
+
+// Phase 33 R1 — move the rules Phase 32 kept in config.json into the
+// `architecture` suite file. A person's confirmed act, never automatic.
+app.post('/api/rules/move-from-config', async (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can move the architecture rules — in the CodeTrellis app's ${RULES_WHERE}.` }); return; }
+  try {
+    const moved = moveRulesFromConfig(projectRoot);
+    broadcast('rules-changed', { project: projectRoot });
+    const person = personFrom(req);
+    recordDecision('rule_changed', { projectRoot, change: 'moved-from-config', ruleIds: moved, to: '.codetrellis/rules/architecture.yaml', author: person.author, authorType: person.authorType }, person.authorType);
+    res.json({ moved, to: '.codetrellis/rules/architecture.yaml' });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Phase 33 R3 — what a change to a rule does, against the code, before a
+// person confirms it: what becomes forbidden, what becomes allowed, and what
+// breaks it today. Read only. `remove: true` previews stopping it.
+function ruleBody(req: express.Request): Record<string, unknown> {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  // The rule's own fields, by name: nothing else in the body reaches the rulebook.
+  return {
+    id: req.params.id, suite: b.suite, from: b.from, mayNotImport: b.mayNotImport, except: b.except, because: b.because, strength: b.strength,
+    // What a pipeline stage or a check selects it by (follow-up to B6).
+    ...(b.tags !== undefined ? { tags: b.tags } : {}),
+    // R5: a package rule's own fields; R6: a symbol rule's.
+    ...(b.kind !== undefined ? { kind: b.kind } : {}), ...(b.package !== undefined ? { package: b.package } : {}), ...(b.only !== undefined ? { only: b.only } : {}),
+    ...(b.symbol !== undefined ? { symbol: b.symbol } : {}), ...(b.calls !== undefined ? { calls: b.calls } : {}),
+    // B1: how a package, symbol or call target is matched.
+    ...(b.match !== undefined ? { match: b.match } : {}), ...(b.threshold !== undefined ? { threshold: b.threshold } : {}),
+    // R8: a folder rule's own fields.
+    ...(b.folder !== undefined ? { folder: b.folder } : {}), ...(b.files !== undefined ? { files: b.files } : {}),
+    ...(b.kinds !== undefined ? { kinds: b.kinds } : {}), ...(b.exports !== undefined ? { exports: b.exports } : {}), ...(b.guide !== undefined ? { guide: b.guide } : {}),
+    // B2: a grep rule's own fields.
+    ...(b.in !== undefined ? { in: b.in } : {}), ...(b.must !== undefined ? { must: b.must } : {}),
+    ...(b.mustNot !== undefined ? { mustNot: b.mustNot } : {}), ...(b.ignoreCase !== undefined ? { ignoreCase: b.ignoreCase } : {}),
+    // B5: who judges it, and an agent rule's words.
+    ...(b.engine !== undefined ? { engine: b.engine } : {}), ...(b.rule !== undefined ? { rule: b.rule } : {}),
+  };
+}
+
+function previewRuleChange(projectRoot: string, id: string, next: ArchitectureRule | null): RulePreview {
+  return previewChange(projectRoot, id, next, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges, undefined, next ? [next] : []));
+}
+
+app.post('/api/rules/:id/preview', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  try {
+    const remove = (req.body as Record<string, unknown> | undefined)?.remove === true;
+    if (remove && !findRule(projectRoot, req.params.id)) { res.status(404).json({ error: `No architecture rule "${req.params.id}" in this project` }); return; }
+    const next = remove ? null : proposedRule(projectRoot, ruleBody(req), changedBy(req)).rule;
+    res.json(previewJson(previewRuleChange(projectRoot, req.params.id, next)));
+  } catch (err) {
+    if (err instanceof RuleError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+/** R3: a confirmed loosening, signed as the person; never throws, the change stands either way. */
+function signLoosening(projectRoot: string, change: RuleChange, person: { author: string }): { file: string; how: string; as: string } | { error: string } {
+  try {
+    return signRuleChange(projectRoot, { rule: change.rule, before: change.before, after: change.after }, { writer: taskRecordWriterId(), name: person.author });
+  } catch (err) {
+    return { error: `The change is made, but it could not be signed (${(err as Error).message}); CI will hold it until it is.` };
+  }
+}
+
+/**
+ * R3 — make a person's change to a rule: a set (`raw`) or a stop (null). A
+ * loosening needs `confirmed`, and is then signed as the person. Shared by
+ * the person's own change and their acceptance of an agent's proposal.
+ */
+async function applyRuleChange(req: express.Request, projectRoot: string, id: string, raw: Record<string, unknown> | null, confirmed: boolean, extra: Record<string, unknown> = {}): Promise<{ status: number; body: Record<string, unknown> }> {
+  if (raw === null && !findRule(projectRoot, id)) return { status: 404, body: { error: `No architecture rule "${id}" in this project` } };
+  const next = raw ? proposedRule(projectRoot, { ...raw, id }, changedBy(req)).rule : null;
+  const { change } = previewRuleChange(projectRoot, id, next);
+  // A loosening is confirmed after its preview, never by default.
+  if (change?.effect === 'loosens' && !confirmed) {
+    return {
+      status: 409,
+      body: { error: `${raw ? 'This loosens the rule' : 'Stopping a rule loosens it'}. Look at what it allows, then confirm it.`, needsConfirm: true, words: change.words, allowed: change.allowed },
+    };
+  }
+  const person = personFrom(req);
+  let rule: ArchitectureRule | null = null;
+  if (raw) rule = setArchitectureRule(projectRoot, { ...raw, id }, changedBy(req));
+  else removeArchitectureRule(projectRoot, id);
+  const approval = change?.effect === 'loosens' ? signLoosening(projectRoot, change, person) : null;
+  broadcast('rules-changed', { project: projectRoot });
+  recordDecision('rule_changed', {
+    projectRoot, ruleId: id, change: rule ? 'set' : 'stopped',
+    ...(rule ? { suite: rule.suite, from: rule.from, mayNotImport: rule.mayNotImport, except: rule.except, because: rule.because, strength: rule.strength } : {}),
+    effect: change?.effect ?? 'none', words: change?.words ?? null, approval: approval && 'file' in approval ? approval.file : null,
+    ...extra, author: person.author, authorType: person.authorType,
+  }, person.authorType);
+  // A7.2 — work in flight is checked against the change at once.
+  await refreshSignals(projectRoot).catch((err) => console.warn('[Awareness] refresh failed:', err));
+  const view = rule ? rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)).find((v) => v.rule.id === id) : undefined;
+  return { status: 200, body: { ...(rule ? { rule, view } : { removed: id }), ...(approval ? { approval } : {}) } };
+}
+
+// Phase 33 B6 — the pipeline: its stages in words, and the loosenings an
+// edit to it makes since the last commit, which a person approves here,
+// signed as a rule's loosening is (R3).
+app.get('/api/pipeline', async (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  res.json(await pipelineView(projectRoot));
+});
+
+app.post('/api/pipeline/approve', async (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can approve a change to the pipeline — in the CodeTrellis app's ${RULES_WHERE}.` }); return; }
+  const person = personFrom(req);
+  try {
+    const r = await approvePipeline(projectRoot, { writer: taskRecordWriterId(), name: person.author });
+    if (r.signed.length) broadcast('rules-changed', { project: projectRoot });
+    res.json(r);
+  } catch (err) {
+    res.status(500).json({ error: `The change could not be signed (${(err as Error).message}); CI will hold it until it is.` });
+  }
 });
 
 app.put('/api/rules/:id', async (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
-  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can set an architecture rule — in the CodeTrellis app, ${RULES_WHERE}.` }); return; }
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can set an architecture rule — in the CodeTrellis app's ${RULES_WHERE}.` }); return; }
   try {
-    // The rule's own fields, by name: nothing else in the body reaches the config.
-    const b = (req.body ?? {}) as Record<string, unknown>;
-    const rule = setArchitectureRule(projectRoot, { id: req.params.id, from: b.from, mayNotImport: b.mayNotImport, except: b.except, because: b.because }, changedBy(req));
-    broadcast('rules-changed', { project: projectRoot });
-    const person = personFrom(req);
-    recordDecision('rule_changed', { projectRoot, ruleId: rule.id, change: 'set', from: rule.from, mayNotImport: rule.mayNotImport, except: rule.except, because: rule.because, author: person.author, authorType: person.authorType }, person.authorType);
-    // A7.2 — work in flight is checked against the new rule at once.
-    await refreshSignals(projectRoot).catch((err) => console.warn('[Awareness] refresh failed:', err));
-    res.json({ rule, view: rulesView(projectRoot, edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges)).find((v) => v.rule.id === rule.id) });
+    const confirmed = (req.body as Record<string, unknown> | undefined)?.confirm === true;
+    const r = await applyRuleChange(req, projectRoot, req.params.id, ruleBody(req), confirmed);
+    res.status(r.status).json(r.body);
   } catch (err) {
     if (err instanceof RuleError) { res.status(err.status).json({ error: err.message }); return; }
     throw err;
@@ -2757,14 +2920,98 @@ app.put('/api/rules/:id', async (req, res) => {
 app.delete('/api/rules/:id', async (req, res) => {
   const projectRoot = requireProjectRoot(req, res);
   if (!projectRoot) return;
-  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can stop an architecture rule — in the CodeTrellis app, ${RULES_WHERE}.` }); return; }
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can stop an architecture rule — in the CodeTrellis app's ${RULES_WHERE}.` }); return; }
   try {
-    removeArchitectureRule(projectRoot, req.params.id);
+    const r = await applyRuleChange(req, projectRoot, req.params.id, null, req.query.confirm === '1');
+    res.status(r.status).json(r.body);
+  } catch (err) {
+    if (err instanceof RuleError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
+});
+
+// Phase 33 C7 — every check is a run: this device's, and teammates' latest
+// read from the plans folder, each saying where it ran and by whom.
+app.get('/api/check-runs', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const limit = Number(req.query.limit ?? 50);
+  res.json({ runs: listCheckRuns(projectRoot, Number.isFinite(limit) ? limit : 50) });
+});
+
+// Phase 33 G9 — run a check from the app: the same check `codetrellis check`
+// runs, over this work's changed files since its base, at any scope, kept
+// as a run like every other.
+app.post('/api/check-runs', async (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const given = typeof b.base === 'string' && b.base.trim() ? b.base.trim() : undefined;
+  if (given !== undefined && !isSafeGitRef(given)) { res.status(400).json({ error: 'base must be a commit or a branch name' }); return; }
+  let changed;
+  try { changed = changedFiles(projectRoot, given, {}); } catch (err) { res.status(400).json({ error: (err as Error).message }); return; }
+  const person = personFrom(req);
+  const r = await checkTheChange({
+    root: projectRoot, paths: changed.files.slice(0, 500), ...(changed.since ? { base: changed.since } : {}), strict: b.strict === true,
+    scope: { suite: b.suite, rule: b.rule, path: b.path, engine: b.engine, strength: b.strength },
+    by: person, ranIn: person.authorType === 'human' ? 'the app' : 'the local API',
+    activeProject: getActiveProjectPath(), checkCriterion: (uid) => criterionLoop.checkCriterion(uid),
+  });
+  if ('error' in r) { res.status(400).json({ error: r.error }); return; }
+  res.json({ ...r.result, base: changed.base });
+});
+
+app.get('/api/check-runs/:id', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const run = getCheckRun(projectRoot, req.params.id);
+  if (!run) { res.status(404).json({ error: 'No such check run in this project' }); return; }
+  res.json(run);
+});
+
+// Phase 33 R3 — agents' proposals (`propose_rule`), each with what it would do now.
+app.get('/api/rules/proposals', (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  const edges = edgesIfLoaded(projectRoot, getActiveProjectPath(), getDependencyEdges);
+  const proposals = listRuleProposals(projectRoot).map((p) => {
+    if (p.status !== 'open') return { ...p, now: null };
+    // Said again against the code and rules as they are now: either may have moved since it was proposed.
+    try {
+      const next = p.body ? proposedRule(projectRoot, { ...p.body, id: p.ruleId }, p.author).rule : null;
+      if (!next && !findRule(projectRoot, p.ruleId)) return { ...p, now: { words: `The rule ${p.ruleId} is already gone.`, change: null, breaches: null, needsConfirm: false } };
+      return { ...p, now: previewJson(previewChange(projectRoot, p.ruleId, next, edges)) };
+    } catch (err) {
+      return { ...p, now: { words: err instanceof RuleError ? err.message : String(err), change: null, breaches: null, needsConfirm: false } };
+    }
+  });
+  res.json({ proposals });
+});
+
+app.post('/api/rules/proposals/:uid/decide', async (req, res) => {
+  const projectRoot = requireProjectRoot(req, res);
+  if (!projectRoot) return;
+  if (!mayGrant(req)) { res.status(403).json({ error: `Only you can decide a proposed rule — in the CodeTrellis app's ${RULES_WHERE}.` }); return; }
+  const p = getRuleProposal(req.params.uid);
+  if (!p || p.projectRoot !== projectRoot) { res.status(404).json({ error: 'No such proposal in this project' }); return; }
+  if (p.status !== 'open') { res.status(409).json({ error: `This proposal was already ${p.status}.` }); return; }
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const note = typeof b.note === 'string' ? b.note.slice(0, 500) : null;
+  const person = personFrom(req);
+  if (b.decision === 'reject') {
+    const decided = decideRuleProposal(p.uid, 'rejected', person, note);
+    recordDecision('rule_changed', { projectRoot, proposal: p.uid, ruleId: p.ruleId, change: 'proposal_rejected', proposedBy: p.author, author: person.author, authorType: person.authorType }, person.authorType);
     broadcast('rules-changed', { project: projectRoot });
-    const person = personFrom(req);
-    recordDecision('rule_changed', { projectRoot, ruleId: req.params.id, change: 'stopped', author: person.author, authorType: person.authorType }, person.authorType);
-    await refreshSignals(projectRoot).catch((err) => console.warn('[Awareness] refresh failed:', err));
-    res.json({ removed: req.params.id });
+    res.json({ proposal: decided });
+    return;
+  }
+  if (b.decision !== 'accept') { res.status(400).json({ error: 'decision must be accept or reject' }); return; }
+  try {
+    // Accepting is the person's change, made as if they made it: a loosening is confirmed and signed.
+    const r = await applyRuleChange(req, projectRoot, p.ruleId, p.body, b.confirm === true, { proposal: p.uid, proposedBy: p.author });
+    if (r.status !== 200) { res.status(r.status).json(r.body); return; }
+    const decided = decideRuleProposal(p.uid, 'accepted', person, note);
+    res.json({ ...r.body, proposal: decided });
   } catch (err) {
     if (err instanceof RuleError) { res.status(err.status).json({ error: err.message }); return; }
     throw err;
@@ -3541,6 +3788,17 @@ app.get('/api/items/:uid/grounding', async (req, res) => {
   const g = await taskGrounding(req.params.uid);
   if (!g) { res.status(404).json({ error: 'Item not found' }); return; }
   res.json(g);
+});
+
+/**
+ * Phase 33 G10 — the rules that judge a task's files, and what the latest
+ * check run found in them: the brief's `rules` block, for the app's Brief.
+ * The root is the task's plan's project, never the request's.
+ */
+app.get('/api/items/:uid/rules', (req, res) => {
+  const item = planItemService.getItem(req.params.uid);
+  if (!item) { res.status(404).json({ error: 'Item not found' }); return; }
+  res.json(taskRules(item, planService.getPlan(item.planUid)?.projectPath ?? null));
 });
 
 app.post('/api/items/:uid/criteria', (req, res) => {
@@ -4505,17 +4763,20 @@ app.get('/api/compare', (req, res) => {
   res.json(result.result);
 });
 
-app.get('/api/plans/:uid/pr-draft', (req, res) => {
+app.get('/api/plans/:uid/pr-draft', async (req, res) => {
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
   // Read-only: this never touches the repository. The agent does the git
   // and opens the PR with its own credentials; we supply the body it
   // cannot write.
+  const before = req.query.before as string | undefined;
+  const after = req.query.after as string | undefined;
   const result = buildPrDraft({
     planUid: req.params.uid,
     projectPath,
-    before: req.query.before as string | undefined,
-    after: req.query.after as string | undefined,
+    before,
+    after,
+    architecture: await draftArchitecture(projectPath, before, after),
   });
   if (!result.ok) { res.status(404).json(result); return; }
   res.json(result.draft);
@@ -4603,7 +4864,7 @@ app.post('/api/play-forward/overlaps/:id/:action', (req, res) => {
   }
 });
 
-app.get('/api/plans/:uid/review', (req, res) => {
+app.get('/api/plans/:uid/review', async (req, res) => {
   const projectPath = requireProjectRoot(req, res);
   if (!projectPath) return;
   const result = reviewPlan({
@@ -4613,11 +4874,46 @@ app.get('/api/plans/:uid/review', (req, res) => {
     after: req.query.after as string | undefined,
   });
   if (!result.ok) { res.status(404).json(result); return; }
+  // V1 — what the change does to the architecture, at the top.
+  const review = await withArchitecture(result.review, projectPath);
   if (req.query.format === 'markdown') {
-    res.type('text/markdown').send(renderReviewMarkdown(result.review));
+    res.type('text/markdown').send(renderReviewMarkdown(review));
     return;
   }
-  res.json(result.review);
+  res.json(review);
+});
+
+// Phase 33 V1 — the architecture section with no plan: between two commits.
+app.get('/api/review/architecture', async (req, res) => {
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  const base = typeof req.query.base === 'string' ? req.query.base : '';
+  const head = typeof req.query.head === 'string' && req.query.head ? req.query.head : 'HEAD';
+  if (!base || !isSafeGitRef(base) || !isSafeGitRef(head)) { res.status(400).json({ error: 'base (and head, default HEAD) must be commits or branch names' }); return; }
+  const a = await architectureOf(projectPath, base, head);
+  if ('error' in a) { res.status(400).json(a); return; }
+  // V3 — what moved since this reviewer's last look at the line of work.
+  const mark = lastMark(projectPath, head, personFrom(req).author);
+  const since = mark ? sinceLastLook(projectPath, mark, a.head, a.words) : null;
+  // V6 — what the linked task asked, only when the head is a task's branch.
+  const task = taskOutcome(projectPath, base, head);
+  if (req.query.format === 'markdown') { res.type('text/markdown').send(`${since ? `${since.words}\n\n` : ''}${architectureMarkdown(a)}${task ? `\n\n${taskMarkdown(task)}` : ''}`); return; }
+  res.json({ ...a, ...(since ? { since } : {}), ...(task ? { task } : {}) });
+});
+
+// Phase 33 V3 — a reviewer marks a line of work reviewed at its head now,
+// keeping what the review says, so the next look shows only what moved.
+app.post('/api/review/seen', async (req, res) => {
+  const projectPath = requireProjectRoot(req, res);
+  if (!projectPath) return;
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const base = typeof b.base === 'string' ? b.base : '';
+  const head = typeof b.head === 'string' && b.head ? b.head : 'HEAD';
+  if (!base || !isSafeGitRef(base) || !isSafeGitRef(head)) { res.status(400).json({ error: 'base (and head, default HEAD) must be commits or branch names' }); return; }
+  const a = await architectureOf(projectPath, base, head);
+  if ('error' in a) { res.status(400).json(a); return; }
+  const person = personFrom(req);
+  res.json(markReviewed(projectPath, { target: head, reviewer: person.author, reviewerType: person.authorType, base: a.base, commit: a.head, findings: a.words }));
 });
 
 // --- Budgets (Phase 23) ---
@@ -6435,6 +6731,8 @@ export async function initializeBackend(): Promise<void> {
   setSplitChangedListener((projectRoot) => { refreshSignals(projectRoot).catch((err) => console.warn('[Awareness] refresh failed:', err)); });
   // D1.5a: a teammate's test run arrived (or was forgotten): grounding is asked again.
   setRunsChangedListener((projectRoot) => { broadcast('tests-reported', { project: projectRoot }); });
+  // Phase 33 C7: a teammate's check run arrived (or sharing went off): the Checks view asks again.
+  setCheckRunsChangedListener((projectRoot) => { broadcast('check-runs-changed', { project: projectRoot }); });
   planItemService.setStatusChangeListener(({ planUid, itemUid }) => {
     const plan = planService.getPlan(planUid);
     if (!plan?.projectPath) return;
@@ -6925,7 +7223,8 @@ export function getGitWorkingTreeStatus(projectPath: string): {
     return {
       staged: [...staged],
       unstaged: [...unstaged],
-      untracked: [...untracked],
+      // A worktree inside the project is another checkout, not a new file.
+      untracked: withoutNestedCheckouts(projectPath, [...untracked], (p) => p),
       stagedAdded: [...stagedAdded],
       stagedModified: [...stagedModified],
       stagedDeleted: [...stagedDeleted],

@@ -1,5 +1,7 @@
 import type { CSSProperties } from 'react';
 
+import { alpha, chipClass, GRAPH_CHROME, languageOf, minimapColor, nodeChange } from './visual-language';
+
 export type GraphDirection = 'inbound' | 'outbound';
 
 export interface GraphNodeVisualData {
@@ -40,95 +42,41 @@ export interface ChangeVisual {
   symbol: string;
   tone: string;
   glow: string;
+  /** The state in words, for the chip's hover. */
+  word: string;
 }
 
-const DEFAULT_LANGUAGE: LanguageVisual = {
-  accent: '#94a3b8',
-  glow: 'rgba(148, 163, 184, 0.28)',
-  bg: 'rgba(148, 163, 184, 0.14)',
-  badge: 'border-white/10 bg-white/6 text-zinc-200',
-  shortLabel: 'FILE',
-};
-
-const LANGUAGE_VISUALS: Record<string, LanguageVisual> = {
-  typescript: {
-    accent: '#3b82f6',
-    glow: 'rgba(59, 130, 246, 0.32)',
-    bg: 'rgba(59, 130, 246, 0.14)',
-    badge: 'border-blue-400/25 bg-blue-500/10 text-blue-100',
-    shortLabel: 'TS',
-  },
-  javascript: {
-    accent: '#eab308',
-    glow: 'rgba(234, 179, 8, 0.28)',
-    bg: 'rgba(234, 179, 8, 0.12)',
-    badge: 'border-yellow-400/25 bg-yellow-500/10 text-yellow-100',
-    shortLabel: 'JS',
-  },
-  python: {
-    accent: '#22c55e',
-    glow: 'rgba(34, 197, 94, 0.28)',
-    bg: 'rgba(34, 197, 94, 0.12)',
-    badge: 'border-emerald-400/25 bg-emerald-500/10 text-emerald-100',
-    shortLabel: 'PY',
-  },
-  rust: {
-    accent: '#f97316',
-    glow: 'rgba(249, 115, 22, 0.3)',
-    bg: 'rgba(249, 115, 22, 0.12)',
-    badge: 'border-orange-400/25 bg-orange-500/10 text-orange-100',
-    shortLabel: 'RS',
-  },
-  go: {
-    accent: '#06b6d4',
-    glow: 'rgba(6, 182, 212, 0.28)',
-    bg: 'rgba(6, 182, 212, 0.12)',
-    badge: 'border-cyan-400/25 bg-cyan-500/10 text-cyan-100',
-    shortLabel: 'GO',
-  },
-  css: {
-    accent: '#a855f7',
-    glow: 'rgba(168, 85, 247, 0.28)',
-    bg: 'rgba(168, 85, 247, 0.12)',
-    badge: 'border-fuchsia-400/25 bg-fuchsia-500/10 text-fuchsia-100',
-    shortLabel: 'CSS',
-  },
-  json: {
-    accent: '#38bdf8',
-    glow: 'rgba(56, 189, 248, 0.24)',
-    bg: 'rgba(56, 189, 248, 0.1)',
-    badge: 'border-sky-400/25 bg-sky-500/10 text-sky-100',
-    shortLabel: 'JSON',
-  },
-  markdown: {
-    accent: '#f472b6',
-    glow: 'rgba(244, 114, 182, 0.24)',
-    bg: 'rgba(244, 114, 182, 0.1)',
-    badge: 'border-pink-400/25 bg-pink-500/10 text-pink-100',
-    shortLabel: 'MD',
-  },
-};
-
-const CHANGE_VISUALS: Record<string, ChangeVisual> = {
-  added: { symbol: '+', tone: 'border-emerald-400/25 bg-emerald-500/15 text-emerald-100', glow: 'rgba(34, 197, 94, 0.34)' },
-  planned_add: { symbol: '+', tone: 'border-emerald-300/30 bg-emerald-500/12 text-emerald-100', glow: 'rgba(34, 197, 94, 0.38)' },
-  modified: { symbol: '~', tone: 'border-amber-400/25 bg-amber-500/15 text-amber-100', glow: 'rgba(245, 158, 11, 0.32)' },
-  planned_modify: { symbol: '~', tone: 'border-orange-300/30 bg-orange-500/12 text-orange-100', glow: 'rgba(249, 115, 22, 0.34)' },
-  removed: { symbol: '-', tone: 'border-red-400/25 bg-red-500/15 text-red-100', glow: 'rgba(239, 68, 68, 0.34)' },
-  planned_remove: { symbol: '-', tone: 'border-red-300/30 bg-red-500/12 text-red-100', glow: 'rgba(239, 68, 68, 0.38)' },
-  in_progress_task: { symbol: '>', tone: 'border-blue-400/25 bg-blue-500/15 text-blue-100', glow: 'rgba(59, 130, 246, 0.36)' },
-  active: { symbol: '*', tone: 'border-blue-300/30 bg-blue-500/12 text-blue-100', glow: 'rgba(96, 165, 250, 0.34)' },
-  affected: { symbol: '!', tone: 'border-violet-400/25 bg-violet-500/15 text-violet-100', glow: 'rgba(139, 92, 246, 0.32)' },
-  unexpected_live: { symbol: '!', tone: 'border-fuchsia-300/30 bg-fuchsia-500/14 text-fuchsia-100', glow: 'rgba(217, 70, 239, 0.34)' },
-};
-
+/**
+ * Language is identity: it colours the file icon only. The glow, ground
+ * and badge are neutral, so a Python file never reads as an added one
+ * (Phase 33 G1; the vocabulary is `visual-language.ts`).
+ */
 export function getLanguageVisual(language?: string): LanguageVisual {
-  return LANGUAGE_VISUALS[language || ''] || DEFAULT_LANGUAGE;
+  const lang = languageOf(language);
+  return {
+    accent: lang.hex,
+    glow: GRAPH_CHROME.glow,
+    bg: GRAPH_CHROME.iconGround,
+    badge: GRAPH_CHROME.badge,
+    shortLabel: lang.short,
+  };
 }
 
+/** A node's change status as the vocabulary draws it: its chip and glow. */
 export function getChangeVisual(changeStatus?: string): ChangeVisual | null {
-  if (!changeStatus) return null;
-  return CHANGE_VISUALS[changeStatus] || null;
+  const change = nodeChange(changeStatus);
+  if (!change) return null;
+  return {
+    symbol: change.symbol,
+    tone: chipClass(change.state.tone),
+    glow: alpha(change.state.tone, 0.36),
+    word: change.state.word,
+  };
+}
+
+/** The colour the minimap paints a node, by its change status. */
+export function minimapNodeColor(node: { data?: Record<string, unknown> }): string {
+  return minimapColor(node.data?.changeStatus);
 }
 
 export function getNodeDimensions(data: GraphNodeVisualData): { width: number; height: number } {
@@ -173,9 +121,9 @@ export function getLanguageLabel(language?: string): string {
  * transparency. An outline needs the opposite, because a 3px line at 30%
  * alpha reads as nothing.
  */
-export function solidOf(rgba: string, alpha = 1): string {
+export function solidOf(rgba: string, a = 1): string {
   const m = rgba.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/);
-  return m ? `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${alpha})` : rgba;
+  return m ? `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${a})` : rgba;
 }
 
 export interface StatusOutlineInput {
@@ -203,7 +151,7 @@ export interface StatusOutlineInput {
  *   planned           3px dashed, status colour (not happened yet)
  *   live / pulsing    5px double, status colour (motion becomes shape)
  *   focused           +1px and offset, so selection reads over status
- *   plan-highlighted  3px solid accent, when nothing else claims it
+ *   plan-highlighted  3px dashed planned violet, when nothing else claims it
  *   otherwise         1px in the language colour: identity, not news
  *
  * `outline` rather than `border` so the card's layout never shifts when
@@ -222,10 +170,10 @@ export function statusOutline(input: StatusOutlineInput): CSSProperties {
     };
   }
   if (input.planHighlighted) {
-    return { outline: '3px solid rgba(59, 130, 246, 0.95)', outlineOffset: input.focused ? 3 : 0 };
+    return { outline: `3px dashed ${alpha('planned', 0.95)}`, outlineOffset: input.focused ? 3 : 0 };
   }
   if (input.focused) {
-    return { outline: '3px solid rgba(255, 255, 255, 0.85)', outlineOffset: 3 };
+    return { outline: `3px solid ${alpha('select', 0.85)}`, outlineOffset: 3 };
   }
   return { outline: `1px solid ${solidOf(input.glow, 0.45)}`, outlineOffset: 0 };
 }
@@ -255,7 +203,7 @@ export function farStatusStyle(input: StatusOutlineInput): CSSProperties {
   const base = statusOutline(input);
   const hasSignal = input.changed || input.live || input.planHighlighted;
   if (!hasSignal) return base;
-  const color = input.planHighlighted && !input.changed && !input.live ? 'rgba(59, 130, 246, 1)' : solidOf(input.glow);
+  const color = input.planHighlighted && !input.changed && !input.live ? alpha('planned', 1) : solidOf(input.glow);
   return {
     ...base,
     outlineWidth: input.live ? 12 : 8,

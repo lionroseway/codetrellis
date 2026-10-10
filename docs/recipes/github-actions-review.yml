@@ -1,0 +1,82 @@
+# CodeTrellis agent checks in a pipeline (Phase 33 C5). Copy into .github/workflows/.
+#
+# Your own agent reviews each pull request, headless, on your model and key:
+# no shell, file access or web, every finding citing the diff and checked by
+# code, a second pass trying to refute each one. The findings show on the
+# changed lines (SARIF) and in the job summary. Advisory: the job never fails
+# the pull request unless you add --fail-on.
+#
+# The cost dial is a repository variable, CODETRELLIS_REVIEW: auto (each pull
+# request when opened), on-request (only when the `codetrellis-review` label is
+# added; the default here), off.
+#
+# Never pull_request_target: a fork's pull request gets no secrets, and the
+# review says so and exits 0.
+name: codetrellis-review
+on:
+  pull_request:
+    types: [opened, ready_for_review, labeled]
+jobs:
+  review:
+    if: >-
+      vars.CODETRELLIS_REVIEW != 'off' &&
+      ((github.event.action == 'labeled' && github.event.label.name == 'codetrellis-review') ||
+       (github.event.action != 'labeled' && vars.CODETRELLIS_REVIEW == 'auto'))
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+      security-events: write
+      # upload-sarif reads the run; a private repository refuses it without
+      # this, and the findings reach the summary but not the changed lines.
+      actions: read
+      # id-token: write  # only for the OIDC sign-in below
+      # pull-requests: write  # only with --post
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - name: Install CodeTrellis and the agent
+        run: |
+          git clone --depth 1 https://github.com/lionroseway/codetrellis "$RUNNER_TEMP/codetrellis"
+          (cd "$RUNNER_TEMP/codetrellis" && npm ci --ignore-scripts && npx patch-package && npm link)
+          npm install -g @anthropic-ai/claude-code   # or: npm install -g @openai/codex
+
+      # Signing in through your cloud instead of a key: the provider's own
+      # action exchanges GitHub's OIDC token for short-lived credentials, and
+      # the review passes them to the agent and nothing else. One of:
+      #
+      # - uses: aws-actions/configure-aws-credentials@v4
+      #   with: { role-to-assume: arn:aws:iam::123456789012:role/review, aws-region: us-east-1 }
+      #   # then CODETRELLIS_AUTH: oidc:bedrock
+      # - uses: google-github-actions/auth@v2
+      #   with: { workload_identity_provider: projects/…/providers/github, service_account: review@….iam.gserviceaccount.com }
+      #   # then CODETRELLIS_AUTH: oidc:vertex, with ANTHROPIC_VERTEX_PROJECT_ID and CLOUD_ML_REGION set
+      # - uses: azure/login@v2
+      #   with: { client-id: …, tenant-id: …, subscription-id: … }
+      #   # then CODETRELLIS_AUTH: oidc:foundry, with ANTHROPIC_FOUNDRY_RESOURCE set
+
+      - name: Review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CODETRELLIS_REVIEW: auto # the dial is decided by the job's `if` above
+          CODETRELLIS_AUTH: env:ANTHROPIC_API_KEY
+          # More: --agent codex --model gpt-5, --skills .codetrellis/review-skills,
+          # --suite payments, --post (a comment; needs pull-requests: write and
+          # GITHUB_TOKEN in env), --fail-on block.
+          CODETRELLIS_REVIEW_ARGS: --verify
+        run: |
+          sh "$RUNNER_TEMP/codetrellis/docs/recipes/review.sh" 2>&1 | tee "$RUNNER_TEMP/review.log" || true
+          # A run that reviewed nothing says so in the summary, not only the log.
+          if [ -f codetrellis-review.md ]; then cat codetrellis-review.md >> "$GITHUB_STEP_SUMMARY"
+          else { echo "**CodeTrellis review: nothing was reviewed.**"; echo; tail -n 5 "$RUNNER_TEMP/review.log"; } >> "$GITHUB_STEP_SUMMARY"; fi
+      - name: Upload the findings
+        if: always() && hashFiles('codetrellis-review.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: codetrellis-review.sarif
+          category: codetrellis-review

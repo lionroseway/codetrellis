@@ -18,8 +18,8 @@ import { listWorktreesAsync, type Worktree } from './worktree-service';
 import { getActiveSessions } from './session-service';
 import { getIntent } from './intent-service';
 import { getChanges, isWatchedFolder, syncWorkstreamWatchers, watchRefs } from './workstream-watch-service';
-import { withSymbolChanges, type SymbolParser } from './workstream-symbols';
-import { branchWorkstreamsOf, showAtAsync } from './branch-workstreams';
+import { uncachedSymbolFiles, withSymbolChanges, type SymbolParser } from './workstream-symbols';
+import { branchWorkstreamsOf, notifyBranchesWarmed, showAtAsync } from './branch-workstreams';
 import { getEffectiveSensorConfig } from './project-config-service';
 import { listTrustedRoots } from './trusted-roots';
 import { gitAsync } from './git-env';
@@ -153,8 +153,35 @@ export function getSymbolParser(): SymbolParser | null {
  *
  * Git runs without blocking the server (`gitAsync`): a listing used to hold
  * the backend's only thread for every call it made, and requests waited.
+ *
+ * Callers asking at the same time share one listing (Phase 33 follow-up): the
+ * window asks six times as it opens (workstreams, source control,
+ * comparands), and on a checkout with many worktrees each ran the whole pass
+ * at once, every git call six times over. A `fresh` caller still gets a pass
+ * of its own.
  */
 export async function listWorkstreams(projectRoot: string, opts: { includeIdle?: boolean; fresh?: boolean } = {}): Promise<Workstream[]> {
+  let all: Workstream[];
+  if (opts.fresh) {
+    all = await listAll(projectRoot, true);
+  } else {
+    let p = listing.get(projectRoot);
+    if (!p) {
+      p = listAll(projectRoot, false).finally(() => listing.delete(projectRoot));
+      listing.set(projectRoot, p);
+    }
+    all = await p;
+  }
+  return opts.includeIdle ? [...all] : all.filter((w) => !w.idle);
+}
+
+/** How many trees' changes are measured at once: git runs off the server's thread. */
+const CHANGES_CONCURRENCY = 6;
+
+/** Listings under way, by project, for callers that ask while one runs. */
+const listing = new Map<string, Promise<Workstream[]>>();
+
+async function listAll(projectRoot: string, fresh: boolean): Promise<Workstream[]> {
   let claudeSessions: readonly ClaudeLogSession[] = [];
   try {
     claudeSessions = claudeSource();
@@ -174,13 +201,34 @@ export async function listWorkstreams(projectRoot: string, opts: { includeIdle?:
   const clones = listed.length ? await cloneTrees(projectRoot, worktrees) : [];
   const cloneRoots = new Set(clones.map((c) => c.path));
   const trees = [...worktrees, ...clones];
-  // Each tree's changes first, one tree after another, then the pure derivation.
+  // Each tree's changes first, a few trees at a time (Phase 33 follow-up: one
+  // after another, 50 worktrees took 5 s before anything answered), then the
+  // pure derivation. The opened project's own tree first, so it is the one
+  // whose symbols fit the budget.
   const changesOf = new Map<string, WorkstreamChanges>();
-  for (const w of trees) {
-    if (w.bare || w.prunable || changesOf.has(w.path)) continue;
-    const changes = await getChanges(w.path, mainRef, { fresh: opts.fresh });
-    changesOf.set(w.path, symbolParser ? await withSymbolChanges(w.path, changes, symbolParser) : changes);
-  }
+  const folders = [...new Set(trees.filter((w) => !w.bare && !w.prunable).map((w) => w.path))];
+  const todo = [...folders.filter((f) => f === projectRoot), ...folders.filter((f) => f !== projectRoot)];
+  // Symbols inside a budget, as for branches (Phase 33 0.1, and this follow-up
+  // for worktrees): 50 worktrees with 8,000 changed files between them were
+  // all parsed before the first listing answered, which took minutes. A tree
+  // past the budget is listed with its files and parsed in the background.
+  let symbolBudget = INLINE_SYMBOL_FILES;
+  const later: SymbolJob[] = [];
+  const measure = async () => {
+    for (let folder = todo.shift(); folder !== undefined; folder = todo.shift()) {
+      const changes = await getChanges(folder, mainRef, { fresh });
+      if (!symbolParser) { changesOf.set(folder, changes); continue; }
+      const pending = uncachedSymbolFiles(folder, changes);
+      if (pending <= symbolBudget) {
+        symbolBudget -= pending;
+        changesOf.set(folder, await withSymbolChanges(folder, changes, symbolParser));
+      } else {
+        changesOf.set(folder, changes);
+        later.push({ folder, changes });
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: CHANGES_CONCURRENCY }, measure));
   const derived = deriveWorkstreams({
     worktrees: trees,
     // Sessions read after the awaits above, so an agent that connected meanwhile is placed.
@@ -190,9 +238,9 @@ export async function listWorkstreams(projectRoot: string, opts: { includeIdle?:
   });
   const all = derived.map((w) => (cloneRoots.has(w.root) ? { ...w, shape: 'clone' as const } : w));
   // This listing is the discovery pass: watch what is active, and stop
-  // watching what went idle.
+  // watching what went idle, or what is past the most worth watching.
   syncWorkstreamWatchers(
-    all.filter((w) => !w.idle).map((w) => ({ folder: w.root, mainRef })),
+    treesToWatch(all, projectRoot).map((folder) => ({ folder, mainRef })),
     all.map((w) => w.root),
   ).catch(() => {});
 
@@ -200,8 +248,33 @@ export async function listWorkstreams(projectRoot: string, opts: { includeIdle?:
   // agent on this machine. Read from local refs only, never fetched.
   const branches = main && listed.length ? await branchWorkstreams(main.path, main.branch, mainRef, worktrees, projectRoot) : [];
   if (main && listed.length) void watchRefs(main.path).catch(() => {});
-  const withBranches = withIntents([...all, ...branches]);
-  return opts.includeIdle ? withBranches : withBranches.filter((w) => !w.idle);
+  // The rest of the worktrees' symbols once this answer is ready, not while it is worked out.
+  warmSymbols(`${main?.path ?? projectRoot}\0trees`, main?.path ?? projectRoot, later);
+  return withIntents([...all, ...branches]);
+}
+
+/**
+ * At most this many working trees are watched at once. A watcher holds a
+ * handle per folder of its tree, and a checkout with fifty worktrees, each
+ * active against an old main, kept fifty of them busy: the backend served
+ * slowly for as long as it ran. The rest are read again when asked, from git,
+ * at most every 20 seconds (`UNWATCHED_TTL_MS`).
+ */
+export const MAX_WATCHED_TREES = 16;
+
+/**
+ * The active trees worth watching, most first: those with agents in them
+ * (more agents first), then the main checkout and the project opened, then
+ * the rest as listed. Idle trees are never watched. Pure.
+ */
+export function treesToWatch(all: ReadonlyArray<Pick<Workstream, 'root' | 'idle' | 'main' | 'agents'>>, projectRoot: string, max = Number(process.env.CODETRELLIS_MAX_WATCHED_TREES) || MAX_WATCHED_TREES): string[] {
+  const rank = (w: Pick<Workstream, 'root' | 'main' | 'agents'>) => (w.agents.length > 0 ? 2 + w.agents.length : w.main || w.root === projectRoot ? 1 : 0);
+  return all
+    .map((w, i) => ({ w, i }))
+    .filter(({ w }) => !w.idle)
+    .sort((a, b) => rank(b.w) - rank(a.w) || a.i - b.i)
+    .slice(0, max)
+    .map(({ w }) => w.root);
 }
 
 /** Where a line of work is checked out, and on which branch: all a section check needs. */
@@ -308,7 +381,27 @@ async function branchWorkstreams(repo: string, mainBranch: string | null, mainRe
   }
   const checkedOut = new Set(worktrees.map((w) => w.branch).filter((b): b is string => !!b));
   const out: Workstream[] = [];
+  // Symbols are parsed inside a budget too (Phase 33 0.1). The branches'
+  // own listing has one (HD4b), but every branch's changed files were then
+  // parsed before answering: twenty branches of forty files each made the
+  // window's first read of awareness take 7 s, and over 10 s under load.
+  // A branch whose files would overrun the budget is listed with what is
+  // parsed so far, and the rest are parsed in the background; the window is
+  // told when they are ready, as for the branches themselves.
+  let symbolBudget = INLINE_SYMBOL_FILES;
+  const later: SymbolJob[] = [];
   for (const b of await branchWorkstreamsOf(repo, { mainBranch, mainRef, checkedOut, windowDays })) {
+    const atCommit = { head: b.head, read: (rel: string) => showAtAsync(repo, b.head, rel) };
+    let changes = b.changes;
+    if (symbolParser) {
+      const pending = uncachedSymbolFiles(repo, b.changes, atCommit);
+      if (pending <= symbolBudget) {
+        symbolBudget -= pending;
+        changes = await withSymbolChanges(repo, b.changes, symbolParser, atCommit);
+      } else {
+        later.push({ folder: repo, changes: b.changes, atCommit });
+      }
+    }
     out.push({
       root: `branch:${b.short}`,
       ref: b.ref,
@@ -317,13 +410,42 @@ async function branchWorkstreams(repo: string, mainBranch: string | null, mainRe
       main: false,
       shape: 'branch' as const,
       agents: [],
-      changes: symbolParser
-        ? await withSymbolChanges(repo, b.changes, symbolParser, { head: b.head, read: (rel) => showAtAsync(repo, b.head, rel) })
-        : b.changes,
+      changes,
       idle: b.changes.files.length === 0,
     });
   }
+  warmSymbols(repo, repo, later);
   return out;
+}
+
+/** Changed files one listing parses, for its worktrees and again for its branches, before it answers. */
+export const INLINE_SYMBOL_FILES = 60;
+const symbolWarming = new Map<string, Promise<void>>();
+
+/** Settles when no branch's or worktree's symbols are being parsed for `repo` (tests). */
+export function branchSymbolsWarmed(repo: string): Promise<void> {
+  return Promise.all([symbolWarming.get(repo), symbolWarming.get(`${repo}\0trees`)]).then(() => undefined);
+}
+
+/** A tree's or a branch's changes whose symbols are parsed later. */
+type SymbolJob = { folder: string; changes: WorkstreamChanges; atCommit?: { head: string; read: (rel: string) => Promise<string | null> } };
+
+/** Parse `jobs` in the background, then tell the window (keyed by `key`: branches and worktrees warm apart). */
+function warmSymbols(key: string, repo: string, jobs: SymbolJob[]): void {
+  if (!symbolParser || jobs.length === 0 || symbolWarming.has(key)) return;
+  const parse = symbolParser;
+  const run = (async () => {
+    // After this listing has answered: a new file parses with no git to wait
+    // on, so the first one would otherwise run before the answer returns.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    // One after another: parsing shares the backend's thread, and
+    // withSymbolChanges already yields after each file.
+    for (const j of jobs) await withSymbolChanges(j.folder, j.changes, parse, j.atCommit).catch(() => undefined);
+  })().finally(() => {
+    symbolWarming.delete(key);
+    notifyBranchesWarmed(repo);
+  });
+  symbolWarming.set(key, run);
 }
 
 const canonicalPath = (p: string): string => {

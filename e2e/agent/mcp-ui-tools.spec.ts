@@ -130,6 +130,25 @@ test.describe('UI tools against the window', () => {
     expect((await ready()).settingsSection).toBeNull();
   });
 
+  // Phase 33 G6 — the plan an agent selects in shows, though it was the
+  // active plan minimised to its chip.
+  test('select_item shows the plan the person minimised', async ({ page, request }) => {
+    const seeded = await seedPlan(request, { title: TITLE, actions: [{ title: 'Wire the loader' }, { title: 'Check the totals' }] });
+    await gotoWithProject(page);
+    await client.callTool('open_plan', { plan_uid: seeded.uid });
+    const tree = page.getByTestId('plan-item-tree');
+    await expect(tree.getByText('Wire the loader')).toBeVisible({ timeout: 15_000 });
+
+    await page.keyboard.press('Escape');
+    const chip = page.locator('button[title*="Restore plan workspace"]');
+    await expect(chip).toBeVisible({ timeout: 5000 });
+    await expect(tree).toBeHidden();
+
+    await client.callTool('select_item', { item_uid: seeded.actionUids[1] });
+    await expect(tree.locator('[aria-current="true"]')).toHaveText(/Check the totals/, { timeout: 10_000 });
+    await expect(chip).toBeHidden();
+  });
+
   test('a wrong uid changes nothing on screen, and the agent is told', async ({ page, request }) => {
     const seeded = await seedPlan(request, { title: TITLE, actions: [{ title: 'Stay on this' }] });
     await gotoWithProject(page);

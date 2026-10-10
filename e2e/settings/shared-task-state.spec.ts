@@ -123,6 +123,33 @@ test.describe('Shared task state', () => {
     await box.screenshot({ path: path.join(OUT, 'shared-task-state-runs.png') });
   });
 
+  test('check runs travel too: CI\'s run beside this device\'s, saying where each ran (Phase 33 C7)', async ({ page }) => {
+    await serve(page);
+    let runs: unknown[] = [];
+    await page.route('**/api/check-runs?*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ runs }) }));
+    await gotoWithProject(page);
+    const { section } = await openSection(page);
+    const box = section.getByTestId('shared-check-runs');
+    await expect(box.getByTestId('shared-check-runs-empty')).toHaveText('No check has run in this project yet.');
+
+    runs = [
+      { id: 'b7e4-2', mine: false, who: 'ci for Build bot', ranIn: 'GitHub Actions', commit: 'b7e41c09d2f5a8836c1e0f4a9b2d7c5e8a1f3d60', at: Date.UTC(2026, 9, 6, 13, 40), outcome: { ok: false, blocks: 1, warns: 0 }, verified: false, words: 'ci for Build bot in GitHub Actions at b7e41c0, against main: ✗ 1 blocks (unverified: it is not signed)' },
+      { id: 'local-1', mine: true, who: 'claude-code', ranIn: "claude-code's session", commit: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678', at: Date.UTC(2026, 9, 6, 13, 0), outcome: { ok: true, blocks: 0, warns: 0 }, verified: true, words: '' },
+    ];
+    // A pull brought a teammate's run: the list reads again.
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('check-runs-changed')));
+    const rows = box.getByTestId('shared-check-run');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0)).toContainText('ci for Build bot in GitHub Actions · b7e41c0');
+    await expect(rows.nth(0)).toContainText('✗ 1 blocks · unverified');
+    await expect(rows.nth(0)).toHaveAttribute('title', /against main/);
+    await expect(rows.nth(1)).toContainText("claude-code in claude-code's session · a1b2c3d");
+    await expect(rows.nth(1)).toContainText('✓ conforms');
+    await box.scrollIntoViewIfNeeded();
+    fs.mkdirSync(OUT, { recursive: true });
+    await box.screenshot({ path: path.join(OUT, 'shared-task-state-check-runs.png') });
+  });
+
   test('Settings says what stays on this device and why a teammate\'s record is unverified; shared, where records go', async ({ page }) => {
     const sent = await serve(page);
     await gotoWithProject(page);

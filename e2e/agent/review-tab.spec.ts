@@ -127,6 +127,85 @@ test.describe('Review tab', () => {
     await shot(page, 'review-tab-line');
   });
 
+  test('since your last look: what moved, and marking the line reviewed (V3)', async ({ page }) => {
+    await serve(page, QUEUE);
+    let marked = false;
+    const posts: unknown[] = [];
+    await page.route('**/api/review/architecture?*', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify(marked
+        ? { words: [], since: { words: 'Nothing changed since you looked at a1b2c3d.', changed: [], addressed: [], added: [] } }
+        : { words: [], since: {
+            words: 'Since you looked at 9f8e7d6: 2 files changed, 1 finding addressed, 1 new.',
+            changed: ['packages/web/src/Extra.ts', 'packages/shared/src/validators.ts'],
+            addressed: ['✗ packages/web/src/Extra.ts now imports packages/shared/src/validators.ts, which it forbids (web-through-shared-index)'],
+            added: ['Adds an HTTP call to POST /api/refunds (packages/web/src/Extra.ts:9)'],
+          } }),
+    }));
+    await page.route('**/api/review/seen?*', (route) => {
+      posts.push(route.request().postDataJSON());
+      marked = true;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ target: 'billing-v2', commit: 'a1b2c3d4e5f6', reviewerType: 'human', findings: [] }) });
+    });
+    await gotoWithProject(page);
+    await tabButton(page).click();
+    await page.getByTestId('review-line').first().getByRole('button').first().click();
+
+    const since = page.getByTestId('review-since');
+    await expect(since.getByTestId('review-since-words')).toHaveText('Since you looked at 9f8e7d6: 2 files changed, 1 finding addressed, 1 new.');
+    await expect(since.getByTestId('review-since-addressed')).toHaveText(/^✗ packages\/web\/src\/Extra\.ts now imports/);
+    await expect(since.getByTestId('review-since-added')).toHaveText('New: Adds an HTTP call to POST /api/refunds (packages/web/src/Extra.ts:9)');
+    await expandPanel(page);
+    await shot(page, 'review-tab-since');
+
+    await since.getByTestId('review-mark-reviewed').click();
+    await expect(since.getByTestId('review-since-marked')).toHaveText('Marked reviewed at a1b2c3d.');
+    await expect(since.getByTestId('review-since-words')).toHaveText('Nothing changed since you looked at a1b2c3d.');
+    expect(posts).toEqual([{ base: 'main', head: 'billing-v2' }]);
+  });
+
+  test('did it do what the task said: shown for a linked branch, absent otherwise (V6)', async ({ page }) => {
+    await serve(page, QUEUE);
+    await page.route('**/api/review/architecture?*', (route) => {
+      const head = new URL(route.request().url()).searchParams.get('head');
+      return route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify(head === 'billing-v2'
+          ? { words: [], task: {
+              branch: 'billing-v2', unplanned: ['services/api/requirements.txt'],
+              words: [
+                '✗ Strict validation: touched 1 of the 2 files it planned; not packages/web/src/Cart.ts; 1 of 2 criteria met (1 sent back).',
+                'Changed 1 file the task did not plan: services/api/requirements.txt.',
+              ],
+              items: [{ uid: 'i1', title: 'Strict validation', planTitle: 'Q4 checkout', words: '', criteria: [
+                { text: 'Bad emails are refused', state: 'met' },
+                { text: 'The cart shows the total', state: 'sent_back' },
+              ] }],
+            } }
+          : { words: [] }),
+      });
+    });
+    await gotoWithProject(page);
+    await tabButton(page).click();
+    await page.getByTestId('review-line').first().getByRole('button').first().click();
+
+    const task = page.getByTestId('review-task');
+    await expect(task.getByTestId('review-task-line')).toHaveText([
+      '✗ Strict validation: touched 1 of the 2 files it planned; not packages/web/src/Cart.ts; 1 of 2 criteria met (1 sent back).',
+      'Changed 1 file the task did not plan: services/api/requirements.txt.',
+    ]);
+    await expect(task.getByTestId('review-task-criterion')).toHaveText(['✓Bad emails are refused (met)', '✗The cart shows the total (sent back)']);
+    await expandPanel(page);
+    await shot(page, 'review-tab-task');
+
+    // A line whose branch no task names: no section, not an empty one.
+    await page.getByTestId('review-line').first().getByRole('button').first().click();
+    await page.getByTestId('review-line').nth(2).getByRole('button').first().click();
+    await expect(page.getByTestId('review-line-detail')).toBeVisible();
+    await expect(page.getByTestId('review-since')).toBeVisible();
+    await expect(page.getByTestId('review-task')).toHaveCount(0);
+  });
+
   test('nothing in review says how a line gets there', async ({ page }) => {
     await serve(page, { base: 'main', lines: [] });
     await gotoWithProject(page);

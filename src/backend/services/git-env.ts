@@ -21,6 +21,7 @@
  */
 
 import { execFile, execFileSync } from 'node:child_process';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 export function quietGitLocks(env: NodeJS.ProcessEnv = process.env): void {
   if (env.GIT_OPTIONAL_LOCKS === undefined) env.GIT_OPTIONAL_LOCKS = '0';
@@ -71,21 +72,47 @@ export async function refreshIndexOccasionallyAsync(folder: string, now = Date.n
  */
 export const GIT_CONCURRENCY = 4;
 let running = 0;
+/** Calls someone is waiting on: a request, a listing, a tool. */
 const queued: Array<() => void> = [];
+/** Calls nobody is waiting on (`inBackground`): served after `queued`, and never in the last slot. */
+const behind: Array<() => void> = [];
+
+/**
+ * Work whose git calls give way to anyone waiting for an answer (Phase 33
+ * follow-up). The branch warmer and the watchers' rechecks queued ahead of
+ * the window's listings: on a checkout with 50 worktrees a listing's first
+ * git call waited 10 s behind them. Their calls now wait while a caller's
+ * do, and leave one slot free for the next caller.
+ */
+const background = new AsyncLocalStorage<true>();
+export function inBackground<T>(fn: () => Promise<T>): Promise<T> {
+  return background.run(true, fn);
+}
+
+function next(): void {
+  if (running >= GIT_CONCURRENCY) return;
+  const now = queued.shift() ?? (running < GIT_CONCURRENCY - 1 ? behind.shift() : undefined);
+  if (now) { running += 1; now(); }
+}
 
 function release(): void {
   running -= 1;
-  queued.shift()?.();
+  next();
 }
 
 async function slot(): Promise<void> {
-  if (running < GIT_CONCURRENCY) { running += 1; return; }
-  await new Promise<void>((resolve) => queued.push(() => { running += 1; resolve(); }));
+  if (background.getStore()) {
+    if (!queued.length && !behind.length && running < GIT_CONCURRENCY - 1) { running += 1; return; }
+    await new Promise<void>((resolve) => behind.push(resolve));
+    return;
+  }
+  if (!queued.length && running < GIT_CONCURRENCY) { running += 1; return; }
+  await new Promise<void>((resolve) => queued.push(resolve));
 }
 
-/** How many git processes `gitAsync` has running and waiting (tests). */
-export function gitAsyncLoad(): { running: number; queued: number } {
-  return { running, queued: queued.length };
+/** How many git processes `gitAsync` has running and waiting, and how many of those waiting are background (tests). */
+export function gitAsyncLoad(): { running: number; queued: number; behind: number } {
+  return { running, queued: queued.length + behind.length, behind: behind.length };
 }
 
 /**

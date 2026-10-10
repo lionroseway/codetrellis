@@ -216,6 +216,10 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   get_play_forward: 'read',
   list_recurring: 'read',
   list_rules: 'read',
+  // Phase 33 R3: proposes only; a person decides in the app. No tool writes a rule.
+  propose_rule: 'write',
+  // Phase 33 V1: what a change does to the architecture, between two commits. Read only.
+  review_change: 'read',
   get_spec_links: 'read',
   list_spec_proposals: 'read',
   reply_to_spec_proposal: 'write',
@@ -249,6 +253,10 @@ export const TOOL_CAPABILITIES: Readonly<Record<string, PeerCapability>> = Objec
   // Asks whether a file is held by a breakpoint; records the hit so the person can answer it (B4.2).
   check_breakpoint: 'read',
   check_changes: 'read',
+  list_check_runs: 'read',
+  // Phase 33 C4b: a review bundle, and a review reported and kept as a check run, as check_changes keeps one.
+  get_review_bundle: 'read',
+  report_review: 'read',
   // Another workstream's changed lines, from git (B3.1): the repository, not an agent's words.
   get_line_changes: 'read',
 

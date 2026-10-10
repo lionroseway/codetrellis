@@ -1,0 +1,22 @@
+#!/bin/sh
+# codetrellis: the CLI the CodeTrellis app carries, run on the app's own
+# binary in Node mode, so no Node install is needed. The app links
+# /usr/local/bin/codetrellis (macOS) or ~/.local/bin/codetrellis (Linux)
+# here; see src/backend/services/cli-install.ts.
+self="$0"
+while [ -L "$self" ]; do
+  link="$(readlink "$self")"
+  case "$link" in
+    /*) self="$link" ;;
+    *) self="$(dirname "$self")/$link" ;;
+  esac
+done
+bin="$(cd "$(dirname "$self")" && pwd -P)"
+res="$(dirname "$(dirname "$bin")")"
+for app in "$res/../MacOS/CodeTrellis" "$res/../codetrellis"; do
+  if [ -x "$app" ]; then
+    ELECTRON_RUN_AS_NODE=1 exec "$app" "$bin/app.cjs" "$@"
+  fi
+done
+echo "codetrellis: the CodeTrellis app is not beside $res. Reinstall the app, or npm install -g codetrellis." >&2
+exit 1

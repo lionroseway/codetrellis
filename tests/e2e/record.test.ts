@@ -48,7 +48,7 @@ test.describe.serial('The record', () => {
     expect((await agent.callTool('list_plans', {})).isError).toBeFalsy();
     const q = `project=${encodeURIComponent(root)}`;
     expect((await h.client.raw('PUT', `/api/rules/web-not-db?${q}`, { from: 'packages/web/', mayNotImport: 'services/', because: 'the web app calls the API' })).status).toBe(200);
-    expect((await h.client.raw('DELETE', `/api/rules/web-not-db?${q}`)).status).toBe(200);
+    expect((await h.client.raw('DELETE', `/api/rules/web-not-db?${q}&confirm=1`)).status).toBe(200);
 
     await expect.poll(async () => (await events()).filter((e) => e.type === 'rule_changed').length, { timeout: 10_000 }).toBe(2);
     const rules = (await events()).filter((e) => e.type === 'rule_changed');

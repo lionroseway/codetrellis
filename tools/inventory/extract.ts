@@ -109,7 +109,7 @@ const REST_DOMAINS: Record<string, DomainKey> = {
   project: 'a', 'project-config': 'a', 'recent-projects': 'a', 'auto-detect': 'a', fs: 'a',
   identity: 'a', 'onboarding-state': 'a', stats: 'a', health: 'a', 'build-info': 'a', git: 'a',
   'architecture-summary': 'b', dependencies: 'b', symbols: 'b', file: 'b', trellis: 'b', replay: 'b',
-  playback: 'b', 'cross-system': 'b', systems: 'b', coverage: 'b', diff: 'b', rules: 'b',
+  playback: 'b', 'cross-system': 'b', systems: 'b', coverage: 'b', diff: 'b', rules: 'b', 'check-runs': 'b', pipeline: 'b',
   plans: 'c', items: 'c', tasks: 'c', 'plan-docs': 'c', 'plan-history': 'c', 'plan-phases': 'c',
   'plan-templates': 'c', comments: 'c', attachments: 'c', refs: 'c', 'team-activity': 'c',
   contributions: 'c', 'contributor-branch': 'c', pantry: 'c', skills: 'c', stack: 'c', 'play-forward': 'c', recurring: 'c', 'spec-proposals': 'c',
@@ -117,7 +117,7 @@ const REST_DOMAINS: Record<string, DomainKey> = {
   artefacts: 'e',
   channels: 'f', presence: 'f', 'screenshot-response': 'f',
   agent: 'g', 'agent-events': 'g', record: 'g', evidence: 'g', 'source-control': 'g', breakpoints: 'g', 'breakpoint-hits': 'g', mcp: 'g', sessions: 'g', sensors: 'g', workstreams: 'g', awareness: 'g',
-  baseline: 'h', comparands: 'h', compare: 'h', conflicts: 'h', freeze: 'h', 'review-queue': 'h',
+  baseline: 'h', comparands: 'h', compare: 'h', conflicts: 'h', freeze: 'h', 'review-queue': 'h', review: 'h',
   terminals: 'i', audio: 'i',
   pairing: 'j', peers: 'j', sync: 'j',
   settings: 'k', updates: 'k', logs: 'k', power: 'k', 'review-host': 'k', 'shared-task-state': 'k', 'plans-folder': 'k',
@@ -183,11 +183,11 @@ export function domainForRpc(method: string): DomainKey | null {
 }
 
 const COMPONENT_DIR_DOMAINS: Record<string, DomainKey> = {
-  graph: 'b', inspector: 'b',
+  graph: 'b', inspector: 'b', rules: 'b',
   plan: 'c',
   artefact: 'e', brief: 'e',
   presence: 'f',
-  layout: 'g', guide: 'g',
+  layout: 'g', guide: 'g', legend: 'g',
   terminal: 'i', audio: 'i',
   pairing: 'j',
   settings: 'k',

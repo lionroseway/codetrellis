@@ -12,44 +12,14 @@
  * the plan changing is not a change to conform.
  */
 
-import { execFileSync } from 'node:child_process';
 import type { Agent } from './agent';
+import { renderMarkdown, renderText, type CheckResult, type CheckedRule, type RuleFinding, type RulebookFinding } from '../shared/lib/check-words';
+import { findingAt } from '../shared/lib/import-line';
 
-const git = (root: string, args: string[]): string | null => {
-  try {
-    return execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-  } catch {
-    return null;
-  }
-};
-const lines = (s: string | null) => (s ?? '').split('\n').map((x) => x.trim()).filter(Boolean);
-
-/** The ref this work branched from, by the order above, or null. */
-export function baseRef(root: string, given: string | undefined, env: NodeJS.ProcessEnv): string | null {
-  const exists = (ref: string) => git(root, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]) !== null;
-  if (given) return exists(given) ? given : null;
-  if (env.GITHUB_BASE_REF && exists(`origin/${env.GITHUB_BASE_REF}`)) return `origin/${env.GITHUB_BASE_REF}`;
-  const head = git(root, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'])?.trim();
-  if (head && exists(head)) return head;
-  for (const ref of ['origin/main', 'origin/master']) if (exists(ref)) return ref;
-  return null;
-}
-
-export interface Changed { base: string | null; since: string | null; files: string[] }
-
-/** Files this work changed: since the base's merge base, and not committed yet. */
-export function changedFiles(root: string, given: string | undefined, env: NodeJS.ProcessEnv): Changed {
-  if (given && baseRef(root, given, env) === null) throw new Error(`${given} is not a commit in this repository (a shallow clone? use fetch-depth: 0)`);
-  const base = baseRef(root, given, env);
-  const since = base ? git(root, ['merge-base', base, 'HEAD'])?.trim() || null : null;
-  const out = new Set<string>([
-    ...(since ? lines(git(root, ['diff', '--name-only', since, 'HEAD'])) : []),
-    ...lines(git(root, ['diff', '--name-only', 'HEAD'])),
-    ...lines(git(root, ['ls-files', '--others', '--exclude-standard'])),
-  ]);
-  const files = [...out].filter((f) => !f.startsWith('.codetrellis/')).sort();
-  return { base, since, files };
-}
+// The work's changed files, since its base: one implementation, the backend's,
+// so the Checks view (G9) and the pipeline check the same files.
+export { baseRef, changedFiles, type Changed } from '../backend/services/work-changes';
+import type { Changed } from '../backend/services/work-changes';
 
 export interface Gate {
   ok: boolean;
@@ -61,29 +31,95 @@ export interface Gate {
   criteria: unknown[];
   docs: unknown[];
   rules: unknown[];
+  /** What the change does to the rulebook (Phase 33 R2). */
+  rulebook: unknown[];
+  /** Said, but not a reason to fail: a rule added or tightened, a reason reworded. */
+  notes: string[];
   /** Set when the rules could not be checked, and why. */
   rulesNote?: string;
+  /** C1: what part of the rulebook was checked, when not all of it. */
+  scope?: string;
+  /** C8: the rules judged by, so a suite can say how many hold. */
+  checked?: CheckedRule[];
+}
+
+/**
+ * Where this check runs, in words, for its run record (Phase 33 C7): the CI
+ * host a job's environment names, else "CI", else "a terminal".
+ */
+export function ranIn(env: NodeJS.ProcessEnv): string {
+  const on = (k: string) => env[k] !== undefined && env[k] !== '' && env[k] !== 'false' && env[k] !== '0';
+  if (on('GITHUB_ACTIONS')) return 'GitHub Actions';
+  if (on('GITLAB_CI')) return 'GitLab CI';
+  if (on('BITBUCKET_BUILD_NUMBER')) return 'Bitbucket Pipelines';
+  if (on('TF_BUILD')) return 'Azure Pipelines';
+  if (on('JENKINS_URL')) return 'Jenkins';
+  if (on('CIRCLECI')) return 'CircleCI';
+  if (on('BUILDKITE')) return 'Buildkite';
+  if (on('CI')) return 'CI';
+  return 'a terminal';
 }
 
 /** `check_changes` over this work's files, as the agent. */
-export async function gate(agent: Agent, root: string, changed: Changed): Promise<Gate | { error: string }> {
-  if (changed.files.length === 0) return { ok: true, says: [], files: 0, base: changed.base, breakpoints: [], tests: [], criteria: [], docs: [], rules: [] };
+/** C1: part of the rulebook to check, as the flags give it (comma-separated). */
+/** `engine` and `strength` select a pipeline stage's rules (B6); `stage` names the run after it. */
+export interface GateScope { suite?: string; rule?: string; path?: string; engine?: string; strength?: string; tag?: string; stage?: string; pipeline?: boolean }
+
+export async function gate(agent: Agent, root: string, changed: Changed, strict = false, scope: GateScope = {}): Promise<Gate | { error: string }> {
+  // Nothing changed, not even the rules: nothing to check. A change to the
+  // rules alone is still checked (Phase 33 R2): it could loosen one.
+  if (changed.files.length === 0 && !changed.rulebook) return { ok: true, says: [], files: 0, base: changed.base, breakpoints: [], tests: [], criteria: [], docs: [], rules: [], rulebook: [], notes: [] };
   // The merge base, so an import that was already there is not this work's (A7.3).
-  const a = await agent.call('check_changes', { paths: changed.files.slice(0, 500), project_path: root, ...(changed.since ? { base: changed.since } : {}) });
+  const { stage, ...selects } = scope;
+  const a = await agent.call('check_changes', {
+    paths: changed.files.slice(0, 500), project_path: root, ...(changed.since ? { base: changed.since } : {}), ...(strict ? { strict: true } : {}), ...selects,
+    // C7: the run is kept saying where it ran; B6: and which stage of the pipeline it was.
+    ran_in: stage ? `${ranIn(process.env)}, stage ${stage}` : ranIn(process.env),
+  });
   if (a.isError) return { error: a.text };
   const j = (a.json ?? {}) as Record<string, unknown>;
   const list = (k: string) => (Array.isArray(j[k]) ? j[k] as unknown[] : []);
   return {
     ok: j.ok === true, says: list('says') as string[], files: changed.files.length, base: changed.base,
     breakpoints: list('breakpoints'), tests: list('tests'), criteria: list('criteria'), docs: list('docs'), rules: list('rules'),
+    rulebook: list('rulebook'), notes: list('notes').filter((n): n is string => typeof n === 'string'),
     ...(typeof j.rules_note === 'string' ? { rulesNote: j.rules_note } : {}),
+    ...(typeof j.scope === 'string' ? { scope: j.scope } : {}),
+    ...(Array.isArray(j.checked) ? { checked: j.checked as CheckedRule[] } : {}),
   };
 }
 
-/** The gate in words: one line saying what was checked, then one per finding. */
-export function gateWords(g: Gate): string {
-  const what = `${g.files} changed file${g.files === 1 ? '' : 's'}${g.base ? ` since ${g.base}` : ''}`;
-  const note = g.rulesNote ? `\n${g.rulesNote}` : '';
-  if (g.ok) return `Conforms: ${what}. No breakpoint holds them, none of their tests fail or are older than the code, no done task fails its checks, no doc that describes them is stale, and they add no import an architecture rule forbids.${note}`;
-  return [`Does not conform (${what}):`, ...g.says.map((s) => `  ${s}`)].join('\n') + note;
+/**
+ * The gate in words (C8, `check-words.ts`): grouped by suite, the summary
+ * first, the fix after →, the exit code last. `read` finds each import's
+ * line and text; `color` is for a terminal that wants it.
+ */
+export function gateWords(g: Gate, opts: { color?: boolean; read?: (rel: string) => string | null } = {}): string {
+  return renderText(withPlaces(g, opts.read), { color: opts.color });
+}
+
+/** The gate as a pull request comment or a job summary (`--format markdown`). */
+export function gateMarkdown(g: Gate, read?: (rel: string) => string | null): string {
+  return renderMarkdown(withPlaces(g, read));
+}
+
+/** Each rule finding with where in its file it is, when the file can be read. */
+export function withPlaces(g: Gate, read?: (rel: string) => string | null): CheckResult {
+  const rules = (g.rules as RuleFinding[]).map((r) => {
+    const text = read ? read(r.path) : null;
+    // B7: where the extractor found it, else where the text names it (a pattern's entry is not in the text).
+    const line = text === null ? null : findingAt(text, r.imports, (r as { line_found?: number }).line_found);
+    return { ...r, line, text: line ? text!.split('\n')[line - 1] : null };
+  });
+  return { ...g, rules, rulebook: g.rulebook as RulebookFinding[] };
+}
+
+/**
+ * Whether to colour: a terminal, and nobody said not to (`NO_COLOR`,
+ * https://no-color.org, or `--no-color`). A pipe or a CI log gets plain text.
+ */
+export function wantsColor(stream: { isTTY?: boolean }, env: NodeJS.ProcessEnv, noColorFlag = false): boolean {
+  if (noColorFlag || (env.NO_COLOR !== undefined && env.NO_COLOR !== '')) return false;
+  if (env.FORCE_COLOR !== undefined && env.FORCE_COLOR !== '' && env.FORCE_COLOR !== '0') return true;
+  return stream.isTTY === true && env.TERM !== 'dumb';
 }

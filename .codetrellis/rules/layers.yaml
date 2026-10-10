@@ -1,0 +1,46 @@
+# This repository's own layers (Phase 33 R10), as CLAUDE.md's directory
+# layout describes them. Owned by the maintainers; change it through the app's
+# Rules view or `propose_rule`, never by hand in a pull request.
+#
+# A few tests import across a layer to prove both sides agree (a frontend
+# formatter against the backend's numbers). They are counted in baseline.yaml,
+# which may only shrink, rather than excepted: an imports rule's `except`
+# names files that may be imported, not files that may import.
+suite: layers
+because: The renderer, the backend and the Electron shell are separate programs that meet only through src/shared and their transports.
+rules:
+  - id: frontend-not-backend
+    from: src/frontend/
+    mayNotImport: src/backend/
+    strength: block
+    because: The renderer reaches the backend through the bridge (HTTP, IPC or WebRTC), never by importing it.
+  - id: frontend-not-electron
+    from: src/frontend/
+    mayNotImport: src/electron/
+    strength: block
+    because: The renderer reaches the shell through the preload's IPC, never by importing it.
+  - id: backend-not-frontend
+    from: src/backend/
+    mayNotImport: src/frontend/
+    strength: block
+    because: The backend runs headless too (codetrellis serve), with no renderer to import.
+  - id: backend-not-electron
+    from: src/backend/
+    mayNotImport: src/electron/
+    strength: block
+    because: The backend runs headless too (codetrellis serve), with no Electron shell.
+  - id: shared-not-backend
+    from: src/shared/
+    mayNotImport: src/backend/
+    strength: block
+    because: Shared code is imported by every side, so it may depend on none of them.
+  - id: shared-not-frontend
+    from: src/shared/
+    mayNotImport: src/frontend/
+    strength: block
+    because: Shared code is imported by every side, so it may depend on none of them.
+  - id: shared-not-electron
+    from: src/shared/
+    mayNotImport: src/electron/
+    strength: block
+    because: Shared code is imported by every side, so it may depend on none of them.

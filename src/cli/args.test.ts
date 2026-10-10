@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { connectorLine, flag, headlessDataDir, parseArgs } from './args';
+import { connectorLine, flag, headlessDataDir, parseArgs, selfCommand } from './args';
 
 test('a command, its flags with and without values, and the rest in order', () => {
   const p = parseArgs(['serve', '--project', '/work/app', '--json', '--port=4100', 'extra', '--', '--not-a-flag']);
@@ -34,10 +34,23 @@ test('a headless data dir is in the user\'s cache, one per project, never the ch
 });
 
 test('the connector line names the CLI\'s own mcp command and carries no secret', () => {
-  const l = connectorLine('/usr/bin/node', '/opt/ct/bin/codetrellis.mjs', '/home/sam/.cache/codetrellis/app-1');
+  const node = selfCommand('/opt/ct/bin', { execPath: '/usr/bin/node' });
+  const l = connectorLine(node, '/home/sam/.cache/codetrellis/app-1');
   assert.deepEqual(l.args, ['/opt/ct/bin/codetrellis.mjs', 'mcp', '--data-dir', '/home/sam/.cache/codetrellis/app-1']);
   assert.equal(l.claude, 'claude mcp add codetrellis -- /usr/bin/node /opt/ct/bin/codetrellis.mjs mcp --data-dir /home/sam/.cache/codetrellis/app-1');
   assert.deepEqual(JSON.parse(l.json), { mcpServers: { codetrellis: { command: '/usr/bin/node', args: l.args } } });
   assert.ok(!/token/i.test(l.claude + l.json));
-  assert.match(connectorLine('/usr/bin/node', '/opt/my ct/bin/codetrellis.mjs', '/d').claude, /'\/opt\/my ct\/bin\/codetrellis\.mjs'/);
+  assert.match(connectorLine(selfCommand('/opt/my ct/bin', { execPath: '/usr/bin/node' }), '/d').claude, /'\/opt\/my ct\/bin\/codetrellis\.mjs'/);
+});
+
+test('inside the desktop app, the CLI runs again on the app\'s binary in Node mode, never as a window', () => {
+  const app = selfCommand('/Applications/CodeTrellis.app/Contents/Resources/cli/bin', { execPath: '/Applications/CodeTrellis.app/Contents/MacOS/CodeTrellis', electron: '44.4.1' });
+  assert.deepEqual(app, {
+    command: '/Applications/CodeTrellis.app/Contents/MacOS/CodeTrellis',
+    args: ['/Applications/CodeTrellis.app/Contents/Resources/cli/bin/app.cjs'],
+    env: { ELECTRON_RUN_AS_NODE: '1' },
+  });
+  const l = connectorLine(app, '/d');
+  assert.deepEqual(JSON.parse(l.json).mcpServers.codetrellis.env, { ELECTRON_RUN_AS_NODE: '1' });
+  assert.match(l.claude, /^claude mcp add codetrellis -e ELECTRON_RUN_AS_NODE=1 -- /);
 });

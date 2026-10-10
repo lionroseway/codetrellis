@@ -1,7 +1,8 @@
 /**
- * What git (and, when it can be asked, GitHub) says about each Phase 32 step
- * (the owner's point, 2026-09-30: a step has a branch, so its state is a
- * fact to read, not a line to keep).
+ * What git (and, when it can be asked, GitHub) says about each step of a
+ * phase (the owner's point, 2026-09-30, for Phase 32: a step has a branch, so
+ * its state is a fact to read, not a line to keep). Phase 33 reads the same
+ * way, with its own integration branch and `Phase 33 <id>: …` subjects.
  *
  * - **done**: a first-parent commit on the integration branch titled
  *   `Phase 32 <id>[, …]: … (#N)` (or, before #153, `feat(phase-32): <id> —
@@ -47,21 +48,23 @@ const git = (cwd: string, args: string[]): string =>
   execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 
 /** The ids a merge subject names, and its PR: `Phase 32 A5 refined, and A5.1: … (#222)` → [A5, A5.1], 222. */
-export function parseMergeSubject(subject: string, known: ReadonlySet<string>): { ids: string[]; pr: number } | null {
+export function parseMergeSubject(subject: string, known: ReadonlySet<string>, phase: number): { ids: string[]; pr: number } | null {
   // `Phase 32 B7.4: …` since #153; `feat(phase-32): A1.7a — …` and `fix(phase-32): A0 — …` before.
-  const m = /^(?:Phase 32 (.+?):|(?:feat|fix)\(phase-32\): (.+?) —) .*\(#(\d+)\)$/.exec(subject);
+  const m = new RegExp(`^(?:Phase ${phase} (.+?):|(?:feat|fix)\\(phase-${phase}\\): (.+?) —) .*\\(#(\\d+)\\)$`).exec(subject);
   if (!m) return null;
-  const ids = [...(m[1] ?? m[2]).matchAll(/(?<![\w.])([A-C]\d+(?:\.\d+[a-z]?)?|0\.\d+[a-z]?(?:-\d)?|HD\d+)(?![\w.])/g)]
+  // An id is a track letter or two and a number, perhaps lettered (`B7.4`, `HD1`, `R5`, `C4b`, `A1.7a`), or a Stage 0 number (`0.4c-1`); only ids in the file count.
+  const ids = [...(m[1] ?? m[2]).matchAll(/(?<![\w.])([A-Z]{1,2}\d+[a-z]?(?:\.\d+[a-z]?)?|0\.\d+[a-z]?(?:-\d)?)(?![\w.])/g)]
     .map((x) => x[1])
     .filter((id) => known.has(id));
   return ids.length ? { ids, pr: Number(m[3]) } : null;
 }
 
 /** The step a branch belongs to: the longest known id whose slug starts the branch name. */
-export function idForBranch(branch: string, known: readonly string[]): string | null {
+export function idForBranch(branch: string, known: readonly string[], phase: number): string | null {
   const name = branch.replace(/^origin\//, '');
-  if (!name.startsWith('feat/phase-32-')) return null;
-  const rest = name.slice('feat/phase-32-'.length);
+  const prefix = `feat/phase-${phase}-`;
+  if (!name.startsWith(prefix)) return null;
+  const rest = name.slice(prefix.length);
   let best: string | null = null;
   for (const id of known) {
     const slug = id.toLowerCase().replace(/\./g, '-');
@@ -93,8 +96,8 @@ async function prsFromGithub(repo: string, base: string): Promise<Pr[] | null> {
 }
 
 /** Read the facts for these ids from the repository at `cwd`. Needs the integration branch's history. */
-export async function readFacts(cwd: string, ids: readonly string[], opts: { base?: string; repo?: string; github?: boolean } = {}): Promise<Facts> {
-  const base = opts.base ?? 'origin/feat/phase-32';
+export async function readFacts(cwd: string, ids: readonly string[], phase: number, opts: { base?: string; repo?: string; github?: boolean } = {}): Promise<Facts> {
+  const base = opts.base ?? `origin/feat/phase-${phase}`;
   const known = new Set(ids);
   const byId = new Map<string, Fact>();
 
@@ -103,7 +106,7 @@ export async function readFacts(cwd: string, ids: readonly string[], opts: { bas
   const log = git(cwd, ['log', base, '--first-parent', '--reverse', '--format=%H%x09%s']).split('\n').filter(Boolean);
   for (const line of log) {
     const [sha, subject] = line.split('\t');
-    const hit = parseMergeSubject(subject, known);
+    const hit = parseMergeSubject(subject, known, phase);
     if (!hit) continue;
     for (const id of hit.ids) {
       const f = byId.get(id) ?? { status: 'done' as ItemStatus, prs: [] };
@@ -116,10 +119,10 @@ export async function readFacts(cwd: string, ids: readonly string[], opts: { bas
   const prs = opts.github === false ? null : await prsFromGithub(opts.repo ?? 'lionroseway/codetrellis', base.replace(/^origin\//, ''));
   const branches = prs
     ? [...new Set(git(cwd, ['for-each-ref', '--format=%(refname:short)', 'refs/heads', 'refs/remotes/origin'])
-      .split('\n').filter((r) => r.includes('feat/phase-32-')).map((r) => r.replace(/^origin\//, '')))]
+      .split('\n').filter((r) => r.includes(`feat/phase-${phase}-`)).map((r) => r.replace(/^origin\//, '')))]
     : [git(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()];
   for (const branch of branches) {
-    const id = idForBranch(branch, ids);
+    const id = idForBranch(branch, ids, phase);
     if (!id || byId.get(id)?.status === 'done') continue;
     const mine = prs?.filter((p) => p.head === branch) ?? [];
     const open = mine.find((p) => p.open);

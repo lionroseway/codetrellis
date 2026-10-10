@@ -143,6 +143,75 @@ export function belongsToRepo(wt: Pick<Worktree, 'path' | 'isMain'>, commonDir: 
   }
 }
 
+/**
+ * Where a worktree lives, said the way a person would look for it.
+ *
+ * Git keeps every worktree it made in one list, wherever its folder is:
+ * inside the checkout (Claude Code's `.claude/worktrees/<name>`), beside it
+ * (`../app-feature`), in a tool's own folder under the home directory, or
+ * anywhere else. The list finds them all; this says which is which, so the
+ * branch popover can show it rather than a bare branch name.
+ */
+export type WorktreeWhere = 'main' | 'inside' | 'beside' | 'home' | 'elsewhere';
+
+const WHERE_ORDER: Record<WorktreeWhere, number> = { main: 0, inside: 1, beside: 2, home: 3, elsewhere: 4 };
+
+function under(child: string, parent: string): string | null {
+  const rel = path.relative(parent, child);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
+  return rel.split(path.sep).join('/');
+}
+
+/** Pure: paths are compared as given (the caller canonicalises). */
+export function worktreeWhere(wtPath: string, isMain: boolean, mainRoot: string, home: string): { where: WorktreeWhere; label: string } {
+  const homeLabel = (p: string) => {
+    const rel = under(p, home);
+    return rel ? `~/${rel}` : p.split(path.sep).join('/');
+  };
+  if (isMain) return { where: 'main', label: homeLabel(wtPath) };
+  const inside = under(wtPath, mainRoot);
+  if (inside) return { where: 'inside', label: inside };
+  const beside = under(wtPath, path.dirname(mainRoot));
+  if (beside) return { where: 'beside', label: `../${beside}` };
+  const label = homeLabel(wtPath);
+  return { where: label.startsWith('~/') ? 'home' : 'elsewhere', label };
+}
+
+export interface WorktreeEntry {
+  path: string;
+  branch: string | null;
+  isMain: boolean;
+  /** Its folder is gone; `git worktree prune` would remove the entry. */
+  prunable: boolean;
+  where: WorktreeWhere;
+  /** `.claude/worktrees/x`, `../app-feature`, `~/…`, or the whole path. */
+  label: string;
+}
+
+/**
+ * The other checkouts of the repository, for the branch popover: the main
+ * checkout first, then those inside it, beside it, under home, elsewhere,
+ * and any whose folder is gone last.
+ */
+export function describeWorktrees(list: Worktree[], projectRoot: string, home: string): WorktreeEntry[] {
+  const main = list.find((w) => w.isMain && !w.bare);
+  const mainRoot = safeCanonical(main?.path ?? projectRoot);
+  const homeRoot = safeCanonical(home);
+  return list
+    .filter((w) => !w.isCurrent && !w.bare)
+    .map((w) => ({
+      path: w.path,
+      branch: w.branch,
+      isMain: w.isMain,
+      prunable: w.prunable,
+      ...worktreeWhere(w.prunable ? path.resolve(w.path) : safeCanonical(w.path), w.isMain, mainRoot, homeRoot),
+    }))
+    .sort((a, b) =>
+      Number(a.prunable) - Number(b.prunable)
+      || WHERE_ORDER[a.where] - WHERE_ORDER[b.where]
+      || a.label.localeCompare(b.label));
+}
+
 /** Worktrees of the repository containing `projectRoot`. Empty if not a repo. */
 export function listWorktrees(projectRoot: string): Worktree[] {
   let out: string;

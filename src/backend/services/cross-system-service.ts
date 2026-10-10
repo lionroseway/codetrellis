@@ -9,6 +9,9 @@
  *   - **SQL** (Phase 21) — a table reference in application code paired
  *     with the `.sql` file that CREATEs that table, carrying whether the
  *     reference reads or writes.
+ *   - **A team's own kinds** (Phase 33 follow-up) — a file that sends an
+ *     entry its patterns name (`queue:orders.created`) paired with each file
+ *     that receives it, when the patterns say which side each is on.
  *
  * Together they make a path like
  * `OrdersPage.tsx → billing/main.go → 003_create_orders.sql` traversable
@@ -126,6 +129,9 @@ export function recomputeCrossSystemEdges(): { added: number } {
   // the table as declared by a CREATE in some .sql file.
   const sqlInserts = matchSqlEdges(db, rows);
 
+  // ── A team's own kinds (Phase 33 follow-up) ─────────────────────────
+  const entryInserts = matchEntryEdges(rows);
+
   // Replace the table atomically-ish (sql.js doesn't expose
   // transactions cleanly; the operation is idempotent so a partial
   // write self-heals on the next scan).
@@ -145,12 +151,48 @@ export function recomputeCrossSystemEdges(): { added: number } {
     );
   }
 
-  const total = inserts.length + sqlInserts.length;
+  for (const edge of entryInserts) {
+    db.run(
+      `INSERT INTO cross_system_edges (source_file_id, target_file_id, protocol, label, confidence)
+       VALUES (?, ?, ?, ?, ?)`,
+      [edge.sourceFileId, edge.targetFileId, edge.protocol, edge.label, 1.0],
+    );
+  }
+
+  const total = inserts.length + sqlInserts.length + entryInserts.length;
   console.log(
     `[XS] Cross-system edges: ${inserts.length} HTTP pair${inserts.length === 1 ? '' : 's'}, ` +
-      `${sqlInserts.length} SQL reference${sqlInserts.length === 1 ? '' : 's'} matched`,
+      `${sqlInserts.length} SQL reference${sqlInserts.length === 1 ? '' : 's'}, ` +
+      `${entryInserts.length} pair${entryInserts.length === 1 ? '' : 's'} of the team's own kinds matched`,
   );
   return { added: total };
+}
+
+/**
+ * Pair each file that sends an entry of a team's own kind with each file that
+ * receives it: `queue:orders.created` from its publisher to its consumers.
+ * Only entries a pattern placed on a side (`side: sends` / `receives`, kept
+ * in `method`) pair; the edge's protocol is the entry's kind (`queue`), its
+ * label the entry. A file on both sides of one entry is not an edge to itself.
+ */
+export function matchEntryEdges(rows: ReadonlyArray<Pick<CallsiteRow, 'fileId' | 'kind' | 'method' | 'urlPattern'>>): Array<{ sourceFileId: number; targetFileId: number; protocol: string; label: string }> {
+  const sides = new Map<string, { send: Set<number>; receive: Set<number> }>();
+  for (const r of rows) {
+    if (r.kind !== 'entry' || !r.urlPattern || (r.method !== 'SEND' && r.method !== 'RECEIVE')) continue;
+    let s = sides.get(r.urlPattern);
+    if (!s) sides.set(r.urlPattern, (s = { send: new Set(), receive: new Set() }));
+    (r.method === 'SEND' ? s.send : s.receive).add(r.fileId);
+  }
+  const out: Array<{ sourceFileId: number; targetFileId: number; protocol: string; label: string }> = [];
+  for (const [entry, s] of [...sides].sort(([a], [b]) => a.localeCompare(b))) {
+    const protocol = entry.slice(0, entry.indexOf(':'));
+    for (const from of [...s.send].sort((a, b) => a - b)) {
+      for (const to of [...s.receive].sort((a, b) => a - b)) {
+        if (from !== to) out.push({ sourceFileId: from, targetFileId: to, protocol, label: entry });
+      }
+    }
+  }
+  return out;
 }
 
 interface SqlEdge {

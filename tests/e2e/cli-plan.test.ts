@@ -34,7 +34,7 @@ test.describe.serial('codetrellis plan, commit and status', () => {
   const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', env: { ...process.env, ...ENV } }).trim();
   const ct = (...args: string[]) => {
     const r = spawnSync(process.execPath, [BIN, ...args, '--data-dir', h.fixture.dataDir], {
-      cwd: root, env: { ...(process.env as Record<string, string>), ...ENV, CLAUDECODE: '1', CODETRELLIS_AGENT: '' }, encoding: 'utf8', timeout: 90_000,
+      cwd: root, env: { ...(process.env as Record<string, string>), ...ENV, CLAUDECODE: '1', CODETRELLIS_AGENT: '', FORCE_COLOR: '' }, encoding: 'utf8', timeout: 90_000,
     });
     return { code: r.status, out: r.stdout.trim(), err: r.stderr.trim() };
   };

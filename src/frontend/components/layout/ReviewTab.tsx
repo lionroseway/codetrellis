@@ -4,6 +4,7 @@ import { useProjectStore } from '../../stores/project-store';
 import type { ReviewQueue, ReviewQueueLine, ReviewQueueStatus } from '@shared/types';
 import type { OtherWorkInFlight } from '@shared/lib/other-work';
 import { singleFlight } from '../../lib/single-flight';
+import { gitLetterText } from '../../lib/visual-language';
 
 /**
  * The Review tab (Phase 32 A5.5, awareness spec §9.4): the review queue, in
@@ -29,6 +30,8 @@ interface LineReview {
   otherWork: OtherWorkInFlight | null;
   unplannedEdges: Array<{ source: string; target: string }>;
   comparison: { diff: { addedFiles: string[]; modifiedFiles: string[]; removedFiles: string[] } };
+  /** Phase 33 V1: what the change does to the architecture, one sentence each. */
+  architecture?: { words: string[]; order?: Array<{ path: string; why: string }> };
 }
 
 export function ReviewTab() {
@@ -149,6 +152,15 @@ function LineDetail({ line, base, root }: { line: ReviewQueueLine; base: string 
     return () => { live = false; };
   }, [base, root, line.planUid, line.branch, line.error]);
 
+  // V3 and V6 — the reviewer's last look, and the task the branch is linked to.
+  const [change, setChange] = useState<ChangeReview | null>(null);
+  const loadChange = useCallback(async () => {
+    if (!base) return;
+    const r = await fetch(`/api/review/architecture?project=${encodeURIComponent(root)}&base=${encodeURIComponent(base)}&head=${encodeURIComponent(line.branch)}`);
+    if (r.ok) setChange((await r.json()) as ChangeReview);
+  }, [root, base, line.branch]);
+  useEffect(() => { void loadChange(); }, [loadChange]);
+
   if (error) return <div className="px-8 pb-2 text-red-400">Could not review {line.branch}: {error}</div>;
   if (!review) return <div className="px-8 pb-2 text-foreground-subtle">Reviewing {line.branch}…</div>;
   const d = review.comparison.diff;
@@ -156,6 +168,19 @@ function LineDetail({ line, base, root }: { line: ReviewQueueLine; base: string 
   const other = review.otherWork;
   return (
     <div className="px-8 pb-2 space-y-2" data-testid="review-line-detail">
+      {base && <SinceLastLook root={root} base={base} head={line.branch} since={change?.since ?? null} onMarked={loadChange} />}
+      {/* V1 — what the change does to the architecture, before anything else. */}
+      {review.architecture && (
+        <section data-testid="review-architecture">
+          <h4 className="text-[10px] uppercase tracking-wide text-foreground-subtle mb-0.5">What this change does to the architecture</h4>
+          {review.architecture.words.length === 0
+            ? <div className="text-foreground-subtle">No imports between folders, outside packages, cross-system calls or rules change.</div>
+            : review.architecture.words.map((w) => (
+              <div key={w} className={w.startsWith('✗') ? 'text-red-300' : 'text-foreground-muted'} data-testid="review-architecture-line">{w}</div>
+            ))}
+        </section>
+      )}
+      {change?.task && <TaskSection task={change.task} />}
       <section>
         <h4 className="text-[10px] uppercase tracking-wide text-foreground-subtle mb-0.5">Other work in flight</h4>
         {!other || other.entries.length === 0
@@ -177,15 +202,124 @@ function LineDetail({ line, base, root }: { line: ReviewQueueLine; base: string 
           ))}
         </section>
       )}
+      {/* V2 — the changed files in order of what a mistake there would cost. */}
+      {review.architecture?.order && review.architecture.order.length > 0 ? (
+        <section data-testid="review-order">
+          <h4 className="text-[10px] uppercase tracking-wide text-foreground-subtle mb-0.5">Review in this order · changed against {base}</h4>
+          {review.architecture.order.slice(0, 25).map((r, n) => (
+            <div key={r.path} className="flex gap-2" data-testid="review-order-file">
+              <span className="w-4 shrink-0 text-right text-foreground-subtle">{n + 1}.</span>
+              <span className="min-w-0">
+                <span className="font-mono text-foreground-muted">{r.path}</span>
+                <span className="block text-foreground-subtle">{r.why}</span>
+              </span>
+            </div>
+          ))}
+          {review.architecture.order.length > 25 && <div className="text-foreground-subtle">…and {review.architecture.order.length - 25} more</div>}
+        </section>
+      ) : (
       <section>
         <h4 className="text-[10px] uppercase tracking-wide text-foreground-subtle mb-0.5">Changed against {base}</h4>
         {files.length === 0
           ? <div className="text-foreground-subtle">Nothing changed yet.</div>
           : files.slice(0, 25).map(([mark, f]) => (
-            <div key={f} className="font-mono text-foreground-muted"><span className="text-amber-400 mr-1.5">{mark}</span>{f}</div>
+            <div key={f} className="font-mono text-foreground-muted"><span className={`${gitLetterText(mark)} mr-1.5`}>{mark}</span>{f}</div>
           ))}
         {files.length > 25 && <div className="text-foreground-subtle">…and {files.length - 25} more</div>}
       </section>
+      )}
     </div>
+  );
+}
+
+interface Since { words: string; changed: string[]; addressed: string[]; added: string[] }
+
+interface TaskOutcome {
+  branch: string;
+  items: Array<{ uid: string; title: string; planTitle: string; words: string; criteria: Array<{ text: string; state: string }> }>;
+  unplanned: string[];
+  words: string[];
+}
+
+interface ChangeReview { since?: Since; task?: TaskOutcome }
+
+/**
+ * Phase 33 V3 — what moved since you last marked this line reviewed: the
+ * files, the findings the pushes addressed, the new ones. Marking keeps the
+ * look at the branch's head now.
+ */
+function SinceLastLook({ root, base, head, since, onMarked }: { root: string; base: string; head: string; since: Since | null; onMarked: () => Promise<void> }) {
+  const [marked, setMarked] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const mark = async () => {
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/review/seen?project=${encodeURIComponent(root)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ base, head }) });
+      if (r.ok) {
+        const m = (await r.json()) as { commit: string };
+        setMarked(m.commit.slice(0, 7));
+        await onMarked();
+      }
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <section className="flex items-start gap-2" data-testid="review-since">
+      <div className="min-w-0 flex-1">
+        {since
+          ? <>
+              <div className="text-foreground" data-testid="review-since-words">{since.words}</div>
+              {since.addressed.map((f) => <div key={`a:${f}`} className="text-foreground-subtle line-through" data-testid="review-since-addressed">{f}</div>)}
+              {since.added.map((f) => <div key={`n:${f}`} className="text-foreground-muted" data-testid="review-since-added">New: {f}</div>)}
+            </>
+          : <div className="text-foreground-subtle">You have not marked {head} reviewed. Mark it, and the next look shows only what moved since.</div>}
+        {marked && <div className="text-foreground-subtle" data-testid="review-since-marked">Marked reviewed at {marked}.</div>}
+      </div>
+      <button
+        onClick={() => void mark()}
+        disabled={busy}
+        className="shrink-0 px-2 py-0.5 rounded border border-border-subtle hover:bg-surface-hover disabled:opacity-50"
+        data-testid="review-mark-reviewed"
+      >
+        Mark reviewed
+      </button>
+    </section>
+  );
+}
+
+const CRITERION_MARK: Record<string, { glyph: string; tone: string; words: string }> = {
+  met: { glyph: '✓', tone: 'text-green-400', words: 'met' },
+  submitted: { glyph: '○', tone: 'text-amber-400', words: 'waiting for a person' },
+  sent_back: { glyph: '✗', tone: 'text-red-400', words: 'sent back' },
+  stale: { glyph: '○', tone: 'text-amber-400', words: 'stale' },
+  open: { glyph: '○', tone: 'text-foreground-subtle', words: 'open' },
+};
+
+/**
+ * Phase 33 V6 — did the change do what the task said. Shown only when the
+ * branch is linked to a task; there is no empty version.
+ */
+function TaskSection({ task }: { task: TaskOutcome }) {
+  return (
+    <section data-testid="review-task">
+      <h4 className="text-[10px] uppercase tracking-wide text-foreground-subtle mb-0.5">Did it do what the task said</h4>
+      {task.words.map((w) => (
+        <div key={w} className={w.startsWith('✗') ? 'text-red-300' : w.startsWith('✓') ? 'text-foreground' : 'text-foreground-muted'} data-testid="review-task-line">{w}</div>
+      ))}
+      {task.items.filter((i) => i.criteria.length > 0).map((i) => (
+        <div key={i.uid} className="mt-1 pl-2 border-l border-border-subtle" data-testid="review-task-criteria">
+          {i.criteria.map((c) => {
+            const m = CRITERION_MARK[c.state] ?? CRITERION_MARK.open;
+            return (
+              <div key={c.text} className="flex gap-1.5" data-testid="review-task-criterion">
+                <span className={`shrink-0 ${m.tone}`}>{m.glyph}</span>
+                <span className="text-foreground-muted">{c.text} <span className="text-foreground-subtle">({m.words})</span></span>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </section>
   );
 }

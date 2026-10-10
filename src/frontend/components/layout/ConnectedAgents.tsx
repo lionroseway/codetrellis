@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Cpu, Sparkles, Bot, Plug, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { usePlanStore } from '../../stores/plan-store';
+import { showPlan } from '../../lib/open-plan-item';
 import { useAgentStore } from '../../stores/agent-store';
 import { usePlanItemsStore } from '../../stores/plan-items-store';
 import { checkScope, describeScope } from '../../lib/scope-check';
+import { AGENT_IDENTITY } from '../../lib/visual-language';
 import type { AgentSessionInfo } from '@shared/types';
 
 /**
@@ -32,10 +34,12 @@ import type { AgentSessionInfo } from '@shared/types';
 
 export function agentBadge(agentType: string): { Icon: typeof Cpu; tint: string; label: string } {
   const t = agentType.toLowerCase();
-  if (t.includes('claude')) return { Icon: Sparkles, tint: 'text-amber-300', label: 'Claude Code' };
-  if (t.includes('codex')) return { Icon: Bot, tint: 'text-emerald-300', label: 'Codex' };
-  if (t.includes('cursor')) return { Icon: Bot, tint: 'text-cyan-300', label: 'Cursor' };
-  if (t.includes('aider')) return { Icon: Bot, tint: 'text-purple-300', label: 'Aider' };
+  // Identity hues, never state hues: Claude Code was amber (= needs you) and
+  // Codex emerald (= added) before Phase 33 G1.
+  if (t.includes('claude')) return { Icon: Sparkles, tint: AGENT_IDENTITY.claude.text, label: 'Claude Code' };
+  if (t.includes('codex')) return { Icon: Bot, tint: AGENT_IDENTITY.codex.text, label: 'Codex' };
+  if (t.includes('cursor')) return { Icon: Bot, tint: AGENT_IDENTITY.cursor.text, label: 'Cursor' };
+  if (t.includes('aider')) return { Icon: Bot, tint: AGENT_IDENTITY.aider.text, label: 'Aider' };
   if (t === 'mcp-client') return { Icon: Plug, tint: 'text-foreground-subtle', label: 'MCP client' };
   return { Icon: Cpu, tint: 'text-foreground-muted', label: agentType };
 }
@@ -210,7 +214,6 @@ export function ConnectedAgents() {
 }
 
 function SessionRow({ session, planTitle }: { session: AgentSessionInfo; planTitle?: string }) {
-  const setActivePlan = usePlanStore((s) => s.setActivePlan);
   const { Icon, tint, label } = agentBadge(session.agentType);
 
   return (
@@ -227,7 +230,7 @@ function SessionRow({ session, planTitle }: { session: AgentSessionInfo; planTit
         <span className="font-mono opacity-60">{shortSessionId(session.sessionId)}</span>
         {session.activePlanUid ? (
           <button
-            onClick={() => setActivePlan(session.activePlanUid)}
+            onClick={() => { if (session.activePlanUid) void showPlan(session.activePlanUid); }}
             className="ml-auto text-accent hover:underline truncate max-w-[180px] text-right"
             title={`Open plan: ${planTitle || session.activePlanUid}`}
           >

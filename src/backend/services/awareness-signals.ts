@@ -31,6 +31,10 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import type { AwarenessSignal, ChangedFile, SignalKind, SignalSeverity } from '../../shared/types';
+import { ruleStatement } from './architecture-rule';
+import type { RuleKind } from '../../shared/types/architecture-rules';
+import { ruleCovers } from '../../shared/lib/rule-pattern';
+import { reachWords } from '../../shared/lib/check-words';
 
 export interface FootprintInput {
   root: string;
@@ -54,7 +58,13 @@ export interface FootprintInput {
    * rule. Looked up by the caller, since that needs the parser and the
    * project's import context; absent when there are no rules.
    */
-  ruleBreaches?: Array<{ rule: { id: string; from: string; mayNotImport: string; because: string }; edges: Array<{ from: string; to: string }> }>;
+  ruleBreaches?: Array<{ rule: { id: string; kind?: RuleKind; from: string; mayNotImport: string; because: string; strength?: 'block' | 'warn' | 'guide' }; edges: Array<{ from: string; to: string }> }>;
+  /**
+   * Phase 33 R9: the project's rules, guides included, so drift can name the
+   * ones about the files it reaches. Given only when there is a scope to
+   * drift from.
+   */
+  rules?: Array<{ id: string; suite?: string; words: string; strength?: 'block' | 'warn' | 'guide'; kind?: string; from: string; mayNotImport: string; only?: string[]; in?: string[]; except?: string[] }>;
 }
 
 /** The files and folders a workstream may change, and where that came from (A2.5). */
@@ -259,13 +269,21 @@ export function computeSignals(footprints: readonly FootprintInput[]): SignalDra
       w.scope.declared ? 'its declared intent' : null,
     ].filter(Boolean).join(' and ');
     const shown = files.length <= 3 ? files.join(', ') : `${files.slice(0, 3).join(', ')} and ${files.length - 3} more`;
-    out.push(draft('drift', 'medium', w.root, { files, ...(w.scope.items.length ? { items: [...w.scope.items].sort() } : {}) }, [w.root],
-      `\`${workstreamLabel(w)}\` changes ${plural(files.length, 'file')} outside the scope ${from} give${from.includes(' and ') || w.scope.items.length > 1 ? '' : 's'} it: ${shown}`));
+    // R9: the rules about the files it reaches, guides included: the agent
+    // went somewhere the team wrote something down about.
+    const rules = (w.rules ?? [])
+      .map((r) => ({ id: r.id, suite: r.suite ?? 'architecture', words: r.words, strength: r.strength ?? 'block', files: files.filter((f) => ruleCovers(r, f)) }))
+      .filter((r) => r.files.length > 0)
+      .sort((a, b) => a.id.localeCompare(b.id));
+    const ruleWords = rules.length === 0 ? '' : `. ${rules.length === 1 ? 'A rule is' : `${rules.length} rules are`} about ${files.length === 1 ? 'it' : 'them'}: ${rules.map((r) => `${r.id} (${r.suite}, ${r.strength})`).join(', ')}`;
+    out.push(draft('drift', 'medium', w.root, { files, ...(w.scope.items.length ? { items: [...w.scope.items].sort() } : {}), ...(rules.length ? { rules } : {}) }, [w.root],
+      `\`${workstreamLabel(w)}\` changes ${plural(files.length, 'file')} outside the scope ${from} give${from.includes(' and ') || w.scope.items.length > 1 ? '' : 's'} it: ${shown}${ruleWords}`));
   }
 
   // ── rule ──────────────────────────────────────────────────────────────
-  // One per workstream and rule, naming the imports it adds across it. High:
-  // the team wrote the rule down, so it is told to the agent on its next call,
+  // One per workstream and rule, naming the imports it adds across it. High
+  // for a rule at block, medium at warn (R4; a guide is never checked): the
+  // team wrote the rule down, so it is told to the agent on its next call,
   // reaches the phone, and can hold the next edit where a person set a `rule`
   // breakpoint (B4); holding is still the person's choice, never a default.
   for (const w of ordered) {
@@ -273,13 +291,18 @@ export function computeSignals(footprints: readonly FootprintInput[]): SignalDra
       if (edges.length === 0) continue;
       const sorted = [...edges].sort((x, y) => x.from.localeCompare(y.from) || x.to.localeCompare(y.to));
       const shown = sorted.slice(0, 2).map((e) => `${e.from} → ${e.to}`).join(', ') + (sorted.length > 2 ? ` and ${sorted.length - 2} more` : '');
-      const words = `${rule.from} may not import ${rule.mayNotImport}`;
-      out.push(draft('rule', 'high', `${w.root}\0${rule.id}`, {
+      // An imports rule says what crossed it; a package, symbol, call or folder
+      // rule (R5–R8) says what the file now does, in the check's own words.
+      const what = !rule.kind || rule.kind === 'imports'
+        ? ` now imports ${rule.mayNotImport} from ${rule.from} (${shown})`
+        : `: ${sorted.slice(0, 2).map((e) => `${e.from} ${reachWords(e.to)}`).join(', ')}${sorted.length > 2 ? ` and ${sorted.length - 2} more` : ''}`;
+      const words = ruleStatement({ ...rule, except: [] });
+      out.push(draft('rule', rule.strength === 'warn' ? 'medium' : 'high', `${w.root}\0${rule.id}`, {
         files: [...new Set(sorted.map((e) => e.from))],
         rule: { id: rule.id, words, because: rule.because },
         edges: sorted,
       }, [w.root],
-      `\`${workstreamLabel(w)}\` now imports ${rule.mayNotImport} from ${rule.from} (${shown}), which the rule “${words}” forbids${rule.because ? `: ${rule.because}` : ''}`,
+      `\`${workstreamLabel(w)}\`${what}, which the rule “${words}” forbids${rule.because ? `: ${rule.because}` : ''}`,
       sorted.map((e) => `${e.from}>${e.to}`).join(',')));
     }
   }

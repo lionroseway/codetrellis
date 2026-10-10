@@ -140,3 +140,43 @@ export function hasCommits(root: string): boolean {
   const common = commonGitDir(gitDir);
   return fs.existsSync(path.join(common, head.ref!)) || packedRefs(common).has(head.ref!);
 }
+
+/**
+ * A linked worktree of some repository: its `.git` is a file naming
+ * `<common git dir>/worktrees/<name>`. It is another checkout, not part of
+ * the one around it. A project with Claude Code's `.claude/worktrees/`
+ * inside it was scanned with every worktree's code again under the main
+ * checkout's graph, and `git status` there lists each such folder as one
+ * untracked entry (`?? .claude/worktrees/x/`), which the explorer, the
+ * graph and Changes showed as a new file. They are reached as checkouts of
+ * their own, from the branch popover.
+ *
+ * A submodule's `.git` file names `<super>/.git/modules/<name>` and is
+ * still scanned, as before. One lstat per directory; the file is read only
+ * when `.git` is a small regular file.
+ */
+export function isLinkedWorktreeDir(dirPath: string): boolean {
+  try {
+    const dotGit = path.join(dirPath, '.git');
+    const st = fs.lstatSync(dotGit);
+    if (!st.isFile() || st.size > 4096) return false;
+    const m = /^gitdir:\s*(.+?)\s*$/m.exec(fs.readFileSync(dotGit, 'utf-8'));
+    if (!m) return false;
+    const target = m[1].replace(/[\\/]+$/, '');
+    return path.basename(path.dirname(target)) === 'worktrees';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Untracked entries from `git status` with the other checkouts inside the
+ * project left out. Git reports a nested worktree as its folder, with a
+ * trailing slash, so only those are looked at.
+ */
+export function withoutNestedCheckouts<T>(projectRoot: string, entries: T[], pathOf: (e: T) => string): T[] {
+  return entries.filter((e) => {
+    const p = pathOf(e);
+    return !(p.endsWith('/') && isLinkedWorktreeDir(path.join(projectRoot, p)));
+  });
+}

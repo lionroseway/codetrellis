@@ -26,6 +26,7 @@ import { computeMaterialSignals } from './material-signals';
 import { materialInputsOf } from './material-footprints';
 import { stateSplitDrafts } from './task-records/split-signals';
 import { checkEdges, rulesOf } from './architecture-rules';
+import { ruleStatement } from './architecture-rule';
 import { importsAdded, importsReadableFor } from './workstream-imports';
 import type { FileSpec } from '../../shared/types';
 
@@ -112,6 +113,7 @@ export async function footprintsOf(all: readonly Workstream[], projectRoot?: str
       ...(w.intents?.length ? { intended: declaredFiles(w.intents) } : {}),
       ...scopeEntry(scopeOf(w)),
       ...(projectRoot ? await ruleEntry(projectRoot, w, main?.root ?? null) : {}),
+      ...(projectRoot && scopeOf(w) ? rulesAboutEntry(projectRoot) : {}),
     });
   }
   return out;
@@ -127,7 +129,7 @@ async function ruleEntry(projectRoot: string, w: Workstream, mainRoot: string | 
   const rules = rulesOf(projectRoot);
   if (rules.length === 0 || w.changes.files.length === 0) return {};
   if (!importsReadableFor(projectRoot)) return {};
-  const breaches = checkEdges(rules, await importsAdded(projectRoot, w, mainRoot));
+  const breaches = checkEdges(rules, await importsAdded(projectRoot, w, mainRoot, { packages: true, symbols: rules.some((r) => r.kind === 'symbol'), calls: rules.some((r) => r.kind === 'calls'), files: rules.some((r) => r.kind === 'folder'), grep: rules.filter((r) => r.kind === 'grep' && r.strength !== 'guide') }));
   if (breaches.length === 0) return {};
   return {
     ruleBreaches: rules
@@ -137,6 +139,13 @@ async function ruleEntry(projectRoot: string, w: Workstream, mainRoot: string | 
 }
 
 const scopeEntry = (scope: WorkstreamScope | null) => (scope ? { scope } : {});
+
+/** Phase 33 R9: the project's rules in words, for drift to name the ones it reaches. */
+function rulesAboutEntry(projectRoot: string): Pick<FootprintInput, 'rules'> {
+  const rules = rulesOf(projectRoot);
+  if (rules.length === 0) return {};
+  return { rules: rules.map((r) => ({ id: r.id, suite: r.suite, words: ruleStatement(r), strength: r.strength, kind: r.kind, from: r.from, mayNotImport: r.mayNotImport, only: r.only, ...(r.in ? { in: r.in, except: r.except } : {}) })) };
+}
 
 /**
  * What a workstream was given to change (A2.5): the files and folders of the

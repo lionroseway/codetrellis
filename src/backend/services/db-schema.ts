@@ -73,7 +73,9 @@ export const SCHEMA_AST = `
     url_pattern TEXT,
     sql_text TEXT,
     line INTEGER,
-    context TEXT
+    context TEXT,
+    -- Phase 33 R7: an outbound call's host, which url_pattern drops.
+    host TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_callsites_file ON callsites(file_id);
   CREATE INDEX IF NOT EXISTS idx_callsites_kind ON callsites(kind);
@@ -472,6 +474,36 @@ export const SCHEMA_PLANS_CORE = `
     PRIMARY KEY (project_root, writer)
   );
 
+  -- Phase 33 C7: every rule check is a run (not Phase 31's criterion check_runs). This device's runs (mine = 1) and
+  -- teammates' latest, read from their check-run records in the plans folder
+  -- (.codetrellis/runs/checks/). Teammates' are forgotten when sharing is off.
+  CREATE TABLE IF NOT EXISTS rule_check_runs (
+    project_root TEXT NOT NULL,
+    id TEXT NOT NULL,
+    mine INTEGER NOT NULL,
+    writer TEXT NOT NULL,
+    counter INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    by_author TEXT NOT NULL,
+    by_type TEXT NOT NULL,
+    ran_in TEXT NOT NULL,
+    commit_sha TEXT,
+    dirty TEXT NOT NULL,
+    base TEXT,
+    rulebook TEXT,
+    scope TEXT,
+    strict INTEGER NOT NULL,
+    outcome TEXT NOT NULL,
+    says TEXT NOT NULL,
+    findings TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    verdict TEXT,
+    -- Phase 33 C4b: an agent's review, when the run is one.
+    review TEXT,
+    PRIMARY KEY (project_root, id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_rule_check_runs_at ON rule_check_runs(project_root, at);
+
   CREATE TABLE IF NOT EXISTS task_record_device_key (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     public_key TEXT NOT NULL,
@@ -706,6 +738,44 @@ export const SCHEMA_PLANS_CORE = `
     decided_text TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_spec_proposals_page ON spec_proposals(page_uid, status);
+
+  -- Phase 33 R3: an agent proposes a change to an architecture rule; a
+  -- person sees what it would do against the code and decides. The rule is
+  -- the body an agent proposed, by field; null for stopping the rule.
+  CREATE TABLE IF NOT EXISTS rule_proposals (
+    uid TEXT PRIMARY KEY,
+    project_root TEXT NOT NULL,
+    rule_id TEXT NOT NULL,
+    body TEXT,
+    why TEXT NOT NULL,
+    effect TEXT,
+    words TEXT NOT NULL,
+    author TEXT NOT NULL,
+    author_type TEXT NOT NULL,
+    session_id TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at INTEGER NOT NULL,
+    decided_at INTEGER,
+    decided_by TEXT,
+    decided_by_type TEXT,
+    decision_note TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_rule_proposals_project ON rule_proposals(project_root, status);
+
+  -- Phase 33 V3: the commit each reviewer last looked at, per line of work,
+  -- with what the review said then, so a later look shows only what moved
+  -- and which findings the pushes since addressed.
+  CREATE TABLE IF NOT EXISTS review_marks (
+    project_root TEXT NOT NULL,
+    target TEXT NOT NULL,
+    reviewer TEXT NOT NULL,
+    reviewer_type TEXT NOT NULL,
+    base TEXT NOT NULL,
+    head_commit TEXT NOT NULL,
+    findings TEXT NOT NULL DEFAULT '[]',
+    at INTEGER NOT NULL,
+    PRIMARY KEY (project_root, target, reviewer)
+  );
 
   -- Phase 32 B7.3: each session holding an affected task is told of an open
   -- proposal once; this is who has been.

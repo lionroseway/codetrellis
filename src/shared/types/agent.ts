@@ -383,6 +383,11 @@ export interface AwarenessSignal {
      */
     rule?: { id: string; words: string; because: string };
     edges?: Array<{ from: string; to: string }>;
+    /**
+     * Drift (Phase 33 R9): the rules about the files it reaches, guides
+     * included, each with those files.
+     */
+    rules?: Array<{ id: string; suite: string; words: string; strength: string; files: string[] }>;
   };
   /** The workstreams it names, by folder, sorted. */
   workstreams: string[];

@@ -14,12 +14,14 @@
  * Run through `bin/codetrellis.mjs`.
  */
 
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { connectorLine, flag, headlessDataDir, parseArgs, USAGE, type Parsed } from './args';
+import { connectorLine, flag, headlessDataDir, parseArgs, selfCommand, USAGE, type Parsed } from './args';
 import { VERBS } from './verbs';
 import { PLAN_VERBS } from './plan-verbs';
+import { version as CLI_VERSION } from '../../package.json';
 
 const out = (s: string) => process.stdout.write(s.endsWith('\n') ? s : `${s}\n`);
 const fail = (s: string, code = 2): never => {
@@ -120,7 +122,7 @@ async function serve(p: Parsed): Promise<void> {
   const project = projectOf(p);
   const dataDir = path.resolve(flag(p, 'data-dir') ?? headlessDataDir(project, process.env, os.homedir()));
   const { base, scan, mcp } = await boot(p, project, dataDir);
-  const line = connectorLine(process.execPath, binPath(), dataDir);
+  const line = connectorLine(self(), dataDir);
   const c = counts(scan);
   markReady(dataDir, project);
   if (p.flags.json) {
@@ -201,7 +203,7 @@ async function runningIn(dataDir: string): Promise<{ pid: number; url: string } 
 async function start(p: Parsed): Promise<void> {
   const project = projectOf(p);
   const dataDir = path.resolve(flag(p, 'data-dir') ?? headlessDataDir(project, process.env, os.homedir()));
-  const line = connectorLine(process.execPath, binPath(), dataDir);
+  const line = connectorLine(self(), dataDir);
   const say = (state: 'running' | 'started', pid: number) => {
     if (p.flags.quiet) return;
     if (p.flags.json) out(JSON.stringify({ state, pid, project, dataDir, connector: { command: line.command, args: line.args } }));
@@ -212,11 +214,11 @@ async function start(p: Parsed): Promise<void> {
 
   fs.mkdirSync(dataDir, { recursive: true });
   const log = fs.openSync(path.join(dataDir, 'serve.log'), 'a');
-  const args = [binPath(), 'serve', '--project', project, '--data-dir', dataDir];
+  const me = self();
+  const args = [...me.args, 'serve', '--project', project, '--data-dir', dataDir];
   for (const k of ['port', 'mcp-port']) { const v = portOf(p, k); if (v !== undefined) args.push(`--${k}`, v); }
   if (p.flags['share-task-state']) args.push('--share-task-state');
-  const { spawn } = await import('node:child_process');
-  const child = spawn(process.execPath, args, { detached: true, stdio: ['ignore', log, log], cwd: project, env: process.env });
+  const child = spawn(me.command, args, { detached: true, stdio: ['ignore', log, log], cwd: project, env: { ...process.env, ...me.env } });
   child.unref();
   fs.closeSync(log);
   let exited: number | null = null;
@@ -275,13 +277,148 @@ async function verb(name: string, p: Parsed): Promise<void> {
   }
 }
 
-/** This CLI's launcher, as an agent's config names it. */
-function binPath(): string {
-  return path.resolve(__dirname, '..', '..', 'bin', 'codetrellis.mjs');
+/**
+ * Phase 33 C4 — `codetrellis review`: agent checks on the person's own agent
+ * CLI, run headless, each pass recorded as a check run (src/cli/review.ts).
+ */
+async function reviewCmd(p: Parsed): Promise<void> {
+  // C9: the signed review on the pull request, which needs git and nothing else.
+  if (p.rest[0] === 'verify' || p.rest[0] === 'publish') {
+    const { verifyCmd, publishCmd, VerifyUsageError } = await import('./review-verify');
+    try {
+      const r = p.rest[0] === 'verify' ? verifyCmd(p, process.cwd(), process.env, CLI_VERSION) : publishCmd(p, process.cwd());
+      out(r.out);
+      process.exitCode = r.code;
+    } catch (err) {
+      if (err instanceof VerifyUsageError) fail(err.message);
+      throw err;
+    }
+    return;
+  }
+  const { agentName, connectAgent, dataDirFor, NotRunningError } = await import('./agent');
+  const { review, reviewOptions, ReviewUsageError } = await import('./review');
+  const cwd = process.cwd();
+  let opts;
+  try { opts = reviewOptions(p, cwd, process.env); } catch (err) {
+    if (err instanceof ReviewUsageError) fail(err.message);
+    throw err;
+  }
+  let agent;
+  try {
+    agent = await connectAgent({ dataDir: dataDirFor(flag(p, 'data-dir'), cwd, process.env), name: agentName(flag(p, 'as'), process.env), cwd });
+  } catch (err) {
+    if (err instanceof NotRunningError) fail(err.message, 1);
+    throw err;
+  }
+  try {
+    const me = self();
+    const sinkFor = (dir: string) => ({ command: me.command, args: [...me.args, 'review-sink', '--pass', dir], env: me.env });
+    const post = opts.post ? await reviewPoster(opts.post, cwd) : undefined;
+    const { out: text, code, note } = await review(agent, opts, cwd, process.env, sinkFor, { post, version: CLI_VERSION });
+    out(text);
+    // Where the review was posted, or why not: never on stdout, which may be SARIF.
+    if (note) process.stderr.write(`codetrellis review: ${note}\n`);
+    process.exitCode = code;
+  } finally {
+    await agent.close();
+  }
+}
+
+/**
+ * C5 — `--post`: the pull request from the CI's variables (or `--pr`), the
+ * host from `origin`, the token from `--post-token env:VAR` or the host's
+ * usual variable. Never handed to the agent: its environment is scrubbed.
+ */
+async function reviewPoster(post: { tokenVar: string | null; pr: number | null }, cwd: string): Promise<(markdown: string) => Promise<{ ok: boolean; says: string }>> {
+  const { detectProjectHost } = await import('../backend/services/review-host/detect');
+  const { DEFAULT_TOKEN, postComment, pullNumber } = await import('./review-post');
+  const host = detectProjectHost(cwd);
+  const pr = post.pr ?? pullNumber(process.env);
+  return async (markdown) => {
+    if (!host?.kind) return { ok: false, says: 'origin is not on GitHub, GitLab or Bitbucket; the review was not posted' };
+    if (!pr) return { ok: false, says: 'no pull request to post to (not a pull request job; --pr names one)' };
+    const tokenVar = post.tokenVar ?? DEFAULT_TOKEN[host.kind];
+    const token = process.env[tokenVar];
+    if (!token) return { ok: false, says: `${tokenVar} is not set; the review was not posted` };
+    return postComment(host, pr, token, markdown);
+  };
+}
+
+/** The review sink a reviewing agent's CLI starts over stdio (C4); stdout is the protocol alone. */
+async function reviewSink(p: Parsed): Promise<void> {
+  const dir = flag(p, 'pass');
+  if (!dir) fail('review-sink needs --pass <dir>');
+  backendLogToStderr();
+  const { runReviewSink } = await import('./review-sink');
+  await runReviewSink(dir!);
+}
+
+/**
+ * `codetrellis desktop install | url` (src/cli/desktop.ts). The download runs
+ * through the app's own verified update path, which keeps its file under the
+ * data dir; here that is a temporary folder of its own, removed afterwards,
+ * so a person's app data is never touched.
+ */
+async function desktopCmd(p: Parsed): Promise<void> {
+  const { desktop, DesktopUsageError } = await import('./desktop');
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'codetrellis-desktop-'));
+  process.env.CODETRELLIS_DATA_DIR = work;
+  const { findDesktopRelease, detectPlatform } = await import('../backend/services/update-service');
+  const { startUpdateDownload, saveVerifiedUpdateCopy, getUpdateDownloadState } = await import('../backend/services/update-download-service');
+  const downloads = path.join(os.homedir(), 'Downloads');
+  // Progress on a terminal only; a script reads the result.
+  const tty = process.stderr.isTTY && p.flags.json !== true;
+  let ticker: NodeJS.Timeout | undefined;
+  let error: unknown;
+  try {
+    const r = await desktop(p, {
+      platform: detectPlatform(),
+      findRelease: findDesktopRelease,
+      download: (version, info) => {
+        if (tty) {
+          ticker = setInterval(() => {
+            const s = getUpdateDownloadState();
+            const pct = s.totalBytes ? Math.floor((s.bytesDownloaded / s.totalBytes) * 100) : null;
+            process.stderr.write(`\r${s.phase === 'preparing' ? 'Checking the signed checksums…' : `Downloading ${s.filename ?? ''} ${pct === null ? '' : `${pct}%`}`}   `);
+          }, 500);
+        }
+        return startUpdateDownload(version, info).finally(() => {
+          if (ticker) { clearInterval(ticker); process.stderr.write('\r\x1b[K'); }
+        });
+      },
+      saveCopy: saveVerifiedUpdateCopy,
+      // A DMG mounts; a Windows installer is itself the program to start.
+      open: (file) => {
+        const child = process.platform === 'darwin' ? spawn('open', [file], { detached: true, stdio: 'ignore' })
+          : process.platform === 'win32' ? spawn(file, [], { detached: true, stdio: 'ignore' })
+          : spawn('xdg-open', [file], { detached: true, stdio: 'ignore' });
+        child.unref();
+      },
+      downloadsDir: fs.existsSync(downloads) ? downloads : process.cwd(),
+    });
+    out(r.out);
+    process.exitCode = r.code;
+  } catch (err) {
+    error = err;
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+  // After the temporary folder is gone: `fail` exits on the spot.
+  if (error instanceof DesktopUsageError) fail(error.message);
+  if (error) fail(error instanceof Error ? error.message : String(error), 1);
+}
+
+/** How to run this CLI again, from npm, a checkout or the desktop app (args.ts). */
+function self() {
+  return selfCommand(path.resolve(__dirname, '..', '..', 'bin'), { execPath: process.execPath, electron: process.versions.electron });
 }
 
 async function main(): Promise<void> {
   const p = parseArgs(process.argv.slice(2));
+  if (p.flags.version === true && !p.command) {
+    out(CLI_VERSION);
+    return;
+  }
   if (p.flags.help || !p.command || p.command === 'help') {
     out(USAGE);
     return;
@@ -292,6 +429,9 @@ async function main(): Promise<void> {
     case 'mcp': return mcp(p);
     case 'start': return start(p);
     case 'stop': return stop(p);
+    case 'review': return reviewCmd(p);
+    case 'review-sink': return reviewSink(p);
+    case 'desktop': return desktopCmd(p);
     default:
       if (VERBS.has(p.command) || PLAN_VERBS.has(p.command)) return verb(p.command, p);
       fail(`unknown command "${p.command}". Run codetrellis --help.`);

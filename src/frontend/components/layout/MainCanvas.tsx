@@ -3,6 +3,7 @@ import { GraphPairBanner, useGraphPair } from './GraphPair';
 import { getAPI } from '../../bridge';
 import { fetchGraphAnswer } from '../../lib/graph-answer';
 import { preserveNodePositions } from '../../lib/preserve-node-positions';
+import { RemeasureHandles } from '../graph/RemeasureHandles';
 import {
   ReactFlow,
   Background,
@@ -20,7 +21,7 @@ import {
   type NodeMouseHandler,
   type OnSelectionChangeFunc,
 } from '@xyflow/react';
-import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, Pause, Play, RefreshCw, Filter, Zap, Plus, Sparkles, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
+import { Download, Layers, Network, GitFork, Camera, Target, Radio, GitCompare, Pause, Play, RefreshCw, Filter, Zap, Plus, Sparkles, AlertTriangle, ChevronDown, ChevronRight, Maximize2, Minimize2 } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 
 import { useProjectStore } from '../../stores/project-store';
@@ -48,6 +49,13 @@ import { useTerminalStore } from '../../stores/terminal-store';
 import type { GraphNode, GraphEdge } from '@shared/types';
 import { useAwarenessStore } from '../../stores/awareness-store';
 import { OverlaysMenu } from '../graph/OverlaysMenu';
+import { EdgesMenu } from '../graph/EdgesMenu';
+import { visibleEdges } from '../../lib/graph-edge-kinds';
+import { breachesOf, edgeBreaches, nodeBreachMark, suiteCovers, type OverlayRuleView } from '../../lib/rule-overlay';
+import { graphLegend, nodeLegendKeys, edgeLegendKeys } from '../../lib/legend';
+import { Legend } from '../legend/Legend';
+import { minimapNodeColor } from '../../lib/graph-visuals';
+import { chipClass, TONES } from '../../lib/visual-language';
 import { openFileAt } from '../../lib/open-file-at';
 import { workCountsByFile, workCountLabel, collisionFiles, projectPrefix, fileGrounding, clusterGrounding, type GroundingMapView } from '../../lib/graph-overlays';
 
@@ -90,6 +98,7 @@ export function MainCanvas() {
   const graphStyle = useUiStore((s) => s.graphStyle);
   // Phase 32 B3.3 — the overlays a person has on.
   const graphOverlays = useUiStore((s) => s.graphOverlays);
+  const graphEdges = useUiStore((s) => s.graphEdges);
   const planOverlay = graphOverlays.includes('plan');
   const setGraphStyle = useUiStore((s) => s.setGraphStyle);
   const recentlyChanged = useAgentStore((s) => s.recentlyChangedFiles);
@@ -901,6 +910,27 @@ export function MainCanvas() {
   // B9.2 — each file's planned overlaps while playing forward.
   const plannedByFile = useMemo(() => overlapsByFile(forward), [forward]);
 
+  // Phase 33 G8 — the rules and what breaks them, with the Rules overlay on;
+  // asked again when the rules change. Nothing is fetched while it is off.
+  const rulesOverlay = graphOverlays.includes('rules');
+  const ruleSuiteFocus = useUiStore((s) => s.ruleSuiteFocus);
+  const setRuleSuiteFocus = useUiStore((s) => s.setRuleSuiteFocus);
+  const [ruleViews, setRuleViews] = useState<OverlayRuleView[]>([]);
+  useEffect(() => {
+    if (!rulesOverlay || !root) { setRuleViews([]); return; }
+    let live = true;
+    const load = () => {
+      fetch(`/api/rules?project=${encodeURIComponent(root)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((b) => { if (live && b) setRuleViews((b as { rules: OverlayRuleView[] }).rules ?? []); })
+        .catch(() => { /* keeps what is shown */ });
+    };
+    load();
+    window.addEventListener('rules-changed', load);
+    return () => { live = false; window.removeEventListener('rules-changed', load); };
+  }, [rulesOverlay, root]);
+  const ruleBreaches = useMemo(() => breachesOf(ruleViews), [ruleViews]);
+
   const displayGraphData = useMemo(() => {
     const hasPlanHighlights = (planOverlay || !!stackFocus) && planHighlightPaths.size > 0;
     const codeBreakpoints = graphOverlays.includes('breakpoints') ? breakpoints.filter((b) => b.kind === 'code') : [];
@@ -913,12 +943,23 @@ export function MainCanvas() {
     for (const n of rawNodes) {
       if (!seenIds.has(n.id)) { seenIds.add(n.id); safeNodes.push(n); }
     }
-    const safeEdges = graphData?.edges ?? [];
+    // G3 — only the kinds of edge a person keeps on.
+    const safeEdges = visibleEdges(graphData?.edges ?? [], graphEdges);
 
-    if (!selectedNodeId && !hasPlanHighlights && codeBreakpoints.length === 0 && workCounts.size === 0 && collisions.size === 0 && !groundingMap?.hasResults && plannedByFile.size === 0) {
+    if (!selectedNodeId && !hasPlanHighlights && codeBreakpoints.length === 0 && workCounts.size === 0 && collisions.size === 0 && !groundingMap?.hasResults && plannedByFile.size === 0 && ruleBreaches.length === 0) {
       return { nodes: safeNodes, edges: safeEdges };
     }
     const isFile = (data: Record<string, unknown>) => data.nodeType === 'file' || data.nodeType === undefined;
+    // G8 — the files under each node, so an edge between clusters breaks a rule when files under its ends do.
+    const filesOfNode = new Map<string, string[]>();
+    if (ruleBreaches.length > 0) {
+      for (const n of safeNodes) {
+        const d = (n.data || {}) as Record<string, unknown>;
+        filesOfNode.set(n.id, d.nodeType === 'package' && Array.isArray(d.files)
+          ? (d.files as unknown[]).filter((f): f is string => typeof f === 'string')
+          : isFile(d) ? [typeof d.fullPath === 'string' ? d.fullPath : n.id] : []);
+      }
+    }
 
     // ⏸ on a node a breakpoint holds (B4.3b): a file, a symbol, or a cluster
     // with any file under one.
@@ -963,6 +1004,8 @@ export function MainCanvas() {
               : data.nodeType === 'package' && Array.isArray(data.files)
                 ? clusterGrounding(groundingMap, (data.files as unknown[]).filter((f): f is string => typeof f === 'string'))
                 : undefined,
+            // G8 — ⊘ on a file, or a cluster holding one, that imports across a rule.
+            ruleBreach: ruleBreaches.length ? nodeBreachMark(ruleBreaches, filesOfNode.get(node.id) ?? []) ?? undefined : undefined,
             // B9.2 — a dashed "◇ planned overlap" zone on a file, or on a cluster holding one.
             plannedOverlap: plannedByFile.size === 0
               ? undefined
@@ -980,10 +1023,40 @@ export function MainCanvas() {
           ...(edge.data || {}),
           emphasized: selectedNodeId ? (edge.source === selectedNodeId || edge.target === selectedNodeId) : false,
           muted: selectedNodeId ? (edge.source !== selectedNodeId && edge.target !== selectedNodeId) : false,
+          ...(ruleBreaches.length ? { breaches: edgeBreaches(ruleBreaches, filesOfNode.get(edge.source) ?? [], filesOfNode.get(edge.target) ?? []) } : {}),
         },
       })),
     };
-  }, [graphData, selectedNodeId, planHighlightPaths, planOverlay, stackFocus, breakpoints, graphOverlays, workCounts, collisions, groundingMap, plannedByFile]);
+  }, [graphData, graphEdges, selectedNodeId, planHighlightPaths, planOverlay, stackFocus, breakpoints, graphOverlays, workCounts, collisions, groundingMap, plannedByFile, ruleBreaches]);
+
+  // G8 — "Show this suite": every node no rule of the suite is about is faded, by a style rule as the legend's hover is.
+  const suiteFadeCss = useMemo(() => {
+    if (!ruleSuiteFocus || !rulesOverlay || ruleViews.length === 0) return '';
+    const esc = (id: string) => (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/["\\]/g, '\\$&'));
+    const lit = displayGraphData.nodes.filter((n) => {
+      const d = (n.data || {}) as Record<string, unknown>;
+      const files = d.nodeType === 'package' && Array.isArray(d.files)
+        ? (d.files as unknown[]).filter((f): f is string => typeof f === 'string')
+        : [typeof d.fullPath === 'string' ? d.fullPath : n.id];
+      return suiteCovers(ruleViews, ruleSuiteFocus, files);
+    }).map((n) => `.react-flow__node[data-id="${esc(n.id)}"]`);
+    return `.react-flow__node { opacity: 0.18; transition: opacity 120ms; }${lit.length ? `${lit.join(', ')} { opacity: 1; }` : ''}`;
+  }, [ruleSuiteFocus, rulesOverlay, ruleViews, displayGraphData]);
+
+  // G2 — the legend lists what the graph draws now; hovering an entry
+  // lights what carries it. Dimmed with a style rule, so the layout is left
+  // alone.
+  const [legendHover, setLegendHover] = useState<string | null>(null);
+  const legendEntries = useMemo(() => graphLegend(displayGraphData.nodes, displayGraphData.edges), [displayGraphData]);
+  const legendDimCss = useMemo(() => {
+    if (!legendHover) return '';
+    const esc = (id: string) => (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/["\\]/g, '\\$&'));
+    const lit = [
+      ...displayGraphData.nodes.filter((n) => nodeLegendKeys(n.data as Record<string, unknown>).includes(legendHover)).map((n) => `.react-flow__node[data-id="${esc(n.id)}"]`),
+      ...displayGraphData.edges.filter((e) => edgeLegendKeys(e.data as Record<string, unknown>).includes(legendHover)).map((e) => `.react-flow__edge[data-id="${esc(e.id)}"]`),
+    ];
+    return `.react-flow__node, .react-flow__edge { opacity: 0.18; transition: opacity 120ms; }${lit.length ? `${lit.join(', ')} { opacity: 1; }` : ''}`;
+  }, [legendHover, displayGraphData]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(displayGraphData?.nodes ?? []);
   const [edges, setEdges, onEdgesChange] = useEdgesState(displayGraphData?.edges ?? []);
@@ -1234,9 +1307,18 @@ export function MainCanvas() {
         className={`!bg-transparent ${graphStyle === 'performance' ? 'graph-perf' : ''}`}
       >
         <AutoFitView nodes={nodes} layout={layoutMode} />
+        <RemeasureHandles />
+        {legendDimCss && <style data-testid="legend-dim">{legendDimCss}</style>}
+        {suiteFadeCss && <style data-testid="rule-suite-fade">{suiteFadeCss}</style>}
+        {ruleSuiteFocus && rulesOverlay && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full border border-border bg-surface/90 px-3 py-1 text-[11px] text-foreground shadow" data-testid="rule-suite-focus">
+            <span>Showing what the <span className="font-semibold">{ruleSuiteFocus}</span> rules are about</span>
+            <button type="button" onClick={() => setRuleSuiteFocus(null)} className="text-foreground-muted hover:text-foreground" data-testid="rule-suite-focus-clear">Show all</button>
+          </div>
+        )}
         <Background color="rgba(59,130,246,0.06)" gap={24} size={1} />
         <Controls className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)] [&>button]:!bg-transparent [&>button]:!border-white/[0.06] [&>button]:!text-zinc-400 [&>button:hover]:!bg-white/[0.06] [&>button:hover]:!text-zinc-200" />
-        <MiniMap className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)]" nodeColor="rgba(59,130,246,0.6)" maskColor="rgba(0,0,0,0.8)" />
+        <MiniMap className="!bg-white/[0.03] !backdrop-blur-md !border-white/[0.08] !rounded-xl !shadow-[0_0_15px_rgba(0,0,0,0.3)]" nodeColor={minimapNodeColor} maskColor="rgba(0,0,0,0.8)" />
         {/* One row across the top of the canvas: what changed on the left,
             the view controls on the right. They used to be two Panels that
             knew nothing of each other, so the controls wrapped leftwards
@@ -1254,6 +1336,7 @@ export function MainCanvas() {
                 planSummary={summarizePlanVsLive(activeDiff, projectionData)}
                 snapshotName={currentSnapshot?.name}
               />
+              <Legend surface="graph" entries={legendEntries} onHover={setLegendHover} />
               {viewDepth === 'symbol' && (
                 <div
                   data-testid="symbols-status"
@@ -1274,10 +1357,12 @@ export function MainCanvas() {
               {/* Trellis mode selector */}
               <div className="flex shrink-0 items-center bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-lg p-0.5 shadow-[0_0_10px_rgba(0,0,0,0.3)]">
                 {([
-                  { mode: 'live' as const, icon: Radio, label: 'Live', color: 'text-green-400' },
-                  { mode: 'current' as const, icon: Camera, label: 'Baseline', color: 'text-blue-400' },
-                  { mode: 'planned' as const, icon: Target, label: 'Planned', color: 'text-amber-400' },
-                  { mode: 'diff' as const, icon: GitCompare, label: 'Diff', color: 'text-violet-400' },
+                  // A view mode is not a state: the word and the icon say which,
+                  // and only Live (happening now) and Planned borrow a state's tone.
+                  { mode: 'live' as const, icon: Radio, label: 'Live', color: TONES.active.text },
+                  { mode: 'current' as const, icon: Camera, label: 'Baseline', color: 'text-zinc-100' },
+                  { mode: 'planned' as const, icon: Target, label: 'Planned', color: TONES.planned.text },
+                  { mode: 'diff' as const, icon: GitCompare, label: 'Diff', color: 'text-zinc-100' },
                 ] as const).map(({ mode, icon: Icon, label, color }) => (
                   <button
                     key={mode}
@@ -1501,7 +1586,13 @@ export function MainCanvas() {
                 </select>
               </div>
               <div className="shrink-0">
+                <EdgesMenu />
+              </div>
+              <div className="shrink-0">
                 <OverlaysMenu />
+              </div>
+              <div className="shrink-0">
+                <FullScreenButton />
               </div>
               <div className="shrink-0">
                 <ExportButton />
@@ -2035,28 +2126,28 @@ function DiffSummary({
           {/* Plan alignment — planned and diff modes */}
           {(isDiff || isPlanned) && planSummary && (
             <div className="flex flex-wrap items-center gap-1.5">
-              {chip(planSummary.onTrack, 'on track', 'border-emerald-300/18 bg-emerald-500/10 text-emerald-100')}
-              {chip(planSummary.planned, 'planned', 'border-blue-300/18 bg-blue-500/10 text-blue-100')}
-              {chip(planSummary.pending, 'pending', 'border-amber-300/18 bg-amber-500/10 text-amber-100')}
-              {chip(planSummary.unexpected, 'unexpected', 'border-fuchsia-300/18 bg-fuchsia-500/10 text-fuchsia-100')}
+              {chip(planSummary.onTrack, '✓ on track', chipClass('done'))}
+              {chip(planSummary.planned, '◇ planned', chipClass('planned'))}
+              {chip(planSummary.pending, '○ pending', chipClass('idle'))}
+              {chip(planSummary.unexpected, '◆ unexpected', chipClass('drift'))}
             </div>
           )}
 
           {/* Files against the baseline — not in planned mode, where alignment leads */}
           {diff && !isPlanned && (
             <div className="flex flex-wrap items-center gap-1.5">
-              {chip(diff.addedFiles.length, 'added', 'border-emerald-300/18 bg-emerald-500/10 text-emerald-100')}
-              {chip(diff.modifiedFiles.length, 'modified', 'border-amber-300/18 bg-amber-500/10 text-amber-100')}
-              {chip(diff.removedFiles.length, 'removed', 'border-white/10 bg-white/[0.04] text-zinc-200')}
+              {chip(diff.addedFiles.length, 'added', chipClass('added'))}
+              {chip(diff.modifiedFiles.length, 'modified', chipClass('modified'))}
+              {chip(diff.removedFiles.length, 'removed', chipClass('deleted'))}
             </div>
           )}
 
           {/* Git — live and diff modes only */}
           {gitStatus && !isPlanned && trellisMode !== 'current' && (
             <div className="flex flex-wrap items-center gap-1.5">
-              {chip(gitStatus.staged.length, 'staged', 'border-sky-300/18 bg-sky-500/10 text-sky-100')}
-              {chip(gitStatus.unstaged.length, 'not staged', 'border-orange-300/18 bg-orange-500/10 text-orange-100')}
-              {chip(gitStatus.untracked.length, 'new to git', 'border-emerald-300/18 bg-emerald-500/10 text-emerald-100')}
+              {chip(gitStatus.staged.length, 'staged', chipClass('index'))}
+              {chip(gitStatus.unstaged.length, 'not staged', chipClass('modified'))}
+              {chip(gitStatus.untracked.length, 'new to git', chipClass('added'))}
             </div>
           )}
         </div>
@@ -2243,6 +2334,29 @@ function ExportButton() {
     >
       <Download size={12} />
       Export
+    </button>
+  );
+}
+
+/**
+ * Phase 33 G4 — the graph full screen and back. Hides the sidebar, the
+ * inspector and the plan panel, and puts back whichever were showing.
+ */
+function FullScreenButton() {
+  const full = useUiStore((s) => s.fullScreenFrom !== null);
+  const toggle = useUiStore((s) => s.toggleFullScreen);
+  const words = full ? 'Leave full screen (⌘⇧F)' : 'Full screen: hide the side panels (⌘⇧F)';
+  return (
+    <button
+      data-testid="graph-full-screen"
+      onClick={toggle}
+      aria-pressed={full}
+      title={words}
+      aria-label={words}
+      className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] rounded-lg bg-white/[0.03] backdrop-blur-md border border-white/[0.08] text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] hover:border-white/[0.12] transition-all"
+    >
+      {full ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+      {full ? 'Exit full screen' : 'Full screen'}
     </button>
   );
 }
