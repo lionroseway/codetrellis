@@ -35,7 +35,7 @@
     "fast-json-patch": "^3.1.1",
     "punycode": "^2.3.1",
     "qrcode": "^1.5.4",
-    "react": "19.2.3",
+    "react": "19.3.0",
     "react-native": "0.86.3",
     "react-native-markdown-display": "^7.0.2",
     "react-native-safe-area-context": "~5.7.0",
@@ -48,7 +48,7 @@
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.5",
-    "@types/react": "~19.2.4",
+    "@types/react": "~19.3.0",
     "typescript": "~6.0.3"
   },
   "overrides": {
