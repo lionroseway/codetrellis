@@ -16,11 +16,11 @@
 #
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
-  step: "Z2 Phase review"
-  status: "Every step and follow-up of Phase 33 is merged into feat/phase-33. Since the last full run: the branch popover and every worktree (#420), the CLI on npm as codetrellis (#422, the name claimed with 0.2.0) and the desktop app carrying the CLI with codetrellis on the PATH (#424). The phase releases as 0.3.0. What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3)."
-  next: "The owner walks the outcomes in RULES-AND-CLARITY.md on a packaged build; anything short becomes a step or a follow-up. Then Z3, on the release Mac: docs/releases/v0.3.0-plan.md takes it from bringing main in to the phone, with RUNBOOK.md for the steps."
+  step: "Released as 0.3.0"
+  status: "Phase 33 is in main (#435, a merge commit) and released as 0.3.0 on 10 October: the desktop on lionroseway/codetrellis-releases (signed and notarised on macOS, with SHA256SUMS signed), the CLI on npm by trusted publishing, the Android companion APK on the release and iOS build 29 sent to TestFlight. Before it, the suites ran on a Mac for the first time this phase and found faults Linux CI cannot see, each fixed into the phase with a test (#430, #431, #432). The packaged build was checked here: it boots on a new database and on the owner's real data (the record intact, 12,750 entries), its CLI, codetrellis check and desktop url, and the demo, whose findings were the steps a person takes in the window. Still the owner's, at the window: RUNBOOK step 5 rows 1-4, 6, 7, 9 and 11, and the demo's own steps."
+  next: "none"
   blockers: "None"
-  updated: 2026-10-08
+  updated: 2026-10-10
 sections:
   - title: Setup
     goal: The phase can be picked up cold by any session, and its progress read on one page.
@@ -290,8 +290,14 @@ sections:
         title: "Docs: `docs/claude/rules.md`, CLI and MCP references, the change-control security rule"
       - id: Z2
         title: Phase review on a packaged build
+        status: done
       - id: Z3
         title: Into `main` and release
+        status: done
+        prs:
+          - 433
+          - 434
+          - 435
 # The screens the phase built, shown on the progress page under "See it",
 # taken by the browser suite into test-results/ux-audit/.
 shots:
