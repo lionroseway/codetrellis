@@ -5,6 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "setup": "node bin/setup.mjs",
+    "test": "bash -c '. bin/env.sh && node --test audio/'",
     "capture": "bash -c '. bin/env.sh && node capture/all.mjs \"$@\"' --",
     "capture:desktop": "bash capture/demo.sh parallel-hd --group=parallel --mode=hd",
     "capture:desktop:smooth": "bash capture/demo.sh parallel-smooth --group=parallel --mode=smooth --pace=normal",
@@ -18,7 +19,12 @@
     "render:clips": "bash -c '. bin/env.sh && node bin/clips.mjs \"$@\"' --",
     "clips": "npm run capture clips && npm run render:clips",
     "site": "npm run hero && npm run clips && npm run clean",
-    "clean": "node bin/clean.mjs"
+    "clean": "node bin/clean.mjs",
+    "setup:voice": "node audio/engines/kokoro.mjs --download",
+    "speak": "bash -c '. bin/env.sh && node audio/speak.mjs \"$@\"' --",
+    "narrate": "bash bin/narrate.sh",
+    "library": "bash -c '. bin/env.sh && node audio/library.mjs \"$@\"' --",
+    "audio:check": "bash -c '. bin/env.sh && node audio/check.mjs \"$@\"' --"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
@@ -26,6 +32,7 @@
     "@fontsource/geist-mono": "^5.3.0",
     "@fontsource/geist-sans": "^5.3.0",
     "gsap": "^3.15.0",
-    "hyperframes": "0.8.116"
+    "hyperframes": "0.8.116",
+    "kokoro-js": "^1.2.1"
   }
 }

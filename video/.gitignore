@@ -15,3 +15,8 @@ compositions/remotion-hero/node_modules/
 compositions/hero/index.html
 
 compositions/hero/timing.json
+
+# Voice: the model (npm run setup:voice), and the narrated cut's mix spec.
+.models/
+compositions/*/audio.json
+audio/library/files/

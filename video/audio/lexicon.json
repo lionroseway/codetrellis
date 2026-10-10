@@ -1,0 +1,9 @@
+{
+  "_note": "How words are said, not written: applied to a line's text before it is spoken, never to captions. Whole words, case-sensitive. Add a word when a voice gets it wrong; `npm run speak` re-speaks only the lines whose spoken text changed.",
+  "CodeTrellis": "Code Trellis",
+  "MCP": "M C P",
+  "CI": "C I",
+  "isValidEmail": "is valid email",
+  "JIRA": "Jira",
+  "codetrellis.dev": "code trellis dot dev"
+}
