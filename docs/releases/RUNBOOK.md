@@ -22,8 +22,8 @@ checked, because step 6 uploads the artefacts step 2 made
 ## 1. Version
 
 - [ ] Set the version in `package.json` and `mobile/app.json` (both the same):
-      **0.1.18** for the Phase 32 release (the owner, 2 October; bugs found are
-      fixed before 0.2.0).
+      **0.3.0** for the Phase 33 release (rules and clarity; the plan is
+      `docs/releases/v0.3.0-plan.md`).
 - [ ] Commit it on a branch, PR into `main`, merge when green, pull.
       The release must be built from a commit on `main`.
 
@@ -50,7 +50,7 @@ CODETRELLIS_DATA_DIR=/tmp/ct-probe \
 
 - [ ] `/tmp/ct-probe/data.db` appears and the log reaches **"Backend initialised"**.
 - [ ] Quit. Launch again with your normal data dir (no env var), so it opens
-      your real `~/.codetrellis` from 0.1.17: projects, plans and history are
+      your real `~/.codetrellis` from 0.2.0: projects, plans and history are
       all there. This is the upgrade path users take.
 - [ ] Settings → Data → Record says **Intact**.
 
@@ -103,6 +103,12 @@ about the packaged app, the window, or this machine.
 | 4 | Settings → Data → Record; **Export evidence** on the replay bar, then **Verify evidence…** on the file | "Intact" with an entry count; the export names who signed it and verifies as one unbroken chain |
 | 5 | Quit the app. In a clone: `npm ci && npm link && codetrellis start && codetrellis status` | A headless backend starts and `status` prints what is in progress |
 | 6 | Pair the phone (step 7's build, or the store build) | Needs you, an overlap with Acknowledge / Intended / Reply, the lines of work; a high overlap pushes |
+| 7 | First launch of the packaged app | It offers once to add the `codetrellis` command. Choose Add, and give the password if macOS asks |
+| 8 | A **new** terminal: `codetrellis --version`, then `which codetrellis` | This version, and `/usr/local/bin/codetrellis` linked into the app |
+| 9 | Settings → MCP Server → Command line | It says the command is installed. Remove it, then Add it again: both work |
+| 10 | In a clone of this repo: `codetrellis check --base origin/main` | The `layers`, `native` and `conventions` suites hold, exit 0 |
+| 11 | The Rules view, then the Checks view | This repo's rulebook. A loosening asks for a signed approval in the window |
+| 12 | `codetrellis desktop url` | The last public DMG's URL for this Mac (this version is not public until step 6) |
 
 - [ ] Every row behaves as written. A row that does not is a release blocker
       until someone decides otherwise; write down what happened.
@@ -118,12 +124,12 @@ about the packaged app, the window, or this machine.
 - [ ] Replace the script's download page with the real notes:
       `gh release edit vX.Y.Z --repo lionroseway/codetrellis-releases --notes-file docs/releases/vX.Y.Z.md`
 - [ ] Bump the version in the releases repo's README download table; push.
-- [ ] The installed 0.1.17 offers the update, and the download verifies.
+- [ ] The installed 0.2.0 offers the update, and the download verifies.
 
 ## 7. The phone
 
-The companion changed in Phase 32 (Needs you, overlaps, breakpoints), so it
-ships with this release. Pairing has not changed since 0.1.14, so no one
+The companion changed in Phase 33 (Needs you and awareness), so it ships
+with this release. Pairing has not changed since 0.1.14, so no one
 re-pairs.
 
 ```bash
