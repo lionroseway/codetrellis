@@ -26,7 +26,7 @@
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `d5b1144`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `3246323`, with open PRs from GitHub.
 
 ---
 
@@ -57,6 +57,7 @@
 - [x] Follow-up: The workstream watcher's unit tests slept a fixed time and failed under load (#417)
 - [x] Follow-up: The open page's name was cut at 260px above its document (the owner's report); the plan name back to one line, at least 7rem, whole on hover (#419)
 - [x] Follow-up: The branch popover ran off the window with sixty branches, did not scroll or search, and hid the worktrees below them; each worktree now says where it is, and one inside the project is no longer scanned as part of it (the owner's report, 0.1.17) (#420)
+- [ ] Follow-up: The CLI as an npm package (codetrellis), published from CI with trusted publishing, and codetrellis desktop install, which downloads the app through the signed manifest (the owner's ask)
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
@@ -228,6 +229,47 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-10 — The CLI as an npm package, and the desktop app from it
+
+- **The owner's ask:** make CodeTrellis easy to script, including getting the
+  desktop app. The owner has made the npmjs.com account, with GitHub linked and
+  two-factor on. The name `codetrellis` is free on npm.
+- **Why the repository could not be published as it was.** Its package.json is
+  the desktop app's: React and the editor as dependencies, `tsx` (which the
+  launcher needs) only as a devDependency, and no `files` list. Installed from
+  npm, it would have been heavy and would not have started.
+- **The package** (`tools/cli-package`, `npm run build:cli-package`):
+  - It compiles `src/cli`, `src/backend` and `src/shared` one file to one
+    file, keeping the layout, so the backend's own-folder paths still hold.
+    Lazy `import()`s become `require`s.
+  - It ships the grammars and the material reader's bundle.
+  - Its package.json lists only what the compiled files require, and the
+    build refuses a devDependency.
+  - 3.7 MB packed, 14 dependencies; `better-sqlite3` and `node-pty` load
+    from prebuilds.
+  - Installed into an empty prefix with install scripts off, it scans the
+    sample app (the same 44 files and 202 symbols as from source) and runs
+    `start`, `check` and `stop` on this repository.
+- **`codetrellis desktop install | url`:**
+  - The installer for this computer, or `--platform`, downloaded through the
+    app's own verified update path: the signed `SHA256SUMS`, pinned hosts,
+    re-checked on copy.
+  - It opens the installer unless `--no-open` is given or the installer is
+    another computer's.
+  - `findDesktopRelease` sits beside the update check, which reads the same
+    releases repo.
+- **Publishing:**
+  - `publish-cli.yml` publishes through npm trusted publishing, so no token
+    exists anywhere, and with provenance. It publishes the exact tarball it
+    has installed and run.
+  - `release.sh` starts it after the desktop release.
+  - The first version is by hand, to claim the name; the steps are in
+    cli.md, "Publishing it".
+  - CI's `cli-package` job runs the install smoke on every pull request.
+- **Next, the owner's call:** the desktop app installs the CLI too, as Ollama
+  and VS Code do: a `codetrellis` command on the PATH from the app, offered at
+  first launch and in Settings.
 
 ### 2026-10-09 — The branch popover fits the window and finds every worktree
 

@@ -1,0 +1,86 @@
+# The `codetrellis` CLI on npm (see docs/claude/cli.md, "Installing from npm").
+#
+# Started by scripts/release.sh once the desktop release is up, so the CLI
+# and the app ship the same version on the same day. Or by hand from the
+# Actions tab; by hand it is a dry run unless `publish` is ticked.
+#
+# No npm token anywhere. npm's trusted publishing lets this workflow, in this
+# repository, publish `codetrellis` by proving who it is with GitHub's OIDC
+# token (the `id-token: write` below); the package page then shows the
+# provenance: built from this commit, by this workflow. Setting that up is a
+# one-time step on npmjs.com, in docs/claude/cli.md.
+#
+# It publishes the exact tarball it has just installed and run.
+
+name: Publish CLI to npm
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish to npm (unticked: build, install and test only)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-cli
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build, test and publish the CLI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+
+      # As ci.yml installs: scripts off, then the patches and the check that
+      # they applied (CLAUDE.md, the better-sqlite3 section).
+      - name: Install
+        run: |
+          npm ci --ignore-scripts
+          npx patch-package
+          node scripts/check-patches.cjs
+
+      - name: Version
+        id: version
+        run: |
+          v="$(node -p "require('./package.json').version")"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if [ "$(npm view "codetrellis@$v" version 2>/dev/null)" = "$v" ]; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::codetrellis $v is already on npm; nothing to publish."
+          fi
+
+      - name: Build the package
+        if: steps.version.outputs.already != 'true'
+        run: npm run build:cli-package
+
+      - name: Pack
+        if: steps.version.outputs.already != 'true'
+        id: pack
+        run: |
+          file="$(npm pack --silent --pack-destination "$RUNNER_TEMP" ./out/cli-package)"
+          echo "tarball=$RUNNER_TEMP/$file" >> "$GITHUB_OUTPUT"
+
+      - name: Install the tarball and run it
+        if: steps.version.outputs.already != 'true'
+        env:
+          CODETRELLIS_TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: npm run smoke:cli-package
+
+      - name: Publish
+        if: steps.version.outputs.already != 'true' && inputs.publish
+        run: npm publish "${{ steps.pack.outputs.tarball }}" --access public --provenance
+
+      - name: Dry run
+        if: steps.version.outputs.already != 'true' && !inputs.publish
+        run: npm publish "${{ steps.pack.outputs.tarball }}" --access public --dry-run

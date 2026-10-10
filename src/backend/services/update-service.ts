@@ -202,7 +202,7 @@ function getGithubRepo(): string {
   return process.env.CODETRELLIS_GITHUB_REPO || DEFAULT_GITHUB_REPO;
 }
 
-function detectPlatform(): string {
+export function detectPlatform(): string {
   const p = process.platform;
   const a = process.arch;
   if (p === 'darwin') return a === 'arm64' ? 'darwin-arm64' : 'darwin-x64';
@@ -330,6 +330,45 @@ async function checkViaGithub(
       : undefined,
     source: 'github',
     websiteFellBackToGithub: true,
+  };
+}
+
+/** A release and the installer it has for one platform, for `codetrellis desktop`. */
+export interface DesktopRelease {
+  version: string;
+  platform: string;
+  /** Null when the release has nothing this platform can run. */
+  download: UpdateDownloadInfo | null;
+  releaseUrl?: string;
+}
+
+/**
+ * The latest release, or the one tagged `v<version>`, and its installer for
+ * `platform`. Read from the releases repo directly, as the update check's
+ * fallback does: the CLI has no website to ask first.
+ */
+export async function findDesktopRelease(platform: string, version?: string): Promise<DesktopRelease> {
+  if (version !== undefined && !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
+    throw new Error(`"${version}" is not a version (for example 0.2.0)`);
+  }
+  const repo = getGithubRepo();
+  const which = version ? `tags/v${encodeURIComponent(version)}` : 'latest';
+  const res = await timedFetch(`${getGithubApi()}/repos/${repo}/releases/${which}`, {
+    headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+  });
+  if (res.status === 404) throw new Error(version ? `There is no CodeTrellis ${version} release` : 'There is no CodeTrellis release yet');
+  if (!res.ok) throw new Error(`GitHub releases API ${res.status}`);
+  const release = (await res.json()) as GithubRelease;
+  const tag = (release.tag_name || '').replace(/^v/, '');
+  if (!tag) throw new Error('GitHub release had no tag');
+  const asset = pickAssetForPlatform(release.assets ?? [], platform);
+  return {
+    version: tag,
+    platform,
+    download: asset
+      ? { url: asset.browser_download_url, filename: asset.name, size: asset.size, contentType: asset.content_type, sha256: extractSha256(asset.digest) }
+      : null,
+    releaseUrl: release.html_url,
   };
 }
 

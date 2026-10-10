@@ -14,6 +14,7 @@
  * Run through `bin/codetrellis.mjs`.
  */
 
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -216,7 +217,6 @@ async function start(p: Parsed): Promise<void> {
   const args = [binPath(), 'serve', '--project', project, '--data-dir', dataDir];
   for (const k of ['port', 'mcp-port']) { const v = portOf(p, k); if (v !== undefined) args.push(`--${k}`, v); }
   if (p.flags['share-task-state']) args.push('--share-task-state');
-  const { spawn } = await import('node:child_process');
   const child = spawn(process.execPath, args, { detached: true, stdio: ['ignore', log, log], cwd: project, env: process.env });
   child.unref();
   fs.closeSync(log);
@@ -351,6 +351,61 @@ async function reviewSink(p: Parsed): Promise<void> {
   await runReviewSink(dir!);
 }
 
+/**
+ * `codetrellis desktop install | url` (src/cli/desktop.ts). The download runs
+ * through the app's own verified update path, which keeps its file under the
+ * data dir; here that is a temporary folder of its own, removed afterwards,
+ * so a person's app data is never touched.
+ */
+async function desktopCmd(p: Parsed): Promise<void> {
+  const { desktop, DesktopUsageError } = await import('./desktop');
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'codetrellis-desktop-'));
+  process.env.CODETRELLIS_DATA_DIR = work;
+  const { findDesktopRelease, detectPlatform } = await import('../backend/services/update-service');
+  const { startUpdateDownload, saveVerifiedUpdateCopy, getUpdateDownloadState } = await import('../backend/services/update-download-service');
+  const downloads = path.join(os.homedir(), 'Downloads');
+  // Progress on a terminal only; a script reads the result.
+  const tty = process.stderr.isTTY && p.flags.json !== true;
+  let ticker: NodeJS.Timeout | undefined;
+  let error: unknown;
+  try {
+    const r = await desktop(p, {
+      platform: detectPlatform(),
+      findRelease: findDesktopRelease,
+      download: (version, info) => {
+        if (tty) {
+          ticker = setInterval(() => {
+            const s = getUpdateDownloadState();
+            const pct = s.totalBytes ? Math.floor((s.bytesDownloaded / s.totalBytes) * 100) : null;
+            process.stderr.write(`\r${s.phase === 'preparing' ? 'Checking the signed checksums…' : `Downloading ${s.filename ?? ''} ${pct === null ? '' : `${pct}%`}`}   `);
+          }, 500);
+        }
+        return startUpdateDownload(version, info).finally(() => {
+          if (ticker) { clearInterval(ticker); process.stderr.write('\r\x1b[K'); }
+        });
+      },
+      saveCopy: saveVerifiedUpdateCopy,
+      // A DMG mounts; a Windows installer is itself the program to start.
+      open: (file) => {
+        const child = process.platform === 'darwin' ? spawn('open', [file], { detached: true, stdio: 'ignore' })
+          : process.platform === 'win32' ? spawn(file, [], { detached: true, stdio: 'ignore' })
+          : spawn('xdg-open', [file], { detached: true, stdio: 'ignore' });
+        child.unref();
+      },
+      downloadsDir: fs.existsSync(downloads) ? downloads : process.cwd(),
+    });
+    out(r.out);
+    process.exitCode = r.code;
+  } catch (err) {
+    error = err;
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+  // After the temporary folder is gone: `fail` exits on the spot.
+  if (error instanceof DesktopUsageError) fail(error.message);
+  if (error) fail(error instanceof Error ? error.message : String(error), 1);
+}
+
 /** This CLI's launcher, as an agent's config names it. */
 function binPath(): string {
   return path.resolve(__dirname, '..', '..', 'bin', 'codetrellis.mjs');
@@ -358,6 +413,10 @@ function binPath(): string {
 
 async function main(): Promise<void> {
   const p = parseArgs(process.argv.slice(2));
+  if (p.flags.version === true && !p.command) {
+    out(CLI_VERSION);
+    return;
+  }
   if (p.flags.help || !p.command || p.command === 'help') {
     out(USAGE);
     return;
@@ -370,6 +429,7 @@ async function main(): Promise<void> {
     case 'stop': return stop(p);
     case 'review': return reviewCmd(p);
     case 'review-sink': return reviewSink(p);
+    case 'desktop': return desktopCmd(p);
     default:
       if (VERBS.has(p.command) || PLAN_VERBS.has(p.command)) return verb(p.command, p);
       fail(`unknown command "${p.command}". Run codetrellis --help.`);

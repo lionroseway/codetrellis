@@ -75,6 +75,10 @@ export function readerScript(): string {
   }
   const source = path.join(__dirname, 'child.ts');
   if (__filename.endsWith('.ts') && fs.existsSync(source)) return source;
+  // The npm package (tools/cli-package): the bundle at the package's root,
+  // four folders up from src/backend/services/material-reader.
+  const inPackage = path.resolve(__dirname, '..', '..', '..', '..', 'reader', 'material-reader.mjs');
+  if (fs.existsSync(inPackage)) return inPackage;
   return path.join(process.cwd(), 'out', 'reader', 'material-reader.mjs');
 }
 
