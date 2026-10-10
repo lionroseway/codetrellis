@@ -158,6 +158,11 @@ sections:
         status: done
         prs:
           - 430
+      - title: "Escape from a ticked box minimised nothing: the plan workspace's Escape left every focused input alone, checkboxes too, which the breakpoints browser test met on a slow runner (#430)"
+        followUp: true
+        status: done
+        prs:
+          - 431
   - title: "Stage 0: ground truth"
     goal: Numbers to measure against, the freeze measured, and every colour the app draws written down.
     items:

@@ -26,7 +26,7 @@
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `18e7a0c`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `43d5718`, with open PRs from GitHub.
 
 ---
 
@@ -61,6 +61,7 @@
 - [x] Follow-up: The desktop app carries the CLI and offers to put codetrellis on the PATH, as Ollama and VS Code do (the owner's ask) (#424)
 - [x] Follow-up: Dependency advisories: shell-quote (critical), source-map-js and http-cache-semantics fixed in the desktop and phone trees, the npm package resolves with none, and what no release fixes yet is written down (the owner's ask, with Dependabot's) (#426)
 - [x] Follow-up: Run on a Mac for 0.3.0 (CI runs Linux): a rule approval in a project opened through a link checked the working tree's allowed signers, not the base's; three tests failed on macOS alone and one stalled the unit run (#430)
+- [x] Follow-up: Escape from a ticked box minimised nothing: the plan workspace's Escape left every focused input alone, checkboxes too, which the breakpoints browser test met on a slow runner (#430) (#431)
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
