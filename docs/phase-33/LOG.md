@@ -19,14 +19,14 @@
 | | |
 |---|---|
 | **Stage / step** | Z2 Phase review |
-| **Status** | Every step and follow-up of Phase 33 is merged into feat/phase-33, and the whole suite passed on the combined tip. The branch popover now fits the window, finds what you type, and shows every worktree and where it is (#420). What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3). |
+| **Status** | Every step and follow-up of Phase 33 is merged into feat/phase-33. Since the last full run: the branch popover and every worktree (#420), the CLI on npm as codetrellis (#422, the name claimed with 0.2.0) and the desktop app carrying the CLI with codetrellis on the PATH (#424). The phase releases as 0.3.0. What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3). |
 | **In flight** | nothing open |
 | **Last merged** | Z1 (#401, #402, `d293a94`) |
 | **Next action** | The owner walks the outcomes in RULES-AND-CLARITY.md on a packaged build; anything short becomes a step or a follow-up. Then Z3: bring main in, run everything, verify a packaged build, follow docs/releases/RUNBOOK.md. |
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `89c7a8f`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `2abb49c`, with open PRs from GitHub.
 
 ---
 
@@ -58,7 +58,7 @@
 - [x] Follow-up: The open page's name was cut at 260px above its document (the owner's report); the plan name back to one line, at least 7rem, whole on hover (#419)
 - [x] Follow-up: The branch popover ran off the window with sixty branches, did not scroll or search, and hid the worktrees below them; each worktree now says where it is, and one inside the project is no longer scanned as part of it (the owner's report, 0.1.17) (#420)
 - [x] Follow-up: The CLI as an npm package (codetrellis), published from CI with trusted publishing, and codetrellis desktop install, which downloads the app through the signed manifest (the owner's ask) (#422)
-- [ ] Follow-up: The desktop app carries the CLI and offers to put codetrellis on the PATH, as Ollama and VS Code do (the owner's ask)
+- [x] Follow-up: The desktop app carries the CLI and offers to put codetrellis on the PATH, as Ollama and VS Code do (the owner's ask) (#424)
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)

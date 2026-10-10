@@ -17,7 +17,7 @@
 # The checklist is grouped by track; the order of work is EXECUTION §2.
 now:
   step: "Z2 Phase review"
-  status: "Every step and follow-up of Phase 33 is merged into feat/phase-33, and the whole suite passed on the combined tip. The branch popover now fits the window, finds what you type, and shows every worktree and where it is (#420). What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3)."
+  status: "Every step and follow-up of Phase 33 is merged into feat/phase-33. Since the last full run: the branch popover and every worktree (#420), the CLI on npm as codetrellis (#422, the name claimed with 0.2.0) and the desktop app carrying the CLI with codetrellis on the PATH (#424). The phase releases as 0.3.0. What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3)."
   next: "The owner walks the outcomes in RULES-AND-CLARITY.md on a packaged build; anything short becomes a step or a follow-up. Then Z3: bring main in, run everything, verify a packaged build, follow docs/releases/RUNBOOK.md."
   blockers: "None"
   updated: 2026-10-08
@@ -145,6 +145,9 @@ sections:
           - 422
       - title: "The desktop app carries the CLI and offers to put codetrellis on the PATH, as Ollama and VS Code do (the owner's ask)"
         followUp: true
+        status: done
+        prs:
+          - 424
   - title: "Stage 0: ground truth"
     goal: Numbers to measure against, the freeze measured, and every colour the app draws written down.
     items:
