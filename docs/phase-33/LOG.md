@@ -22,11 +22,11 @@
 | **Status** | Every step and follow-up of Phase 33 is merged into feat/phase-33. Since the last full run: the branch popover and every worktree (#420), the CLI on npm as codetrellis (#422, the name claimed with 0.2.0) and the desktop app carrying the CLI with codetrellis on the PATH (#424). The phase releases as 0.3.0. What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3). |
 | **In flight** | nothing open |
 | **Last merged** | Z1 (#401, #402, `d293a94`) |
-| **Next action** | The owner walks the outcomes in RULES-AND-CLARITY.md on a packaged build; anything short becomes a step or a follow-up. Then Z3: bring main in, run everything, verify a packaged build, follow docs/releases/RUNBOOK.md. |
+| **Next action** | The owner walks the outcomes in RULES-AND-CLARITY.md on a packaged build; anything short becomes a step or a follow-up. Then Z3, on the release Mac: docs/releases/v0.3.0-plan.md takes it from bringing main in to the phone, with RUNBOOK.md for the steps. |
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `5d9891b`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `7f397db`, with open PRs from GitHub.
 
 ---
 
