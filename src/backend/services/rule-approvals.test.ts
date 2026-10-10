@@ -139,3 +139,34 @@ test('git\'s key: verified against the allowed signers file as the base has it, 
     assert.deepEqual(approvalFor(root, removal, approvalsHere(root), keys, listed), { ok: true, by: 'sam@acme.test', how: 'git', file: `${APPROVALS_DIR}/web-not-db-git.yaml` });
   } finally { keys.done(); }
 });
+
+test('git\'s key, the project opened through a link: still the base\'s allowed signers, never the branch\'s copy', () => {
+  // git names the checkout by its realpath and the configured file came as
+  // the project was opened. Through a link (macOS's /var and /tmp are links)
+  // the file read as outside the repository, and the working tree's copy,
+  // which the branch had just added its own key to, verified that key.
+  const real = fs.realpathSync(repo());
+  const link = `${real}-link`;
+  fs.symlinkSync(real, link, 'dir');
+  try {
+    const keyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-sshkey-'));
+    const key = path.join(keyDir, 'id');
+    execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-C', 'sam', '-f', key]);
+    const pub = fs.readFileSync(`${key}.pub`, 'utf8').trim();
+    git(real, 'config', 'gpg.ssh.allowedSignersFile', '.github/allowed_signers');
+    put(real, '.github/allowed_signers', '# nobody yet\n');
+    const base = commit(real, 'base: allowed signers, Sam not in it');
+    const s: RuleChangeStatement = { kind: 'codetrellis-rule-change', version: 1, rule: 'web-not-db', before: ruleTerms(rule()), after: null, base, signer: 'sam@acme.test', at: '2026-10-06T12:00:00.000Z' };
+    const value = execFileSync('ssh-keygen', ['-Y', 'sign', '-f', key, '-n', RULE_CHANGE_NAMESPACE], { input: statementBytes(s), encoding: 'utf8' }).trim();
+    put(real, `${APPROVALS_DIR}/web-not-db-git.yaml`, approvalYaml(s, { how: 'git', signer: 'sam@acme.test', value }));
+    put(real, '.github/allowed_signers', `sam@acme.test namespaces="${RULE_CHANGE_NAMESPACE}" ${pub}\n`);
+
+    const keys = keysAt(link, base);
+    try {
+      assert.notEqual(keys.allowedSigners, path.join(link, '.github/allowed_signers'), 'the working tree\'s copy is never the one read');
+      assert.equal(approvalFor(link, removal, approvalsHere(link), keys, base)?.ok, false);
+    } finally { keys.done(); }
+  } finally {
+    fs.rmSync(link, { force: true });
+  }
+});

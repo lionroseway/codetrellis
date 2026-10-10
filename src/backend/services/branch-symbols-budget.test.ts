@@ -14,7 +14,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-branch-symbols-'));
+// Canonical: git names the repository by its realpath, and the warmer tells
+// the window that name; on macOS the temp dir is under /var, a link to /private/var.
+const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ct-branch-symbols-')));
 process.env.CODETRELLIS_DATA_DIR = path.join(tmp, 'data');
 fs.mkdirSync(process.env.CODETRELLIS_DATA_DIR, { recursive: true });
 const repo = path.join(tmp, 'app');

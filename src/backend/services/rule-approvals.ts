@@ -196,6 +196,11 @@ export interface KeysAt {
   done(): void;
 }
 
+/** `file` with its folder canonical (links in the folders resolved) and its own name kept; as given when the folder is not there. */
+function canonicalFolderOf(file: string): string {
+  try { return path.join(fs.realpathSync(path.dirname(file)), path.basename(file)); } catch { return file; }
+}
+
 export function keysAt(projectRoot: string, commit: string): KeysAt {
   const devices = new Map<string, string>();
   const listing = git(projectRoot, ['ls-tree', '--name-only', commit, `./${KEYS_DIR}/`]);
@@ -216,7 +221,14 @@ export function keysAt(projectRoot: string, commit: string): KeysAt {
   const configured = signingSetup(projectRoot).allowedSigners;
   if (configured) {
     const top = git(projectRoot, ['rev-parse', '--show-toplevel'])?.trim();
-    const inRepo = top ? path.relative(fs.realpathSync(top), path.resolve(configured)) : null;
+    // Both sides canonical. git names the checkout by its realpath, and the
+    // configured file arrives as the project was opened: through a link
+    // (macOS's /var and /tmp, or a linked workspace) the two spellings
+    // differ, the file read as outside the repository, and the working
+    // tree's copy, the branch's own, verified the branch's own key. The
+    // file's folder is resolved, not the file: a link at the file itself
+    // must not change which file is read.
+    const inRepo = top ? path.relative(fs.realpathSync(top), canonicalFolderOf(path.resolve(configured))) : null;
     if (inRepo !== null && !inRepo.startsWith('..') && !path.isAbsolute(inRepo)) {
       const text = git(top!, ['show', `${commit}:${inRepo.split(path.sep).join('/')}`]);
       if (text !== null) {
