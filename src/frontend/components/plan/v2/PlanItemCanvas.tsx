@@ -43,6 +43,7 @@ import type {
   PlanItem, TaskStatus, Comment,
 } from '@shared/types';
 import { authorKind } from '../../../lib/author-words';
+import { isTypingTarget } from '../../../lib/typing-target';
 import { UnverifiedIf } from '../../UnverifiedTag';
 
 const STATUS_META: Record<TaskStatus, { label: string; tint: string; Icon: typeof Circle }> = {
@@ -83,10 +84,7 @@ export function PlanItemCanvas() {
     if (!selectedItemUid) return;
     const handler = async (e: ClipboardEvent) => {
       // Don't fight a textarea / input that owns the focus.
-      const target = document.activeElement;
-      if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || (target as HTMLElement).isContentEditable)) {
-        return;
-      }
+      if (isTypingTarget(document.activeElement as HTMLInputElement | null)) return;
       const items = e.clipboardData?.items ?? [];
       for (const item of Array.from(items)) {
         if (item.kind !== 'file') continue;
