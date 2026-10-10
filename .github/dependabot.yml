@@ -1,12 +1,14 @@
 # Dependabot configuration.
 #
-# EXPECT A FLOOD, AND EXPECT IT TO SETTLE
+# WHERE IT STANDS
 #
-# Measured 2026-09-16: the desktop tree carries 36 advisories (3 critical,
-# 26 high) and mobile carries 34. Nothing has been picking up patches on its
-# own, so the first few runs will open a lot of pull requests. That is the
-# backlog becoming visible, not something going wrong. It settles to roughly
-# one grouped PR per ecosystem per week once the arrears clear.
+# Measured 2026-09-16, when Dependabot was switched on: the desktop tree
+# carried 36 advisories (3 critical, 26 high) and mobile 34, so the first
+# runs opened a lot of pull requests. Measured again 2026-10-10: nothing the
+# desktop app ships has one, and what is left in each tree (braces,
+# sprintf-js, node-forge) is build tooling with no fixed release.
+# docs/claude/architecture.md, "Dependency advisories", keeps the list and
+# how to check it with npm audit, which reads the same database.
 #
 # THE GROUPING RULE
 #
@@ -75,10 +77,8 @@ updates:
   # tree, which is the one carrying the security programme.
   #
   # Nothing is ignored. It is tempting to ignore the Expo SDK because upgrades
-  # are painful, but the 54 -> 55 upgrade is exactly the change that clears
-  # mobile's critical advisory (tar, via @expo/cli) and resolves the existing
-  # @config-plugins/react-native-webrtc peer conflict. It should be proposed
-  # and then done deliberately, not hidden.
+  # are painful, but an SDK upgrade is how @expo/cli's own advisories clear.
+  # It should be proposed and then done deliberately, not hidden.
   # ---------------------------------------------------------------------------
   - package-ecosystem: npm
     directory: /mobile

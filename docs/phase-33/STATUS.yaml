@@ -148,6 +148,8 @@ sections:
         status: done
         prs:
           - 424
+      - title: "Dependency advisories: shell-quote (critical), source-map-js and http-cache-semantics fixed in the desktop and phone trees, the npm package resolves with none, and what no release fixes yet is written down (the owner's ask, with Dependabot's)"
+        followUp: true
   - title: "Stage 0: ground truth"
     goal: Numbers to measure against, the freeze measured, and every colour the app draws written down.
     items:

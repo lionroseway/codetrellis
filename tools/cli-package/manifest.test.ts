@@ -6,7 +6,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cliManifest, packageOf, requiredPackages } from './manifest';
+import { cliManifest, IN_READER_BUNDLE_ONLY, packageOf, requiredPackages, requiresLeftOut } from './manifest';
 
 test('a specifier names its package; built-ins and relative paths name none', () => {
   assert.equal(packageOf('yaml'), 'yaml');
@@ -49,4 +49,19 @@ test('only what is required, at the repository\'s ranges, plus what a computed r
 test('a package the CLI needs but npm would not install is refused at build time', () => {
   assert.throws(() => cliManifest(root, ['tsx']), /tsx \(only a devDependency\)/);
   assert.throws(() => cliManifest(root, ['left-pad']), /left-pad/);
+});
+
+test('a compiled file that still requires a source only the reader bundle carries is found', () => {
+  const src = [
+    'var import_read = require("./read");',
+    'var x = require("../material-reader/child.js");',
+    'var ok = require("./reader-host");',
+    'var y = require("mammoth");',
+  ].join('\n');
+  assert.deepEqual(
+    requiresLeftOut('src/backend/services/material-reader/other.js', src, IN_READER_BUNDLE_ONLY),
+    ['src/backend/services/material-reader/read', 'src/backend/services/material-reader/child.js'],
+  );
+  assert.deepEqual(requiresLeftOut('src/backend/services/reader-host.js', 'require("./material-reader/read")', IN_READER_BUNDLE_ONLY), ['src/backend/services/material-reader/read']);
+  assert.deepEqual(requiresLeftOut('src/cli/main.js', 'require("../backend/server")', IN_READER_BUNDLE_ONLY), []);
 });

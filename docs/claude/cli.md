@@ -79,6 +79,16 @@ devDependency. The build instead:
   out from its own folder (the grammars, the review sink's launcher) lands
   where it expects. Lazy `import()`s become `require`s;
 - copies `resources/tree-sitter/` and the material reader's bundle;
+- leaves out the reader's own sources (`IN_READER_BUNDLE_ONLY` in
+  `manifest.ts`). The reader runs in a process of its own, started from its
+  bundle, which carries mammoth and pdf.js inside it; compiled as well, those
+  two sources would make mammoth and pdf.js dependencies for code nothing
+  runs. pdf.js is large, and mammoth's own command line brings `argparse` 1
+  and a `sprintf-js` with an advisory no release fixes. The repository pins
+  that `argparse` to 2 with `overrides`, but npm ignores a published package's
+  overrides, so leaving it out is the only fix that reaches someone who
+  installs the package. The build fails if anything it ships still requires
+  one of them;
 - writes a package.json listing only the packages the compiled files
   `require`, at the repository's ranges (`tools/cli-package/manifest.ts`). A
   package the CLI needs that npm would not install, such as a devDependency,
@@ -86,7 +96,9 @@ devDependency. The build instead:
 
 `npm run smoke:cli-package` installs the packed tarball into an empty prefix
 outside the checkout, with install scripts off, and runs it: `--version`,
-the native modules, a scan of the sample app, and `start`, `check` and `stop`
+the native modules, a Word document and a PDF read through the reader bundle
+(with mammoth, pdf.js, argparse and sprintf-js confirmed absent), a scan of
+the sample app, and `start`, `check` and `stop`
 on this repository. CI runs it on every pull request (`cli-package` in
 `ci.yml`). It is about 3.7 MB packed; `better-sqlite3` and `node-pty` load from
 the prebuilds they ship, so installing needs no compiler.
