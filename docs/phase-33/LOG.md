@@ -20,13 +20,13 @@
 |---|---|
 | **Stage / step** | Z2 Phase review |
 | **Status** | Every step and follow-up of Phase 33 is merged into feat/phase-33. Since the last full run: the branch popover and every worktree (#420), the CLI on npm as codetrellis (#422, the name claimed with 0.2.0) and the desktop app carrying the CLI with codetrellis on the PATH (#424). The phase releases as 0.3.0. What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3). |
-| **In flight** | nothing open |
+| **In flight** | Z3 building on `feat/phase-33-z3-main`; #431 in review on `feat/phase-33-fu-escape-checkbox`; #430 in review on `feat/phase-33-fix-macos-paths` |
 | **Last merged** | Z1 (#401, #402, `d293a94`) |
 | **Next action** | The owner walks the outcomes in RULES-AND-CLARITY.md on a packaged build; anything short becomes a step or a follow-up. Then Z3, on the release Mac: docs/releases/v0.3.0-plan.md takes it from bringing main in to the phone, with RUNBOOK.md for the steps. |
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `7f397db`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `18e7a0c`, with open PRs from GitHub.
 
 ---
 
@@ -60,6 +60,7 @@
 - [x] Follow-up: The CLI as an npm package (codetrellis), published from CI with trusted publishing, and codetrellis desktop install, which downloads the app through the signed manifest (the owner's ask) (#422)
 - [x] Follow-up: The desktop app carries the CLI and offers to put codetrellis on the PATH, as Ollama and VS Code do (the owner's ask) (#424)
 - [x] Follow-up: Dependency advisories: shell-quote (critical), source-map-js and http-cache-semantics fixed in the desktop and phone trees, the npm package resolves with none, and what no release fixes yet is written down (the owner's ask, with Dependabot's) (#426)
+- [x] Follow-up: Escape from a ticked box minimised nothing: the plan workspace's Escape left every focused input alone, checkboxes too, which the breakpoints browser test met on a slow runner (#430) (#431)
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
@@ -125,7 +126,7 @@
 ### Stage Z: close
 - [x] Z1 Docs: `docs/claude/rules.md`, CLI and MCP references, the change-control security rule (#401, #402)
 - [ ] Z2 Phase review on a packaged build
-- [ ] Z3 Into `main` and release
+- [ ] Z3 Into `main` and release — building
 
 <!-- status:end -->
 

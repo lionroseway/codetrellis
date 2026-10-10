@@ -24,6 +24,7 @@ import { PlanStatusChip } from './PlanStatusChip';
 import { ApprovePlanButton } from './ApprovePlanButton';
 import { usePlanStatus } from '../../../lib/plan-status';
 import { peekCodeReturn, returnToCode, type CodeReturn } from '../../../lib/open-file-at';
+import { isTypingTarget } from '../../../lib/typing-target';
 
 /**
  * Phase 15 §15.D — V2 plan workspace shell.
@@ -94,8 +95,7 @@ export function PlanWorkspaceShellV2() {
   // page went to nobody (#370), as the Settings dialog's did (#367).
   useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || (t as HTMLElement).isContentEditable)) return;
+      if (isTypingTarget(e.target as HTMLInputElement | null)) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         setWorkspaceMode('graph');
