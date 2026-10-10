@@ -36,6 +36,7 @@ import { FETCH_INTERVAL_CHOICES, type AppSettings, type SettingsSection, type Po
 import { useProjectStore } from '../../stores/project-store';
 import { useBranchesStore } from '../../stores/branches-store';
 import { AddToClaudeDesktop } from './AddToClaudeDesktop';
+import { CommandLineTool } from './CommandLineTool';
 import { ReviewHostSection } from './ReviewHostSection';
 import { SharedTaskStateSection } from './SharedTaskStateSection';
 import { PlansFolderSection } from './PlansFolderSection';
@@ -703,6 +704,12 @@ function McpSection({
           </details>
         )}
       </Field>
+
+      {window.electronAPI?.cli && (
+        <Field label="Command line">
+          <CommandLineTool />
+        </Field>
+      )}
 
       <p className="text-[10px] text-foreground-subtle leading-relaxed">
         Claude Code: run the command. Claude Desktop: <strong>Add to Claude Desktop</strong> in the desktop app, or paste

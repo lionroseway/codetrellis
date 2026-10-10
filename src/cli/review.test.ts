@@ -127,3 +127,21 @@ test('the sink: the report taken, a changed file read, anything else refused and
     '.env is not a file in the change', 'Bash is not a tool this review may use', 'the pass\'s budget of 3 tool calls is spent; call report_review now',
   ]);
 });
+
+test('the CLI the desktop app carries: its sink runs on the app binary in Node mode, in both agents\' configs, and nothing else is added', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-sink-env-'));
+  const sink = { command: '/Applications/CodeTrellis.app/Contents/MacOS/CodeTrellis', args: ['/r/cli/bin/app.cjs', 'review-sink', '--pass', dir], env: { ELECTRON_RUN_AS_NODE: '1' } };
+  const base = { instructions: 'I', message: 'M', sink, model: null, endpoint: null, maxTurns: 3, dir, work: dir, auth: { kind: 'login' as const }, tools: ['report_review'] };
+  adapterFor('claude-code')!.command(base);
+  const mcp = JSON.parse(fs.readFileSync(path.join(dir, 'mcp.json'), 'utf8'));
+  assert.deepEqual(mcp.mcpServers.codetrellis_review, { type: 'stdio', command: sink.command, args: sink.args, env: { ELECTRON_RUN_AS_NODE: '1' } });
+
+  const codex = adapterFor('codex')!.command({ ...base, auth: { kind: 'key', var: 'K', value: 'k' } });
+  const sets = codex.args.flatMap((a, i) => (codex.args[i - 1] === '-c' ? [a] : []));
+  assert.ok(sets.includes('mcp_servers.codetrellis_review.env={ ELECTRON_RUN_AS_NODE = "1" }'), sets.join('\n'));
+
+  // From npm or a checkout there is no env, and none is written.
+  const plain = fs.mkdtempSync(path.join(os.tmpdir(), 'ct-sink-plain-'));
+  adapterFor('claude-code')!.command({ ...base, dir: plain, sink: { command: '/usr/bin/node', args: ['/ct/bin/codetrellis.mjs'] } });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(plain, 'mcp.json'), 'utf8')).mcpServers.codetrellis_review.env, undefined);
+});

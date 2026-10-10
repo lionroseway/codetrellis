@@ -18,7 +18,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { connectorLine, flag, headlessDataDir, parseArgs, USAGE, type Parsed } from './args';
+import { connectorLine, flag, headlessDataDir, parseArgs, selfCommand, USAGE, type Parsed } from './args';
 import { VERBS } from './verbs';
 import { PLAN_VERBS } from './plan-verbs';
 import { version as CLI_VERSION } from '../../package.json';
@@ -122,7 +122,7 @@ async function serve(p: Parsed): Promise<void> {
   const project = projectOf(p);
   const dataDir = path.resolve(flag(p, 'data-dir') ?? headlessDataDir(project, process.env, os.homedir()));
   const { base, scan, mcp } = await boot(p, project, dataDir);
-  const line = connectorLine(process.execPath, binPath(), dataDir);
+  const line = connectorLine(self(), dataDir);
   const c = counts(scan);
   markReady(dataDir, project);
   if (p.flags.json) {
@@ -203,7 +203,7 @@ async function runningIn(dataDir: string): Promise<{ pid: number; url: string } 
 async function start(p: Parsed): Promise<void> {
   const project = projectOf(p);
   const dataDir = path.resolve(flag(p, 'data-dir') ?? headlessDataDir(project, process.env, os.homedir()));
-  const line = connectorLine(process.execPath, binPath(), dataDir);
+  const line = connectorLine(self(), dataDir);
   const say = (state: 'running' | 'started', pid: number) => {
     if (p.flags.quiet) return;
     if (p.flags.json) out(JSON.stringify({ state, pid, project, dataDir, connector: { command: line.command, args: line.args } }));
@@ -214,10 +214,11 @@ async function start(p: Parsed): Promise<void> {
 
   fs.mkdirSync(dataDir, { recursive: true });
   const log = fs.openSync(path.join(dataDir, 'serve.log'), 'a');
-  const args = [binPath(), 'serve', '--project', project, '--data-dir', dataDir];
+  const me = self();
+  const args = [...me.args, 'serve', '--project', project, '--data-dir', dataDir];
   for (const k of ['port', 'mcp-port']) { const v = portOf(p, k); if (v !== undefined) args.push(`--${k}`, v); }
   if (p.flags['share-task-state']) args.push('--share-task-state');
-  const child = spawn(process.execPath, args, { detached: true, stdio: ['ignore', log, log], cwd: project, env: process.env });
+  const child = spawn(me.command, args, { detached: true, stdio: ['ignore', log, log], cwd: project, env: { ...process.env, ...me.env } });
   child.unref();
   fs.closeSync(log);
   let exited: number | null = null;
@@ -310,7 +311,8 @@ async function reviewCmd(p: Parsed): Promise<void> {
     throw err;
   }
   try {
-    const sinkFor = (dir: string) => ({ command: process.execPath, args: [binPath(), 'review-sink', '--pass', dir] });
+    const me = self();
+    const sinkFor = (dir: string) => ({ command: me.command, args: [...me.args, 'review-sink', '--pass', dir], env: me.env });
     const post = opts.post ? await reviewPoster(opts.post, cwd) : undefined;
     const { out: text, code, note } = await review(agent, opts, cwd, process.env, sinkFor, { post, version: CLI_VERSION });
     out(text);
@@ -406,9 +408,9 @@ async function desktopCmd(p: Parsed): Promise<void> {
   if (error) fail(error instanceof Error ? error.message : String(error), 1);
 }
 
-/** This CLI's launcher, as an agent's config names it. */
-function binPath(): string {
-  return path.resolve(__dirname, '..', '..', 'bin', 'codetrellis.mjs');
+/** How to run this CLI again, from npm, a checkout or the desktop app (args.ts). */
+function self() {
+  return selfCommand(path.resolve(__dirname, '..', '..', 'bin'), { execPath: process.execPath, electron: process.versions.electron });
 }
 
 async function main(): Promise<void> {
