@@ -26,7 +26,7 @@
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `abf11db`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `5d9891b`, with open PRs from GitHub.
 
 ---
 
@@ -59,7 +59,7 @@
 - [x] Follow-up: The branch popover ran off the window with sixty branches, did not scroll or search, and hid the worktrees below them; each worktree now says where it is, and one inside the project is no longer scanned as part of it (the owner's report, 0.1.17) (#420)
 - [x] Follow-up: The CLI as an npm package (codetrellis), published from CI with trusted publishing, and codetrellis desktop install, which downloads the app through the signed manifest (the owner's ask) (#422)
 - [x] Follow-up: The desktop app carries the CLI and offers to put codetrellis on the PATH, as Ollama and VS Code do (the owner's ask) (#424)
-- [ ] Follow-up: Dependency advisories: shell-quote (critical), source-map-js and http-cache-semantics fixed in the desktop and phone trees, the npm package resolves with none, and what no release fixes yet is written down (the owner's ask, with Dependabot's)
+- [x] Follow-up: Dependency advisories: shell-quote (critical), source-map-js and http-cache-semantics fixed in the desktop and phone trees, the npm package resolves with none, and what no release fixes yet is written down (the owner's ask, with Dependabot's) (#426)
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
