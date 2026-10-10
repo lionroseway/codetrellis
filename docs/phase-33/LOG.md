@@ -20,13 +20,13 @@
 |---|---|
 | **Stage / step** | Z2 Phase review |
 | **Status** | Every step and follow-up of Phase 33 is merged into feat/phase-33. Since the last full run: the branch popover and every worktree (#420), the CLI on npm as codetrellis (#422, the name claimed with 0.2.0) and the desktop app carrying the CLI with codetrellis on the PATH (#424). The phase releases as 0.3.0. What is left is the owner's: the phase review on a packaged build (Z2), then into main and the release (Z3). |
-| **In flight** | Z3 building on `feat/phase-33-z3-main`; #430 in review on `feat/phase-33-fix-macos-paths` |
+| **In flight** | Z3 building on `feat/phase-33-z3-main`; #432 in review on `feat/phase-33-fu-smoke-macos` |
 | **Last merged** | Z1 (#401, #402, `d293a94`) |
 | **Next action** | The owner walks the outcomes in RULES-AND-CLARITY.md on a packaged build; anything short becomes a step or a follow-up. Then Z3, on the release Mac: docs/releases/v0.3.0-plan.md takes it from bringing main in to the phone, with RUNBOOK.md for the steps. |
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `43d5718`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `a9a67a9`, with open PRs from GitHub.
 
 ---
 
@@ -62,6 +62,7 @@
 - [x] Follow-up: Dependency advisories: shell-quote (critical), source-map-js and http-cache-semantics fixed in the desktop and phone trees, the npm package resolves with none, and what no release fixes yet is written down (the owner's ask, with Dependabot's) (#426)
 - [x] Follow-up: Run on a Mac for 0.3.0 (CI runs Linux): a rule approval in a project opened through a link checked the working tree's allowed signers, not the base's; three tests failed on macOS alone and one stalled the unit run (#430)
 - [x] Follow-up: Escape from a ticked box minimised nothing: the plan workspace's Escape left every focused input alone, checkboxes too, which the breakpoints browser test met on a slow runner (#430) (#431)
+- [x] Follow-up: Run on a Mac for 0.3.0: the CLI package's reader check compared a realpath with the temp folder as mktemp named it, so the smoke failed on macOS alone (#432)
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
