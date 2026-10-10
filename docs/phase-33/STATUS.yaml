@@ -153,6 +153,11 @@ sections:
         status: done
         prs:
           - 426
+      - title: "Run on a Mac for 0.3.0 (CI runs Linux): a rule approval in a project opened through a link checked the working tree's allowed signers, not the base's; three tests failed on macOS alone and one stalled the unit run"
+        followUp: true
+        status: done
+        prs:
+          - 430
   - title: "Stage 0: ground truth"
     goal: Numbers to measure against, the freeze measured, and every colour the app draws written down.
     items:
