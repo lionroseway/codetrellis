@@ -14,6 +14,7 @@
  */
 
 import { builtinModules } from 'node:module';
+import path from 'node:path';
 
 /** Required by name somewhere the scan cannot see (a computed require). */
 export const ALWAYS_NEEDED = ['web-tree-sitter'];
@@ -24,6 +25,21 @@ export const ALWAYS_NEEDED = ['web-tree-sitter'];
  * `process.versions.electron` is set). Listing it would download Electron.
  */
 export const NEVER_SHIPPED = ['electron'];
+
+/**
+ * Sources the package carries only inside the material reader's bundle
+ * (`reader/material-reader.mjs`, vite.reader.config.ts), so they are not
+ * compiled one to one. The reader runs in a process of its own and only that
+ * bundle is ever started; these two are its entry and what it reads with.
+ * Compiled as well, they would make mammoth and pdf.js dependencies of the
+ * package — pdf.js is large, and mammoth's own command line brings argparse 1
+ * and with it a sprintf-js no release fixes (GHSA-hp3w-g68c-fv3c) — for code
+ * nothing runs. The build refuses a package in which anything requires them.
+ */
+export const IN_READER_BUNDLE_ONLY = [
+  'src/backend/services/material-reader/child.ts',
+  'src/backend/services/material-reader/read.ts',
+];
 
 const BUILTINS = new Set([...builtinModules, ...builtinModules.map((m) => `node:${m}`)]);
 
@@ -44,6 +60,25 @@ export function requiredPackages(source: string): string[] {
     if (pkg) found.add(pkg);
   }
   return [...found];
+}
+
+/** Every relative path a compiled CommonJS file requires, as written. */
+export function relativeRequires(source: string): string[] {
+  return [...source.matchAll(/\brequire\(\s*(["'])(\.{1,2}\/[^"'\n]+)\1\s*\)/g)].map((m) => m[2]);
+}
+
+/**
+ * The left-out sources a compiled file still requires, by their path in the
+ * repository. `file` is the compiled file's path relative to the package
+ * (`src/backend/x.js`), which is also its source's path with `.ts` for `.js`.
+ */
+export function requiresLeftOut(file: string, source: string, leftOut: readonly string[]): string[] {
+  const dir = path.posix.dirname(file);
+  const strip = (p: string) => p.replace(/\.(ts|js)$/, '');
+  const out = new Set(leftOut.map(strip));
+  return relativeRequires(source)
+    .map((r) => path.posix.normalize(path.posix.join(dir, r)))
+    .filter((r) => out.has(strip(r)) || out.has(`${r}/index`));
 }
 
 export interface RootPackage {

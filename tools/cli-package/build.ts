@@ -9,7 +9,8 @@
  * the CLI's own launcher for the review sink) lands in the same place:
  *
  *   bin/codetrellis.mjs          the launcher
- *   src/**                       compiled one file to one file, not bundled
+ *   src/**                       compiled one file to one file, not bundled,
+ *                                but for what only the reader bundle carries
  *   resources/tree-sitter/*.wasm the grammars
  *   reader/material-reader.mjs   the material reader's bundle
  *   package.json                 only what the compiled files require
@@ -22,7 +23,7 @@ import fs from 'node:fs';
 import { builtinModules } from 'node:module';
 import path from 'node:path';
 import { build as viteBuild, transformWithEsbuild } from 'vite';
-import { cliManifest, requiredPackages, type RootPackage } from './manifest';
+import { cliManifest, IN_READER_BUNDLE_ONLY, requiredPackages, requiresLeftOut, type RootPackage } from './manifest';
 
 const root = path.resolve(__dirname, '..', '..');
 const out = path.join(root, 'out', 'cli-package');
@@ -85,7 +86,8 @@ async function main(): Promise<void> {
   fs.mkdirSync(out, { recursive: true });
 
   const files = SOURCE_DIRS.flatMap((d) => walk(path.join(root, d)));
-  const sources = files.filter((f) => f.endsWith('.ts') && !f.endsWith('.d.ts') && !isTest(f));
+  const leftOut = new Set(IN_READER_BUNDLE_ONLY.map((f) => path.join(root, f)));
+  const sources = files.filter((f) => f.endsWith('.ts') && !f.endsWith('.d.ts') && !isTest(f) && !leftOut.has(f));
 
   // One file to one file. Bundling would move every module to one place and
   // break the paths the backend works out from `__dirname`. Through Vite's
@@ -134,8 +136,15 @@ async function main(): Promise<void> {
   );
 
   const required = new Set<string>();
+  const reachesLeftOut: string[] = [];
   for (const f of walk(path.join(out, 'src')).filter((f) => f.endsWith('.js'))) {
-    for (const pkg of requiredPackages(fs.readFileSync(f, 'utf8'))) required.add(pkg);
+    const code = fs.readFileSync(f, 'utf8');
+    for (const pkg of requiredPackages(code)) required.add(pkg);
+    const rel = path.relative(out, f).split(path.sep).join('/');
+    for (const r of requiresLeftOut(rel, code, IN_READER_BUNDLE_ONLY)) reachesLeftOut.push(`${rel} requires ${r}`);
+  }
+  if (reachesLeftOut.length) {
+    throw new Error(`The package leaves out what only the reader bundle carries, but the CLI still requires it: ${reachesLeftOut.join('; ')}. Reach it through the reader (reader-host.ts), or take it off IN_READER_BUNDLE_ONLY in tools/cli-package/manifest.ts.`);
   }
   const rootPkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')) as RootPackage;
   fs.writeFileSync(path.join(out, 'package.json'), `${JSON.stringify(cliManifest(rootPkg, required), null, 2)}\n`);

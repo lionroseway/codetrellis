@@ -26,7 +26,7 @@
 | **Blockers** | None |
 | **Last updated** | 2026-10-08 |
 
-> Read from git at `origin/feat/phase-33` `2abb49c`, with open PRs from GitHub.
+> Read from git at `origin/feat/phase-33` `abf11db`, with open PRs from GitHub.
 
 ---
 
@@ -59,6 +59,7 @@
 - [x] Follow-up: The branch popover ran off the window with sixty branches, did not scroll or search, and hid the worktrees below them; each worktree now says where it is, and one inside the project is no longer scanned as part of it (the owner's report, 0.1.17) (#420)
 - [x] Follow-up: The CLI as an npm package (codetrellis), published from CI with trusted publishing, and codetrellis desktop install, which downloads the app through the signed manifest (the owner's ask) (#422)
 - [x] Follow-up: The desktop app carries the CLI and offers to put codetrellis on the PATH, as Ollama and VS Code do (the owner's ask) (#424)
+- [ ] Follow-up: Dependency advisories: shell-quote (critical), source-map-js and http-cache-semantics fixed in the desktop and phone trees, the npm package resolves with none, and what no release fixes yet is written down (the owner's ask, with Dependabot's)
 
 ### Stage 0: ground truth
 - [x] 0.1 Baseline (Node 26, clean `npm ci`, every suite and the lint warning count) (#350)
@@ -230,6 +231,46 @@ The suite was green at the start, so the three failures were ours:
   rules that judge it), then the small clarity wins (EXECUTION §2).
 
 ## Entries
+
+### 2026-10-10 — Dependency advisories (the owner's ask)
+
+The owner asked for the vulnerabilities in the package, and Dependabot's, to
+be dealt with first. `npm audit` reads Dependabot's database, so it was run in
+every folder with a lockfile, and the package was audited as a fresh install
+resolves it.
+
+- **Fixed, lockfile only, nothing else moved:**
+  - root: `shell-quote` 1.9.0 → 1.12.0 (critical; through `concurrently`
+    9.2.5, which pinned it), `source-map-js` 1.2.2, `http-cache-semantics`
+    4.3.0;
+  - mobile: `shell-quote` 1.10.0 → 1.12.0, `source-map-js` 1.2.2.
+
+  These are Dependabot's #348, #349 and #357, which target `main` and close
+  when the phase merges. `npm audit fix` was tried first and dropped: to fix
+  those three it also moved electron-builder and the hashes werift's crypto
+  uses.
+- **The npm package had 3 moderate** (mammoth → argparse 1 → sprintf-js, with
+  no fixed sprintf-js). The repository's `overrides` pin argparse 2, but npm
+  ignores a published package's overrides. The reader already runs from its
+  own bundle, which carries mammoth's library and not its command line, so
+  the package now leaves out the two reader sources only that bundle needs
+  (`IN_READER_BUNDLE_ONLY`). mammoth and pdf.js leave its dependencies, a
+  fresh resolution audits at 0, and the build fails if anything shipped still
+  requires them. The smoke test reads a Word document and a PDF through the
+  installed package and confirms the four packages are absent.
+- **Shipped by the desktop app:** 0 (`npm audit --omit=dev`), before and after.
+- **Left, with no fixed release:** `braces` (root and mobile build tooling),
+  `sprintf-js` (electron-builder, at packaging), and `node-forge` 1.4.0, the
+  latest release (`@expo/cli`, on the developer's machine). None is in what
+  ships; docs/claude/architecture.md, "Dependency advisories", says why and
+  how to re-check. `.github/dependabot.yml`'s 2026-09-16 count is brought up
+  to date there too.
+- **Dependabot's other open PRs are version updates, not advisories:**
+  Electron 44.5.1, actions/cache 6, the Expo SDK group, and majors
+  (TypeScript 7, ESLint 10, tailwind-merge 3, concurrently 10). They wait for
+  the owner, outside this phase.
+- Checked: unit (2293 pass, 0 fail), typecheck, lint (0 errors), build,
+  mobile typecheck, the phone's 40 screens, and the package's smoke test.
 
 ### 2026-10-10 — The name is claimed; the desktop app carries the CLI
 

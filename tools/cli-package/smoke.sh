@@ -38,6 +38,13 @@ echo "== the native modules load from the install"
 (cd "$work/prefix/lib/node_modules/codetrellis" 2>/dev/null || cd "$work/prefix/node_modules/codetrellis"
  node -e "new (require('better-sqlite3'))(':memory:'); require('node-pty'); console.log('ok')")
 
+echo "== the material reader: a Word document and a PDF, through the reader bundle"
+pkgdir="$work/prefix/lib/node_modules/codetrellis"; [[ -d "$pkgdir" ]] || pkgdir="$work/prefix/node_modules/codetrellis"
+for dep in mammoth pdfjs-dist argparse sprintf-js; do
+  [[ ! -e "$pkgdir/node_modules/$dep" && ! -e "$work/prefix/lib/node_modules/$dep" ]] || { echo "$dep was installed with the package" >&2; exit 1; }
+done
+(cd "$repo" && node_modules/.bin/tsx tools/cli-package/reader-smoke.ts "$pkgdir")
+
 echo "== scan: the grammars parse the sample app"
 out="$("$ct" scan --project "$repo/tests/fixtures/sample-app" --data-dir "$work/scan" --json 2>/dev/null | grep '^{')"
 echo "$out"
