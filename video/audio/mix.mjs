@@ -56,7 +56,10 @@ export function graph(spec, base) {
         const end = len ?? Math.min(duration(file), D - (clip.at ?? 0));
         f.push(`afade=t=out:st=${Math.max(0, end - clip.fadeOut).toFixed(3)}:d=${clip.fadeOut}`);
       }
-      f.push(`adelay=${ms}`, 'apad', `atrim=0:${D.toFixed(3)}`);
+      // One delay per channel: a single value delays only the first channel, so
+      // every clip also played at 0 s on the right and in place only on the left.
+      // (`all=1` would do the same but needs FFmpeg 4.2; the bundled one is older.)
+      f.push(`adelay=${ms}|${ms}`, 'apad', `atrim=0:${D.toFixed(3)}`);
       const label = `c${i}`;
       lines.push(`[${i}:a]${f.join(',')}[${label}]`);
       parts.push(label);

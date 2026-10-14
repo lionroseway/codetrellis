@@ -104,6 +104,22 @@ test('a real mix with one voice track and nothing else (the narrated hero\'s sha
   assert.deepEqual(checkRendered(s, out).errors, []);
 });
 
+test('a mono clip sits in both channels, at its time, and nowhere before it', () => {
+  // The bug this guards: `adelay` with one value delays only the left channel,
+  // so every line also played at 0 s on the right and the voice sat on one side.
+  tone('a.wav', 0.5, 300, 0.5); tone('b.wav', 0.5, 450, 0.5);
+  const s = { duration: 3, tracks: [{ name: 'vo', exclusive: true, clips: [{ id: 'a', file: 'a.wav', at: 1 }, { id: 'b', file: 'b.wav', at: 2 }] }] };
+  const out = path.join(tmp, 'sides.wav');
+  mix(s, out, { base: tmp, log: () => {} });
+  const peak = (ch, from, to) => Number(/max_volume: (-?[\d.]+) dB/.exec(ff(['-i', out, '-af', `pan=mono|c0=${ch},atrim=${from}:${to},volumedetect`, '-f', 'null', '-']).replace('-inf', '-200'))?.[1] ?? -200);
+  for (const ch of ['FL', 'FR']) {
+    assert.ok(peak(ch, 0, 0.95) < -60, `${ch} is silent before the first clip`);
+    assert.ok(peak(ch, 1, 1.5) > -20, `${ch} carries the first clip at 1 s`);
+    assert.ok(peak(ch, 2, 2.5) > -20, `${ch} carries the second clip at 2 s`);
+  }
+  assert.ok(Math.abs(peak('FL', 1, 2.5) - peak('FR', 1, 2.5)) < 0.5, 'left and right are level');
+});
+
 // ── Sound effects, music and the library ──────────────────────────────────
 import { generate } from './synth.mjs';
 import { track as sfxTrack } from './sfx.mjs';
