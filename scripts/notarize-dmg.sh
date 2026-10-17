@@ -25,7 +25,15 @@
 # servers, so a user who is offline — or behind a network that blocks them —
 # is refused despite everything being valid.
 #
-# Usage:  ./scripts/notarize-dmg.sh out/make/*.dmg
+# The installer package (.pkg) gets the same treatment, with one difference:
+# electron-builder signs it as it builds it, with the "Developer ID Installer"
+# certificate (a disk image takes the Application one, and only `codesign` can
+# sign it). So for a package this checks the signature is that certificate's
+# rather than signing, then notarizes, staples and asks Gatekeeper the
+# question an installer is asked (`spctl -t install`). A package that MDM
+# pushes to a Mac with no network has only the stapled ticket to go on.
+#
+# Usage:  ./scripts/notarize-dmg.sh out/make/*.dmg out/make/*.pkg
 
 set -euo pipefail
 
@@ -33,7 +41,7 @@ log() { printf '\033[1;36m[notarize-dmg]\033[0m %s\n' "$*"; }
 err() { printf '\033[1;31m[notarize-dmg]\033[0m %s\n' "$*" >&2; }
 
 if [[ $# -eq 0 ]]; then
-  err "Usage: $0 <dmg> [dmg...]"
+  err "Usage: $0 <dmg|pkg> [dmg|pkg...]"
   exit 2
 fi
 
@@ -80,8 +88,22 @@ for dmg in "$@"; do
     continue
   fi
 
-  log "${name}: signing…"
-  codesign --sign "$CSC_NAME" --timestamp --force "$dmg"
+  if [[ "$dmg" == *.pkg ]]; then
+    # Signed by productbuild at build time; a machine without the Installer
+    # certificate builds it unsigned, and notarization would reject it later
+    # with a less useful message.
+    sig="$(pkgutil --check-signature "$dmg" 2>&1 || true)"
+    if ! grep -q "Developer ID Installer: " <<<"$sig" || ! grep -q "signed by a developer certificate issued by Apple for distribution" <<<"$sig"; then
+      err "${name}: not signed with a Developer ID Installer certificate."
+      printf '%s\n' "$sig" >&2
+      err "Install the certificate in the login keychain (see docs/releases/RUNBOOK.md) and rebuild."
+      exit 1
+    fi
+    log "${name}: signed with $(grep -m1 -o 'Developer ID Installer: [^)]*)' <<<"$sig")"
+  else
+    log "${name}: signing…"
+    codesign --sign "$CSC_NAME" --timestamp --force "$dmg"
+  fi
 
   log "${name}: notarizing (this waits on Apple — usually a couple of minutes)…"
   #
@@ -121,13 +143,18 @@ for dmg in "$@"; do
 
   # Verify against the artifact, not against the exit codes above. This is the
   # exact assessment Gatekeeper performs when the user opens the download.
-  if ! spctl -a -t open --context context:primary-signature -v "$dmg" 2>&1 | grep -q accepted; then
+  if [[ "$dmg" == *.pkg ]]; then
+    assess=(spctl -a -t install -v "$dmg")
+  else
+    assess=(spctl -a -t open --context context:primary-signature -v "$dmg")
+  fi
+  if ! "${assess[@]}" 2>&1 | grep -q accepted; then
     err "${name}: STILL REJECTED by Gatekeeper after signing and stapling."
-    spctl -a -t open --context context:primary-signature -v "$dmg" || true
+    "${assess[@]}" || true
     exit 1
   fi
 
   log "${name}: accepted by Gatekeeper ✓"
 done
 
-log "All disk images signed, notarized and stapled."
+log "All disk images and packages signed, notarized and stapled."
