@@ -109,6 +109,19 @@ node "${REPO_ROOT}/scripts/verify-build-stamp.js" \
   "${OUT_DIR}/mac-arm64/CodeTrellis.app/Contents/Resources/app.asar" \
   "${OUT_DIR}/mac/CodeTrellis.app/Contents/Resources/app.asar"
 
+# The installer package carries its own copy of the arm64 app, so it is
+# checked too: with --skip-build a package left from another build would
+# otherwise publish beside DMGs it does not match.
+PKG="${OUT_DIR}/CodeTrellis-${VERSION}-arm64.pkg"
+if [[ -f "$PKG" ]]; then
+  PKG_X="$(mktemp -d)"
+  pkgutil --expand-full "$PKG" "${PKG_X}/x" >/dev/null
+  PKG_ASAR="$(find "${PKG_X}/x" -path '*CodeTrellis.app/Contents/Resources/app.asar' | head -1)"
+  [[ -n "$PKG_ASAR" ]] || { err "No CodeTrellis.app inside $(basename "$PKG")"; exit 1; }
+  node "${REPO_ROOT}/scripts/verify-build-stamp.js" "$PKG_ASAR"
+  rm -rf "$PKG_X"
+fi
+
 # --- Sign + notarize + staple the DMGs themselves --------------------------
 #
 # electron-builder notarizes the .app but leaves the disk image unsigned, so
@@ -122,8 +135,12 @@ node "${REPO_ROOT}/scripts/verify-build-stamp.js" \
 # notarization round trip on each of them — and, worse, fail the release on a
 # stale ad-hoc-signed DMG from an older build that has nothing to do with this
 # one. Only this version's disk images are this release's business.
-if [[ -n "$(ls "${OUT_DIR}"/CodeTrellis-${VERSION}-*.dmg 2>/dev/null)" ]]; then
-  "${REPO_ROOT}/scripts/notarize-dmg.sh" "${OUT_DIR}"/CodeTrellis-${VERSION}-*.dmg
+# The arm64 installer package goes through the same step.
+shopt -s nullglob
+mac_installers=("${OUT_DIR}"/CodeTrellis-${VERSION}-*.dmg "${OUT_DIR}"/CodeTrellis-${VERSION}-*.pkg)
+shopt -u nullglob
+if [[ ${#mac_installers[@]} -gt 0 ]]; then
+  "${REPO_ROOT}/scripts/notarize-dmg.sh" "${mac_installers[@]}"
 fi
 
 # --- Build Windows + Linux on CI (native runners) ---
@@ -163,6 +180,7 @@ upload_files=()
 for f in \
   "${OUT_DIR}/CodeTrellis-${VERSION}-arm64.dmg" \
   "${OUT_DIR}/CodeTrellis-${VERSION}-x64.dmg" \
+  "${OUT_DIR}/CodeTrellis-${VERSION}-arm64.pkg" \
   "${OUT_DIR}/CodeTrellis-Setup-${VERSION}.exe" \
   "${OUT_DIR}/CodeTrellis-Portable-${VERSION}.exe" \
   "${OUT_DIR}"/CodeTrellis-${VERSION}*.AppImage \
@@ -246,6 +264,7 @@ CodeTrellis ${VERSION} — installer downloads.
 
 - **macOS (Apple Silicon)** — \`CodeTrellis-${VERSION}-arm64.dmg\` (signed + notarized)
 - **macOS (Intel)** — \`CodeTrellis-${VERSION}-x64.dmg\` (signed + notarized)
+- **macOS (Apple Silicon), managed Macs** — \`CodeTrellis-${VERSION}-arm64.pkg\`: an installer package for MDM (Jamf, Intune, Kandji); signed + notarized, installs to /Applications
 - **Windows installer (NSIS)** — \`CodeTrellis-Setup-${VERSION}.exe\`
 - **Windows portable** — \`CodeTrellis-Portable-${VERSION}.exe\`
 - **Linux AppImage** — \`CodeTrellis-${VERSION}-x86_64.AppImage\` / \`CodeTrellis-${VERSION}-arm64.AppImage\` (portable, no install)

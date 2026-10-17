@@ -660,6 +660,7 @@ update** — never 404, and never offer a download the user cannot run.
 |---|---|---|
 | macOS Apple Silicon | `CodeTrellis-X.Y.Z-arm64.dmg` | Signed + notarised **via `scripts/release.sh` only** |
 | macOS Intel | `CodeTrellis-X.Y.Z-x64.dmg` | Signed + notarised **via `scripts/release.sh` only** |
+| macOS Apple Silicon, managed | `CodeTrellis-X.Y.Z-arm64.pkg` | Installer package for MDM (Jamf, Intune, Kandji): signed with the **Developer ID Installer** certificate, notarised, installs to `/Applications`. Never offered as an update |
 | Checksums | `SHA256SUMS` + `SHA256SUMS.sig` | Signed manifest — the app verifies against this |
 | Windows installer | `CodeTrellis-Setup-X.Y.Z.exe` | NSIS, unsigned (SmartScreen warning) |
 | Windows portable | `CodeTrellis-Portable-X.Y.Z.exe` | No install needed |

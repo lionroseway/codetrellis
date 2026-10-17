@@ -17,6 +17,7 @@ checked, because step 6 uploads the artefacts step 2 made
 - [ ] Node 26: `node -v` says v26. If not: `fnm use 26`
 - [ ] `gh auth status` is logged in
 - [ ] `scripts/release-env.sh` exists (Apple credentials); `scripts/release-signing-key.pem` exists
+- [ ] `security find-identity -v` lists **Developer ID Application** and **Developer ID Installer** for AILAR Limited (35GKY9KGZ3). Both expire **1 Feb 2027**; renew them in Xcode → Settings → Accounts → Manage Certificates before a release after that date. What was signed before then stays valid
 - [ ] Quit any running CodeTrellis (a second instance moves to other ports, and the demo would talk to the wrong one)
 
 ## 1. Version
@@ -39,7 +40,10 @@ node scripts/check-patches.cjs           # every patch in patches/ applied
 - [ ] macOS signing is real, for both DMGs:
       `spctl -a -vvv -t install out/make/CodeTrellis-*-arm64.dmg` says **accepted** and
       **Notarized Developer ID**. Same for `-x64.dmg`. (v0.1.13 shipped unsigned; this is the check.)
-- [ ] `out/make/` holds the DMGs, Setup and Portable `.exe`, both AppImages, `.deb`, `.rpm`, all at this version.
+- [ ] The installer package for managed Macs is signed, notarised and stapled:
+      `pkgutil --check-signature out/make/CodeTrellis-*-arm64.pkg` names **Developer ID Installer: AILAR Limited**,
+      and `spctl -a -vvv -t install out/make/CodeTrellis-*-arm64.pkg` says **accepted** and **Notarized Developer ID**.
+- [ ] `out/make/` holds the DMGs, the arm64 `.pkg`, Setup and Portable `.exe`, both AppImages, `.deb`, `.rpm`, all at this version.
 
 ## 3. The packaged app boots and opens a real database
 

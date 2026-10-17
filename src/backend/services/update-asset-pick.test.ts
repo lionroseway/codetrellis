@@ -53,6 +53,15 @@ describe('an installer the user cannot run is not a fallback (m20)', () => {
     assert.equal(name('win32-x64'), 'CodeTrellis-Setup-0.1.15.exe');
   });
 
+  test('the installer package is for MDM, never an update: an Apple Silicon Mac is offered the DMG beside it, and nothing without one', () => {
+    // A .pkg installs as root into /Applications. Offered as an update it
+    // would ask a managed Mac's user for an admin password they do not have.
+    const withPkg = [asset('CodeTrellis-0.3.1-arm64.pkg'), asset('CodeTrellis-0.3.1-arm64.dmg'), asset('CodeTrellis-0.3.1-x64.dmg')];
+    assert.equal(pickAssetForPlatform(withPkg, 'darwin-arm64')?.name, 'CodeTrellis-0.3.1-arm64.dmg');
+    assert.equal(pickAssetForPlatform([asset('CodeTrellis-0.3.1-arm64.pkg')], 'darwin-arm64'), null);
+    assert.equal(pickAssetForPlatform([asset('CodeTrellis-0.3.1-arm64.pkg')], 'darwin-x64'), null);
+  });
+
   test('an unrecognised platform gets nothing rather than something', () => {
     assert.equal(pickAssetForPlatform(armOnly, 'freebsd-x64'), null);
   });

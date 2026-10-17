@@ -29,6 +29,10 @@ module.exports = {
   ...base,
   mac: {
     ...macBase,
+    // The DMG and zip for both architectures, plus an installer package for
+    // Apple Silicon: managed Macs (Jamf, Intune, Kandji) deploy a signed .pkg,
+    // not a disk image. It wraps the same signed app the arm64 DMG carries.
+    target: [...macBase.target, { target: 'pkg', arch: ['arm64'] }],
     hardenedRuntime: true,
     gatekeeperAssess: false,
     entitlements: 'build/entitlements.mac.plist',
@@ -39,6 +43,22 @@ module.exports = {
     // (APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD), plus APPLE_TEAM_ID. Activate only
     // when creds are present so a signing-only build (no notarization) still works.
     notarize: Boolean(process.env.APPLE_API_KEY || process.env.APPLE_ID),
+  },
+  // Signed with the "Developer ID Installer" certificate, which electron-builder
+  // finds in the keychain as it finds the Application one; a machine without it
+  // builds an unsigned package, and scripts/notarize-dmg.sh refuses that.
+  // Notarizing and stapling are that script's too, for the reason the DMG's are.
+  pkg: {
+    installLocation: '/Applications',
+    // Only into /Applications on the startup disk. Relocatable, the installer
+    // "upgrades" whichever copy of the app it finds anywhere on the disk.
+    isRelocatable: false,
+    allowAnywhere: false,
+    allowCurrentUserHome: false,
+    allowRootDirectory: true,
+    // Never installs an older version over a newer one.
+    isVersionChecked: true,
+    mustClose: ['dev.codetrellis.app'],
   },
   dmg: {
     ...base.dmg,
