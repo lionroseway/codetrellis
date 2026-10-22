@@ -164,11 +164,13 @@ export const ACTS = [
       // A real `codetrellis check`: exit 3 on the breach, 0 after the fix.
       { layout: 'terminal', vo: "And CI fails when work drifts.", dur: 9, bar: 'exports-v2 · ci',
         box: { x: 96, y: 120, w: 1040 },
-        recipe: { x: 96, y: 700, w: 1040, name: '.github/workflows/conformity.yml', at: 3.4, lines: [
+        // The passing output fills the terminal to the foot of the frame, so
+        // the workflow sits in the right column, above the statement.
+        recipe: { x: 1176, y: 120, w: 648, name: '.github/workflows/conformity.yml', at: 3.4, lines: [
           '- name: Start CodeTrellis',
           '  run: codetrellis start --quiet',
           '- name: Conformity',
-          '  run: codetrellis check   # exit 3 when it does not conform',
+          '  run: codetrellis check  # exit 3 on drift',
         ] },
         holdFail: 2.8,
         textBox: { x: 1220, w: 600 },
