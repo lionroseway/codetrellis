@@ -47,7 +47,12 @@ export interface ParserPlugin {
    */
   extractSymbols(root: SyntaxNode): ParsedSymbol[];
 
-  /** Extract import declarations as raw source strings + specifiers. */
+  /**
+   * Extract import declarations as raw source strings + specifiers, from
+   * wherever the language lets a file write one: rules read this, and one it
+   * misses is a breach nobody is told about. docs/claude/rules.md, "What counts
+   * as an import", lists what each language counts.
+   */
   extractImports(root: SyntaxNode): ImportDeclaration[];
 
   /** Optional — most languages won't need export tracking yet. */

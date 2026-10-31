@@ -12,6 +12,7 @@
  */
 
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { test, expect } from '@playwright/test';
 import { setupHarness, startBackend, createClient, createMcpClient, type Harness, type RunningBackend, type ScriptedMcp } from '../harness';
 import type { RecordCheck } from '../../src/shared/types/record';
@@ -96,8 +97,7 @@ test.describe.serial('The record', () => {
   });
 
   test('a tool call edited in the database while the app was closed is named on the next start', async () => {
-    const Database = require('better-sqlite3') as new (file: string) => { prepare: (sql: string) => { get: (...a: unknown[]) => unknown; run: (...a: unknown[]) => unknown }; close: () => void };
-    const db = new Database(path.join(h.fixture.dataDir, 'data.db'));
+    const db = new DatabaseSync(path.join(h.fixture.dataDir, 'data.db'));
     const target = db.prepare(`SELECT c.seq AS seq, e.id AS id FROM agent_events e JOIN record_chain c ON c.event_id = e.id
       WHERE e.type = 'tool_call' AND e.agent_type = 'codex' ORDER BY c.seq ASC LIMIT 1`).get() as { seq: number; id: string };
     db.prepare('UPDATE agent_events SET payload = ? WHERE id = ?').run(JSON.stringify({ tool: 'delete_plan', args: '{}' }), target.id);

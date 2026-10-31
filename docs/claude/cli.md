@@ -402,13 +402,23 @@ nobody gated). `codetrellis rules baseline` writes them down, per rule, in
 
 A baseline never excuses an import the change adds.
 
-**A baseline written by 0.3.0 can list too few.** 0.3.0 read only a Python
-file's top-level imports, and matched `pypi:langchain-ollama` to nothing when
-the code says `langchain_ollama`. Later versions see the rest, so a repository
-with Python imports inside a function, a `try:` or an `if`, or a rule spelled
-with the other separator, fails every check, on any change, with
-`… and its baseline does not list it`. `rules baseline` will not add them,
-because a baseline only shrinks. To write the truth down:
+**A baseline written by 0.3.0 can list too few.** 0.3.0 read only the top level
+of a Python, Rust or C# file, and only the `import` statements of a TypeScript
+or JavaScript one. It read `pub use stripe::X` as a crate called `pub use
+stripe`, and matched `pypi:langchain-ollama` to nothing when the code says
+`langchain_ollama`. Later versions see the rest
+([what counts as an import](rules.md#what-counts-as-an-import)). So a repository
+with any of these fails every check, on any change, with
+`… and its baseline does not list it`:
+
+- a Python import inside a function, a `try:` or an `if`, or a rule spelled with
+  the other separator;
+- a Rust `use` inside a `fn` or a `mod tests { }`, or a `pub use`;
+- a C# `using` inside a namespace or an `#if`;
+- a `require('x')` or an `import('x')`.
+
+`rules baseline` will not add them, because a baseline only shrinks. To write
+the truth down:
 
 1. While CI is still on 0.3.0, remove the affected rules from `baseline.yaml`
    in a pull request. Its check passes there, judged by the base's baseline.

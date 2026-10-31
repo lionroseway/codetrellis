@@ -12,6 +12,7 @@
  */
 
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { test, expect } from '@playwright/test';
 import { setupHarness, startBackend, type Harness, type RunningBackend, type ScriptedMcp } from '../harness';
 
@@ -147,8 +148,7 @@ test.describe.serial('The evidence export', () => {
   test('a tool call changed in the database while the app was closed: the evidence exported before names it', async () => {
     const target = exported.record.entries.find((e) => e.event?.type === 'tool_call' && e.event.agentType === 'codex')!;
     await h.backend.stop();
-    const Database = require('better-sqlite3') as new (file: string) => { prepare: (sql: string) => { run: (...a: unknown[]) => unknown }; close: () => void };
-    const db = new Database(path.join(h.fixture.dataDir, 'data.db'));
+    const db = new DatabaseSync(path.join(h.fixture.dataDir, 'data.db'));
     db.prepare('UPDATE agent_events SET payload = ? WHERE id = ?').run(JSON.stringify({ tool: 'delete_plan', args: '{}' }), target.event!.id);
     db.close();
 

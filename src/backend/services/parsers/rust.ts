@@ -7,6 +7,7 @@ import type { ParsedSymbol, ImportDeclaration } from '../../../shared/types';
  * Tree-sitter-rust nodes:
  *   - function_item, struct_item, enum_item, trait_item, impl_item, mod_item, type_item
  *   - use_declaration ← `use crate::foo::Bar;`
+ *   - extern_crate_declaration ← `extern crate foo;`
  */
 
 function nameOf(node: SyntaxNode): string {
@@ -56,27 +57,69 @@ function extractSymbols(node: SyntaxNode): ParsedSymbol[] {
   return symbols;
 }
 
-function readUsePath(node: SyntaxNode): string {
-  // The body of a use_declaration is a use_clause / scoped_use_list /
-  // scoped_identifier / use_as_clause / etc. We just stringify the
-  // raw text up to the first '{' (group imports).
-  const text = (node.text || '').trim().replace(/^use\s+/, '').replace(/;\s*$/, '');
-  const braceIdx = text.indexOf('{');
-  return braceIdx === -1 ? text : text.slice(0, braceIdx).replace(/::$/, '');
+/**
+ * What a use declaration's argument names, without its alias: `a::b as c` is
+ * `a::b`, `a::{b, c}` is `a`, and `{a::b, c}` is both. The argument, and not
+ * the declaration's text, so `pub use a::b` is not a crate called `pub use a`.
+ */
+function usePaths(node: SyntaxNode): string[] {
+  switch (node.type) {
+    case 'use_as_clause':
+      return [node.childForFieldName('path')?.text ?? ''];
+    case 'scoped_use_list': {
+      const path = node.childForFieldName('path');
+      const list = node.childForFieldName('list');
+      return path ? [path.text] : list ? usePaths(list) : [];
+    }
+    case 'use_list':
+      return node.namedChildren.filter((c: SyntaxNode) => !c.type.endsWith('comment')).flatMap(usePaths);
+    default:
+      return [node.text];
+  }
 }
 
-function extractImports(node: SyntaxNode): ImportDeclaration[] {
+/** Holds no declaration the grammar can see (a macro's body is tokens), or is what makes a generated table large. */
+const NO_USE_INSIDE = new Set(['macro_invocation', 'macro_definition', 'array_expression']);
+
+/**
+ * Every use and extern crate declaration in the file, in source order, at any
+ * depth: inside a `fn`, a `mod tests { }`, an `impl`. Reading only the top level
+ * left a package rule silently under-reporting. A block is an expression in
+ * Rust, and `use` may open any block, so unlike Python this walk has to enter
+ * expressions: it stays out only of what is listed above. An explicit stack,
+ * because expressions can nest deeper than the call stack.
+ */
+function useNodes(root: SyntaxNode): SyntaxNode[] {
+  const found: SyntaxNode[] = [];
+  const stack = [root];
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    if (node.type === 'use_declaration' || node.type === 'extern_crate_declaration') {
+      found.push(node);
+    } else if (!NO_USE_INSIDE.has(node.type)) {
+      const children = node.children;
+      for (let i = children.length - 1; i >= 0; i -= 1) stack.push(children[i]);
+    }
+  }
+  return found;
+}
+
+function extractImports(root: SyntaxNode): ImportDeclaration[] {
   const imports: ImportDeclaration[] = [];
-  for (const child of node.children) {
-    if (child.type !== 'use_declaration') continue;
-    const path = readUsePath(child);
-    if (!path) continue;
-    imports.push({
-      source: path,
-      specifiers: [path.split('::').pop() || path],
-      isDefault: false,
-      isNamespace: false,
-    });
+  for (const node of useNodes(root)) {
+    const argument = node.childForFieldName('argument');
+    const paths = node.type === 'extern_crate_declaration'
+      ? [node.childForFieldName('name')?.text ?? '']
+      : argument ? usePaths(argument) : [];
+    for (const path of paths) {
+      if (!path) continue;
+      imports.push({
+        source: path,
+        specifiers: [path.split('::').pop() || path],
+        isDefault: false,
+        isNamespace: false,
+      });
+    }
   }
   return imports;
 }

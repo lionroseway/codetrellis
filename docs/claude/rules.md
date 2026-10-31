@@ -74,6 +74,36 @@ Every rule has an **engine**, which follows from the rule: `deterministic`
 `.codetrellis/rules/baseline.yaml` holds the breaches each rule already had
 when it was written. A rule's count of old breaches may only fall (C3).
 
+### What counts as an import
+
+An `imports`, a `package` and a `symbol` rule all read the same thing: what the
+file's parser calls an import. It looks wherever the language lets a file write
+one, because a dependency put off to a function is still a dependency.
+
+| Language | Counted, at any depth | Deliberately not counted |
+|---|---|---|
+| TypeScript, JavaScript | `import`, `export … from`, `import x = require('x')`, `require('x')`, `import('x')`, a type written `import('x').T`, and any of them in a `declare module` | A computed name (`require(name)`, `` import(`./${x}`) ``). `require.resolve('x')`, which only finds a file. A `require` by another name, such as what `createRequire` returns. `export import x = require('x')`, which the grammar cannot read |
+| Python | `import`, `from … import` ([more](#python-imports)) | `importlib.import_module('x')` and `__import__('x')` |
+| Rust | `use` and `pub use`, in a function, a `mod tests { }`, an `impl` or any block, and `extern crate` | Inside a macro's body (`cfg_if!`, `macro_rules!`), which the grammar holds as tokens, or an array literal, which is what makes a generated table large |
+| C# | `using`, at the top, in a namespace however nested, and in any arm of an `#if` | A `using` statement, which disposes something |
+| Ruby | `require`, `require_relative`, `load` and `autoload`, anywhere | A computed name (`require name`) |
+| PHP | `use`, at the top and in a namespace, the only places it is an import | `require` and `include`, which run a file. `use` in a class (a trait) or a closure |
+| Go, Java, Kotlin, Swift | `import`. These languages allow it only at the top of a file, so there is no depth to read. Swift's `#if canImport(X)` arms are read | Reflection, such as Java's `Class.forName("x")` |
+
+`require` and `import()` count because they load a module as surely as `import`
+does: `require` is how CommonJS says it, and `import()` is how a route or a heavy
+dependency gets put off. They take their names where they say them, so
+`const { raw } = require('./db')` uses `raw` and not `safe`, for a symbol rule;
+`const db = require('./db')` may use anything, as `import * as db` may.
+
+**A name written in full is not an import, in any language.** `stripe::Charge::new()`
+in Rust, or `Stripe.Charge.Create()` in C#, depends on the package with no import
+to read. A [`grep` rule](#text-that-must-or-must-not-appear) can hold that shape.
+
+A baseline written before a version that reads more lists too few:
+[Old breaches may only fall](cli.md#old-breaches-may-only-fall-phase-33-c3) says
+what to do.
+
 ## Change control
 
 Rules change only through a person (R2, R3):

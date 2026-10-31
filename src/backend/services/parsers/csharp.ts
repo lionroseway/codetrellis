@@ -239,6 +239,30 @@ function extractSymbols(root: SyntaxNode): ParsedSymbol[] {
   return flattenSymbols(out);
 }
 
+/** What can hold a `using` directive besides the file itself. A type's body cannot, so it is never entered. */
+const USING_HOLDERS = new Set(['compilation_unit', 'namespace_declaration', 'declaration_list', 'preproc_if', 'preproc_elif', 'preproc_else']);
+
+/**
+ * Every `using` directive in the file, in source order: at the top, in a
+ * `namespace X { }` however nested, and in either arm of an `#if`. Reading only
+ * the top level left a package rule silently under-reporting. A `using var`
+ * statement is not one, and lives in a method. An explicit stack, as Python's.
+ */
+function usingDirectives(root: SyntaxNode): SyntaxNode[] {
+  const found: SyntaxNode[] = [];
+  const stack = [root];
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    if (node.type === 'using_directive') {
+      found.push(node);
+    } else if (USING_HOLDERS.has(node.type)) {
+      const children = node.namedChildren;
+      for (let i = children.length - 1; i >= 0; i -= 1) stack.push(children[i]);
+    }
+  }
+  return found;
+}
+
 /**
  * `using` is a *namespace* import, not a file import.
  *
@@ -258,9 +282,7 @@ function extractSymbols(root: SyntaxNode): ParsedSymbol[] {
  */
 function extractImports(root: SyntaxNode): ImportDeclaration[] {
   const imports: ImportDeclaration[] = [];
-  for (const child of root.namedChildren) {
-    if (child.type !== 'using_directive') continue;
-
+  for (const child of usingDirectives(root)) {
     const qualified = child.children.find((c: SyntaxNode) => c.type === 'qualified_name');
     const identifiers = child.children.filter((c: SyntaxNode) => c.type === 'identifier');
     const alias = child.childForFieldName('alias')?.text
