@@ -74,6 +74,32 @@ to `npm audit fix`, which also moved electron-builder, werift's crypto and a
 dozen unrelated packages to fix three. Never `--force`: it proposes
 downgrades (Expo 44, React Native 0.72) that are no fix at all.
 
+`npm audit fix --omit=dev --ignore-scripts` is the narrower form, for when only
+production packages need to move: on 2026-10-31 it moved exactly the eight
+vulnerable packages and nothing else. It also deletes the dev packages from
+`node_modules`, so follow it with the clean install CI uses.
+
+**Electron is outside the blocking gate, and it ships.** It is a
+`devDependency`, as packaging requires, so `npm audit --omit=dev` never reports
+it, though every installer carries it. Read it from the full audit.
+
+**Where it stood on 2026-10-31** (the root only; the other lockfiles were not
+re-measured):
+
+- **Fixed:** `dompurify` 3.4.17 (critical), `zod` 4.6.7 and `body-parser` 2.4.0
+  (high), `@hono/node-server` 2.1.5, `hono` 4.13.14, `fast-uri` 3.1.9,
+  `ip-address` 10.7.5 and `qs` 6.17.1 (moderate). All were published after
+  0.3.0, and turned the blocking gate red on every pull request.
+- **Shipped by the desktop app (`--omit=dev`):** 0, not counting Electron.
+- **Open in Electron 44.4.1, which ships:** GHSA-jr5w-w6x2-84p9 (high, compromised
+  eMudhra intermediate certificates, fixed in 44.9.1), GHSA-x562-297c-g43g
+  (moderate, fixed in 44.5.0) and two lows (fixed in 44.4.3). Moving it needs a
+  packaged build to prove it; see `CLAUDE.md`.
+- **Open in build and dev tooling,** 28 in the full audit with Electron (3 high,
+  25 moderate). The highs other than Electron are `vite` 7.3.6 and `undici`
+  (through `node-gyp` and `@electron/get`). The moderates are the
+  `electron-builder` and `eslint` trees, through `minimatch` and `glob`.
+
 **Where it stood on 2026-10-10** (Phase 33 follow-up, "audit"):
 
 - **Fixed:** `shell-quote` 1.12.0 (critical, command injection in `quote()`),
