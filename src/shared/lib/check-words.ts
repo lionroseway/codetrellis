@@ -201,6 +201,8 @@ export function whatWords(c: CheckResult): string {
 /** The first line. */
 export function headline(c: CheckResult): string {
   const what = whatWords(c);
+  // Not "conforms": that says the rules hold, and nothing read them.
+  if (c.ok && c.rulesNote) return `Nothing found (${what}), but the rules were not checked.`;
   if (c.scope) return c.ok ? `Conforms to ${c.scope}: ${what}. They add no import those rules forbid, and loosen none of them.` : `Does not conform to ${c.scope} (${what}):`;
   return c.ok
     ? `Conforms: ${what}. No breakpoint holds them, none of their tests fail or are older than the code, no done task fails its checks, no doc that describes them is stale, they add no import an architecture rule forbids, and they loosen no rule.`

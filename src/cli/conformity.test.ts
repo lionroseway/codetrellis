@@ -75,6 +75,8 @@ test('the gate in words: what was checked, the findings by kind, the exit code l
       '1 finding blocks this change (exit 3).',
     ].join('\n'),
   );
+  assert.match(gateWords({ ...base, ok: true, says: [], rulesNote: 'The architecture rules were not checked.' }), /^Nothing found \(.*\), but the rules were not checked\.\n/);
+  assert.doesNotMatch(gateWords({ ...base, ok: true, says: [], rulesNote: 'The architecture rules were not checked.' }), /Conforms/);
   assert.match(gateWords({ ...base, ok: true, says: [], rulesNote: 'The architecture rules were not checked.' }), /\n\nThe architecture rules were not checked\.\n\nNothing blocks this change \(exit 0\)\.$/);
   // Phase 33 R2: a rule added or tightened is said, and does not fail the gate.
   assert.match(

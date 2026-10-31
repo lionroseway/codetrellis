@@ -110,9 +110,11 @@ export async function checkChanges(
   scoped = false,
   /** C3: the debt ratchet's findings, with each rule's strength (a warn rule's breach is said, not failed, unless strict). */
   ratchet: ReadonlyArray<RatchetFinding & { strength?: string }> = [],
+  /** Why rules that would fail this check could not be read: a finding, because nothing here can vouch for the change. */
+  rulesUnread: string | null = null,
 ): Promise<Conformity> {
   const files = cleanChanged(changed);
-  const says: string[] = [];
+  const says: string[] = rulesUnread ? [`✗ ${rulesUnread}`] : [];
   const said = [...notes];
 
   // The rulebook first (R2): a change that loosens a rule is the first thing a reviewer must see.

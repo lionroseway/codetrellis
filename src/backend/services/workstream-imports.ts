@@ -16,6 +16,7 @@ import path from 'node:path';
 import type { ChangedFile, Workstream } from '../../shared/types';
 import { parseVirtualFile } from './ast-parser';
 import { getAllFileHashes, getImportResolutionContext, resolutionContextRoot } from './database';
+import { scanFailureOf } from './scan-health';
 import { getResolverForLanguage } from './resolvers';
 import { packageEntry } from '../../shared/lib/package-entry';
 import { symbolEntry } from '../../shared/lib/symbol-entry';
@@ -139,6 +140,7 @@ const real = (p: string) => { try { return fs.realpathSync(p); } catch { return 
  * Resolving another with none would invent breaches, or miss them.
  */
 export function importsReadableFor(projectRoot: string): boolean {
+  if (scanFailureOf(projectRoot)) return false;
   const held = resolutionContextRoot();
   return !!held && real(held) === real(projectRoot);
 }

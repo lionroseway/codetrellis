@@ -162,7 +162,7 @@ silently: the person still drags the app or clicks through the wizard.
 
 | Command | What it does |
 |---|---|
-| `codetrellis start [--quiet \| --json]` | `serve` in the background for the folder, unless one already runs there; returns once the project is scanned. Being up already is success. Its log is `serve.log` in the data dir |
+| `codetrellis start [--quiet \| --json]` | `serve` in the background for the folder, unless one already runs there; returns once the project is scanned. Being up already is success, and so is a scan that failed, which it says on stderr. Its log is `serve.log` in the data dir |
 | `codetrellis stop` | Ends it |
 | `codetrellis serve` | The same backend in the foreground (D1.1) |
 | `--share-task-state` (on `start` or `serve`) | Writes task state and test runs to the project's files and reads teammates', as the app's Settings switch does (D1.5a). Refused for the desktop app's own data dir, whose switch stays the window's |
@@ -499,8 +499,21 @@ first", and nobody can be asked from a runner.
 
 Rules, unlike breakpoints, **do** travel: they are committed. Checking them
 needs the project's imports resolved, which `serve` does when it scans the
-checkout; if they cannot be read (another project is loaded), the answer
-says the rules were not checked rather than passing them silently.
+checkout. What happens when they cannot be read depends on why:
+
+- **Nobody has opened the project here** (the app has another one loaded): the
+  answer says the rules were not checked, and exits 0. Nothing has gone wrong,
+  and opening the project answers it.
+- **A scan was tried and failed:** nothing read this code, so the check cannot
+  vouch for it. With any rule at `block` it **fails, exit 3**, and says why (at
+  `warn`, with `--strict`). With only rules at `warn` or `guide`, it says the
+  rules were not checked and exits 0. `start` still exits 0, because the backend
+  is up and a repository with no rules has nothing riding on the graph, but it
+  says so on stderr, even with `--quiet`. `scan` exits 1.
+
+Neither says a rule holds. A file over the 2 MB parse budget is skipped as
+generated, in every scan: the rest of the project is read, but its imports are
+not, and nothing fails.
 
 ## Check runs that travel (Phase 33 C7)
 
@@ -747,4 +760,4 @@ run with `codetrellis commit`. One that only gates needs neither.
 | 0 | Done; conforms |
 | 1 | Refused (a tool said no, or CodeTrellis is not running) |
 | 2 | Usage (a bad flag, a `--base` that is not a commit) |
-| 3 | Held (`check <path>`), not answered yet (`request`), or does not conform (`check`, `status`); a rule's breach makes it 3 only at `block`, or at `warn` with `--strict`; `review` only with `--fail-on` |
+| 3 | Held (`check <path>`), not answered yet (`request`), or does not conform (`check`, `status`); a rule's breach makes it 3 only at `block`, or at `warn` with `--strict`; so does a failed scan while such a rule exists, since nothing read the code; `review` only with `--fail-on` |

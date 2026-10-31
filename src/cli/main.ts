@@ -98,13 +98,18 @@ async function boot(p: Parsed, project: string, dataDir: string) {
     headers: { 'Content-Type': 'application/json', 'x-codetrellis-token': getCapabilityToken() },
     body: JSON.stringify({ projectPath: project }),
   });
-  const scan = await res.json().catch(() => ({})) as { fileCount?: number; astStats?: { fileCount?: number; symbolCount?: number; importCount?: number; resolvedImports?: number }; error?: string };
+  const scan = await res.json().catch(() => ({})) as { fileCount?: number; astStats?: { fileCount?: number; symbolCount?: number; importCount?: number; resolvedImports?: number }; astError?: string | null; error?: string };
   if (!res.ok) fail(`could not open ${project}: ${scan.error ?? res.status}`, 1);
   if (p.flags['share-task-state']) await shareTaskState(project);
   // The MCP server's URL, as the connector will read it (never the token).
   const { readConnectTarget } = await import('../backend/mcp/connector/files');
   const target = readConnectTarget(dataDir);
   return { base, scan, mcp: target.ok ? target.url : null };
+}
+
+/** A scan that failed, in words for stderr: even `--quiet` says it, since nothing else will. */
+function scanFailedWords(project: string, why: string): string {
+  return `codetrellis: could not read ${project}: ${why}\nIts file tree is served, without symbols or imports. A check fails while any rule blocks.\n`;
 }
 
 function counts(scan: Awaited<ReturnType<typeof boot>>['scan']) {
@@ -124,9 +129,10 @@ async function serve(p: Parsed): Promise<void> {
   const { base, scan, mcp } = await boot(p, project, dataDir);
   const line = connectorLine(self(), dataDir);
   const c = counts(scan);
-  markReady(dataDir, project);
+  markReady(dataDir, project, scan.astError ?? null);
+  if (scan.astError) process.stderr.write(scanFailedWords(project, scan.astError));
   if (p.flags.json) {
-    out(JSON.stringify({ project, dataDir, api: base, mcp, connector: { command: line.command, args: line.args }, counts: c }));
+    out(JSON.stringify({ project, dataDir, api: base, mcp, connector: { command: line.command, args: line.args }, counts: c, ...(scan.astError ? { astError: scan.astError } : {}) }));
     return;
   }
   out([
@@ -147,6 +153,7 @@ async function scanOnce(p: Parsed): Promise<void> {
   const project = projectOf(p);
   const dataDir = path.resolve(flag(p, 'data-dir') ?? headlessDataDir(project, process.env, os.homedir()));
   const { scan } = await boot(p, project, dataDir);
+  if (scan.astError) fail(`could not read ${project}: ${scan.astError}`, 1);
   const c = counts(scan);
   if (p.flags.json) out(JSON.stringify({ project, ...c }));
   else out(`${project}: ${c.files} files (${c.parsed} parsed), ${c.symbols} symbols, ${c.resolvedImports} of ${c.imports} imports resolved`);
@@ -172,9 +179,9 @@ const READY_FILE = 'serve-ready.json';
  * rather than for the endpoint: a gate run on half a graph would pass on
  * files it had not read yet. Removed when this process exits.
  */
-function markReady(dataDir: string, project: string): void {
+function markReady(dataDir: string, project: string, scanFailed: string | null): void {
   const file = path.join(dataDir, READY_FILE);
-  fs.writeFileSync(file, JSON.stringify({ pid: process.pid, project }), { mode: 0o600 });
+  fs.writeFileSync(file, JSON.stringify({ pid: process.pid, project, ...(scanFailed ? { scanFailed } : {}) }), { mode: 0o600 });
   process.on('exit', () => {
     try {
       if ((JSON.parse(fs.readFileSync(file, 'utf8')) as { pid?: number }).pid === process.pid) fs.unlinkSync(file);
@@ -183,16 +190,18 @@ function markReady(dataDir: string, project: string): void {
 }
 
 /** The headless backend's process for a data dir, when one is up, scanned and answering. */
-async function runningIn(dataDir: string): Promise<{ pid: number; url: string } | null> {
+async function runningIn(dataDir: string): Promise<{ pid: number; url: string; scanFailed?: string } | null> {
   const { readConnectTarget, readEndpoint } = await import('../backend/mcp/connector/files');
   const endpoint = readEndpoint(dataDir);
   const target = readConnectTarget(dataDir);
   if (!endpoint || !target.ok) return null;
   try { process.kill(endpoint.pid, 0); } catch { return null; } // left behind by a process that died
+  let ready: { pid?: number; scanFailed?: string };
   try {
-    if ((JSON.parse(fs.readFileSync(path.join(dataDir, READY_FILE), 'utf8')) as { pid?: number }).pid !== endpoint.pid) return null;
+    ready = JSON.parse(fs.readFileSync(path.join(dataDir, READY_FILE), 'utf8')) as { pid?: number; scanFailed?: string };
+    if (ready.pid !== endpoint.pid) return null;
   } catch { return null; } // still scanning, or not a headless backend
-  return { pid: endpoint.pid, url: target.url };
+  return { pid: endpoint.pid, url: target.url, ...(ready.scanFailed ? { scanFailed: ready.scanFailed } : {}) };
 }
 
 /**
@@ -204,13 +213,16 @@ async function start(p: Parsed): Promise<void> {
   const project = projectOf(p);
   const dataDir = path.resolve(flag(p, 'data-dir') ?? headlessDataDir(project, process.env, os.homedir()));
   const line = connectorLine(self(), dataDir);
-  const say = (state: 'running' | 'started', pid: number) => {
+  // Exit 0 all the same: the backend is up, and a repository with no rules has
+  // nothing riding on the graph. The check is what fails, where a rule says so.
+  const say = (state: 'running' | 'started', pid: number, scanFailed?: string) => {
+    if (scanFailed) process.stderr.write(scanFailedWords(project, scanFailed));
     if (p.flags.quiet) return;
-    if (p.flags.json) out(JSON.stringify({ state, pid, project, dataDir, connector: { command: line.command, args: line.args } }));
+    if (p.flags.json) out(JSON.stringify({ state, pid, project, dataDir, connector: { command: line.command, args: line.args }, ...(scanFailed ? { scanFailed } : {}) }));
     else out(`CodeTrellis ${state === 'running' ? 'is already running' : 'started'} for ${project} (pid ${pid}).\nConnect an agent with:\n  ${line.claude}`);
   };
   const up = await runningIn(dataDir);
-  if (up) return say('running', up.pid);
+  if (up) return say('running', up.pid, up.scanFailed);
 
   fs.mkdirSync(dataDir, { recursive: true });
   const log = fs.openSync(path.join(dataDir, 'serve.log'), 'a');
@@ -230,7 +242,7 @@ async function start(p: Parsed): Promise<void> {
     // The launcher runs the CLI as its own child, so the backend's pid is not
     // child.pid: any live endpoint now is the one just started.
     const now = await runningIn(dataDir);
-    if (now) return say('started', now.pid);
+    if (now) return say('started', now.pid, now.scanFailed);
     if (exited !== null) fail(`codetrellis serve stopped (exit ${exited}); see ${path.join(dataDir, 'serve.log')}`, 1);
     await new Promise((r) => setTimeout(r, 250));
   }
