@@ -85,6 +85,28 @@ jobs:
       - name: Audit production dependencies (blocking, any severity)
         run: npm audit --omit=dev --audit-level=low
 
+      # Electron is a devDependency, as packaging requires, so --omit=dev above
+      # never reports it, though every installer carries it. 44.4.1 shipped with
+      # a high advisory while this job stayed green. It blocks at any severity,
+      # like the rest of what ships, and fails if the audit gives no answer.
+      # Moving Electron needs a packaged build (CLAUDE.md), so a new advisory
+      # here costs that work before anything else can merge. That is the price
+      # of knowing, and the job's rule above about exceptions applies here too.
+      - name: Audit Electron (blocking, any severity)
+        run: |
+          npm audit --json > electron-audit.json || true
+          node -e "
+            const a = JSON.parse(require('fs').readFileSync('electron-audit.json', 'utf8'));
+            if (!a.metadata) throw new Error('npm audit gave no result');
+            const e = a.vulnerabilities?.electron;
+            if (e) {
+              console.error('Electron ' + e.range + ' has advisories:');
+              for (const v of e.via) if (v.url) console.error('  ' + v.severity + ' ' + v.url + ' ' + v.title);
+              process.exit(1);
+            }
+            console.log('Electron: no advisories');
+          "
+
       - name: Full production report (advisory)
         if: always()
         run: npm audit --omit=dev || true
