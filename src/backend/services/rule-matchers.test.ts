@@ -58,6 +58,24 @@ test('a package glob covers a scope and what is under each of its packages', () 
   assert.equal(breaks(rule!, 'src/web/x.ts', 'pypi:@aws-sdk/client-s3'), false, 'another ecosystem');
 });
 
+test('a Python package rule reads a name however it is spelled: exactly, by a glob, in except; a regex takes it as the code does', () => {
+  const exact = parse({ kind: 'package', package: 'pypi:langchain-ollama', only: ['services/inference/'] }).rule!;
+  assert.equal(breaks(exact, 'app/report.py', 'pypi:langchain_ollama'), true);
+  assert.equal(breaks(exact, 'services/inference/llm.py', 'pypi:langchain_ollama'), false, 'its own files may');
+  assert.equal(ruleStatement(exact), 'only services/inference/ may import pypi:langchain-ollama', 'said as it was written');
+  const excepted = parse({ kind: 'package', package: 'pypi:langchain*', only: ['services/inference/'], except: ['pypi:langchain-core'] }).rule!;
+  assert.equal(breaks(excepted, 'app/report.py', 'pypi:langchain_ollama'), true);
+  assert.equal(breaks(excepted, 'app/report.py', 'pypi:langchain_core'), false, 'except, in the other spelling');
+  const glob = parse({ kind: 'package', package: 'pypi:langchain-*', only: ['services/inference/'] }).rule!;
+  assert.equal(breaks(glob, 'app/report.py', 'pypi:langchain_ollama'), true);
+  assert.equal(breaks(glob, 'app/report.py', 'pypi:langchain'), false);
+  const regex = parse({ kind: 'package', package: { match: 'regex', value: 'pypi:langchain_.*' }, only: ['services/inference/'] }).rule!;
+  assert.equal(breaks(regex, 'app/report.py', 'pypi:langchain_ollama'), true);
+  assert.equal(breaks(regex, 'app/report.py', 'pypi:langchain-ollama'), false, 'a regex says what it means');
+  const npm = parse({ kind: 'package', package: 'npm:react-*', only: ['web/'] }).rule!;
+  assert.equal(breaks(npm, 'app/x.ts', 'npm:react_dom'), false, 'only PyPI folds them');
+});
+
 test('a symbol glob covers the exports it names, and a namespace import of their file', () => {
   const { rule } = parse({ kind: 'symbol', symbol: 'src/db.ts#raw*' });
   assert.equal(breaks(rule!, 'src/web/x.ts', 'src/db.ts#rawQuery'), true);

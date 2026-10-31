@@ -1287,7 +1287,10 @@ export function MainCanvas() {
         onNodeContextMenu={onNodeContextMenu}
         onSelectionChange={handleSelectionChange}
         onPaneClick={() => setContextMenu(null)}
-        onMoveStart={() => setContextMenu(null)}
+        // Only the person moving the view closes the menu. A refit has no event,
+        // and a live refresh that changes the node count refits: the menu went
+        // from under a click that was on its way.
+        onMoveStart={(event) => { if (event) setContextMenu(null); }}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         nodesDraggable

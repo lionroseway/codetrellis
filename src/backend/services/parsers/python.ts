@@ -118,10 +118,35 @@ function extractClassMembers(body: SyntaxNode): ParsedSymbol[] {
   return members;
 }
 
+/**
+ * Every import statement in the file, in source order, at any depth. Python
+ * imports inside a function, a `try:` or an `if TYPE_CHECKING:` as readily as
+ * at the top, and those are the dependencies a rule most wants to see: reading
+ * only the top level left a package rule silently under-reporting.
+ *
+ * An explicit stack, and no walk into expressions: no statement lives in one,
+ * and a generated data file's expressions are most of its tree and can nest
+ * deeper than the call stack.
+ */
+function importNodes(root: SyntaxNode): SyntaxNode[] {
+  const found: SyntaxNode[] = [];
+  const stack = [root];
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    if (node.type === 'import_statement' || node.type === 'import_from_statement') {
+      found.push(node);
+    } else if (node.type !== 'expression_statement') {
+      const children = node.children;
+      for (let i = children.length - 1; i >= 0; i -= 1) stack.push(children[i]);
+    }
+  }
+  return found;
+}
+
 function extractImports(node: SyntaxNode): ImportDeclaration[] {
   const imports: ImportDeclaration[] = [];
 
-  for (const child of node.children) {
+  for (const child of importNodes(node)) {
     if (child.type === 'import_statement') {
       // `import a, b.c, d as e`
       for (const spec of child.children) {
@@ -134,7 +159,7 @@ function extractImports(node: SyntaxNode): ImportDeclaration[] {
           isNamespace: true,  // `import x` brings x in as a namespace
         });
       }
-    } else if (child.type === 'import_from_statement') {
+    } else {
       // `from x.y import a, b`  /  `from . import x`  /  `from ..pkg import y`
       const moduleNode = child.childForFieldName('module_name');
       const module = readModuleSource(moduleNode);

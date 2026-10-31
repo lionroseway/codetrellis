@@ -55,7 +55,7 @@ import { verifyRecord } from './services/record-chain';
 import { startAgentEventLog, recordDecision, pruneAgentEvents, listAgentEvents, setEventPublisher, setRecordedListener, actingSession, workstreamOfItem, DEFAULT_LIMIT as AGENT_EVENTS_DEFAULT_LIMIT } from './services/agent-event-log';
 import { stateAt } from './services/replay-state';
 import { startReplayFrames, pruneFrames, setHeldProject, setFramePublisher, noteAgentActivity, requestFrame, noteRefsChanged, seedHeads, listFrames, DEFAULT_FRAME_LIMIT } from './services/replay-frames';
-import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
+import { initDatabase, storeParsedFile, searchSymbols, getFileSymbols, getDbStats, getArchitectureSummary, resolveImports, getDependencyEdges, getFileDependencies, clearAstData, astRowsAreCurrent, markAstRowsCurrent, getAllFileHashes, removeStaleFiles, setImportResolutionContext } from './services/database';
 import { startWatching } from './services/file-watcher';
 import { startClaudeCodeWatcher, getWatcherStatus } from './agent/claude-code-watcher';
 import { listWorkstreams, listWorkstreamPlaces, setClaudeSessionSource, setSymbolParser, getSymbolParser } from './services/workstream-service';
@@ -1335,7 +1335,8 @@ async function storeParsedFiles(files: Awaited<ReturnType<typeof parseFiles>>, p
 }
 
 async function runScan(projectPath: string): Promise<ScanStats> {
-    const isSameProject = lastScannedProject === projectPath;
+    // A new version parses everything once: its parsers may read the same file differently.
+    const isSameProject = lastScannedProject === projectPath && astRowsAreCurrent();
     console.log(`[Scan] Scanning project: ${projectPath}${isSameProject ? ' (incremental)' : ' (full)'}`);
 
     try {
@@ -1395,6 +1396,7 @@ async function runScan(projectPath: string): Promise<ScanStats> {
       clearAstData();
       parsedFiles = await parseFiles(filePaths);
       await storeParsedFiles(parsedFiles, projectPath);
+      markAstRowsCurrent();
       notePatternsRead(projectPath);
     }
 

@@ -402,6 +402,27 @@ nobody gated). `codetrellis rules baseline` writes them down, per rule, in
 
 A baseline never excuses an import the change adds.
 
+**A baseline written by 0.3.0 can list too few.** 0.3.0 read only a Python
+file's top-level imports, and matched `pypi:langchain-ollama` to nothing when
+the code says `langchain_ollama`. Later versions see the rest, so a repository
+with Python imports inside a function, a `try:` or an `if`, or a rule spelled
+with the other separator, fails every check, on any change, with
+`… and its baseline does not list it`. `rules baseline` will not add them,
+because a baseline only shrinks. To write the truth down:
+
+1. While CI is still on 0.3.0, remove the affected rules from `baseline.yaml`
+   in a pull request. Its check passes there, judged by the base's baseline.
+2. Once that has merged, run `rules baseline` on the new version. A rule new to
+   the file starts with what breaks it now. Commit it, then move CI to the new
+   version.
+
+If CI has already moved, the first pull request fails its own check, because
+the base's baseline still judges it, and has to be merged over the check. A
+repository with no baseline has nothing to do: the check judges only what a
+change adds, and the Rules view simply shows the breaches it was missing.
+The first scan on a new version parses every file again, so a machine that had
+already scanned gets the same answer as a fresh CI run.
+
 ### How hard a rule holds (Phase 33 R4)
 
 Every rule has a `strength`:

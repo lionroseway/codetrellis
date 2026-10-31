@@ -5,6 +5,7 @@ import type { Callsite, ParsedFile, ParsedSymbol, AliasMapping, DiscoveredSystem
 import { getDataDir, ensureDataDir } from './persistence';
 import { getResolverForLanguage } from './resolvers';
 import { packageEntry } from '../../shared/lib/package-entry';
+import { BUILD_INFO } from '../../shared/build-info';
 import { callEntry } from '../../shared/lib/call-entry';
 import { exportCount, fileFact } from '../../shared/lib/folder-entry';
 import { reconcileSchemaFromSql } from './schema-reconciler';
@@ -355,6 +356,31 @@ export function clearAstData(): void {
     try { d.run('ROLLBACK'); } catch { /* rollback best-effort */ }
     throw err;
   }
+}
+
+/**
+ * The version whose parsers wrote the AST rows, as a number SQLite can keep
+ * in `user_version`: 0.3.1 is 3001. A database from before this was kept reads 0.
+ */
+function astStamp(): number {
+  const [major = 0, minor = 0, patch = 0] = BUILD_INFO.version.split('.').map((n) => parseInt(n, 10) || 0);
+  return major * 1_000_000 + minor * 1_000 + patch;
+}
+
+/**
+ * Whether the AST rows are this version's. They survive a restart, and an
+ * incremental scan re-parses only a file whose content changed, so a parser
+ * that learned to read more (Python's nested imports) would otherwise see
+ * nothing until each file happened to be edited, and a check on this machine
+ * would quietly disagree with CI's fresh scan of the same commit.
+ */
+export function astRowsAreCurrent(): boolean {
+  return getDb().exec('PRAGMA user_version')[0]?.values[0]?.[0] === astStamp();
+}
+
+/** Say the AST rows are this version's. Only after a full scan has rewritten all of them. */
+export function markAstRowsCurrent(): void {
+  getDb().run(`PRAGMA user_version = ${astStamp()}`);
 }
 
 /**

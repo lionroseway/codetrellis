@@ -6,7 +6,7 @@
  * the project config can parse rules without importing it back.
  */
 import { RULE_ENGINES, RULE_STRENGTHS, type ArchitectureRule, type RuleBreach, type RuleEngine, type RuleStrength } from '../../shared/types/architecture-rules';
-import { isPackageEntry, packageMatches, packageProblem } from '../../shared/lib/package-entry';
+import { isPackageEntry, packageMatches, packageProblem, packageSpelling } from '../../shared/lib/package-entry';
 import { isSymbolEntry, splitSymbol, symbolMatches, symbolProblem } from '../../shared/lib/symbol-entry';
 import { callMatches, callProblem, callWords, isCallEntry, normaliseCall } from '../../shared/lib/call-entry';
 import { folderProblem, folderWords, isFileFact } from '../../shared/lib/folder-entry';
@@ -417,7 +417,11 @@ export function lookAlike(rule: Pick<ArchitectureRule, 'kind' | 'mayNotImport' |
 export function targetMatches(rule: Pick<ArchitectureRule, 'kind' | 'mayNotImport' | 'match' | 'threshold'>, entry: string): boolean {
   if (rule.match === 'fuzzy') return lookAlike(rule, entry) !== null;
   const m = rule.match;
-  if (rule.kind === 'package') return m ? underPattern(m, rule.mayNotImport, entry) : packageMatches(rule.mayNotImport, entry);
+  if (rule.kind === 'package') {
+    if (!m) return packageMatches(rule.mayNotImport, entry);
+    // A glob reads a name as an exact rule does; a regex says for itself what it means, over the name as the code spells it.
+    return m === 'glob' ? underPattern(m, packageSpelling(rule.mayNotImport), packageSpelling(entry)) : underPattern(m, rule.mayNotImport, entry);
+  }
   if (rule.kind === 'symbol') {
     if (!m) return symbolMatches(rule.mayNotImport, entry);
     const got = splitSymbol(entry);

@@ -24,6 +24,11 @@
  * Go's `net/http`, Rust's `std::`, `crate::`, `self::`, `super::`.
  * Python and Ruby name the module or the require, not the distribution
  * (`yaml` for PyYAML), which is what the code says.
+ *
+ * A Python rule may be written either way a name is spelled: `-`, `_` and case
+ * are one name, as they are to pip (`pypi:langchain-ollama` is the module
+ * `langchain_ollama`, `pypi:SQLAlchemy` is `sqlalchemy`). A distribution whose
+ * module has another name altogether is still named by its module.
  */
 
 export const PACKAGE_ECOSYSTEMS = ['npm', 'pypi', 'go', 'cargo', 'maven', 'nuget', 'gem', 'composer', 'swift'] as const;
@@ -118,11 +123,21 @@ export function packageEntry(language: string, source: string, isRelative = fals
 
 const SEPARATORS = ['/', '.', '\\', '::'];
 
+/**
+ * A package entry as two spellings of it compare. On PyPI `-`, `_` and case
+ * do not tell names apart (PEP 503). A `.` does here, unlike there: it is what
+ * separates a module from what is under it. Every other ecosystem compares as
+ * written.
+ */
+export function packageSpelling(entry: string): string {
+  return entry.startsWith('pypi:') ? entry.toLowerCase().replace(/[-_]+/g, '-') : entry;
+}
+
 /** Whether a rule's package (`npm:stripe`, `maven:com.stripe`) covers this entry. */
 export function packageMatches(rulePackage: string, entry: string): boolean {
   if (rulePackage === entry) return true;
-  const r = ECOSYSTEM_RE.exec(rulePackage);
-  const e = ECOSYSTEM_RE.exec(entry);
+  const r = ECOSYSTEM_RE.exec(packageSpelling(rulePackage));
+  const e = ECOSYSTEM_RE.exec(packageSpelling(entry));
   if (!r || !e || r[1] !== e[1]) return false;
-  return SEPARATORS.some((sep) => e[2].startsWith(r[2] + sep));
+  return r[2] === e[2] || SEPARATORS.some((sep) => e[2].startsWith(r[2] + sep));
 }
