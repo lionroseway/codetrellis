@@ -415,7 +415,9 @@ with any of these fails every check, on any change, with
   the other separator;
 - a Rust `use` inside a `fn` or a `mod tests { }`, or a `pub use`;
 - a C# `using` inside a namespace or an `#if`;
-- a `require('x')` or an `import('x')`.
+- a `require('x')` or an `import('x')`;
+- a PHP group (`use A\{B, C}`), which 0.3.0 dropped, or a `use function` or
+  `use const`, which it read as a class called `function A\b`.
 
 `rules baseline` will not add them, because a baseline only shrinks. To write
 the truth down:

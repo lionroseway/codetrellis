@@ -87,7 +87,7 @@ one, because a dependency put off to a function is still a dependency.
 | Rust | `use` and `pub use`, in a function, a `mod tests { }`, an `impl` or any block, and `extern crate` | Inside a macro's body (`cfg_if!`, `macro_rules!`), which the grammar holds as tokens, or an array literal, which is what makes a generated table large |
 | C# | `using`, at the top, in a namespace however nested, and in any arm of an `#if` | A `using` statement, which disposes something |
 | Ruby | `require`, `require_relative`, `load` and `autoload`, anywhere | A computed name (`require name`) |
-| PHP | `use`, at the top and in a namespace, the only places it is an import | `require` and `include`, which run a file. `use` in a class (a trait) or a closure |
+| PHP | `use`, `use function` and `use const`, at the top and in a namespace, the only places it is an import. A group counts as each member, so `use A\{B, C}` is `A\B` and `A\C` | `require` and `include`, which run a file. `use` in a class (a trait) or a closure. A group with a leading slash (`use \A\{B}`), which the grammar cannot read |
 | Go, Java, Kotlin, Swift | `import`. These languages allow it only at the top of a file, so there is no depth to read. Swift's `#if canImport(X)` arms are read | Reflection, such as Java's `Class.forName("x")` |
 
 `require` and `import()` count because they load a module as surely as `import`

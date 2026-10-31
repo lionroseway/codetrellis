@@ -2,9 +2,10 @@
  * A rule sees an import wherever the language lets a file write one: a `use` in
  * a Rust function or test module, a `using` in a C# namespace, a `require` or an
  * `import()` in TypeScript. These parsers read only the top level, so a package
- * rule under-reported without saying so. The parsers' own tests hold what each
- * one reads (parsers/nested-imports.test.ts); this holds that a rule gets it,
- * through a scan and through the check that gates a change.
+ * rule under-reported without saying so. PHP reached the right places and misread
+ * some forms of `use` there, with the same result. The parsers' own tests hold
+ * what each one reads (parsers/nested-imports.test.ts); this holds that a rule
+ * gets it, through a scan and through the check that gates a change.
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -39,6 +40,20 @@ rules:
     symbol: ts/db/conn.ts#raw
     only: [ts/db/]
     strength: block
+  - id: composer-stripe
+    kind: package
+    package: composer:Stripe
+    only: [php/src/Billing/]
+    strength: block
+  - id: php-web-not-db
+    from: php/src/Web/
+    mayNotImport: php/src/Db/
+    strength: block
+  - id: php-conn-only-in-db
+    kind: symbol
+    symbol: php/src/Db/Conn.php#Conn
+    only: [php/src/Db/]
+    strength: block
 `;
 
 const FILES: Record<string, string> = {
@@ -65,11 +80,22 @@ const FILES: Record<string, string> = {
   // An imports rule and a symbol rule read the same calls.
   'ts/db/conn.ts': 'export function raw(sql: string) { return sql; }\nexport function safe(sql: string) { return sql; }\n',
   'ts/web/uses_raw.ts': "export function view() {\n  const { raw } = require('../db/conn');\n  return raw('select 1');\n}\n",
+  // PHP: not nesting, but the forms of `use` it misread.
+  'php/composer.json': JSON.stringify({ name: 'acme/app', autoload: { 'psr-4': { 'App\\': 'src/' } } }),
+  'php/src/Billing/Pay.php': '<?php\nnamespace App\\Billing;\nuse Stripe\\{Charge, Refund};\n',
+  'php/src/Web/Grouped.php': '<?php\nnamespace App\\Web;\nuse Stripe\\{Charge, Refund as R};\n',
+  'php/src/Web/Func.php': '<?php\nnamespace App\\Web;\nuse function Stripe\\charge;\n',
+  'php/src/Web/Konst.php': '<?php\nnamespace App\\Web;\nuse const Stripe\\VERSION;\n',
+  'php/src/Web/Clean.php': '<?php\nnamespace App\\Web;\nuse Striped\\{Charge};\n',
+  'php/src/Db/Conn.php': '<?php\nnamespace App\\Db;\nclass Conn {}\n',
+  'php/src/Db/Other.php': '<?php\nnamespace App\\Db;\nclass Other {}\n',
+  'php/src/Web/GroupedDb.php': '<?php\nnamespace App\\Web;\nuse App\\Db\\{Conn, Other};\n',
+  'php/src/Web/AliasedDb.php': '<?php\nnamespace App\\Web;\nuse App\\Db\\Conn as C;\n',
 };
 
 interface RuleView { rule: { id: string }; breaches: Array<{ from: string; to: string }> | null }
 
-test.describe.serial('Imports at any depth, in Rust, C# and TypeScript', () => {
+test.describe.serial('Every import, in Rust, C#, TypeScript and PHP', () => {
   test.setTimeout(240_000);
   let h: Harness;
   let root: string;
@@ -130,6 +156,27 @@ test.describe.serial('Imports at any depth, in Rust, C# and TypeScript', () => {
     await h.client.scanProject(root);
     expect(await breachesOf('raw-only-in-db')).toEqual([]);
     expect(await breachesOf('web-not-db')).toEqual(['ts/web/uses_raw.ts > ts/db/conn.ts']);
+  });
+
+  test('PHP: a group, use function and use const reach a package rule; its own folder may', async () => {
+    expect(await breachesOf('composer-stripe')).toEqual([
+      'php/src/Web/Func.php > composer:Stripe\\charge',
+      'php/src/Web/Grouped.php > composer:Stripe\\Charge',
+      'php/src/Web/Grouped.php > composer:Stripe\\Refund',
+      'php/src/Web/Konst.php > composer:Stripe\\VERSION',
+    ]);
+  });
+
+  test('PHP: each member of a group resolves for an imports rule, and an alias does not hide a class from a symbol rule', async () => {
+    expect(await breachesOf('php-web-not-db')).toEqual([
+      'php/src/Web/AliasedDb.php > php/src/Db/Conn.php',
+      'php/src/Web/GroupedDb.php > php/src/Db/Conn.php',
+      'php/src/Web/GroupedDb.php > php/src/Db/Other.php',
+    ]);
+    expect(await breachesOf('php-conn-only-in-db')).toEqual([
+      'php/src/Web/AliasedDb.php > php/src/Db/Conn.php#Conn',
+      'php/src/Web/GroupedDb.php > php/src/Db/Conn.php#Conn',
+    ]);
   });
 
   test('the check fails a change that adds one, naming the rule', () => {

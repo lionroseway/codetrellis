@@ -298,6 +298,43 @@ describe('the languages that already walk deeper', () => {
     assert.deepEqual(sourcesOf(phpPlugin, '<?php\nclass K { use InTrait; }\nfunction f() { $c = function() use ($d) {}; }\n'), []);
   });
 
+  const php = (src: string) => importsOf(phpPlugin, `<?php\n${src}\n`).map((i) => [i.source, i.specifiers]);
+
+  test('PHP: a class, with or without a leading slash or an alias, and several in one use', () => {
+    assert.deepEqual(php('use Single;\nuse \\Top\\Lead;\nuse A\\B as C;\nuse First\\X, Second\\Y as Z;'), [
+      ['Single', ['Single']],
+      ['Top\\Lead', ['Lead']],
+      ['A\\B', ['B']], // the original name, as Python and TypeScript keep it: a symbol rule asks about B
+      ['First\\X', ['X']],
+      ['Second\\Y', ['Y']],
+    ]);
+  });
+
+  test('PHP: use function and use const name the path, not the keyword', () => {
+    assert.deepEqual(php('use function D\\e;\nuse const F\\G as H;\nuse function \\I\\j;'), [
+      ['D\\e', ['e']],
+      ['F\\G', ['G']],
+      ['I\\j', ['j']],
+    ]);
+  });
+
+  test('PHP: a group is one import per member, however it is written', () => {
+    assert.deepEqual(php('use A\\{B, C as D};'), [['A\\B', ['B']], ['A\\C', ['C']]]);
+    assert.deepEqual(php('use A\\B\\{C, D\\E};'), [['A\\B\\C', ['C']], ['A\\B\\D\\E', ['E']]]);
+    assert.deepEqual(php('use function A\\{b, c};'), [['A\\b', ['b']], ['A\\c', ['c']]]);
+    assert.deepEqual(php('use A\\{function b, const C, D\\E,};'), [['A\\b', ['b']], ['A\\C', ['C']], ['A\\D\\E', ['E']]]);
+    assert.deepEqual(php('use A\\{ /* note */ B, // and\n C };'), [['A\\B', ['B']], ['A\\C', ['C']]]);
+  });
+
+  test('PHP: not read: a group with a leading slash, valid PHP that the grammar cannot parse', () => {
+    assert.equal(parsers.get(phpPlugin).parse('<?php\nuse \\A\\B\\{C, D\\E};\n').rootNode.hasError, true);
+    assert.deepEqual(php('use \\A\\B\\{C, D\\E};'), []);
+  });
+
+  test('PHP: a group in a namespace block', () => {
+    assert.deepEqual(php('namespace X { use A\\{B, C}; use function D\\e; }'), [['A\\B', ['B']], ['A\\C', ['C']], ['D\\e', ['e']]]);
+  });
+
   test('PHP: deliberately not read: require, which includes a file rather than importing a name', () => {
     assert.deepEqual(sourcesOf(phpPlugin, "<?php\nrequire_once 'vendor/autoload.php';\nfunction g() { require 'in_fn.php'; }\n"), []);
   });
