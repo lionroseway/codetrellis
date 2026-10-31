@@ -38,5 +38,8 @@ The licence files are that archive's own.
 | `en-AU-10-1.bdic` | `9e045c63b05e5435cd2045c8db9e2e15239a896d3363298fcbba2a3890d74eb1` |
 | `en-CA-10-1.bdic` | `0820d1fbc03198ef2933d3a6aed58a21dca5bb901af2c1db02346a496d4b7bdc` |
 
+Checked against Electron v44.10.1's archive on 2026-10-31: these four files are
+unchanged, though the archive's own hash is not.
+
 When Electron is upgraded, check the new release's archive: if the English
 files' names or hashes changed, replace them here in the same commit.

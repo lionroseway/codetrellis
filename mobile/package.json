@@ -21,16 +21,16 @@
     "@xterm/xterm": "^6.0.0",
     "expo": "^57.0.23",
     "expo-asset": "~57.0.17",
-    "expo-camera": "~57.0.5",
+    "expo-camera": "~57.0.6",
     "expo-clipboard": "~57.0.2",
     "expo-constants": "~57.0.18",
     "expo-font": "~57.0.4",
     "expo-haptics": "~57.0.3",
-    "expo-linking": "~57.0.10",
-    "expo-notifications": "~57.0.19",
-    "expo-router": "~57.0.21",
+    "expo-linking": "~57.0.13",
+    "expo-notifications": "~57.0.24",
+    "expo-router": "~57.0.29",
     "expo-secure-store": "~57.0.4",
-    "expo-splash-screen": "~57.0.9",
+    "expo-splash-screen": "~57.0.10",
     "expo-status-bar": "~57.0.1",
     "fast-json-patch": "^3.1.1",
     "punycode": "^2.3.1",
@@ -53,11 +53,16 @@
   },
   "overrides": {
     "react-native-markdown-display": {
-      "markdown-it": "^14.2.0"
+      "markdown-it": "^14.3.3"
     },
     "xcode": {
       "uuid": "^11.1.1"
     },
-    "decode-uri-component": "^0.5.0"
+    "decode-uri-component": "^0.5.1",
+    "glob": "^14.0.2",
+    "minimatch": "^11.0.1",
+    "@expo/cli": {
+      "zod": "^4.6.7"
+    }
   }
 }

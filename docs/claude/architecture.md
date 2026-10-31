@@ -74,6 +74,55 @@ to `npm audit fix`, which also moved electron-builder, werift's crypto and a
 dozen unrelated packages to fix three. Never `--force`: it proposes
 downgrades (Expo 44, React Native 0.72) that are no fix at all.
 
+`npm audit fix --omit=dev --ignore-scripts` is the narrower form, for when only
+production packages need to move: on 2026-10-31 it moved exactly the eight
+vulnerable packages and nothing else. It also deletes the dev packages from
+`node_modules`, so follow it with the clean install CI uses.
+
+**Electron is a `devDependency`, as packaging requires, and it ships.** So
+`npm audit --omit=dev` never reports it, though every installer carries it.
+`security.yml` has a blocking step for Electron alone; 44.4.1 shipped with a high
+advisory (GHSA-jr5w-w6x2-84p9) before it. Moving Electron within a major keeps
+Node-API and the module ABI, so `better-sqlite3` can stay, but a packaged build
+still has to prove it, and `resources/spellcheck/README.md` has its own check.
+
+**Where it stands on 2026-10-31:** every lockfile audits clean, including dev
+and build tooling, except one low advisory with no fixed release.
+
+| Lockfile | Full audit | What moved |
+|---|---|---|
+| root | 0 | Electron 44.10.1; `vite`, `undici`, `electron-builder` within range; ESLint 10; the overrides below; `dompurify`, `zod`, `body-parser`, `@hono/node-server`, `hono`, `fast-uri`, `ip-address`, `qs` |
+| `mobile/` | 7 low, all from `deepmerge` | Expo within SDK 57, `node-forge` 1.4.2, the overrides below |
+| `video/` | 0 | `puppeteer-core`, and `sharp` 0.35.5 under `@huggingface/transformers` |
+| `video/compositions/remotion-hero/` | 0 | `fast-uri`, and `zod` 4.6.7 over Remotion's exact 4.5.4 |
+
+- **The exception: `deepmerge` ≤ 4.3.1, the latest release** (GHSA-gcqx-w48m-w2h4,
+  low, prototype poisoning). `@expo/config` uses it to read the project's own
+  config on the developer's machine. It is not in the phone app: a source map
+  of the Android bundle has no `deepmerge` module in it. Re-check when a release
+  fixes it.
+- **Overrides, because a parent pins an affected version:**
+  - `minimatch` ^11.0.1 and `glob` ^14.0.2 in the root and `mobile/`. Every
+    `minimatch` below 11 is affected (GHSA-g3hv-75wg-m249).
+  - `rimraf` ^6 under `temp` in the root, which removes `glob` 7.
+  - `zod` ^4.6.7 under `@expo/cli`, a major up from its 3.25. Its only uses are
+    two schemas for dev tools plugins.
+  - `markdown-it` ^14.3.3 and `decode-uri-component` ^0.5.1 in `mobile/`, where
+    both are already overridden past what their parents ask for.
+- **`minimatch` 11 removes what older consumers call, and nothing says so:**
+  - `glob` 7 reads a private field 11 no longer sets. Under it `@electron/asar`
+    packed an **empty archive with no error**, so `glob` 7 is gone, not forced.
+  - `@electron/asar` and `dir-compare` call the removed default export, and
+    `@electron/asar` needs `glob`'s newer API. `patches/` carries each change,
+    and `scripts/check-patches.cjs` proves they are applied.
+
+  When `electron-builder` moves `@electron/asar`, drop its patch if the new
+  version no longer needs it. Compare the packaged file list before and after
+  (`npx asar list`); a clean audit says nothing about whether a build still works.
+- **ESLint 10 adds `no-useless-assignment` and `preserve-caught-error`,** at warn
+  in `eslint.config.mjs`. They flag 33 existing lines, which is why the warning
+  count rose.
+
 **Where it stood on 2026-10-10** (Phase 33 follow-up, "audit"):
 
 - **Fixed:** `shell-quote` 1.12.0 (critical, command injection in `quote()`),
