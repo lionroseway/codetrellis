@@ -166,7 +166,7 @@ a tagged candidate and on packaged artifacts.
 
 ## Tech Stack
 
-- **Desktop runtime**: Electron (primary) — `^44.4.1`, paired with
+- **Desktop runtime**: Electron (primary) — `^44.10.1`, paired with
   `better-sqlite3@^13.0.3`. That upgrade has **landed**; the two move
   together and the section below says why. Embedded Express on `:3001`,
   Vite `^6` on `:5173` in dev. macOS arm64 + x64, Windows x64, Linux
@@ -471,7 +471,7 @@ installed here; `fnm exec --using=26 -- <cmd>` or putting
 - `npm run package:win` — Build Windows installers (Setup + Portable exe)
 - `npm run package:linux` — Build Linux packages (AppImage, deb, rpm)
 - `npm run lint` — Run ESLint. Flat config in `eslint.config.mjs`;
-  it must exit **0 errors** (warnings are allowed and currently ~291).
+  it must exit **0 errors** (warnings are allowed and currently ~346).
   CI gates on it since Phase 32 §0.3.
   The severity split is a decision and the config explains it inline:
   error for what is almost always a defect, warn for what needs

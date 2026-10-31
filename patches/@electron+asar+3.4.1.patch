@@ -1,0 +1,39 @@
+diff --git a/node_modules/@electron/asar/lib/asar.js b/node_modules/@electron/asar/lib/asar.js
+index fd94e84..9271acd 100644
+--- a/node_modules/@electron/asar/lib/asar.js
++++ b/node_modules/@electron/asar/lib/asar.js
+@@ -51,7 +51,7 @@ const crawlfs_1 = require("./crawlfs");
+  * @param unpackDirs - Array of directory paths previously marked as unpacked
+  */
+ function isUnpackedDir(dirPath, pattern, unpackDirs) {
+-    if (dirPath.startsWith(pattern) || (0, minimatch_1.default)(dirPath, pattern)) {
++    if (dirPath.startsWith(pattern) || (0, minimatch_1.minimatch)(dirPath, pattern)) {
+         if (!unpackDirs.includes(dirPath)) {
+             unpackDirs.push(dirPath);
+         }
+@@ -144,7 +144,7 @@ async function createPackageFromFiles(src, dest, filenames, metadata = {}, optio
+         const shouldUnpackPath = function (relativePath, unpack, unpackDir) {
+             let shouldUnpack = false;
+             if (unpack) {
+-                shouldUnpack = (0, minimatch_1.default)(filename, unpack, { matchBase: true });
++                shouldUnpack = (0, minimatch_1.minimatch)(filename, unpack, { matchBase: true });
+             }
+             if (!shouldUnpack && unpackDir) {
+                 shouldUnpack = isUnpackedDir(relativePath, unpackDir, unpackDirs);
+diff --git a/node_modules/@electron/asar/lib/crawlfs.js b/node_modules/@electron/asar/lib/crawlfs.js
+index bc614ab..35e672f 100644
+--- a/node_modules/@electron/asar/lib/crawlfs.js
++++ b/node_modules/@electron/asar/lib/crawlfs.js
+@@ -28,11 +28,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.determineFileType = determineFileType;
+ exports.crawl = crawl;
+-const util_1 = require("util");
+ const glob_1 = require("glob");
+ const wrapped_fs_1 = __importDefault(require("./wrapped-fs"));
+ const path = __importStar(require("path"));
+-const glob = (0, util_1.promisify)(glob_1.glob);
++const glob = (pattern, options) => (0, glob_1.glob)(pattern, { windowsPathsNoEscape: true, ...options });
+ async function determineFileType(filename) {
+     const stat = await wrapped_fs_1.default.lstat(filename);
+     if (stat.isFile()) {

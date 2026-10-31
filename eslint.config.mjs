@@ -48,6 +48,10 @@ export default tseslint.config(
       }],
       // Judgement calls — visible, not blocking. See the severity policy above.
       '@typescript-eslint/no-explicit-any': 'warn',
+      // New in ESLint 10's recommended set. An initial value that every path
+      // overwrites, or a rethrow with no `cause`, is worth seeing and rarely wrong.
+      'no-useless-assignment': 'warn',
+      'preserve-caught-error': 'warn',
     },
   },
 
@@ -55,7 +59,9 @@ export default tseslint.config(
     files: ['src/frontend/**/*.{ts,tsx}'],
     plugins: { 'react-hooks': reactHooks },
     rules: {
-      ...reactHooks.configs.recommended.rules,
+      // Named, not the plugin's `recommended`: from 7 that also turns on the
+      // React Compiler's rules, which are a separate decision.
+      'react-hooks/rules-of-hooks': 'error',
       // Wrong deps cause stale closures and render loops, but the fix is
       // often a deliberate restructure rather than adding the dep.
       'react-hooks/exhaustive-deps': 'warn',
