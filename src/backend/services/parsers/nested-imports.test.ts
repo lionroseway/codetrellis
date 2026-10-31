@@ -335,6 +335,15 @@ describe('the languages that already walk deeper', () => {
     assert.deepEqual(php('namespace X { use A\\{B, C}; use function D\\e; }'), [['A\\B', ['B']], ['A\\C', ['C']], ['D\\e', ['e']]]);
   });
 
+  test('Ruby: nesting deeper than the call stack does not throw, and what follows it is still found', () => {
+    assert.deepEqual(sourcesOf(rubyPlugin, `require 'before'\nX = ${'['.repeat(20_000)}${']'.repeat(20_000)}\nrequire 'after'\n`), ['before', 'after']);
+    assert.deepEqual(sourcesOf(rubyPlugin, `${'module A\n'.repeat(20_000)}require 'inside'\n${'end\n'.repeat(20_000)}`), ['inside']);
+  });
+
+  test('Ruby: source order, an outer call before one in its arguments', () => {
+    assert.deepEqual(sourcesOf(rubyPlugin, "require 'a'\ndef f\n  require 'b'\nend\nrequire(require('c') ? 'd' : 'e')\nrequire 'f'\n"), ['a', 'b', 'c', 'f']);
+  });
+
   test('PHP: deliberately not read: require, which includes a file rather than importing a name', () => {
     assert.deepEqual(sourcesOf(phpPlugin, "<?php\nrequire_once 'vendor/autoload.php';\nfunction g() { require 'in_fn.php'; }\n"), []);
   });

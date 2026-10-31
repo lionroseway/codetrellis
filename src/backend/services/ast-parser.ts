@@ -307,9 +307,21 @@ function parseSource(filePath: string, content: string): ParsedFile | null {
 
   const root = tree.rootNode;
   const contentHash = createHash('md5').update(content).digest('hex');
-  const symbols = plugin.extractSymbols(root);
-  const imports = plugin.extractImports(root);
-  const exports = plugin.extractExports?.(root) ?? [];
+  // A plugin that throws costs this file what it could not read, and nothing
+  // else. Thrown out of here, it ends the whole scan: every file's symbols and
+  // imports gone, and the rules unable to read any of them. Each is apart so a
+  // file whose declarations nest too deep to list still has its imports read.
+  const read = <T>(what: string, extract: () => T, none: T): T => {
+    try {
+      return extract();
+    } catch (err) {
+      console.warn(`[AST] Could not read the ${what} of ${filePath}:`, err);
+      return none;
+    }
+  };
+  const symbols = read('symbols', () => plugin.extractSymbols(root), []);
+  const imports = read('imports', () => plugin.extractImports(root), []);
+  const exports = read('exports', () => plugin.extractExports?.(root) ?? [], []);
 
   // Extract non-import callsites (HTTP routes / fetches / SQL / etc.)
   // for the cross-system matcher. Best-effort — a missing extractor or
@@ -343,7 +355,7 @@ function parseSource(filePath: string, content: string): ParsedFile | null {
 
   // Phase 33 B4: the project's own patterns, found by the file's place in it,
   // so the scan, the watcher, the gate and reviews read the same ones.
-  callsites = [...callsites, ...patternCallsitesFor(filePath, content)];
+  callsites = [...callsites, ...read('pattern finds', () => patternCallsitesFor(filePath, content), [])];
 
   return {
     path: filePath,
