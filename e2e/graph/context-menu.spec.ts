@@ -82,6 +82,26 @@ test.describe('Node context menu', () => {
     await expect(page.getByText('Explain with agent')).not.toBeVisible();
   });
 
+  test('the view refitting leaves the menu open; moving it by hand closes it', async ({ page }) => {
+    await gotoWithProject(page, { projectPath: FIXTURE_PATH });
+
+    const firstNode = (await reachableNodes(page))[0];
+    await firstNode.click({ button: 'right' });
+    const menuItem = page.getByText('Explain with agent');
+    await expect(menuItem).toBeVisible();
+
+    // A live refresh that changes the node count refits the same way. The menu
+    // closing then took "Plan a change" from under a click on its way to it.
+    await page.getByRole('button', { name: 'Fit View' }).click();
+    await page.waitForTimeout(600);
+    await expect(menuItem).toBeVisible();
+
+    const pane = (await page.locator('.react-flow__pane').boundingBox())!;
+    await page.mouse.move(pane.x + 20, pane.y + pane.height / 2);
+    await page.mouse.wheel(0, 200);
+    await expect(menuItem).not.toBeVisible();
+  });
+
   test('Escape closes context menu', async ({ page }) => {
     await gotoWithProject(page, { projectPath: FIXTURE_PATH });
 
