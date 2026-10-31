@@ -50,6 +50,13 @@ test('npm:reqeusts is a look-alike of npm:requests, said with its score; the rea
   assert.equal(breaks({ ...r, threshold: 0.9 }, 'app/client.py', 'npm:reqeusts'), false, 'below a stricter threshold');
 });
 
+test('a Python name spelled the other way is the name itself, not a look-alike of it', () => {
+  const r = parse({ kind: 'package', package: { match: 'fuzzy', value: 'pypi:langchain-ollama' } }).rule!;
+  assert.equal(breaks(r, 'app/client.py', 'pypi:langchain_ollama'), false);
+  assert.equal(lookAlike(r, 'pypi:langchain_ollama'), null);
+  assert.equal(breaks(r, 'app/client.py', 'pypi:langchain_olama'), true, 'a typo of it still is');
+});
+
 test('a look-alike export, or call, is matched by its name; only, when said, may', () => {
   const sym = parse({ kind: 'symbol', symbol: { match: 'fuzzy', value: 'src/money.ts#formatMoney', threshold: 0.8 }, only: ['src/legacy/'] }).rule!;
   assert.equal(ruleStatement(sym), 'only src/legacy/ may import a look-alike of formatMoney from src/money.ts (0.80 or closer)');

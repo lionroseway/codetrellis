@@ -37,7 +37,7 @@ What a rule can say:
 | Kind | Says | Since |
 |---|---|---|
 | `imports` (the default) | `from` may not import `mayNotImport`, `except` some files | A7, R1 |
-| `package` | only `only` may import an outside package (`npm:stripe`, `pypi:requests`) | R5 |
+| `package` | only `only` may import an outside package (`npm:stripe`, `pypi:requests`), wherever in the file; see [Python imports](#python-imports) | R5 |
 | `symbol` | only `only` may import one export (`src/payments/charge.ts#createCharge`), through barrels too | R6 |
 | `calls` | only `only` may make a call: `http:api.stripe.com/v1`, `sql:invoices`, run a command (`exec:git`), read an environment variable (`env:STRIPE_SECRET_KEY`), or a kind of your own (`queue:orders.*`) | R7, B4 |
 | `folder` | what the files in a folder are: named to `files`, of `kinds`, `exports: one`, with a `guide` | R8 |
@@ -496,6 +496,85 @@ supply-chain  ✗ 1 blocks
       → pypi:reqeusts is 0.88 like pypi:requests: did you mean it?
 
 1 finding blocks this change (exit 3).
+```
+
+### Python imports
+
+A package rule sees every import in a Python file, however deep: inside a
+function, any arm of a `try:`, a class body, an `if`, and under
+`if TYPE_CHECKING:`, which counts because the file still names the package.
+Through 0.3.0 it saw only the top level, so it under-reported without saying
+so. A baseline written then lists too few, and the check now fails on the rest:
+[Old breaches may only fall](cli.md#old-breaches-may-only-fall-phase-33-c3) says
+what to do.
+
+The name can be written the way pip writes it or the way the code does. `-`,
+`_` and case do not tell Python names apart, so `pypi:langchain-ollama`,
+`pypi:langchain_ollama` and `pypi:LangChain-Ollama` are one package, in
+`package`, in `except` and in a `glob`. A `regex` reads the name as the code
+spells it. A finding always says what the code says.
+
+The name is still the module the code imports, not the distribution it was
+installed from: `yaml` for PyYAML, `PIL` for Pillow. And it is the top module,
+so `google.cloud.storage` is `pypi:google`.
+
+```yaml example=python-imports file=.codetrellis/rules/inference.yaml at=main
+suite: inference
+because: Every model call goes through one place.
+rules:
+  - id: ollama-via-inference
+    kind: package
+    package: pypi:langchain-ollama
+    only: [services/inference/]
+    strength: block
+    because: The inference service holds the retries and the budget.
+```
+
+```python example=python-imports file=services/inference/llm.py at=main
+from langchain_ollama import OllamaLLM
+
+llm = OllamaLLM(model="llama3")
+```
+
+```python example=python-imports file=app/report.py at=change
+def summarise(text):
+    from langchain_ollama import OllamaLLM
+    return OllamaLLM(model="llama3").invoke(text)
+```
+
+```python example=python-imports file=app/extract.py at=change
+try:
+    import langchain_ollama
+except ImportError:
+    langchain_ollama = None
+```
+
+```python example=python-imports file=app/hints.py at=change
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from langchain_ollama import OllamaLLM
+```
+
+```sh example=python-imports exit=3
+codetrellis start --quiet
+codetrellis check --base main
+```
+
+```text example=python-imports
+Does not conform (3 changed files since main):
+
+inference  ✗ 1 blocks
+
+  ✗ ollama-via-inference   only services/inference/ may import pypi:langchain-ollama: The inference service holds the retries and the budget.
+      app/extract.py:2 imports pypi:langchain_ollama   import langchain_ollama
+      → use services/inference/ instead
+      app/hints.py:4 imports pypi:langchain_ollama   from langchain_ollama import OllamaLLM
+      → use services/inference/ instead
+      app/report.py:2 imports pypi:langchain_ollama   from langchain_ollama import OllamaLLM
+      → use services/inference/ instead
+
+3 findings block this change (exit 3).
 ```
 
 ### An agent rule

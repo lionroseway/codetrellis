@@ -44,6 +44,20 @@ test('a rule covers its package and what is under it, in the language\'s own sep
   assert.equal(packageMatches('npm:stripe', 'pypi:stripe'), false);
 });
 
+test('a Python name is one name however - and _ and case spell it, as it is to pip; nowhere else', () => {
+  assert.equal(packageMatches('pypi:langchain-ollama', 'pypi:langchain_ollama'), true, 'the distribution name, the module the code imports');
+  assert.equal(packageMatches('pypi:langchain_ollama', 'pypi:langchain_ollama'), true);
+  assert.equal(packageMatches('pypi:SQLAlchemy', 'pypi:sqlalchemy'), true);
+  assert.equal(packageMatches('pypi:a--b', 'pypi:a_b'), true, 'a run of them is one');
+  assert.equal(packageMatches('pypi:langchain', 'pypi:langchain_ollama'), false, 'a different package, not one under it');
+  assert.equal(packageMatches('pypi:langchain-ollama', 'npm:langchain_ollama'), false, 'another ecosystem');
+  assert.equal(packageMatches('npm:react-dom', 'npm:react_dom'), false, 'npm tells these apart');
+  assert.equal(packageMatches('npm:Stripe', 'npm:stripe'), false);
+  assert.equal(packageMatches('gem:active-support', 'gem:active_support'), false);
+  // The finding says what the code says: the entry keeps its own spelling.
+  assert.equal(packageEntry('python', 'langchain_ollama.llms'), 'pypi:langchain_ollama');
+});
+
 test('a package entry is told from a project path; a bad one is named', () => {
   assert.equal(isPackageEntry('npm:stripe'), true);
   assert.equal(isPackageEntry('src/payments/index.ts'), false);
