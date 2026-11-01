@@ -17,6 +17,7 @@
  */
 
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { test, expect } from '@playwright/test';
 import { setupHarness, startBackend, createClient, createMcpClient, type Harness, type HarnessClient, type RunningBackend, type ScriptedMcp } from '../harness';
 import type { RecordCheck } from '../../src/shared/types/record';
@@ -163,8 +164,7 @@ test.describe.serial('G2: months later, the week a payment change was built', ()
     const approval = week.find((e) => e.type === 'criterion_decided')!;
     await later!.stop();
     later = null;
-    const Database = require('better-sqlite3') as new (file: string) => { prepare: (sql: string) => { get: (...a: unknown[]) => unknown; run: (...a: unknown[]) => unknown }; close: () => void };
-    const db = new Database(path.join(h.fixture.dataDir, 'data.db'));
+    const db = new DatabaseSync(path.join(h.fixture.dataDir, 'data.db'));
     const row = db.prepare('SELECT payload FROM agent_events WHERE id = ?').get(approval.id) as { payload: string };
     db.prepare('UPDATE agent_events SET payload = ? WHERE id = ?').run(row.payload.replace('"approved"', '"sent_back"'), approval.id);
     const seq = (db.prepare('SELECT seq FROM record_chain WHERE event_id = ?').get(approval.id) as { seq: number }).seq;

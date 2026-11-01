@@ -12,6 +12,7 @@
  * resolver's graph, never a text match.
  */
 import fs from 'node:fs';
+import { scanFailureOf } from './scan-health';
 import path from 'node:path';
 import type { ArchitectureRule, RuleView } from '../../shared/types/architecture-rules';
 import { getProjectConfig, updateProjectConfig } from './project-config-service';
@@ -182,7 +183,7 @@ export function edgesIfLoaded(
   /** Rules beyond the project's own whose symbols to look up: a preview's, or the base's (R6). */
   alsoRules: readonly ArchitectureRule[] = [],
 ): Array<{ from: string; to: string }> | null {
-  if (!loadedRoot) return null;
+  if (!loadedRoot || scanFailureOf(projectRoot)) return null;
   const real = (p: string) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
   if (real(loadedRoot) !== real(projectRoot)) return null;
   // Files importing files, then files importing outside packages (R5), which

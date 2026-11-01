@@ -103,6 +103,7 @@ import { inScope, parseScope, scopeWords } from './services/rule-scope';
 import { getCheckRun, listCheckRuns } from './services/check-runs';
 import { taskRules } from './services/task-rules';
 import { checkTheChange } from './services/change-check';
+import { noteScanFailed, noteScanSucceeded } from './services/scan-health';
 import { changedFiles } from './services/work-changes';
 import { debtByRule, ruleHistory, suiteSummaries } from './services/rules-overview';
 import { decideRuleProposal, getRuleProposal, listRuleProposals } from './services/rule-proposals';
@@ -1285,7 +1286,15 @@ export async function scanProject(projectPath: string): Promise<ScanStats> {
   const run = runScan(projectPath);
   scanInFlight = { path: projectPath, promise: run };
   try {
-    const stats = await run;
+    let stats: ScanStats;
+    try {
+      stats = await run;
+    } catch (err) {
+      // Here, not at the callers, for the reason the announcement below gives.
+      noteScanFailed(projectPath, err instanceof Error ? err.message : String(err));
+      throw err;
+    }
+    noteScanSucceeded(projectPath);
 
     // Announce that the graph's data has been replaced.
     //

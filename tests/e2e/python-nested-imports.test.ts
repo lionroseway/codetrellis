@@ -13,6 +13,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { test, expect } from '@playwright/test';
 import { setupHarness, startBackend, createClient, type Harness, type RunningBackend } from '../harness';
 
@@ -57,18 +58,16 @@ test.describe.serial('Python imports at any depth', () => {
     return (rules.find((r) => r.rule.id === id)?.breaches ?? []).map((b) => `${b.from} > ${b.to}`).sort();
   };
   /** Close the backend, do something to its database as an older version would have left it, and start again. */
-  const restartAfter = async (change: (db: { exec: (sql: string) => unknown; prepare: (sql: string) => { run: (...a: unknown[]) => { changes: number } } }) => void) => {
+  const restartAfter = async (change: (db: DatabaseSync) => void) => {
     await (backend ?? h.backend).stop();
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const Database = require('better-sqlite3') as new (file: string) => { exec: (sql: string) => unknown; prepare: (sql: string) => { run: (...a: unknown[]) => { changes: number } }; close: () => void };
-    const db = new Database(path.join(h.fixture.dataDir, 'data.db'));
+    const db = new DatabaseSync(path.join(h.fixture.dataDir, 'data.db'));
     change(db);
     db.close();
     backend = await startBackend({ dataDir: h.fixture.dataDir });
     client = createClient(backend.baseUrl, backend.capabilityToken);
     await client.scanProject(root);
   };
-  const forgetInFunction = (db: { prepare: (sql: string) => { run: (...a: unknown[]) => { changes: number } } }) => {
+  const forgetInFunction = (db: DatabaseSync) => {
     const gone = db.prepare(`DELETE FROM imports WHERE source_path = 'langchain_ollama' AND file_id = (SELECT id FROM files WHERE relative_path = ?)`).run(IN_FUNCTION);
     expect(gone.changes, 'the row an older parser would not have written').toBe(1);
   };

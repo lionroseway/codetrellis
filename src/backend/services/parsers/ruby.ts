@@ -262,16 +262,14 @@ const REQUIRE_CALLS = new Set(['require', 'require_relative', 'load', 'autoload'
  * in `begin/rescue LoadError` for an optional dependency. Scanning only
  * the top level dropped every one of those — the dependency edge was
  * missing precisely for the conditional dependencies worth seeing.
+ *
+ * The grammar's own walk, as TypeScript's calls are found: a data file's
+ * expressions can nest deeper than the call stack.
  */
-function* callNodes(node: SyntaxNode): Iterable<SyntaxNode> {
-  if (node.type === 'call') yield node;
-  for (const child of node.children) yield* callNodes(child);
-}
-
 function extractImports(root: SyntaxNode): ImportDeclaration[] {
   const imports: ImportDeclaration[] = [];
 
-  for (const child of callNodes(root)) {
+  for (const child of root.descendantsOfType('call')) {
     // The callee must be the FIRST child: `require 'json'`. A call with
     // a receiver (`loader.require 'x'`) puts the receiver there instead,
     // and is not Kernel#require. Matching any identifier child mattered

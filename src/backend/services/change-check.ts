@@ -8,13 +8,14 @@
 
 import { execFileSync } from 'node:child_process';
 import { checkChanges } from './conformity-gate';
-import { ruleImports } from './workstream-imports';
+import { importsReadableFor, ruleImports } from './workstream-imports';
 import { rulesAt } from './rules-at';
 import { changeWords, diffRules, type RuleChange } from './rule-changes';
 import { approvalFor, approvalsHere, keysAt } from './rule-approvals';
 import { inScope, parseScope, scopeRules, scopeWords } from './rule-scope';
 import { baselineAt, ratchet, readBaseline, type RatchetFinding } from './rule-baseline';
 import { edgesIfLoaded, rulesOf } from './architecture-rules';
+import { scanFailureOf } from './scan-health';
 import { diffPipeline, pipelineAt, readPipeline } from './pipeline';
 import { getDependencyEdges } from './database';
 import { isSafeGitRef } from './git-safety';
@@ -100,8 +101,15 @@ export async function checkTheChange(input: ChangeCheckInput): Promise<{ error: 
   let ratchetFound: Array<RatchetFinding & { strength: string }> = [];
   const baseBaseline = since ? baselineAt(root, since) : null;
   const headBaseline = readBaseline(root);
+  const judged = judgeBy ?? scopeRules(rulesOf(root), scope);
+  // A scan that was tried and failed is not a project nobody opened: nothing here
+  // read this code, so a rule that would fail the check cannot be said to hold.
+  // An agent rule is a review's to judge, and a rule at warn would not fail it.
+  const scanFailed = scanFailureOf(root);
+  const wouldFail = judged.some((r) => r.kind !== 'agent' && (r.strength === 'block' || (strict === true && r.strength === 'warn')));
+  const rulesRead = judged.length === 0 || importsReadableFor(root);
+  const unreadWords = scanFailed ? `The rules could not be checked, because the last scan of this project failed (${scanFailed}), so this change cannot be said to conform.` : null;
   if (baseBaseline || headBaseline) {
-    const judged = judgeBy ?? scopeRules(rulesOf(root), scope);
     const edges = edgesIfLoaded(root, input.activeProject, getDependencyEdges);
     if (edges) {
       const strengthOf = new Map(judged.map((r) => [r.id, r.strength]));
@@ -109,11 +117,11 @@ export async function checkTheChange(input: ChangeCheckInput): Promise<{ error: 
       ratchetFound = ratchet(baseBaseline, headBaseline, judged, edges)
         .filter((f) => ids.has(f.rule) || f.kind === 'grew')
         .map((f) => ({ ...f, strength: strengthOf.get(f.rule) ?? 'block' }));
-    } else {
+    } else if (!scanFailed) {
       notes.push('⚠ The rules\' baseline was not checked: this project\'s imports are not loaded here.');
     }
   }
-  const c = await checkChanges(root, paths, input.checkCriterion, (files) => ruleImports(root, files, since, judgeBy ?? (scope ? scopeRules(rulesOf(root), scope) : undefined)), rulebook, notes, strict === true, scope !== null, ratchetFound);
+  const c = await checkChanges(root, paths, input.checkCriterion, (files) => ruleImports(root, files, since, judgeBy ?? (scope ? scopeRules(rulesOf(root), scope) : undefined)), rulebook, notes, strict === true, scope !== null, ratchetFound, unreadWords && wouldFail ? unreadWords : null);
   // C7: every check is a run, kept with where it ran and by whom; shared where task state is.
   const failing = new Set(c.says);
   const code = codeAt(root);
@@ -136,11 +144,12 @@ export async function checkTheChange(input: ChangeCheckInput): Promise<{ error: 
       rules: c.rules.map((r) => ({ path: r.path, imports: r.imports, rule: r.rule, words: r.words, because: r.because, strength: r.strength, suite: r.suite ?? 'architecture', fix: r.fix ?? null, ...(r.line ? { line_found: r.line } : {}) })),
       // C8: the rules judged by, so a suite can say how many hold.
       // B5: an agent rule is a review's to judge, not this check's: it is not said to hold.
-      checked: (judgeBy ?? scopeRules(rulesOf(root), scope)).filter((r) => r.kind !== 'agent').map((r) => ({ rule: r.id, suite: r.suite ?? 'architecture', strength: r.strength })),
+      // Nor is any rule whose imports nothing here could read.
+      checked: rulesRead ? judged.filter((r) => r.kind !== 'agent').map((r) => ({ rule: r.id, suite: r.suite ?? 'architecture', strength: r.strength })) : [],
       rulebook: c.rulebook.map((r) => ({ rule: r.rule, change: r.change, effect: r.effect, allowed: r.allowed, forbidden: r.forbidden, words: changeWords(r), ...(r.approval ? { approval: r.approval } : {}) })),
       notes: c.notes,
       ...(c.ratchet.length ? { ratchet: c.ratchet } : {}),
       ...(scope ? { scope: scopeWords(scope) } : {}),
-      ...(c.rulesChecked ? {} : { rules_note: 'The architecture rules were not checked: this project\'s imports are not loaded here. Open the project, or run `codetrellis start` in it.' }),
+      ...(rulesRead || (scanFailed && wouldFail) ? {} : { rules_note: unreadWords ?? 'The architecture rules were not checked: this project\'s imports are not loaded here. Open the project, or run `codetrellis start` in it.' }),
   } };
 }

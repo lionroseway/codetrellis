@@ -70,21 +70,36 @@ function extractSymbols(node: SyntaxNode): ParsedSymbol[] {
   return symbols;
 }
 
+/**
+ * What a `use` declaration imports, one path per name, without its keyword or
+ * alias: `use function A\b` is `A\b`, and `use A\{B, C as D}` is `A\B` and `A\C`.
+ * A group is one path per member because each is its own class to autoload, so
+ * an imports rule can resolve it, and `composer:A` still covers them by prefix.
+ */
+function usePaths(declaration: SyntaxNode): string[] {
+  const named = declaration.namedChildren;
+  const group = named.find((c: SyntaxNode) => c.type === 'namespace_use_group');
+  const prefix = group ? named.find((c: SyntaxNode) => c.type === 'namespace_name')?.text : null;
+  const paths: string[] = [];
+  for (const clause of (group ?? declaration).namedChildren) {
+    if (clause.type !== 'namespace_use_clause') continue;
+    // The first name is the path: an alias comes after it, and `function` is not a named node.
+    const name = clause.namedChildren.find((c: SyntaxNode) => c.type === 'qualified_name' || c.type === 'name')?.text;
+    if (name) paths.push((prefix ? `${prefix}\\${name}` : name).replace(/^\\/, ''));
+  }
+  return paths;
+}
+
 function extractImports(node: SyntaxNode): ImportDeclaration[] {
   const imports: ImportDeclaration[] = [];
   const collect = (n: SyntaxNode) => {
     for (const child of n.children) {
       if (child.type === 'namespace_use_declaration') {
-        // Inner use_clauses each name a fully-qualified name + optional alias
-        const clauses = child.children.filter((c: SyntaxNode) => c.type === 'namespace_use_clause' || c.type === 'namespace_use_group_clause');
-        for (const clause of clauses) {
-          const text = clause.text.trim();
-          // strip trailing alias `Foo as Bar`
-          const [pathPart, ...rest] = text.split(/\s+as\s+/i);
-          const alias = rest.join(' as ').trim();
+        for (const path of usePaths(child)) {
           imports.push({
-            source: pathPart.trim().replace(/^\\/, ''),
-            specifiers: alias ? [alias] : [pathPart.trim().split('\\').pop() || pathPart.trim()],
+            source: path,
+            // The ORIGINAL name (A2.2), not an alias: "who imports a?" is asked of what the file exports.
+            specifiers: [path.split('\\').pop() || path],
             isDefault: false,
             isNamespace: false,
           });
