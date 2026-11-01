@@ -118,7 +118,7 @@ jobs:
         run: npm ci
 
       - name: Restore the compiler cache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.CCACHE_DIR }}
           key: rendition-ccache-${{ hashFiles('tools/rendition-engine/build.sh', 'tools/rendition-engine/autogen.input', 'tools/rendition-engine/no-network.js', 'tools/rendition-engine/patches/**') }}-${{ github.run_id }}
@@ -129,7 +129,7 @@ jobs:
             rendition-ccache-
 
       - name: Restore third-party sources
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.TARBALLS }}
           key: rendition-tarballs-${{ hashFiles('tools/rendition-engine/build.sh') }}-${{ github.run_id }}
@@ -156,14 +156,14 @@ jobs:
 
       - name: Save the compiler cache
         if: always() && steps.build.outputs.status != ''
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ${{ env.CCACHE_DIR }}
           key: rendition-ccache-${{ hashFiles('tools/rendition-engine/build.sh', 'tools/rendition-engine/autogen.input', 'tools/rendition-engine/no-network.js', 'tools/rendition-engine/patches/**') }}-${{ github.run_id }}
 
       - name: Save third-party sources
         if: always() && steps.build.outputs.status != ''
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ${{ env.TARBALLS }}
           key: rendition-tarballs-${{ hashFiles('tools/rendition-engine/build.sh') }}-${{ github.run_id }}
