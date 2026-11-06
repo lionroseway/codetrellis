@@ -313,7 +313,7 @@ peer network, the mobile companion, and the MCP tool categories.
   Zustand 5, CodeMirror 6, Lucide
 - **Backend** — Express 5, ws, better-sqlite3
 - **AST** — web-tree-sitter with twelve grammars
-- **Desktop** — Electron 44 via electron-builder + electron-vite
+- **Desktop** — Electron 45 via electron-builder + electron-vite
 - **Mobile** — Expo 57 / React Native 0.86, WebRTC
 - **MCP** — `@modelcontextprotocol/sdk` over SSE
 

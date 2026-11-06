@@ -48,12 +48,12 @@ describe('installing', () => {
       const bundle = bundledDictionaryDir(REPO, undefined, false);
       const installed = installDictionaries(bundle, userData);
       assert.deepEqual([...installed].sort(), BUNDLED);
-      const target = path.join(userData, 'Dictionaries', 'en-US-10-1.bdic');
-      assert.equal(fs.statSync(target).size, fs.statSync(path.join(bundle, 'en-US-10-1.bdic')).size);
+      const target = path.join(userData, 'Dictionaries', 'en-US-10-2.bdic');
+      assert.equal(fs.statSync(target).size, fs.statSync(path.join(bundle, 'en-US-10-2.bdic')).size);
 
       fs.writeFileSync(target, 'truncated');
       installDictionaries(bundle, userData);
-      assert.equal(fs.statSync(target).size, fs.statSync(path.join(bundle, 'en-US-10-1.bdic')).size);
+      assert.equal(fs.statSync(target).size, fs.statSync(path.join(bundle, 'en-US-10-2.bdic')).size);
     } finally {
       fs.rmSync(userData, { recursive: true, force: true });
     }

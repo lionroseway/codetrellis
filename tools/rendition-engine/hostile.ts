@@ -12,7 +12,7 @@
  * zero; the conversions must end (a PDF or a refusal, never a hang); and
  * nothing read from outside the engine may appear in a PDF.
  *
- * CI runs it on Node 24 (Electron 44's runtime, which cannot deny the network
+ * CI runs it on Node 24 (Electron 45's runtime, which cannot deny the network
  * itself — the case the network-free build exists for) and on Node 26.
  */
 import fs from 'node:fs';

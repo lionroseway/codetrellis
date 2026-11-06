@@ -9,7 +9,7 @@ name: Rendition engine
 # Emscripten, with our no-network stubs linked in (tools/rendition-engine/).
 # Building it ourselves is what lets us say what is in it: a prebuilt engine
 # from elsewhere could not be proven network-free, and the app runs an engine
-# on Electron 44's Node 24 — which cannot deny a process the network — only
+# on Electron 45's Node 24 — which cannot deny a process the network — only
 # if it was.
 #
 # WHY IT RESUMES
@@ -191,7 +191,7 @@ jobs:
         if: steps.build.outputs.status == 'done'
         with:
           node-version: 24
-      - name: Hostile documents, Node 24 (Electron 44's runtime; only the build keeps it off the network)
+      - name: Hostile documents, Node 24 (Electron 45's runtime; only the build keeps it off the network)
         if: steps.build.outputs.status == 'done'
         run: |
           node --version
