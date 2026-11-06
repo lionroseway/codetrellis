@@ -183,25 +183,28 @@ handshake without a note about forced re-pairing.
 
 ---
 
-## werift is patched — the patch must survive every upgrade
+## werift's SCTP chunks are 1024 bytes — the setting must survive every upgrade
 
-`patches/werift+<version>.patch` lowers SCTP's `USERDATA_MAX_LENGTH` from
-werift's default 1200 to **1024**. This is an MTU fix: CodeTrellis is
-explicitly a bring-your-own-VPN product, and a tunnel's overhead pushes a
-1200-byte SCTP chunk past the path MTU. The symptom is not a clean failure —
-it is a peer that pairs and then stalls on larger payloads (a UI snapshot,
-terminal scrollback).
+`webrtc-service.ts` gives every `RTCPeerConnection` `sctp: { mtu: 1052 }`,
+which caps SCTP's data chunks at **1024** bytes against werift's default of
+1160. This is an MTU fix: CodeTrellis is explicitly a bring-your-own-VPN
+product, and a tunnel's overhead pushes a larger chunk past the path MTU. The
+symptom is not a clean failure — it is a peer that pairs and then stalls on
+larger payloads (a UI snapshot, terminal scrollback). Until werift 0.25 made
+the size a setting, it was a patch to werift's `USERDATA_MAX_LENGTH`.
 
-**Finding:** a werift version bump without a regenerated patch. patch-package
-silently stops protecting you when the version moves — the 0.23 → 0.24.4 bump
-invalidated both existing patches, and only surfaced because `npm ci` failed
-in CI. A patch that still *applies* to a renamed file and quietly does nothing
-would not even do that.
+**Finding:** a `new RTCPeerConnection` that doesn't go through
+`peerConnectionConfig()`, or a werift upgrade that renames or drops the
+`sctp.mtu` option.
 
-`tests/e2e/webrtc-handshake.test.ts` asserts the resulting VALUE rather than
-the patch file, and is verified to fail when the patch is lost. If an upgrade
-moves the constant somewhere that test cannot see, re-target it — never delete
-it.
+`tests/e2e/webrtc-handshake.test.ts` builds two peers with the app's own
+config, sends 10 KB and asserts every chunk is at most 1024 bytes; it fails
+without the setting. Never weaken or delete it.
+
+**Finding:** a version bump of a package in `patches/` without a regenerated
+patch. patch-package stops protecting you when the version moves — the werift
+0.23 → 0.24.4 bump invalidated both existing patches, and only surfaced
+because `npm ci` failed in CI.
 
 **Finding:** a patch file for a package that is no longer a dependency.
 `werift-sctp` stopped existing at 0.24 and its stale patch broke every
