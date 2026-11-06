@@ -60,7 +60,7 @@ export default function RecurringScreen() {
         </>
       }
       ListEmptyComponent={
-        error ? null : (
+        error ? undefined : (
           <View style={styles.empty} testID="recurring-empty">
             <Text style={styles.emptyTitle}>Nothing recurs yet</Text>
             <Text style={styles.emptyBody}>A playbook can run every day, week or month. Set one in the app on your computer: Settings → Recurring playbooks.</Text>

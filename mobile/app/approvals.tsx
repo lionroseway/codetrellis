@@ -58,9 +58,9 @@ export default function ApprovalsScreen() {
       data={entries ?? []}
       keyExtractor={(e) => e.uid}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#71717a" />}
-      ListHeaderComponent={error ? <Text style={styles.error}>{error}</Text> : null}
+      ListHeaderComponent={error ? <Text style={styles.error}>{error}</Text> : undefined}
       ListEmptyComponent={
-        error ? null : (
+        error ? undefined : (
           <View style={styles.empty}>
             <Text style={styles.emptyMark}>✓</Text>
             <Text style={styles.emptyTitle}>Nothing is waiting for you</Text>

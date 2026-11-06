@@ -12,7 +12,7 @@
  */
 
 import type { RefObject } from 'react';
-import type WebView from 'react-native-webview';
+import type { WebView } from './webview';
 import { connection } from './connection';
 import type {
   BridgeToWebView,

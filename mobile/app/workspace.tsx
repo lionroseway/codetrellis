@@ -17,7 +17,7 @@ import {
   StyleSheet,
   SafeAreaView,
 } from 'react-native';
-import { WebView } from 'react-native-webview';
+import { WebView } from '../lib/webview';
 import { useRouter } from 'expo-router';
 import { WebViewBridge } from '../lib/bridge';
 import { connection } from '../lib/connection';

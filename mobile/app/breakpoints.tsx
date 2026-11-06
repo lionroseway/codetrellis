@@ -73,9 +73,9 @@ export default function BreakpointsScreen() {
       keyExtractor={(h) => h.ref}
       keyboardShouldPersistTaps="handled"
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#71717a" />}
-      ListHeaderComponent={error ? <Text style={styles.error}>{error}</Text> : null}
+      ListHeaderComponent={error ? <Text style={styles.error}>{error}</Text> : undefined}
       ListEmptyComponent={
-        error ? null : (
+        error ? undefined : (
           <View style={styles.empty}>
             <Text style={styles.emptyMark}>✓</Text>
             <Text style={styles.emptyTitle}>No agent is waiting on you</Text>

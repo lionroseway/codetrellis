@@ -92,12 +92,12 @@ and build tooling, except one low advisory with no fixed release.
 | Lockfile | Full audit | What moved |
 |---|---|---|
 | root | 0 | Electron 44.10.1; `vite`, `undici`, `electron-builder` within range; ESLint 10; the overrides below; `dompurify`, `zod`, `body-parser`, `@hono/node-server`, `hono`, `fast-uri`, `ip-address`, `qs` |
-| `mobile/` | 7 low, all from `deepmerge` | Expo within SDK 57, `node-forge` 1.4.2, the overrides below |
+| `mobile/` | 0 since Expo SDK 58 (was 7 low, all from `deepmerge`) | Expo SDK 58, whose `@expo/config` no longer uses `deepmerge`; `node-forge` 1.4.2, the overrides below |
 | `video/` | 0 | `puppeteer-core`, and `sharp` 0.35.5 under `@huggingface/transformers` |
 | `video/compositions/remotion-hero/` | 0 | `fast-uri`, and `zod` 4.6.7 over Remotion's exact 4.5.4 |
 
-- **The exception: `deepmerge` ≤ 4.3.1, the latest release** (GHSA-gcqx-w48m-w2h4,
-  low, prototype poisoning). `@expo/config` uses it to read the project's own
+- **The exception, until Expo SDK 58: `deepmerge` ≤ 4.3.1, the latest release** (GHSA-gcqx-w48m-w2h4,
+  low, prototype poisoning). SDK 58's `@expo/config` dropped it, and `mobile/` audits clean. `@expo/config` uses it to read the project's own
   config on the developer's machine. It is not in the phone app: a source map
   of the Android bundle has no `deepmerge` module in it. Re-check when a release
   fixes it.
