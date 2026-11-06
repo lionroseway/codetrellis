@@ -263,7 +263,7 @@ function installWebSocketShim(bridge: CodetrellisIpcBridge): void {
     readonly extensions = '';
     readonly bufferedAmount = 0;
     binaryType: BinaryType = 'blob';
-    readyState: number = 0;
+    readyState: WebSocket['readyState'] = 0;
     onopen: ((this: WebSocket, ev: Event) => void) | null = null;
     onclose: ((this: WebSocket, ev: CloseEvent) => void) | null = null;
     onmessage: ((this: WebSocket, ev: MessageEvent) => void) | null = null;
@@ -322,7 +322,7 @@ function installWebSocketShim(bridge: CodetrellisIpcBridge): void {
     readonly extensions = '';
     readonly bufferedAmount = 0;
     binaryType: BinaryType = 'blob';
-    readyState: number = 0;
+    readyState: WebSocket['readyState'] = 0;
     onopen: ((this: WebSocket, ev: Event) => void) | null = null;
     onclose: ((this: WebSocket, ev: CloseEvent) => void) | null = null;
     onmessage: ((this: WebSocket, ev: MessageEvent) => void) | null = null;
