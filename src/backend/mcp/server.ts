@@ -449,8 +449,14 @@ function setupMcpServerInstance(sessionId: string): McpServer {
   const mcpServer = new McpServer(
     { name: 'codetrellis', version: '0.1.0' },
     {
+      // `tools` is NOT declared here. From SDK 1.32.2 a tools capability in
+      // these options makes the SDK install its tools/call handler in this
+      // constructor, before the setRequestHandler wrapper below exists, and
+      // every call it refuses (bad arguments, an unknown tool) silently left
+      // the Timeline and the event log. Undeclared, the SDK installs it on
+      // the first registerTool, after the wrapper, and declares `tools`
+      // itself. The check at the end of this function holds that order.
       capabilities: {
-        tools: {},
         resources: {},
       },
       instructions: 'CodeTrellis provides codebase architecture analysis. Use these tools to understand how files connect, search for symbols, and report your plans.',
@@ -609,10 +615,12 @@ function setupMcpServerInstance(sessionId: string): McpServer {
   // (the SDK registers it on the first registerTool, after this line); a
   // call that comes back as an error without having reached `instrument`
   // is broadcast as a tool_error, like one refused at the interception.
+  let isToolCallWrapped = false;
   const originalSetRequestHandler = (mcpServer.server.setRequestHandler as any).bind(mcpServer.server);
   (mcpServer.server as any).setRequestHandler = (schema: any, handler: any) => {
     const method = schema?.shape?.method?.value ?? schema?.shape?.method?._def?.value;
     if (method !== 'tools/call') return originalSetRequestHandler(schema, handler);
+    isToolCallWrapped = true;
     return originalSetRequestHandler(schema, async (request: any, extra: any) => {
       const start = Date.now();
       const id = extra?.requestId;
@@ -688,6 +696,13 @@ function setupMcpServerInstance(sessionId: string): McpServer {
   registerPeerTools(mcpServer, deps);
   registerAwarenessTools(mcpServer, deps);
   registerResources(mcpServer, deps);
+
+  // Refuse to serve rather than serve calls the record cannot see: an SDK
+  // that installs its tools/call handler some other way (as 1.32.2 did from
+  // its constructor) would otherwise drop every refused call without a word.
+  if (!isToolCallWrapped) {
+    throw new Error('MCP server: the tools/call handler was installed without the recording wrapper; refused tool calls would be missing from the Timeline and the event log.');
+  }
 
   return mcpServer;
 }
