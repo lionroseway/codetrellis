@@ -32,6 +32,10 @@ export default tseslint.config(
       '.expo/**',
       'expo-env.d.ts',
       '**/*.ipa',
+      // Written by scripts/gen-xterm-bundle.js, byte for byte: the harness
+      // (build-artifacts) fails when it differs from a fresh generation, so
+      // it is not ours to edit, and its `eslint-disable` stays.
+      'components/xterm-bundle.ts',
     ],
   },
 
