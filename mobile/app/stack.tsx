@@ -67,7 +67,7 @@ export default function StackScreen() {
           )}
         </>
       }
-      ListEmptyComponent={error ? null : (
+      ListEmptyComponent={error ? undefined : (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No plan is under way</Text>
           <Text style={styles.emptyBody}>A plan shows here from when it is created until it is completed or archived.</Text>

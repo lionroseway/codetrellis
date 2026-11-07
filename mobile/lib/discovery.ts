@@ -9,6 +9,8 @@
  * and port so reconnection works even after DHCP or port changes.
  */
 
+import type Zeroconf from 'react-native-zeroconf';
+import type { Service, ZeroconfError } from 'react-native-zeroconf';
 import { upsertPairedDesktop, loadPairedDesktops } from './storage';
 
 // --- Types -------------------------------------------------------------------
@@ -30,7 +32,7 @@ export interface DiscoveredDesktop {
 
 // --- State -------------------------------------------------------------------
 
-let zeroconfInstance: any = null;
+let zeroconfInstance: Zeroconf | null = null;
 let browsing = false;
 const discovered = new Map<string, DiscoveredDesktop>();
 const listeners = new Set<(desktops: DiscoveredDesktop[]) => void>();
@@ -50,19 +52,15 @@ export function startDiscovery(): void {
     // is absent, so *any* call into the native module throws.
     // Wrap the entire setup in one big try/catch.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const Zeroconf = require('react-native-zeroconf').default;
-    if (!Zeroconf) {
+    const ZeroconfClass: typeof Zeroconf | undefined = require('react-native-zeroconf').default;
+    if (!ZeroconfClass) {
       console.warn('[Discovery] react-native-zeroconf default export is null');
       return;
     }
-    zeroconfInstance = new Zeroconf();
+    const instance = new ZeroconfClass();
+    zeroconfInstance = instance;
 
-    if (!zeroconfInstance) {
-      console.warn('[Discovery] Zeroconf instance is null');
-      return;
-    }
-
-    zeroconfInstance.on('resolved', (service: any) => {
+    instance.on('resolved', (service: Service) => {
       const txt = service.txt ?? {};
       const instanceId = txt.instanceId || service.name || '';
       const deviceName = txt.deviceName || service.name || 'Unknown';
@@ -88,7 +86,9 @@ export function startDiscovery(): void {
       updatePairedDesktops(desktop);
     });
 
-    zeroconfInstance.on('removed', (name: string) => {
+    // The library emits `remove`. This listened for `removed`, which no version
+    // emits, so a desktop that left the network stayed listed until restart.
+    instance.on('remove', (name: string) => {
       for (const [id, d] of discovered) {
         if (name.includes(id) || name.includes(d.deviceName)) {
           console.log(`[Discovery] Lost: "${d.deviceName}"`);
@@ -99,11 +99,11 @@ export function startDiscovery(): void {
       }
     });
 
-    zeroconfInstance.on('error', (err: any) => {
+    instance.on('error', (err: ZeroconfError) => {
       console.warn('[Discovery] Error:', err);
     });
 
-    zeroconfInstance.scan('codetrellis', 'tcp', 'local.');
+    instance.scan({ type: 'codetrellis', protocol: 'tcp', domain: 'local.' });
     browsing = true;
     console.log('[Discovery] Browsing for _codetrellis._tcp');
   } catch (err) {

@@ -16,19 +16,19 @@ The CodeTrellis Companion is an Expo / React Native app that pairs with a deskto
 
 ## Stack
 
-- **Expo SDK 57.0.23**
-- **Expo Router 6.0.23** with `typedRoutes: true` — file-based routing rooted at `mobile/app/`.
-- **React 19.2.3**, **React Native 0.86.3**
+- **Expo SDK 58.0.23**
+- **Expo Router 58.0.30** with `typedRoutes: true` — file-based routing rooted at `mobile/app/`.
+- **React 19.3.0**, **React Native 0.88.1** (React is the exact version the SDK pins, which is also what RN's bundled renderer was built from)
 - **Zustand 5** for state (`useWorkspaceStore` is the main one)
-- **react-native-webrtc 124** (via `@config-plugins/react-native-webrtc`) — peer transport
-- **react-native-zeroconf 0.14** — mDNS browser for `_codetrellis._tcp`
+- **react-native-webrtc 155** (via `@config-plugins/react-native-webrtc`) — peer transport. 155 is libwebrtc M155; its JavaScript API is unchanged from 124
+- **react-native-zeroconf 0.17** — mDNS browser for `_codetrellis._tcp`. On iOS it browses through `dns_sd`, which refuses a type missing from `NSBonjourServices` (`app.json` lists `_codetrellis._tcp`); 0.17.7 is the first that resolves under React Native 0.88's Swift Package Manager autolinking
 - **expo-camera** — QR code scanning for pairing
 - **expo-secure-store** — persistent paired-device credentials
 - **expo-notifications** — push notifications
 - **react-native-view-shot** — screenshot capture (for the `screenshot` MCP command)
 - **`@xterm/xterm` + `@xterm/addon-fit`** — terminal emulation for remote PTYs
 - **fast-json-patch** — applies JSON patches on the `ui` data channel
-- **qrcode**, **react-native-markdown-display**, **react-native-webview**
+- **qrcode**, **react-native-markdown-display**, **react-native-webview** 14. Import `WebView` from `mobile/lib/webview.ts`, not the package: 14's declaration types every prop as `never` (react-native-webview#3970), and that module fixes the type parameter
 
 ## Routes
 

@@ -46,7 +46,7 @@ export default function WorkstreamsScreen() {
       data={items ?? []}
       keyExtractor={(w) => w.id}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} tintColor="#71717a" />}
-      ListHeaderComponent={error ? <Text style={styles.error}>{error}</Text> : null}
+      ListHeaderComponent={error ? <Text style={styles.error}>{error}</Text> : undefined}
       ListFooterComponent={tasks.length > 0 ? (
         <View testID="task-workstreams">
           <Text style={styles.section}>TASKS</Text>
@@ -65,8 +65,8 @@ export default function WorkstreamsScreen() {
             </View>
           ))}
         </View>
-      ) : null}
-      ListEmptyComponent={error || tasks.length > 0 ? null : (
+      ) : undefined}
+      ListEmptyComponent={error || tasks.length > 0 ? undefined : (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>One line of work</Text>
           <Text style={styles.emptyBody}>When agents work in more than one worktree, branch or folder, each shows here with what it has changed.</Text>

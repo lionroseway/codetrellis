@@ -18,6 +18,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  type ScrollViewInstance,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { rpc } from '../lib/rpc';
@@ -88,7 +89,7 @@ export default function EventDetailScreen() {
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [sending, setSending] = useState(false);
   const [resolving, setResolving] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
 
   const fetchEvent = useCallback(async () => {
     if (!uid) return;

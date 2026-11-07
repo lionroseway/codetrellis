@@ -14,7 +14,7 @@
  */
 
 import { forwardRef, useImperativeHandle, useRef, useCallback } from 'react';
-import { WebView, type WebViewMessageEvent } from 'react-native-webview';
+import { WebView, type WebViewMessageEvent } from '../lib/webview';
 import { StyleSheet } from 'react-native';
 import { TERMINAL_HTML } from './xterm-bundle';
 import { logTouch } from '../lib/diagnostics';

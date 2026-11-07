@@ -55,7 +55,7 @@ export default function ReviewQueueScreen() {
           )}
         </>
       }
-      ListEmptyComponent={error ? null : (
+      ListEmptyComponent={error ? undefined : (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Nothing to review yet</Text>
           <Text style={styles.emptyBody}>When plan items are assigned to a branch, each branch shows here with where it stands and the order to merge in.</Text>

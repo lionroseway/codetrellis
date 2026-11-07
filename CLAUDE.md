@@ -183,7 +183,7 @@ a tagged candidate and on packaged artifacts.
   one from Google's CDN; `tools/spellcheck-check` proves it in CI. The only
   request the app makes on its own is the update check, and
   Settings → Updates turns it off.
-- **Mobile runtime**: Expo SDK 57 + React Native 0.86.3 companion app
+- **Mobile runtime**: Expo SDK 58 + React Native 0.88.1 companion app
   in `mobile/`. iOS + Android. Talks to desktop over WebRTC, not HTTP.
 - **Frontend**: React 19 + TypeScript, Tailwind CSS 4 (dark theme),
   React Flow 12 (`@xyflow/react`; custom nodes/edges), Zustand 5, react-markdown +

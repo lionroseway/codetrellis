@@ -24,6 +24,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  type ScrollViewInstance,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { rpc } from '../lib/rpc';
@@ -92,7 +93,7 @@ export default function PlanChannelScreen() {
   const [composeType, setComposeType] = useState('weigh-in');
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [sending, setSending] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
 
   const fetchEvents = useCallback(async () => {
     if (!planUid) return;
