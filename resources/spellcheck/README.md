@@ -25,21 +25,23 @@ suffix is Chromium's format version and must match what the Electron in
 ## Provenance
 
 Every file is taken unmodified from `hunspell_dictionaries.zip` on the
-Electron **v44.4.1** release —
-`https://github.com/electron/electron/releases/download/v44.4.1/hunspell_dictionaries.zip`
-(sha256 `f75f5f4d42181996edd0cee535d48a1dde30f237238cc845ba106f029d0f2dde`),
+Electron **v45.2.3** release —
+`https://github.com/electron/electron/releases/download/v45.2.3/hunspell_dictionaries.zip`
+(sha256 `f4692e1bc615b542478c8cf4c5d3424ea2d9c891076a8f218b0da0ba06b8d5c8`),
 which Electron builds from Chromium's `third_party/hunspell_dictionaries`.
-The licence files are that archive's own.
+The licence files are that archive's own, unchanged from v44's.
 
 | File | sha256 |
 |---|---|
-| `en-US-10-1.bdic` | `a075b01d9b015c616511a9e87da77da3d9881621db32f584e4606ddabf1c1100` |
-| `en-GB-10-1.bdic` | `eaed4a709abdbd2f14aa143f25fe9c4c1b44591c7cb1942f75f968fb2fcd3cf8` |
-| `en-AU-10-1.bdic` | `9e045c63b05e5435cd2045c8db9e2e15239a896d3363298fcbba2a3890d74eb1` |
-| `en-CA-10-1.bdic` | `0820d1fbc03198ef2933d3a6aed58a21dca5bb901af2c1db02346a496d4b7bdc` |
+| `en-US-10-2.bdic` | `b0d80e6b6c5491879365e176ecbd98074602a663429bcfcfb0a5a8375c051f13` |
+| `en-GB-10-2.bdic` | `e014c23d2215f093205343b9b8805e17c8d8e115d314d93fd5ba51eadf05cff2` |
+| `en-AU-10-2.bdic` | `13427b9828773291cde00ba266a58fd5110ba6f1d4b29ed86b49f4b3afdf0a39` |
+| `en-CA-10-2.bdic` | `4e0ab8e315fff2c7db23476e08a287088005912a08d9d5a2efc601699b7d34a8` |
 
-Checked against Electron v44.10.1's archive on 2026-10-31: these four files are
-unchanged, though the archive's own hash is not.
+Electron 45 moved Chromium's dictionary format from `10-1` to `10-2`, so the
+v44 files (`en-*-10-1.bdic`, from v44.4.1's archive and unchanged in v44.10.1's)
+were replaced in the commit that moved Electron to 45: Electron 45 looks for
+the `10-2` name, so the old files would not have been found.
 
 When Electron is upgraded, check the new release's archive: if the English
 files' names or hashes changed, replace them here in the same commit.

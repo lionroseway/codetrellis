@@ -166,9 +166,10 @@ a tagged candidate and on packaged artifacts.
 
 ## Tech Stack
 
-- **Desktop runtime**: Electron (primary) — `^44.10.1`, paired with
+- **Desktop runtime**: Electron (primary) — `^45.2.3`, paired with
   `better-sqlite3@^13.0.3`. That upgrade has **landed**; the two move
-  together and the section below says why. Embedded Express on `:3001`,
+  together and the section below says why. Electron 45 kept Node 24 and
+  N-API 10, so v13 carried over from 44 unchanged. Embedded Express on `:3001`,
   Vite `^6` on `:5173` in dev. macOS arm64 + x64, Windows x64, Linux
   .deb / .rpm / AppImage. **AppImage IS distributed**, and has been in
   every release since v0.1.11 — an earlier note here claimed it was
@@ -285,6 +286,12 @@ failure modes were measured on 2026-09-16, not inferred:
 |---|---|---|
 | Electron 33 | 20.18.3 | 9 |
 | Electron 44 | 24.21.0 | 10 |
+| Electron 45 | 24.22.2 | 10 |
+
+The Electron 45 row was measured on 45.2.3 (`process.versions` under
+`ELECTRON_RUN_AS_NODE`), on 2026-11-06. Its module ABI (`modules` 150)
+moved, but N-API did not, and both native modules here are N-API, so
+`better-sqlite3@13` and `node-pty` load on it as they are.
 
 - `better-sqlite3@11` uses **direct V8 APIs** (`Context::GetIsolate`,
   `PropertyCallbackInfo::This`, 2-arg `External::New`). Electron 44's V8
@@ -293,7 +300,7 @@ failure modes were measured on 2026-09-16, not inferred:
   every Electron version.
 - `better-sqlite3@13` is N-API (`node-addon-api`) and ships per-platform
   prebuilds, but declares `engines.node >= 22`, so it needs Electron 44's
-  Node 24. It also structurally removes the wrong-architecture class of
+  (or 45's) Node 24. It also structurally removes the wrong-architecture class of
   failure v11 had.
 
 So: **bump Electron and better-sqlite3 in the same commit.** Verified

@@ -4,7 +4,7 @@ CodeTrellis is an Electron desktop app with an embedded Express backend, a Vite-
 
 ## Runtime topology
 
-- **Desktop (primary)** — Electron 41, ships installers for macOS (arm64 + x64 DMG), Windows (NSIS Setup + Portable exe), Linux (AppImage, .deb, .rpm).
+- **Desktop (primary)** — Electron 45, ships installers for macOS (arm64 + x64 DMG), Windows (NSIS Setup + Portable exe), Linux (AppImage, .deb, .rpm).
 - **Embedded Express** — runs in-process on `:3001`. Same server is used in Electron and in web/dev mode; web mode is a fallback for browser-based development.
 - **Vite dev server** — `:5173`, HMR for the renderer in development.
 - **MCP server** — SSE transport on `:19432`. Any MCP-speaking client (Claude Code, Codex, Cursor, aider, Claude Desktop, …) appears as an attributed agent in the timeline. See `mcp-tools.md`.
@@ -85,6 +85,12 @@ vulnerable packages and nothing else. It also deletes the dev packages from
 advisory (GHSA-jr5w-w6x2-84p9) before it. Moving Electron within a major keeps
 Node-API and the module ABI, so `better-sqlite3` can stay, but a packaged build
 still has to prove it, and `resources/spellcheck/README.md` has its own check.
+The move from 44 to 45 (2026-11-06) changed the module ABI but not Node-API
+(still 10), so `better-sqlite3@13` stayed then too; it did change the
+dictionary format, and the bundled dictionaries moved with it. electron-vite
+6, which came with it, no longer depends on `esbuild`, so `esbuild` is now a
+devDependency of its own: several tools and one test import it, and they had
+been reaching electron-vite 5's hoisted copy.
 
 **Where it stands on 2026-10-31:** every lockfile audits clean, including dev
 and build tooling, except one low advisory with no fixed release.

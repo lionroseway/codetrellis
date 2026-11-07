@@ -36,7 +36,7 @@ The version names the recipe: the LibreOffice commit plus a hash of `build.sh`, 
 
 ## Why "network-free" is proven, not assumed
 
-Node 25+ can deny a child process the network (`--permission` without `--allow-net`), and the engine host uses that where it can. Electron 44 bundles Node 24, which cannot. There, the host runs an engine only if its pin says `networkFree: true`, and CI writes that only for an engine that passed the proof and the hostile documents. See Phase 31 §7.6.
+Node 25+ can deny a child process the network (`--permission` without `--allow-net`), and the engine host uses that where it can. Electron 45 bundles Node 24, which cannot. There, the host runs an engine only if its pin says `networkFree: true`, and CI writes that only for an engine that passed the proof and the hostile documents. See Phase 31 §7.6.
 
 ## Building locally
 
