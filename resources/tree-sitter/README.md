@@ -43,7 +43,7 @@ failure, so:
 | `tree-sitter-rust.wasm` | `f65f354215611fd94ad34134b3427eb3d58cbb745df7b6509ba722184db73d57` | unrecorded — predates this file |
 | `tree-sitter-tsx.wasm` | `79e5da75ea62855a0cd67177685f0164eac87d5f630b3cbe1e0a099751ad30f8` | unrecorded — predates this file |
 | `tree-sitter-typescript.wasm` | `778025db5a8be0e70f8ccc3671e486dfeddd048c25d9e8a70c26de2e1bf6f97d` | unrecorded — predates this file |
-| `tree-sitter.wasm` | `c03bccdc3b448a32848f5ae327e209c982bbb0840d43eec8bc2d5759544a1ed3` | the `web-tree-sitter` runtime (see `package.json` for the pinned version) |
+| `tree-sitter.wasm` | `beca80e44cccbf2299ed4d1e3fa6462a9a6fe818aeebf847547a392227ce4acc` | the `web-tree-sitter` runtime, 0.27.1 (see `package.json` for the pinned version) |
 
 ## Swift is built from source
 
