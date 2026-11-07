@@ -49,7 +49,12 @@ export default tseslint.config(
       globals: { ...globals.browser, ...globals.es2021, __DEV__: 'readonly' },
     },
     rules: {
-      ...reactHooks.configs.recommended.rules,
+      // Named, as the root config does, not the plugin's `recommended`:
+      // from react-hooks 7 that also turns on the React Compiler's rules
+      // (refs, set-state-in-effect, purity, immutability, manual
+      // memoization), and this app does not use the Compiler. Adopting it
+      // is a separate decision, and its rules come with it.
+      'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
       '@typescript-eslint/no-unused-vars': ['error', {
         argsIgnorePattern: '^_',
