@@ -250,8 +250,8 @@ a tagged candidate and on packaged artifacts.
   `npm ci --ignore-scripts`**, and both modules load from their prebuilds.
   That flag also skips the root `postinstall`, which is `patch-package`, so
   every such install is followed by `npx patch-package && node
-  scripts/check-patches.cjs` — without it werift ships unpatched, which the
-  CI-built installers did until HD4c. Check that the modules *load*, not
+  scripts/check-patches.cjs` — without it the packages in `patches/` ship
+  unpatched, as werift did in the CI-built installers until HD4c. Check that the modules *load*, not
   that a script ran:
 
   ```

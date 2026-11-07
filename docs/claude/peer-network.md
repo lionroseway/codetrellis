@@ -38,6 +38,8 @@ Once paired, peers establish a standard `RTCPeerConnection` per session. Desktop
 
 `peer-connection-service` manages the mesh: liveness, reconnect, and bidirectional peer sync. `webrtc-service` orchestrates the data channels described below.
 
+Every desktop peer connection is built from `peerConnectionConfig()` in `webrtc-service`, which caps an SCTP DATA chunk at 1024 bytes of user data (werift's default is 1160). That is VPN headroom: a tunnel's overhead pushes a bigger chunk past the path MTU, and the symptom is a peer that pairs and then stalls on a UI snapshot or terminal scrollback. Up to werift 0.24 this took a patch to a hard-coded constant; werift 0.25 made it the `sctp: { mtu }` setting. `tests/e2e/webrtc-handshake.test.ts` checks the chunks actually sent.
+
 ## Data channels
 
 Four named data channels carry all peer traffic. Each has a distinct protocol and payload type:

@@ -13,7 +13,7 @@
  * another native dependency alongside `node-pty`.
  */
 
-import { RTCPeerConnection, RTCSessionDescription } from 'werift';
+import { RTCPeerConnection, RTCSessionDescription, type RTCPeerConnectionConfig } from 'werift';
 import { randomBytes } from 'node:crypto';
 import type {
   PeerConnectionInfo,
@@ -29,6 +29,41 @@ const DEFAULT_STUN_SERVERS = [
   'stun:stun.l.google.com:19302',
   'stun:stun1.l.google.com:19302',
 ];
+
+/**
+ * The most user data one SCTP DATA chunk carries on the phone's link.
+ *
+ * An MTU fix: CodeTrellis is a bring-your-own-VPN product, and a tunnel's
+ * overhead pushes werift's default chunk past the path MTU, where it is
+ * fragmented or dropped. The symptom is not a clean failure but a peer that
+ * pairs and then stalls on larger payloads (a UI snapshot, terminal
+ * scrollback). 1024 leaves the headroom.
+ *
+ * Up to werift 0.24 this was a hard-coded `USERDATA_MAX_LENGTH = 1200`, and
+ * `patches/werift+<version>.patch` rewrote it to 1024. werift 0.25 replaced
+ * the constant with a per-connection setting, `sctp: { mtu }` (default 1191,
+ * so 1160 bytes of payload — still too many), so the value lives here now and
+ * no patch is needed.
+ */
+export const SCTP_MAX_PAYLOAD = 1024;
+
+/**
+ * The SCTP packet MTU that gives {@link SCTP_MAX_PAYLOAD}: werift takes the
+ * 12-byte common header and the 16-byte DATA chunk header off the MTU, then
+ * rounds down to a multiple of 4 (`maxPayloadSizeForMtu`).
+ */
+const SCTP_MTU = SCTP_MAX_PAYLOAD + 12 + 16;
+
+/**
+ * The configuration every peer connection is built with — one place, so a
+ * new connection cannot miss the SCTP limit.
+ */
+export function peerConnectionConfig(): RTCPeerConnectionConfig {
+  return {
+    iceServers: DEFAULT_STUN_SERVERS.map((url) => ({ urls: url })),
+    sctp: { mtu: SCTP_MTU },
+  };
+}
 
 /** Heartbeat interval on the control channel. */
 const HEARTBEAT_INTERVAL_MS = 10_000;
@@ -115,9 +150,7 @@ export async function createOffer(): Promise<{
   // Clean up any previous pending offer
   await discardPendingOffer();
 
-  const pc = new RTCPeerConnection({
-    iceServers: DEFAULT_STUN_SERVERS.map((url) => ({ urls: url })),
-  });
+  const pc = new RTCPeerConnection(peerConnectionConfig());
 
   // Create a dummy data channel so that ICE gathering includes data.
   pc.createDataChannel('_init');
@@ -176,9 +209,7 @@ export async function connectWithAnswer(
     console.log('[WebRTC] Reusing pending offer PC (same DTLS certificate)');
   } else {
     console.warn('[WebRTC] No pending offer PC — creating fresh connection (fingerprint may differ)');
-    pc = new RTCPeerConnection({
-      iceServers: DEFAULT_STUN_SERVERS.map((url) => ({ urls: url })),
-    });
+    pc = new RTCPeerConnection(peerConnectionConfig());
   }
 
   const entry: PeerEntry = {
@@ -255,9 +286,7 @@ export async function createAnswer(
   iceCandidates: string[];
   fingerprint: string;
 }> {
-  const pc = new RTCPeerConnection({
-    iceServers: DEFAULT_STUN_SERVERS.map((url) => ({ urls: url })),
-  });
+  const pc = new RTCPeerConnection(peerConnectionConfig());
 
   await pc.setRemoteDescription(
     new RTCSessionDescription(offerSdp, 'offer'),

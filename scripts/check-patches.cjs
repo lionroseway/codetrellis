@@ -5,9 +5,11 @@
  * `patch-package` runs as the root postinstall, so an install that skips
  * scripts (`npm ci --ignore-scripts`, which the installer builds use) skips
  * it too, and nothing said so: the Windows and Linux installers CI built
- * could ship without the werift SCTP patch the phone's link relies on. This
- * reads each patch and checks that every hunk's result is in the installed
- * file, with no git and no shell, so it runs the same on every runner.
+ * shipped without the werift SCTP patch the phone's link then relied on
+ * (werift needs no patch since 0.25, where the limit became a setting in
+ * webrtc-service.ts; the check covers whatever patches/ holds). This reads
+ * each patch and checks that every hunk's result is in the installed file,
+ * with no git and no shell, so it runs the same on every runner.
  *
  *   node scripts/check-patches.cjs     exits 1, naming each file, when one is not applied
  */

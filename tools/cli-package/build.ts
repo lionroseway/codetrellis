@@ -40,13 +40,14 @@ const isTest = (f: string) => /\.(test|spec)\.ts$/.test(f) || f.split(path.sep).
 
 /**
  * werift, as one file, for the CLI the desktop app carries (out/cli-vendor,
- * shipped as `<resources>/cli/node_modules/werift`). The app's own copy in
- * app.asar is not whole: electron-builder prunes the nested node_modules that
- * `@shinyoshiaki/binary-data` resolves `lib/binary-stream` from, which is why
- * electron.vite.config.ts bundles werift into the app's main code. This
- * bundles it the same way, from the same patched ESM entry, so the CLI finds
- * it beside itself before it looks in app.asar. The npm package does not need
- * it: npm installs werift whole.
+ * shipped as `<resources>/cli/node_modules/werift`), bundled the way
+ * electron.vite.config.ts bundles it into the app's main code, so the CLI
+ * finds it beside itself before it looks in app.asar. Up to werift 0.25.0 the
+ * copy in app.asar was not whole: electron-builder pruned the nested
+ * node_modules `@shinyoshiaki/binary-data` resolved `lib/binary-stream` from,
+ * and both bundles had to alias those requires. werift 0.25.1 dropped that
+ * dependency. The npm package does not need any of this: npm installs werift
+ * whole.
  */
 async function vendorWerift(): Promise<void> {
   const dir = path.join(root, 'out', 'cli-vendor', 'node_modules', 'werift');
@@ -55,16 +56,10 @@ async function vendorWerift(): Promise<void> {
   fs.mkdirSync(path.dirname(entry), { recursive: true });
   fs.writeFileSync(entry, "export * from 'werift';\n");
   const builtins = [...builtinModules, ...builtinModules.map((m) => `node:${m}`)];
-  // binary-data's bare `lib/…`, `types/…` and `internal/…` requires, each to
-  // its file, as electron.vite.config.ts aliases them for the app's main code.
-  const nested = path.join(root, 'node_modules', '@shinyoshiaki', 'binary-data', 'src', 'node_modules');
-  const alias = Object.fromEntries(['lib', 'types', 'internal'].flatMap((d) =>
-    fs.readdirSync(path.join(nested, d)).filter((f) => f.endsWith('.js')).map((f) => [`${d}/${f.slice(0, -3)}`, path.join(nested, d, f)])));
   await viteBuild({
     configFile: false,
     logLevel: 'warn',
     root,
-    resolve: { alias },
     build: {
       outDir: dir,
       commonjsOptions: { transformMixedEsModules: true },
