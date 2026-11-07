@@ -23,8 +23,10 @@ checked, because step 6 uploads the artefacts step 2 made
 ## 1. Version
 
 - [ ] Set the version in `package.json` and `mobile/app.json` (both the same):
-      **0.3.0** for the Phase 33 release (rules and clarity; the plan is
-      `docs/releases/v0.3.0-plan.md`).
+      **0.3.1**: rules that see every import, and every dependency brought
+      up to date (Electron 45, Expo SDK 58, werift 0.26). The phone's WebRTC
+      engine and the desktop's both moved, so the person-only checks in
+      step 5 include pairing a real phone.
 - [ ] Commit it on a branch, PR into `main`, merge when green, pull.
       The release must be built from a commit on `main`.
 
