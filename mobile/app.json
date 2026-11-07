@@ -58,6 +58,14 @@
       "expo-asset",
       "expo-font",
       "@config-plugins/react-native-webrtc",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "extraProguardRules": "-dontwarn org.webrtc.Dav1dDecoder$Natives"
+          }
+        }
+      ],
       "expo-status-bar",
       [
         "expo-splash-screen",
