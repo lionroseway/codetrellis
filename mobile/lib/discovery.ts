@@ -51,7 +51,6 @@ export function startDiscovery(): void {
     // In Expo Go the JS package loads fine but the native bridge
     // is absent, so *any* call into the native module throws.
     // Wrap the entire setup in one big try/catch.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const ZeroconfClass: typeof Zeroconf | undefined = require('react-native-zeroconf').default;
     if (!ZeroconfClass) {
       console.warn('[Discovery] react-native-zeroconf default export is null');

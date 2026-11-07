@@ -40,7 +40,6 @@ import XtermView, { type XtermHandle } from '../components/XtermView';
 // AND rebuilt; this lets the code run today without the native module.
 let haptics: { impactAsync?: (s: number) => void; ImpactFeedbackStyle?: { Light: number } } = {};
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   haptics = require('expo-haptics');
 } catch { /* fine — silent no-op until next build */ }
 function tapHaptic(): void {
@@ -164,11 +163,8 @@ function encodeSpecial(seq: string, f: ModFlags): string {
   const p = modParam(f);
   if (p === 1) return seq;
   let m: RegExpExecArray | null;
-  // eslint-disable-next-line no-control-regex
   if ((m = /^\x1b\[([0-9]+)~$/.exec(seq))) return `\x1b[${m[1]};${p}~`;
-  // eslint-disable-next-line no-control-regex
   if ((m = /^\x1b\[([A-Z])$/.exec(seq))) return `\x1b[1;${p}${m[1]}`;
-  // eslint-disable-next-line no-control-regex
   if ((m = /^\x1bO([A-Z])$/.exec(seq))) return `\x1b[1;${p}${m[1]}`;
   return (f.alt || f.meta) ? '\x1b' + seq : seq;
 }
@@ -211,7 +207,6 @@ export default function TerminalDetailScreen() {
       // Strip ANSI escapes for readability — the overlay is a plain
       // text view, not an xterm grid. Keep newlines + tabs.
       const ansi = /\x1b\[[0-9;?]*[A-Za-z]|\x1b\].*?\x07|\x1b[()][A-Z0-9]/g;
-      // eslint-disable-next-line no-control-regex
       const ctrlChars = /[\x00-\x09\x0b\x0c\x0e-\x1f]/g;
       const clean = r.data.replace(ansi, '').replace(ctrlChars, '');
       // Prepend (oldest chunk goes at the top so combined text is in order).

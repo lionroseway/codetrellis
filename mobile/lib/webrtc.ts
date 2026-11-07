@@ -30,7 +30,6 @@ let _webrtcModule: typeof import('react-native-webrtc') | null = null;
 function getWebRTC() {
   if (!_webrtcModule) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       _webrtcModule = require('react-native-webrtc');
     } catch (err) {
       throw new Error(
@@ -38,6 +37,7 @@ function getWebRTC() {
         'WebRTC requires a development build (not Expo Go). ' +
         'Run `npx expo run:ios` or `npx expo run:android` instead.\n' +
         String(err),
+        { cause: err },
       );
     }
   }
@@ -321,6 +321,7 @@ export class WebRTCManager {
       throw new Error(
         `The desktop's pairing offer is malformed (${(err as Error).message}). ` +
         'Cancel pairing on the desktop and try again.',
+        { cause: err },
       );
     }
     if (args.declaredFingerprint && !fingerprintsEqual(desktopFingerprint, args.declaredFingerprint)) {
@@ -363,7 +364,7 @@ export class WebRTCManager {
     try {
       ourFingerprint = extractSingleFingerprint(finalSdp);
     } catch (err) {
-      throw new Error(`Failed to read our own fingerprint from the answer SDP: ${(err as Error).message}`);
+      throw new Error(`Failed to read our own fingerprint from the answer SDP: ${(err as Error).message}`, { cause: err });
     }
 
     // Derive the confirmation code OURSELVES (Phase 19, finding 1.2).
@@ -655,7 +656,7 @@ export class WebRTCManager {
     try {
       offeredFingerprint = extractSingleFingerprint(String(offerData.offer ?? ''));
     } catch (err) {
-      throw new Error(`offer SDP unusable: ${(err as Error).message}`);
+      throw new Error(`offer SDP unusable: ${(err as Error).message}`, { cause: err });
     }
 
     const expectedOfferMac = computeReconnectOfferMac(

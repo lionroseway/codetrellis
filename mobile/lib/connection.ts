@@ -663,7 +663,6 @@ async function handleMobileCommand(msg: { cmd: string; route?: string; id?: stri
     try {
       // Lazily require so the JS bundle still loads in dev clients that don't
       // yet have the native module built in (screenshot just errors until then).
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { captureScreen } = require('react-native-view-shot');
       // Downscale to a small JPEG: a full-res PNG base64 is multiple MB, which
       // silently exceeds the data channel's max message size (the send is
