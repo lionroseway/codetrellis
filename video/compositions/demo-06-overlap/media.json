@@ -1,0 +1,4 @@
+{
+  "_note": "beats.mjs places every clip by demo scene (scripts/demo/groups/talk.ts) plus an offset; scenes.json is staged beside the footage.",
+  "assets/talk.mp4": { "from": "captures/talk-team-hd/raw.mp4" }
+}

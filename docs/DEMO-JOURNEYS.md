@@ -206,6 +206,66 @@ A full plan and a large codebase, so the product is seen at the size a team uses
 | `merge-order` | the Stack tab with three lines of work against main and what to merge first, then the Timeline's lanes |
 | `big-map` | CodeTrellis's own repository opened and mapped: packages, then files |
 
+## A10. The talk, part 1: one agent (`talk`) — *built*
+
+An applied AI development lifecycle on one small repository, cut into the demo
+videos a talk plays (`video/compositions/demo-0*`, `video/talk/README.md`).
+Part 1 is one agent: plan → build → check → review. The repository is built at
+run time from `scripts/demo/fixtures/prefs-api.ts`: a TypeScript API in three
+layers, `src/endpoints/` → `src/services/` → `src/db/`, with its architecture
+rule committed and a worktree, `prefs-save`. The epic is customer preferences,
+in three stories: save, read, audit. One session writes the plan; one connects
+as a Claude Code session does, placed by its worktree, and claims its tasks.
+`npm run demo -- --group=talk --grant=terminal`. Nothing is narrated in the
+window: the videos are captioned where they are cut. Steps only the window can
+take (opening the Rules view, typing to the agents) are taken in the real page
+when a recorder is listening (`scripts/demo/lib/window.ts`), and through
+`--decide` otherwise. The scenes are short because each is a moment a video
+cuts on.
+
+| Scene | Watch for |
+|---|---|
+| `talk-plan` | the plan "Customer preferences" on its own page: three stories and their tasks, nobody working |
+| `talk-spec` | the spec page: the epic, the three stories, the rule |
+| `talk-task` | "Validate and save in the service": its file, two acceptance criteria and a comment, then its Brief |
+| `talk-export` | a file under `.codetrellis/plans/` in the reader: the plan as text |
+| `talk-phases` | back on the plan's own page, every story in view |
+| `talk-claim` | a chip for `prefs-save` in the top bar; the Timeline shows the claim |
+| `talk-build` | the Timeline takes each step: started, what it is doing, committed |
+| `talk-line` | line history on the new line: claude-code, from the commit message, and its commit |
+| `talk-done` | each criterion offered by the agent, approved by a person; the task done |
+| `talk-rule` | `.codetrellis/rules/architecture.yaml` in the reader, `strength: warn` |
+| `talk-promote` | the Rules view; the rule entered again at block and saved; the list and the file say block |
+| `talk-proposal` | "Proposed by agents (1)" with Accept and Reject; the suite file unchanged |
+| `talk-breach` | a **high** "Breaks a rule" signal naming `prefs-save`, the import and the reason; "Told claude-code" |
+| `talk-check-fail` | the terminal: "Does not conform", the rule, `preferences.ts:2`, "exit code 3" |
+| `talk-checks` | Rules → Checks lists the failed run, with who ran it and where; opened, it shows the finding |
+| `talk-fix` | the finding on the line; then the endpoint importing the service, the rule signal gone |
+| `talk-check-pass` | the same command: "Conforms", "exit code 0" |
+| `talk-review` | Review against what landed: 1 landed, 1 partly landed, 2 untouched, 1 file no item claimed |
+| `talk-draft` | Copy PR description: the warnings, then the title and body |
+| `talk-summary` | back at the top of the review |
+
+## A11. The talk, part 2: a team (`talk-team`) — *built*
+
+The same loop run by a team, on the same repository with three worktrees
+(`prefs-save`, `prefs-read`, `prefs-audit`) and a story for each. Three agents
+connect as Claude Code sessions do and claim their stories from the plan; they
+do not divide the work themselves. `npm run demo -- --group=talk-team`.
+
+| Scene | Watch for |
+|---|---|
+| `team-stack` | Stack lists the three stories, each with its line of work and nobody on it |
+| `team-claim` | a chip per worktree arrives in the top bar; each story in Stack takes "claude-code" |
+| `team-lines` | `prefs-save`, `prefs-read` and `prefs-audit` in the top bar, an agent in each |
+| `team-claimed` | Stack with every story held |
+| `team-overlap` | one **high** "Same function" overlap naming `savePreferences`, `prefs-audit` and `prefs-save` |
+| `team-message` | "Message the agents", typed and sent in the window; "Read by claude-code"; the agent's note under the card |
+| `team-adjust` | `prefs-audit` puts the function back and the overlap leaves on its own |
+| `team-breakpoint` | `src/db/preferencesRepo.ts` in the reader, then a breakpoint on it |
+| `team-held` | Waiting on you: "Claude Code in prefs-save wants to change …preferencesRepo.ts"; Continue, Continue with steer, Stop; the file unchanged |
+| `team-steer` | answered with a steer; the card goes; the reader shows the one new field, by claude-code, and the validation as it was |
+
 ## B. The journeys, and where each one lives
 
 ### B1. A human plans it by hand — *built*

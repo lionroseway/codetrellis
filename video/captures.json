@@ -8,8 +8,11 @@
   "observe-smooth":      { "group": "observe",      "mode": "smooth", "pace": "normal" },
   "teams-smooth":        { "group": "teams",        "mode": "smooth", "pace": "normal" },
   "record-smooth":       { "group": "record",       "mode": "smooth", "pace": "normal" },
+  "talk-hd":             { "group": "talk",         "mode": "hd",     "pace": "normal", "grant": "terminal", "window": "1440x810@2" },
+  "talk-team-hd":        { "group": "talk-team",    "mode": "hd",     "pace": "normal", "window": "1440x810@2" },
   "phone-breakpoint":    { "phone": "breakpoint" },
   "phone-activity":      { "phone": "activity" },
+  "phone-talk-steer":    { "phone": "talk-steer" },
   "phone-overlap":       { "phone": "overlap" },
   "ci-gate":             { "ci": true }
 }
