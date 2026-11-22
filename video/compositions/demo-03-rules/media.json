@@ -1,0 +1,12 @@
+{
+  "_note": "beats.mjs places every clip by demo scene (scripts/demo/groups/talk.ts) plus an offset; scenes.json is staged beside the footage. The two CI clips are GitHub's own pages for the sample repository's pull request, recorded signed out by talk/ci.sh.",
+  "assets/talk.mp4": {
+    "from": "captures/talk-hd/raw.mp4"
+  },
+  "assets/ci-fail.mp4": {
+    "from": "captures/ci-fail-hd/raw.mp4"
+  },
+  "assets/ci-pass.mp4": {
+    "from": "captures/ci-pass-hd/raw.mp4"
+  }
+}

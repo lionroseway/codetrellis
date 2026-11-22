@@ -68,6 +68,26 @@ has the page they go on). Look at every poster before handing them over.
 
 `npm run site` does the hero and the loops in one go, then `npm run clean`.
 
+### The talk's demo videos
+
+```bash
+bash talk/record.sh --record   # record, render, review, export into out/talk/ (about fifteen minutes)
+```
+
+Seven short pieces that play behind a person talking, in two parts. One
+agent: the plan, a task built and attributed, a rule from warn to a failing
+then passing check, the review against the plan. Then a team: three sessions
+claiming an epic's stories, an overlap flagged, a breakpoint answered from the
+phone. Two demo groups (`scripts/demo/groups/talk.ts`) on a small sample
+repository built for them, cut by `compositions/demo-0*/beats.mjs`. `talk/README.md` has what they
+are and what they are not; `out/talk/review.html` plays them with each beat's
+words beside it.
+
+A capture can run beside an open CodeTrellis: `CAPTURE_API_PORT`,
+`CAPTURE_WEB_PORT` and `CAPTURE_MCP_PORT` move its app off the usual ports,
+and `CAPTURE_WIDTH`, `CAPTURE_HEIGHT` and `CAPTURE_SCALE` size its window
+(`capture/demo.sh`).
+
 ### Disk
 
 A smooth capture writes up to ~2 GB of frames before encoding them, so

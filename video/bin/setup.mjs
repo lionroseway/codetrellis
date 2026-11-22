@@ -19,7 +19,7 @@ const fonts = [
   return weights.map((w) => path.join(dir, `${name}-latin-${w}-normal.woff2`));
 });
 
-const hyperframes = ['collision', 'real-footage', 'real-ui-hero', 'hero'];
+const hyperframes = ['collision', 'real-footage', 'real-ui-hero', 'hero', 'demo-01-plan', 'demo-02-build', 'demo-03-rules', 'demo-04-review', 'demo-05-epic', 'demo-06-overlap', 'demo-07-breakpoint'];
 // The only mark any video uses: the app's own icon.
 const logo = path.resolve(root, '..', 'resources', 'icon.png');
 for (const c of hyperframes) {

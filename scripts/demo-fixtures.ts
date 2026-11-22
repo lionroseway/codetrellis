@@ -25,6 +25,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { makeWorkbook, makeDocx, makePdf } from '../src/backend/services/material-reader/fixtures.test-helper';
 import { copyFixtureTemplate } from '../tests/harness/fixture';
+import { PREFS_API_FILES } from './demo/fixtures/prefs-api';
 
 let root: string | null = null;
 
@@ -387,6 +388,80 @@ export function repoWithAgentBranch(): AgentBranchFixture {
     },
     read() {
       return fs.readFileSync(path.join(worktree, file), 'utf-8');
+    },
+  };
+}
+
+export interface PrefsApiFixture extends ParallelFixture {
+  /** Write a whole file in one worktree (or `main`), creating it if need be. */
+  write(tree: string, rel: string, body: string): void;
+  /** Run git in one worktree (or `main`). */
+  git(tree: string, ...args: string[]): string;
+}
+
+/**
+ * The talk demos' repository (`demo/fixtures/prefs-api.ts`): a small
+ * TypeScript API in three layers with its architecture rule committed, and a
+ * worktree per line of work. Commits are Alex Kim's, the capture's demo
+ * identity, so line history and the record name one fictional person.
+ */
+export function prefsApiRepo(worktrees: string[]): PrefsApiFixture {
+  // The real path, not the one through macOS's /var symlink: the CLI names a
+  // project by the folder it is run in, as the shell resolves it, and a
+  // project opened under the other spelling is a different project to a check.
+  const dir = path.join(fs.realpathSync(base()), 'acme-customer-api');
+  init(dir);
+  git(dir, 'config', 'user.email', 'alex@acme.test');
+  git(dir, 'config', 'user.name', 'Alex Kim');
+  for (const [rel, body] of Object.entries(PREFS_API_FILES)) write(dir, rel, body);
+  // Two commits by a person, dated last week. Line history credits a commit
+  // to an agent that was seen working while it was HEAD, so the commit that
+  // wrote the code is not the one the sessions start on.
+  const person = (message: string, daysAgo: number) => {
+    const then = new Date(Date.now() - daysAgo * 86_400_000).toISOString();
+    git(dir, 'add', '-A');
+    execFileSync('git', ['commit', '-qm', message, `--date=${then}`], {
+      cwd: dir, stdio: 'ignore',
+      env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_COMMITTER_DATE: then },
+    });
+  };
+  person('Customers API: endpoints, services, db', 7);
+  write(dir, 'README.md', `${PREFS_API_FILES['README.md']}\nRules live in \`.codetrellis/rules/\`, and are checked on every change.\n`);
+  person('README: where the rules live', 6);
+  const trees: Record<string, string> = { main: dir };
+  for (const wt of worktrees) {
+    trees[wt] = `${dir}-${wt}`;
+    git(dir, 'worktree', 'add', '-q', trees[wt], '-b', wt);
+  }
+  const at = (tree: string) => {
+    const t = trees[tree];
+    if (!t) throw new Error(`no worktree called "${tree}"`);
+    return t;
+  };
+  return {
+    path: dir,
+    trees,
+    edit(tree, rel, from, to) {
+      const abs = path.join(at(tree), rel);
+      const was = fs.readFileSync(abs, 'utf-8');
+      if (!was.includes(from)) throw new Error(`${tree}: ${rel} does not contain the text the scene changes`);
+      fs.writeFileSync(abs, was.replace(from, to));
+    },
+    write(tree, rel, body) {
+      write(at(tree), rel, body);
+    },
+    git(tree, ...args) {
+      return git(at(tree), ...args);
+    },
+    reset(tree) {
+      git(at(tree), 'checkout', '--', '.');
+      git(at(tree), 'clean', '-fdq');
+    },
+    resetAll() {
+      for (const t of Object.keys(trees)) this.reset(t);
+    },
+    commit(tree, message) {
+      return commit(at(tree), message);
     },
   };
 }

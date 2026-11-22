@@ -20,3 +20,7 @@ compositions/hero/timing.json
 .models/
 compositions/*/audio.json
 audio/library/files/
+
+# The talk demos: index.html and timing.json are generated from beats.mjs by talk/build.mjs.
+compositions/demo-0*/index.html
+compositions/demo-0*/timing.json

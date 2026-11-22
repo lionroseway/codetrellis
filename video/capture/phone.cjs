@@ -5,6 +5,10 @@
 //    would once the desktop took the answer.
 //  - shown: `rpc` (method -> answer) and optional `params`. The screen is
 //    held for `before` seconds, nothing tapped.
+//  - stepped: `steps` in place of `tap`, for an answer that takes more than
+//    one touch: [{ tap: 'Continue with steer' }, { type: '…', into: '<label>' },
+//    { tap: 'Send' }], each with an optional `hold` (seconds shown after it).
+//    Frames are taken while a step happens, so typing is seen letter by letter.
 //
 // Usage: node phone.cjs --fixture=phone/breakpoint.json --out=<dir> [--url=http://localhost:5190/]
 // Writes frames/ (PNG, 3x), frames.json and tap.json (where and when the tap
@@ -39,13 +43,14 @@ const items = relative(fx.items ?? []);
     let answered = false;
     const rpc = { ...(fx.rpc ?? {}) };
     if (fx.list) rpc[fx.list.method] = () => ({ [fx.list.key]: answered ? [] : items });
-    if (fx.answer) rpc[fx.answer.method] = () => { answered = true; return { [fx.answer.key]: { ...items[0], ...fx.answer.set, answeredAt: Date.now() } }; };
+    if (fx.answer) rpc[fx.answer.method] = (p) => { answered = true; return { [fx.answer.key]: { ...items[0], ...fx.answer.set, ...(fx.answer.echo && p ? { decision: p.decision, note: p.note ?? null } : {}), answeredAt: Date.now() } }; };
     window.__PHONE__ = { state: fx.state ?? {}, calls: [], rpc };
   }, { fx, items });
   const q = new URLSearchParams({ screen: fx.screen, ...(fx.params ? { params: JSON.stringify(fx.params) } : {}) });
   await page.goto(`${f.url ?? 'http://localhost:5190/'}?${q}`);
   await page.locator('#phone[data-ready]').waitFor({ state: 'attached' });
-  const button = fx.tap ? page.getByText(fx.tap, { exact: true }) : null;
+  const firstTap = fx.tap ?? fx.steps?.find((st) => st.tap)?.tap;
+  const button = firstTap ? page.getByText(firstTap, { exact: true }) : null;
   if (button) await button.waitFor();
   else if (fx.waitFor) await page.getByText(fx.waitFor).first().waitFor();
   await page.waitForTimeout(800);
@@ -60,13 +65,34 @@ const items = relative(fx.items ?? []);
   const hold = async (s) => { const end = Date.now() + s * 1000; while (Date.now() < end) await grab(); };
   await hold(fx.before ?? 1.5);
   const tapAt = Date.now() / 1000;
-  if (button) {
+  const taps = [];
+  if (fx.steps) {
+    // Frames go on being taken while each step happens.
+    for (const st of fx.steps) {
+      let going = true;
+      const filming = (async () => { while (going) await grab(); })();
+      if (st.tap) {
+        const b = page.getByText(st.tap, { exact: true });
+        await b.waitFor();
+        const bb = await b.boundingBox();
+        const ph = await page.locator('#phone').boundingBox();
+        taps.push({ x: bb.x - ph.x + bb.width / 2, y: bb.y - ph.y + bb.height / 2, at: +(Date.now() / 1000 - meta[0]).toFixed(2), text: st.tap });
+        await b.click();
+      } else if (st.type) {
+        await page.getByLabel(st.into).first().pressSequentially(st.type, { delay: st.delay ?? 45 });
+      }
+      going = false;
+      await filming;
+      await hold(st.hold ?? 0.8);
+    }
+  } else if (button) {
     await button.click();
     await hold(fx.after ?? 3);
   }
   meta.push(Date.now() / 1000);
   fs.writeFileSync(path.join(OUT, 'frames.json'), JSON.stringify(meta));
-  if (box) fs.writeFileSync(path.join(OUT, 'tap.json'), JSON.stringify({ x: box.x + box.width / 2, y: box.y + box.height / 2, at: +(tapAt - meta[0]).toFixed(2) }, null, 2));
+  if (taps.length) fs.writeFileSync(path.join(OUT, 'tap.json'), JSON.stringify(taps, null, 2));
+  else if (box) fs.writeFileSync(path.join(OUT, 'tap.json'), JSON.stringify({ x: box.x + box.width / 2, y: box.y + box.height / 2, at: +(tapAt - meta[0]).toFixed(2) }, null, 2));
   await browser.close();
   console.log(`phone: ${meta.length - 1} frames${button ? `, tapped "${fx.tap}" at ${(tapAt - meta[0]).toFixed(2)} s` : ''}`);
 })().catch((e) => { console.error(e); process.exit(1); });

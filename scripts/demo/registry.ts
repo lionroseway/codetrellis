@@ -13,8 +13,9 @@ import { teamsGroup } from './groups/teams';
 import { phoneGroup } from './groups/phone';
 import { heroGroup } from './groups/hero';
 import { scaleGroup } from './groups/scale';
+import { talkGroup, talkTeamGroup } from './groups/talk';
 
-export const GROUPS: Group[] = [mainGroup, parallelGroup, observeGroup, recordGroup, codeHistoryGroup, teamsGroup, phoneGroup, heroGroup, scaleGroup];
+export const GROUPS: Group[] = [mainGroup, parallelGroup, observeGroup, recordGroup, codeHistoryGroup, teamsGroup, phoneGroup, heroGroup, scaleGroup, talkGroup, talkTeamGroup];
 
 /** The group `npm run demo` runs when none is named. */
 export const DEFAULT_GROUP = 'main';
